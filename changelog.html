@@ -20,7 +20,7 @@
     <h1>Engineering Change Log</h1>
     <p>This log documents changes to miniPCB™ circuit boards, including design revisions, documentation updates, and status changes.</p>
 
-    <table class="changelog-table">
+    <table class="changelog-table" id="ecl-table">
       <thead>
         <tr>
           <th>Date</th>
@@ -30,24 +30,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td>2025-06-21</td>
-          <td>09H-15</td>
-          <td>A1-01</td>
-          <td>Initial release. Voltage inverter with external NPN.</td>
-        </tr>
-        <tr>
-          <td>2025-06-20</td>
-          <td>04B-350</td>
-          <td>A1-03</td>
-          <td>Corrected trimmer range for Q2 biasing. Updated layout to add TP3.</td>
-        </tr>
-        <tr>
-          <td>2025-06-18</td>
-          <td>00A-010</td>
-          <td>A1-02</td>
-          <td>Updated silkscreen labeling for test points. Changed bypass capacitor value.</td>
-        </tr>
+        <!-- rows will be inserted here dynamically -->
       </tbody>
     </table>
   </main>
@@ -55,6 +38,33 @@
   <footer>
     &copy; 2025 miniPCB. All rights reserved.
   </footer>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      fetch("ECL.json")
+        .then(response => response.json())
+        .then(data => {
+          const tbody = document.querySelector("#ecl-table tbody");
+          data.forEach(entry => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${entry.date}</td>
+              <td>${entry.board}</td>
+              <td>${entry.rev}</td>
+              <td>${entry.change}</td>
+            `;
+            tbody.appendChild(row);
+          });
+        })
+        .catch(error => {
+          console.error("Failed to load ECL.json:", error);
+          const tbody = document.querySelector("#ecl-table tbody");
+          const row = document.createElement("tr");
+          row.innerHTML = `<td colspan="4">Failed to load change log.</td>`;
+          tbody.appendChild(row);
+        });
+    });
+  </script>
 
 </body>
 </html>
