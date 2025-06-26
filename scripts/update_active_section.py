@@ -1,7 +1,7 @@
 import os
 import re
 
-folders = ["./04B", "./05", "./06", "./08H", "./09A", "./09H", "./10"]
+folders = ["./00A", "./04A", "./04B", "./05", "./06", "./08H", "./09A", "./09H", "./10"]
 
 def update_html_tab_default(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
