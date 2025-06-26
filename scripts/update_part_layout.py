@@ -69,8 +69,12 @@ def convert_file(path):
     print(f"Processing: {part_no}")
 
     # Extract fields
-    title = re.search(r"<h1>(.*?)</h1>", html)
-    title = title.group(1).strip() if title else "Unknown"
+    # Extract full <h1> line
+    title_raw = re.search(r"<h1>(.*?)</h1>", html)
+    title_raw = title_raw.group(1).strip() if title_raw else "Unknown"
+
+    # Remove part number prefix (e.g., "04A-04 – ")
+    title = re.sub(r"^[A-Z0-9\-]+\s+[–-]\s+", "", title_raw)
 
     board_size = re.search(r"Board Size:</strong>\s*(.*?)<", html)
     board_size = board_size.group(1).strip() if board_size else "N/A"
