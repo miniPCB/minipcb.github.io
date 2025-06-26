@@ -24,11 +24,6 @@ TAB_TEMPLATE = """
       <p><strong>Board Size:</strong> {board_size}</p>
       <p><strong>Pieces per Panel:</strong> {pieces}</p>
       <p><strong>Panel Size:</strong> {panel_size}</p>
-
-      <h2>Key Learning Objectives</h2>
-      <ul>
-        {objectives}
-      </ul>
     </div>
 
     <div id="schematic" class="tab-content">
