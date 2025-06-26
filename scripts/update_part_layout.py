@@ -102,9 +102,33 @@ def convert_file(path):
     # Replace the old <main>...</main> section
     updated = re.sub(r"<main>.*?</main>", new_main, html, flags=re.DOTALL)
 
+    # Inject required JS if not already present
+    if "function showTab(" not in updated:
+        js_block = """
+    <script>
+        function showTab(id) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        event.currentTarget.classList.add('active');
+        }
+    </script>
+    <script>
+        function openLightbox(img) {
+        document.getElementById('lightbox-img').src = img.src;
+        document.getElementById('lightbox').style.display = 'flex';
+        }
+        function closeLightbox() {
+        document.getElementById('lightbox').style.display = 'none';
+        }
+    </script>
+    """
+        updated = updated.replace("</body>", js_block + "\n</body>")
+
     # Save it back
     with open(path, "w", encoding="utf-8") as f:
         f.write(updated)
+
 
 def run():
     for folder in folders:
