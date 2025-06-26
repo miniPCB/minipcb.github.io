@@ -1,51 +1,62 @@
 import os
+import re
 
-folders = ["./00A", "./04A", "./04B", "./05", "./06", "./08H", "./09A", "./09H", "./10"]
+folders = ["./00A", "./04A", "./04B", "./05", "./06", "./08H", "./09A", "./09H", "./10", "./collections"]
 
-google_analytics_snippet = """<!-- Google tag (gtag.js) -->
+# Cleaned GA snippet
+ga_snippet = """<!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-
   gtag('config', 'G-9ZM2D6XGT2');
 </script>
 """
 
-def add_google_analytics(filepath):
+# Regex to remove any existing Google Analytics gtag script block
+ga_pattern = re.compile(
+    r'<!-- Google tag \(gtag\.js\) -->.*?<script.*?</script>\s*<script>.*?gtag\(\'config\',\s*\'G-[A-Z0-9]+\'\);\s*</script>',
+    re.DOTALL
+)
+
+def clean_and_insert_ga(html):
+    # Remove existing GA snippet if found
+    html = ga_pattern.sub('', html)
+
+    # Insert after <head> (and only if it's not already there)
+    if "googletagmanager.com/gtag/js" not in html:
+        html = re.sub(r'(<head[^>]*>)', r'\1\n' + ga_snippet, html, count=1)
+
+    return html
+
+def process_file(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
-        content = f.read()
+        original = f.read()
 
-    if "googletagmanager.com/gtag/js" in content:
-        print(f"[SKIPPED] {filepath} already has Google Analytics.")
-        return
+    updated = clean_and_insert_ga(original)
 
-    if "</head>" not in content:
-        print(f"[SKIPPED] {filepath} has no </head> tag.")
-        return
-
-    updated_content = content.replace("</head>", f"{google_analytics_snippet}\n</head>")
-
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(updated_content)
-
-    print(f"[UPDATED] {filepath}")
+    if original != updated:
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(updated)
+        print(f"[UPDATED] {filepath}")
+    else:
+        print(f"[SKIPPED] {filepath} already correct")
 
 def run():
-    # Top-level .html files
-    for filename in os.listdir("./"):
-        if filename.endswith(".html"):
-            add_google_analytics(os.path.join("./", filename))
+    # Top-level HTML files
+    for file in os.listdir("."):
+        if file.endswith(".html"):
+            process_file(os.path.join(".", file))
 
-    # Subfolder files
+    # Subfolder HTML files
     for folder in folders:
         if not os.path.isdir(folder):
             print(f"[SKIPPED] Folder not found: {folder}")
             continue
-        for filename in os.listdir(folder):
-            if filename.endswith(".html"):
-                add_google_analytics(os.path.join(folder, filename))
+        for file in os.listdir(folder):
+            if file.endswith(".html"):
+                process_file(os.path.join(folder, file))
 
 if __name__ == "__main__":
     run()
