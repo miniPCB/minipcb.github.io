@@ -6,8 +6,8 @@ def activate_schematic_tab(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
         html = f.read()
 
-    original = "<button class=\"tab\" onclick=\"showTab('schematic')\">Schematic</button>"
-    replacement = "<button class=\"tab active\" onclick=\"showTab('schematic')\">Schematic</button>"
+    original = "Comming"
+    replacement = "Coming"
 
     if original in html:
         html = html.replace(original, replacement)
