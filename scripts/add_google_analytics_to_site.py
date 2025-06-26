@@ -18,7 +18,11 @@ def add_google_analytics(filepath):
         content = f.read()
 
     if "googletagmanager.com/gtag/js" in content:
-        print(f"[SKIPPED] {filepath} already has Google Analytics code.")
+        print(f"[SKIPPED] {filepath} already has Google Analytics.")
+        return
+
+    if "</head>" not in content:
+        print(f"[SKIPPED] {filepath} has no </head> tag.")
         return
 
     updated_content = content.replace("</head>", f"{google_analytics_snippet}\n</head>")
@@ -29,14 +33,19 @@ def add_google_analytics(filepath):
     print(f"[UPDATED] {filepath}")
 
 def run():
+    # Top-level .html files
+    for filename in os.listdir("./"):
+        if filename.endswith(".html"):
+            add_google_analytics(os.path.join("./", filename))
+
+    # Subfolder files
     for folder in folders:
         if not os.path.isdir(folder):
             print(f"[SKIPPED] Folder not found: {folder}")
             continue
         for filename in os.listdir(folder):
             if filename.endswith(".html"):
-                filepath = os.path.join(folder, filename)
-                add_google_analytics(filepath)
+                add_google_analytics(os.path.join(folder, filename))
 
 if __name__ == "__main__":
     run()
