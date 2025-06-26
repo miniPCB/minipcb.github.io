@@ -2,7 +2,7 @@ import os
 import re
 
 # === CONFIGURATION ===
-folders = ["./04A"]  # <-- Replace with your actual folder paths
+folders = ["./04B", "./05", "./06", "./08H", "./09A", "./09H", "./10"]  # <-- Replace with your actual folder paths
 
 # === HTML Template ===
 TAB_TEMPLATE = """
