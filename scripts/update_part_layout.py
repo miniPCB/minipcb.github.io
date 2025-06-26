@@ -2,7 +2,7 @@ import os
 import re
 
 # === CONFIGURATION ===
-folders = ["./00A"]  # <-- Replace with your actual folder paths
+folders = ["./04A"]  # <-- Replace with your actual folder paths
 
 # === HTML Template ===
 TAB_TEMPLATE = """
@@ -75,10 +75,10 @@ def convert_file(path):
     board_size = re.search(r"Board Size:</strong>\s*(.*?)<", html)
     board_size = board_size.group(1).strip() if board_size else "N/A"
 
-    pieces = re.search(r"Pieces per Panel:</strong>\s*(.*?)<", html)
+    pieces = re.search(r"Pieces per Panel:</strong>\s*([^<]*)", html)
     pieces = pieces.group(1).strip() if pieces else "N/A"
 
-    panel_size = re.search(r"Panel Size:</strong>\s*(.*?)<", html)
+    panel_size = re.search(r"Panel Size:</strong>\s*([^<]*)", html)
     panel_size = panel_size.group(1).strip() if panel_size else "N/A"
 
     datasheet = re.search(r'<a href="([^"]*?datasheets/[^"]+)"', html)
