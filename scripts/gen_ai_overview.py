@@ -87,7 +87,7 @@ def insert_ai_overview(html_path, overview_html):
                     break
 
             if insert_index is not None:
-                tab_buttons[insert_index].insert_before(soup.new_string("\\n"))
+                tab_buttons[insert_index].insert_before(soup.new_string("\n"))
                 tab_buttons[insert_index].insert_before(new_tab)
                 inserted_tab = True
                 print(f"[OK] Inserted <button> AI Overview tab")
