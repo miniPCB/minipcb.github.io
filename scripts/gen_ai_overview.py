@@ -56,19 +56,23 @@ Use proper HTML tags like <h2>, <p>, and <ul>, but do not include <html>, <head>
     return response.choices[0].message.content.strip()
 
 def insert_ai_overview(html_path, overview_html):
+    print(f"[INFO] Inserting AI Overview into: {html_path}")
+
     with open(html_path, "r", encoding="utf-8") as f:
         soup = BeautifulSoup(f, "html.parser")
 
     tab_container = soup.find("div", class_="tab-container")
     if not tab_container:
-        print(f"[ERROR] No tab-container found in {html_path}")
+        print(f"[ERROR] No .tab-container found in {html_path}")
         return
 
-    # ✅ Add AI Overview tab button if it doesn't exist
+    # ✅ Add the AI Overview tab button
     tabs_div = tab_container.find("div", class_="tabs")
+    inserted_tab = False
     if tabs_div:
         tab_buttons = tabs_div.find_all("button")
         existing = [btn.get("onclick", "") for btn in tab_buttons]
+
         if not any("ai-overview" in e for e in existing):
             new_tab = soup.new_tag("button", attrs={
                 "class": "tab",
@@ -76,24 +80,32 @@ def insert_ai_overview(html_path, overview_html):
             })
             new_tab.string = "AI Overview"
 
-            # Insert after "Layout", before "Downloads"
             insert_index = None
             for i, btn in enumerate(tab_buttons):
                 if "downloads" in btn.get("onclick", ""):
                     insert_index = i
                     break
-            if insert_index is not None:
-                tab_buttons[insert_index].insert_before(new_tab)
-                tab_buttons[insert_index].insert_before(soup.new_string("\\n"))
 
-    # ✅ Insert the AI Overview section
+            if insert_index is not None:
+                tab_buttons[insert_index].insert_before(soup.new_string("\\n"))
+                tab_buttons[insert_index].insert_before(new_tab)
+                inserted_tab = True
+                print(f"[OK] Inserted <button> AI Overview tab")
+        else:
+            print(f"[SKIP] AI Overview tab already present")
+
+    else:
+        print(f"[WARN] No <div class='tabs'> found")
+
+    # ✅ Add the AI Overview content block
     new_div = BeautifulSoup(overview_html, "html.parser")
     tab_container.append(new_div)
+    print(f"[OK] Inserted <div id='ai-overview'> content")
 
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(str(soup))
 
-    print(f"[OK] AI Overview inserted into: {html_path}")
+    print(f"[DONE] Updated file saved: {html_path}\\n")
 
 def main():
     if len(sys.argv) < 2:
