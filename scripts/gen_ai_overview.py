@@ -64,20 +64,29 @@ def insert_ai_overview(html_path, overview_html):
         print(f"[ERROR] No tab-container found in {html_path}")
         return
 
-    # ✅ Insert AI Overview tab if it's not already present
+    # ✅ Add AI Overview tab button if it doesn't exist
     tabs_div = tab_container.find("div", class_="tabs")
     if tabs_div:
         tab_buttons = tabs_div.find_all("button")
-        tab_ids = [btn.get("onclick", "") for btn in tab_buttons]
-        if not any("ai-overview" in tid for tid in tab_ids):
+        existing = [btn.get("onclick", "") for btn in tab_buttons]
+        if not any("ai-overview" in e for e in existing):
             new_tab = soup.new_tag("button", attrs={
                 "class": "tab",
                 "onclick": "showTab('ai-overview')"
             })
             new_tab.string = "AI Overview"
-            tabs_div.insert(len(tab_buttons) - 2, new_tab)  # Insert before Downloads
 
-    # ✅ Append the generated <div id="ai-overview"> section
+            # Insert after "Layout", before "Downloads"
+            insert_index = None
+            for i, btn in enumerate(tab_buttons):
+                if "downloads" in btn.get("onclick", ""):
+                    insert_index = i
+                    break
+            if insert_index is not None:
+                tab_buttons[insert_index].insert_before(new_tab)
+                tab_buttons[insert_index].insert_before(soup.new_string("\\n"))
+
+    # ✅ Insert the AI Overview section
     new_div = BeautifulSoup(overview_html, "html.parser")
     tab_container.append(new_div)
 
