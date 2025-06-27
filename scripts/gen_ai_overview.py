@@ -3,7 +3,10 @@ import os
 import openai
 from bs4 import BeautifulSoup
 
-# Initialize OpenAI client (new API style)
+# ✅ Set your API key in the environment like this (before running):
+# $env:OPENAI_API_KEY = "sk-..."
+
+# Initialize OpenAI client (for openai>=1.0.0)
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def extract_data(html_path):
@@ -61,6 +64,20 @@ def insert_ai_overview(html_path, overview_html):
         print(f"[ERROR] No tab-container found in {html_path}")
         return
 
+    # ✅ Insert AI Overview tab if it's not already present
+    tabs_div = tab_container.find("div", class_="tabs")
+    if tabs_div:
+        tab_buttons = tabs_div.find_all("button")
+        tab_ids = [btn.get("onclick", "") for btn in tab_buttons]
+        if not any("ai-overview" in tid for tid in tab_ids):
+            new_tab = soup.new_tag("button", attrs={
+                "class": "tab",
+                "onclick": "showTab('ai-overview')"
+            })
+            new_tab.string = "AI Overview"
+            tabs_div.insert(len(tab_buttons) - 2, new_tab)  # Insert before Downloads
+
+    # ✅ Append the generated <div id="ai-overview"> section
     new_div = BeautifulSoup(overview_html, "html.parser")
     tab_container.append(new_div)
 
