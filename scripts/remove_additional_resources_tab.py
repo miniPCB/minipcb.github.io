@@ -16,8 +16,8 @@ placeholder_pattern = re.compile(
 
 # Final "Coming Soon" block to detect and insert
 final_block = '''<div id="resources" class="tab-content">
-    <h2>Coming Soon</h2>
-    <p>We are working on additional resources for this PCB. Please check back later!</p>
+<h2>Coming Soon</h2>
+<p>We are working on additional resources for this PCB. Please check back later!</p>
 </div>'''
 
 # Regex to detect the final "Coming Soon" block

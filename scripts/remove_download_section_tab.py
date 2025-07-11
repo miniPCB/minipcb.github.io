@@ -30,8 +30,8 @@ tab_button_pattern = lambda tab_id, label: re.compile(
 
 # Replacement HTML for resources
 replacement_resources = '''<div id="resources" class="tab-content">
-    <h2>Coming Soon</h2>
-    <p>We are working on additional resources for this PCB. Please check back later!</p>
+<h2>Coming Soon</h2>
+<p>We are working on additional resources for this PCB. Please check back later!</p>
 </div>'''
 
 # Process all HTML files
