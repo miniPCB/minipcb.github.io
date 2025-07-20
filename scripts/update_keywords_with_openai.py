@@ -7,31 +7,40 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise EnvironmentError("OPENAI_API_KEY environment variable not set.")
 
-# Create OpenAI client (new API style for openai >= 1.0.0)
+# New client-based API for openai>=1.0.0
 client = openai.OpenAI(api_key=api_key)
 
 def extract_text_for_prompt(soup):
     content = []
 
+    # Title
     if soup.title:
         content.append(f"Title: {soup.title.string.strip()}")
 
+    # Headings
     for tag in soup.find_all(['h1', 'h2']):
         text = tag.get_text(strip=True)
         if text:
             content.append(f"Heading: {text}")
 
+    # Image alt text
     for img in soup.find_all('img'):
         alt = img.get('alt')
         if alt:
             content.append(f"Image Alt: {alt.strip()}")
 
+    # Slogan
+    slogan = soup.find('p', class_='slogan')
+    if slogan:
+        slogan_text = slogan.get_text(strip=True)
+        content.append(f"Slogan: {slogan_text}")
+
     return '\n'.join(content)
 
 def get_ai_keywords(text):
     prompt = (
-        "Based on the following HTML page content (title, headings, image alt text), "
-        "generate a list of 10 to 20 concise, comma-separated SEO keywords:\n\n"
+        "Based on the following HTML page content (title, headings, slogan, image alt text), "
+        "generate a list of 10 to 20 concise, comma-separated SEO keywords that are relevant to the page:\n\n"
         f"{text}\n\nKeywords:"
     )
 
@@ -83,6 +92,6 @@ def find_html_files(root_dir):
                 yield os.path.join(dirpath, file)
 
 if __name__ == '__main__':
-    root_directory = '.'  # Change to your root directory
+    root_directory = '.'  # Change this path if needed
     for html_file in find_html_files(root_directory):
         update_keywords_in_html(html_file)
