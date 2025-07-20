@@ -6,8 +6,8 @@ def activate_schematic_tab(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
         html = f.read()
 
-    original = "Comming"
-    replacement = "Coming"
+    original = "<li>Datasheet (PDF) Coming Soon</li>"
+    replacement = " "
 
     if original in html:
         html = html.replace(original, replacement)
