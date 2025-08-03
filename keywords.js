@@ -30,12 +30,6 @@ const keywords = [
     "slogan": ""
   },
   {
-    "keyword": "Custom Designs \u2013 miniPCB\u2122",
-    "url": "custom.html",
-    "meta": "miniPCB, Custom Designs, PCB Design, Custom miniPCB, Electronics, Circuit Board Design, Custom Circuit Boards, Small PCB, Compact Circuit Boards, PCB Manufacturing, Custom Electronics, Personalized PCB, Miniature Circuit Boards, PCB Prototyping, Electronic Design Services, PCB Assembly, Customizable Circuit Boards, Tailored PCB Designs, miniPCB Solutions, Advanced PCB Design",
-    "slogan": ""
-  },
-  {
     "keyword": "History \u2013 miniPCB\u2122",
     "url": "history.html",
     "meta": "\"History of miniPCB, PCB Design, Flashlight-tag sensor, Animal box trap, Electronics, Surface mount 555 Timer kit, myDAQ interface, myDAQ board design, myDAQ dock evolution, Concept designs, 2015 concept, 2017 concept, 2020 concept, Experimental transformer, Audio filter attempt, miniPCB logo, Original miniPCB idea, Electronic Components, PCB layout\"",
@@ -801,12 +795,6 @@ const keywords = [
     "keyword": "Transistor Amplifier Collection",
     "url": "collections/transistor-amplifiers.html",
     "meta": "Transistor Amplifier, Amplifier Collection, Circuits, Transistor Circuits, Audio Amplifiers, Electronic Components, Sound Amplification, Electronics Collection, Transistor Technology, Amplifier Designs, Amplifier Models, Hi-Fi Transistor Amplifiers, Vintage Amplifiers, Modern Amplifiers, Amplifier Circuit Design, High-Quality Amplifiers, Sound Equipment, Audio Technology, Electronics Hobbyists, Amplifier Enthusiasts.",
-    "slogan": ""
-  },
-  {
-    "keyword": "miniPCB\u2122 Datasheet Coming Soon",
-    "url": "datasheets/coming-soon.html",
-    "meta": "miniPCB, Datasheet, Coming Soon, miniPCB Datasheet, PCB Technology, Circuit Board, Electronic Components, PCB Datasheet, Future Electronics, Upcoming Datasheet, PCB Design, miniPCB Specs, Tech Specs Coming Soon, PCB Product Info, Electronics Datasheet, New Electronics, Advanced Circuitry, PCB Schematics, Miniature Circuit Board, Updated PCB Data",
     "slogan": ""
   }
 ];
