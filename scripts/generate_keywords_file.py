@@ -15,6 +15,10 @@ keywords_list = []
 for root, _, files in os.walk(ROOT_DIR):
     for file in files:
         if file.endswith(HTML_EXTENSIONS):
+            # Skip search.html explicitly
+            if file.lower() == "search.html":
+                continue
+
             file_path = os.path.join(root, file)
             rel_path = os.path.relpath(file_path, ROOT_DIR).replace("\\", "/")
 
@@ -54,6 +58,4 @@ with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
     json.dump(keywords_list, f, indent=2)
     f.write(";")
 
-print(f"✅ Keyword index built: {OUTPUT_FILE} with {len(keywords_list)} entries")
-# This script generates a keywords.js file containing keywords, URLs, and descriptions
-# for each HTML file in the miniPCB site, based on the title, meta keywords, and slogan.
+print(f"✅ Keyword index built: {OUTPUT_FILE} with {len(keywords_list)} entries (excluding search.html)")

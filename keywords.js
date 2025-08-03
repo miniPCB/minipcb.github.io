@@ -502,7 +502,7 @@ const keywords = [
   {
     "keyword": "09H-10 | Buck (Step-Down) Converter",
     "url": "09H/09H-10.html",
-    "description": "09H-10, Buck Converter, Step-Down Converter, PCB Details, Schematic, Board Layout, MiniPCB, PCB Design, Compact Buck Converter, Voltage Step-Down, Efficient Voltage Conversion, Electronic Components, Power Management, Converter Schematic, Power Supply Design, Voltage Regulation, Electronic Circuits, PCB Layout Design, Power Converters, Voltage Converters. | A compact buck converter design for efficient voltage step-down applications."
+    "description": "09H-10, Buck Converter, LM2574, Step-Down Converter, PCB Details, Schematic, Board Layout, MiniPCB, PCB Design, Compact Buck Converter, Voltage Step-Down, Efficient Voltage Conversion, Electronic Components, Power Management, Converter Schematic, Power Supply Design, Voltage Regulation, Electronic Circuits, PCB Layout Design, Power Converters, Voltage Converters. | A compact buck converter design for efficient voltage step-down applications."
   },
   {
     "keyword": "09H-11 | Boost (Step-Up) Converter (MAX757)",
