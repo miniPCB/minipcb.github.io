@@ -1,5 +1,4 @@
 import os
-import re
 import json
 from bs4 import BeautifulSoup
 
@@ -39,14 +38,11 @@ for root, _, files in os.walk(ROOT_DIR):
                 slogan_tag = soup.find("p", class_="slogan")
                 slogan = slogan_tag.get_text(strip=True) if slogan_tag else ""
 
-                # Build description
-                description_parts = [x for x in [meta_keywords, slogan] if x]
-                description = " | ".join(description_parts) if description_parts else "No description available"
-
                 keywords_list.append({
                     "keyword": title,
                     "url": rel_path,
-                    "description": description
+                    "meta": meta_keywords,
+                    "slogan": slogan
                 })
 
             except Exception as e:

@@ -40,41 +40,46 @@
 
     <ul id="results"></ul>
     
-    <script src="keywords.js"></script>
-    <script>
-      const searchBox = document.getElementById("searchBox");
-      const results = document.getElementById("results");
+<script src="keywords.js"></script>
+<script>
+  const searchBox = document.getElementById("searchBox");
+  const results = document.getElementById("results");
 
-      searchBox.addEventListener("input", () => {
-        const query = searchBox.value.toLowerCase();
-        results.innerHTML = "";
-        if (query.length < 2) return;
+  searchBox.addEventListener("input", () => {
+    const query = searchBox.value.toLowerCase();
+    results.innerHTML = "";
+    if (query.length < 2) return;
 
-        const queries = query.split(" ");
-        const matches = keywords.filter(k =>
-          queries.every(q =>
-            k.keyword.toLowerCase().includes(q) ||
-            k.description.toLowerCase().includes(q)
-          )
-        );
+    const queries = query.split(" ");
+    const matches = keywords.filter(k =>
+      queries.every(q =>
+        k.keyword.toLowerCase().includes(q) ||
+        (k.slogan && k.slogan.toLowerCase().includes(q)) ||
+        (k.meta && k.meta.toLowerCase().includes(q))
+      )
+    );
 
-        if (matches.length === 0) {
-          results.innerHTML = `<li>No results found for "<strong>${query}</strong>"</li>`;
-          return;
-        }
+    if (matches.length === 0) {
+      results.innerHTML = `<li>No results found for "<strong>${query}</strong>"</li>`;
+      return;
+    }
 
-        matches.forEach(match => {
-          const li = document.createElement("li");
-          li.innerHTML = `<a href="${match.url}">${match.keyword}</a><br><small>${match.description}</small>`;
-          results.appendChild(li);
-        });
-      });
+    matches.forEach(match => {
+      const li = document.createElement("li");
+      li.innerHTML = `
+        <a href="${match.url}">${match.keyword}</a>
+        ${match.slogan ? `<br><small><em>${match.slogan}</em></small>` : ""}
+      `;
+      results.appendChild(li);
+    });
+  });
 
-      // Autofocus search on page load
-      window.onload = () => {
-        searchBox.focus();
-      };
-    </script>
+  // Autofocus search on page load
+  window.onload = () => {
+    searchBox.focus();
+  };
+</script>
+
   </main>
   
   <footer>
