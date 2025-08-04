@@ -36,7 +36,7 @@ const keywords = [
     "slogan": ""
   },
   {
-    "keyword": "miniPCB",
+    "keyword": "Catalog \u2013 miniPCB\u2122",
     "url": "index.html",
     "meta": "miniPCB, Circuit Boards, Electronics Education, PCB for Education, Mini Circuit Boards, Electronics Learning, Educational PCB, Electronics Training, Circuit Board Education, miniPCB Logo, Printed Circuit Board Education, Miniature PCB, Learning Electronics, PCB Training, DIY Electronics Education, Electronics Study Material, Circuit Board Training, Miniature Circuit Board Training, miniPCB for Education, Educational Electronics Kit.",
     "slogan": "Circuit boards for electronics education."
@@ -142,6 +142,12 @@ const keywords = [
     "url": "02/02A-07.html",
     "meta": "Redundant Switch Input Circuit, 02A-07, Redundant Switch Input Circuit, PCB Details, Schematic, Board Layout, Coming Soon, miniPCB, Schematic Image, Expanded Schematic, Top View miniPCB, Basic Redundant Switch Input Circuit Design, Circuit Board, Electronic Component, PCB Design, Redundant Switch Input Circuit Layout, Redundant Switch Input Circuit Schematic, PCB 02A-07, 2P PCB, miniPCB Top View.",
     "slogan": "A basic switch input circuit design."
+  },
+  {
+    "keyword": "02B-09 | Adjustable JFET Electroscope AFE",
+    "url": "02/02B-09.html",
+    "meta": "Adjustable JFET Electroscope AFE, 02B-09, Adjustable JFET Electroscope AFE, PCB Details, Schematic, Board Layout, Coming Soon, miniPCB, Schematic Image, Expanded Schematic, Top View miniPCB, Basic Adjustable JFET Electroscope AFE Design, Circuit Board, Electronic Component, PCB Design, Adjustable JFET Electroscope AFE Layout, Adjustable JFET Electroscope AFE Schematic, PCB 02B-09, 2P PCB, miniPCB Top View.",
+    "slogan": "JFET Electroscope AFE with adjustable excitation voltage."
   },
   {
     "keyword": "04A-00 | Voltage Follower",
