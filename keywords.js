@@ -144,12 +144,6 @@ const keywords = [
     "slogan": "A basic switch input circuit design."
   },
   {
-    "keyword": "02B-09 | Adjustable JFET Electroscope AFE",
-    "url": "02/02B-09.html",
-    "meta": "Adjustable JFET Electroscope AFE, 02B-09, Adjustable JFET Electroscope AFE, PCB Details, Schematic, Board Layout, Coming Soon, miniPCB, Schematic Image, Expanded Schematic, Top View miniPCB, Basic Adjustable JFET Electroscope AFE Design, Circuit Board, Electronic Component, PCB Design, Adjustable JFET Electroscope AFE Layout, Adjustable JFET Electroscope AFE Schematic, PCB 02B-09, 2P PCB, miniPCB Top View.",
-    "slogan": "JFET Electroscope AFE with adjustable excitation voltage."
-  },
-  {
     "keyword": "04A-00 | Voltage Follower",
     "url": "04A/04A-00.html",
     "meta": "Voltage Follower, 04A-00, PCB Details, Schematic, Board Layout, Amplifier Design, Basic Voltage Follower, Expanded Schematic, MiniPCB, Top View of MiniPCB, Amplifier Circuit, Voltage Amplifier, Circuit Diagram, PCB Layout, Electronic Design, Schematic Diagram, Voltage Follower PCB, Electrical Board Layout, Voltage Follower Design, Amplifier Schematic",
