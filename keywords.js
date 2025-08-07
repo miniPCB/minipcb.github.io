@@ -144,6 +144,12 @@ const keywords = [
     "slogan": "A basic switch input circuit design."
   },
   {
+    "keyword": "02B-55 | Wheatstone Bridge Circuit with Instrumentation Amplifier",
+    "url": "02/02B-55.html",
+    "meta": "Wheatstone Bridge Circuit with Instrumentation Amplifier, 02B-55, Wheatstone Bridge Circuit with Instrumentation Amplifier, PCB Details, Schematic, Board Layout, Coming Soon, miniPCB, Schematic Image, Expanded Schematic, Top View miniPCB, Basic Wheatstone Bridge Circuit with Instrumentation Amplifier Design, Circuit Board, Electronic Component, PCB Design, Wheatstone Bridge Circuit with Instrumentation Amplifier Layout, Wheatstone Bridge Circuit with Instrumentation Amplifier Schematic, PCB 02B-55, 2P PCB, miniPCB Top View.",
+    "slogan": "A basic Wheatstone bridge circuit design with instrumentation amplifier."
+  },
+  {
     "keyword": "04A-00 | Voltage Follower",
     "url": "04A/04A-00.html",
     "meta": "Voltage Follower, 04A-00, PCB Details, Schematic, Board Layout, Amplifier Design, Basic Voltage Follower, Expanded Schematic, MiniPCB, Top View of MiniPCB, Amplifier Circuit, Voltage Amplifier, Circuit Diagram, PCB Layout, Electronic Design, Schematic Diagram, Voltage Follower PCB, Electrical Board Layout, Voltage Follower Design, Amplifier Schematic",
