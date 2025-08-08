@@ -57,6 +57,12 @@
 <button class="tab" onclick="showTab('layout')">
       Layout
      </button>
+<button class="tab" onclick="showTab('circuit-description')">
+      Circuit Description
+     </button>
+<button class="tab" onclick="showTab('parts-list')">
+      Parts List
+     </button>
 </div>
 <div class="tab-content" id="details">
 <h2>
@@ -110,6 +116,98 @@
      </h2>
 <img alt="Top view of miniPCB" class="zoomable" src="../images/02A-07_components_top.png"/>
 </div>
+
+<div id="circuit-description" class="tab-content">
+  <h2>Redundant Switch Input – Circuit Description</h2>
+  <p>
+    Two independent NPN stages (Q1 and Q2) read a single switch (SW1) and drive two
+    separate outputs. Either channel can be checked by downstream logic; disagreement
+    flags a fault, improving safety and diagnostics.
+  </p>
+
+  <ul>
+    <li><strong>Power (P1-1…P1-3):</strong> V+ supply and ground for both channels.</li>
+    <li><strong>Inputs (P1-4, P1-5):</strong> Separate lines from SW1 feed each channel.</li>
+    <li><strong>Channel A – Q1 → Output P1-6:</strong> R2 limits base current; C2 filters
+      noise/switch bounce. SW1 closure forward-biases Q1 and pulls P1-6 low.</li>
+    <li><strong>Channel B – Q2 → Output P1-7:</strong> R3 limits base current; R4 || C1 filter;
+      R5 provides pull-up bias. SW1 closure drives Q2 and pulls P1-7 low.</li>
+    <li><strong>Outputs:</strong> P1-6 and P1-7 are independent, open-collector–like
+      transistor pulls to ground (use external pull-ups as required).</li>
+  </ul>
+
+  <p class="note">
+    <strong>Design notes:</strong> Separate bias/filter networks reduce common-mode failures.
+    Capacitors tame bounce; resistors set safe base currents and default states.
+  </p>
+</div>
+
+<div id="parts-list" class="tab-content">
+  <h2>Example Parts List</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Ref Des</th>
+        <th>Value / Part No.</th>
+        <th>Rationale</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Q1</td>
+        <td>2N3906 PNP BJT</td>
+        <td>General-purpose PNP transistor for high-side switching; turns on when base is pulled low relative to emitter.</td>
+      </tr>
+      <tr>
+        <td>Q2</td>
+        <td>2N3904 NPN BJT</td>
+        <td>General-purpose NPN transistor for low-side switching; turns on when base is driven high relative to emitter.</td>
+      </tr>
+      <tr>
+        <td>R2</td>
+        <td>10 kΩ</td>
+        <td>Limits base current into Q1 and sets bias for proper operation.</td>
+      </tr>
+      <tr>
+        <td>R3</td>
+        <td>10 kΩ</td>
+        <td>Limits base current into Q2 to safe levels.</td>
+      </tr>
+      <tr>
+        <td>R4</td>
+        <td>100 kΩ</td>
+        <td>Provides high-value bias for Q2’s base; forms an RC filter with C1 for noise suppression.</td>
+      </tr>
+      <tr>
+        <td>R5</td>
+        <td>10 kΩ</td>
+        <td>Pull-up to V+ for Q2 base, preventing false triggering when the switch is open.</td>
+      </tr>
+      <tr>
+        <td>C1</td>
+        <td>100 nF</td>
+        <td>Works with R4 to filter out switch bounce and high-frequency interference for Q2’s channel.</td>
+      </tr>
+      <tr>
+        <td>C2</td>
+        <td>100 nF</td>
+        <td>Filters switch bounce and noise for Q1’s channel.</td>
+      </tr>
+      <tr>
+        <td>SW1</td>
+        <td>Momentary Pushbutton</td>
+        <td>Primary mechanical input; its contacts independently feed the two transistor channels.</td>
+      </tr>
+      <tr>
+        <td>P1</td>
+        <td>7-pin header</td>
+        <td>Provides power, independent inputs, and dual redundant outputs for external connection.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
 </div>
 </main>
 <footer>
