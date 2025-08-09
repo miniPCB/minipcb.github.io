@@ -132,9 +132,9 @@ const keywords = [
     "slogan": "A basic backplane board design."
   },
   {
-    "keyword": "All Test Boards | miniPCB",
+    "keyword": "Sensor Interface Boards | miniPCB",
     "url": "02/02.html",
-    "meta": "Test Boards, miniPCB, 00A-series, PCB Catalog, Circuit Boards, miniPCB Test Boards, PCB Series, Test Board Catalog, Electronic Boards, miniPCB 00A-series, Test Boards Collection, PCB Board Collection, Circuit Board Series, Electronic Test Boards, 00A-series Catalog, PCB Testing, miniPCB Products, All Test Boards, 00A-series Test Boards, miniPCB Test Collection",
+    "meta": "Sensor Interface Boards, miniPCB, 02-series, PCB Catalog, Circuit Boards, miniPCB Sensor Interface Boards, PCB Series, Sensor Interface Board Catalog, Electronic Boards, miniPCB 02-series, Sensor Interface Boards Collection, PCB Board Collection, Circuit Board Series, Electronic Sensor Interface Boards, 02-series Catalog, PCB Testing, miniPCB Products, All Sensor Interface Boards, 02-series Sensor Interface Boards, miniPCB Sensor Interface Collection",
     "slogan": "02-series miniPCB catalog"
   },
   {
@@ -146,8 +146,20 @@ const keywords = [
   {
     "keyword": "02B-55 | Wheatstone Bridge Circuit with Instrumentation Amplifier",
     "url": "02/02B-55.html",
-    "meta": "Wheatstone Bridge Circuit with Instrumentation Amplifier, 02B-55, Wheatstone Bridge Circuit with Instrumentation Amplifier, PCB Details, Schematic, Board Layout, Coming Soon, miniPCB, Schematic Image, Expanded Schematic, Top View miniPCB, Basic Wheatstone Bridge Circuit with Instrumentation Amplifier Design, Circuit Board, Electronic Component, PCB Design, Wheatstone Bridge Circuit with Instrumentation Amplifier Layout, Wheatstone Bridge Circuit with Instrumentation Amplifier Schematic, PCB 02B-55, 2P PCB, miniPCB Top View.",
+    "meta": "Wheatstone Bridge Circuit with Instrumentation Amplifier, 02B-55, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End",
     "slogan": "A basic Wheatstone bridge circuit design with instrumentation amplifier."
+  },
+  {
+    "keyword": "Actuator Boards | miniPCB",
+    "url": "03/03.html",
+    "meta": "Actuator Boards, miniPCB, 03-series, PCB Catalog, Circuit Boards, miniPCB Actuator Boards, PCB Series, Actuator Board Catalog, Electronic Boards, miniPCB 03-series, Actuator Boards Collection, PCB Board Collection, Circuit Board Series, Electronic Actuator Boards, 03-series Catalog, PCB Testing, miniPCB Products, All Actuator Boards, 03-series Actuator Boards, miniPCB Actuator Collection",
+    "slogan": "03-series miniPCB catalog"
+  },
+  {
+    "keyword": "03D-10 | Ultrasound Transducer Driver (Discrete)",
+    "url": "03/03D-10.html",
+    "meta": "Ultrasound Transducer Driver (Discrete), 03D-10, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End",
+    "slogan": "A basic ultrasound transducer driver circuit design."
   },
   {
     "keyword": "04A-00 | Voltage Follower",
@@ -620,8 +632,8 @@ const keywords = [
   {
     "keyword": "09H-13 | Buck (Step-Down) Converter (MC34063)",
     "url": "09H/09H-13.html",
-    "meta": "Buck Converter, Step-Down Converter, MC34063, 09H-13, PCB Details, Schematic, Board Layout, MiniPCB, Compact Boost Converter, Voltage Step-Up Applications, Converter Design, Efficient Voltage, Expanded Schematic, Top View MiniPCB, Electronic Components, Power Conversion, Circuit Design, Coming Soon, Voltage Converter, Power Electronics.",
-    "slogan": "A compact boost converter design for efficient voltage step-up applications."
+    "meta": "Buck Converter, Step-Down Converter, MC34063, 09H-13, PCB Details, Schematic, Board Layout, MiniPCB, Compact Buck Converter, Voltage Step-Down Applications, Converter Design, Efficient Voltage, Expanded Schematic, Top View MiniPCB, Electronic Components, Power Conversion, Circuit Design, Voltage Converter, Power Electronics.",
+    "slogan": "A compact boost converter design for efficient voltage step-down applications."
   },
   {
     "keyword": "09H-14 | Voltage Inverter (MC34063)",
