@@ -6,9 +6,9 @@ const keywords = [
     "slogan": ""
   },
   {
-    "keyword": "Asking for Help \u2013 miniPCB",
+    "keyword": "Free Samples \u2013 miniPCB",
     "url": "ask.html",
-    "meta": "miniPCB, Asking for Help, PCB Assistance, PCB Help, Electronic Components, PCB Support, PCB Inquiry, Technical Assistance, PCB Solutions, DIY Electronics, Circuit Board Help, miniPCB Guide, PCB Troubleshooting, miniPCB Support, miniPCB Assistance, PCB Help Desk, Electronic Support, miniPCB Query, PCB Questions, PCB Support Services.",
+    "meta": "miniPCB, Free Samples, PCB Assistance, PCB Help, Electronic Components, PCB Support, PCB Inquiry, Technical Assistance, PCB Solutions, DIY Electronics, Circuit Board Help, miniPCB Guide, PCB Troubleshooting, miniPCB Support, miniPCB Assistance, PCB Help Desk, Electronic Support, miniPCB Query, PCB Questions, PCB Support Services.",
     "slogan": ""
   },
   {
@@ -304,6 +304,18 @@ const keywords = [
     "url": "04B/04B.html",
     "meta": "Transistor Amplifiers, miniPCB, 04B-series, Amplifier Technology, PCB Electronics, Audio Amplifiers, Electronic Components, Transistor Amplifier Models, Mini Circuit Board, Amplifier Catalog, High Quality Amplifiers, Transistor Audio Products, Compact Amplifiers, 04B-series Amplifiers, Amplifier Components, PCB Audio, miniPCB Products, Transistor Amplifier Technology, Electronics Catalog, Miniature PCB",
     "slogan": "04B-series miniPCB catalog"
+  },
+  {
+    "keyword": "03D-10 | Ultrasound Transducer Driver (Discrete)",
+    "url": "04C/04C-05.html",
+    "meta": "Ultrasound Transducer Driver (Discrete), 03D-10, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End",
+    "slogan": "A basic ultrasound transducer driver circuit design."
+  },
+  {
+    "keyword": "All Specialty Amplifiers | miniPCB",
+    "url": "04C/04C.html",
+    "meta": "Specialty Amplifiers, miniPCB, 04C-series, Amplifier Technology, PCB Electronics, Audio Amplifiers, Electronic Components, Specialty Amplifier Models, Mini Circuit Board, Amplifier Catalog, High Quality Amplifiers, Specialty Audio Products, Compact Amplifiers, 04C-series Amplifiers, Amplifier Components, PCB Audio, miniPCB Products, Specialty Amplifier Technology, Electronics Catalog, Miniature PCB",
+    "slogan": "04C-series miniPCB catalog"
   },
   {
     "keyword": "All RC Filters | miniPCB",
