@@ -306,10 +306,10 @@ const keywords = [
     "slogan": "04B-series miniPCB catalog"
   },
   {
-    "keyword": "03D-10 | Ultrasound Transducer Driver (Discrete)",
+    "keyword": "04C-05 | Ultrasound Analog Front End",
     "url": "04C/04C-05.html",
-    "meta": "Ultrasound Transducer Driver (Discrete), 03D-10, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End",
-    "slogan": "A basic ultrasound transducer driver circuit design."
+    "meta": "Ultrasound Analog Front End, 04C-05, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End",
+    "slogan": "A basic ultrasound transducer pre-amplifier circuit design."
   },
   {
     "keyword": "All Specialty Amplifiers | miniPCB",
@@ -580,6 +580,12 @@ const keywords = [
     "url": "09A/09A-16.html",
     "meta": "Shunt Regulator, 09A-16, Improved Shunt Regulator, PCB Details, Board Layout, Schematic, Downloads, Voltage Regulation Circuit, Reliable Voltage Regulation, MiniPCB, Top view of MiniPCB, Expanded Schematic, Coming Soon, Shunt Regulator Configuration, Improved Regulator Configuration, Voltage Control, Circuit Design, Electronic Components, Voltage Regulator, Electronic Schematic.",
     "slogan": "A reliable voltage regulation circuit using an improved shunt regulator configuration."
+  },
+  {
+    "keyword": "09A-17 | +/- 10V Reference Regulator",
+    "url": "09A/09A-17.html",
+    "meta": "Shunt Regulator, 09A-17, +/- 10V Reference Regulator, PCB Details, Board Layout, Schematic, Downloads, Voltage Regulation Circuit, Reliable Voltage Regulation, MiniPCB, Top view of MiniPCB, Expanded Schematic, Coming Soon, Shunt Regulator Configuration, Improved Regulator Configuration, Voltage Control, Circuit Design, Electronic Components, Voltage Regulator, Electronic Schematic.",
+    "slogan": "A voltage regulation circuit."
   },
   {
     "keyword": "All Power, Linear Voltage Regulators | miniPCB",
