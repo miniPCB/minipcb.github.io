@@ -588,6 +588,12 @@ const keywords = [
     "slogan": "A voltage regulation circuit."
   },
   {
+    "keyword": "09A-18 | Low Dropout Regulator",
+    "url": "09A/09A-18.html",
+    "meta": "Shunt Regulator, 09A-18, Low Dropout Regulator, PCB Details, Board Layout, Schematic, Downloads, Voltage Regulation Circuit, Reliable Voltage Regulation, MiniPCB, Top view of MiniPCB, Expanded Schematic, Coming Soon, Shunt Regulator Configuration, Improved Regulator Configuration, Voltage Control, Circuit Design, Electronic Components, Voltage Regulator, Electronic Schematic.",
+    "slogan": "A voltage regulation circuit."
+  },
+  {
     "keyword": "All Power, Linear Voltage Regulators | miniPCB",
     "url": "09A/09A.html",
     "meta": "Linear Voltage Regulators, All Power, miniPCB, 09A-series, Voltage Regulation, Power Regulators, Electronic Components, miniPCB Catalog, PCB Power Solutions, Linear Power Regulators, All Power Voltage Regulators, 09A-series Regulators, miniPCB Products, Linear Regulators, Voltage Control, Power Management, Electronic Regulators, Miniature PCB, Regulator Components, High-Power Regulators.",
