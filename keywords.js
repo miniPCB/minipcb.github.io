@@ -312,6 +312,12 @@ const keywords = [
     "slogan": "A basic ultrasound transducer pre-amplifier circuit design."
   },
   {
+    "keyword": "04C-25 | Resistance Measurement Circuit",
+    "url": "04C/04C-25.html",
+    "meta": "Resistance Measurement Circuit, 04C-25, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End",
+    "slogan": "A basic circuit design to measure resistance."
+  },
+  {
     "keyword": "All Specialty Amplifiers | miniPCB",
     "url": "04C/04C.html",
     "meta": "Specialty Amplifiers, miniPCB, 04C-series, Amplifier Technology, PCB Electronics, Audio Amplifiers, Electronic Components, Specialty Amplifier Models, Mini Circuit Board, Amplifier Catalog, High Quality Amplifiers, Specialty Audio Products, Compact Amplifiers, 04C-series Amplifiers, Amplifier Components, PCB Audio, miniPCB Products, Specialty Amplifier Technology, Electronics Catalog, Miniature PCB",
