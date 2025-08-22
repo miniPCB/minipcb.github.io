@@ -159,17 +159,8 @@
     }
   };
   </script>
-  <!-- Data file you auto-generate with Python -->
-<script src="schematics-data.js"></script>
 
 <script>
-  // Tab switcher
-  function showTab(id) {
-    document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelector(`.tab[onclick="showTab('${id}')"]`)?.classList.add('active');
-    document.getElementById(id)?.classList.add('active');
-  }
 
   // Render the List from window.SCHEMATICS
 (function renderList(){
@@ -221,14 +212,41 @@
   }
 
   // ------- Search wiring (from your search page, adapted to live in-tab) -------
-  (function attachSearch(){
+(function attachSearch(){
     const searchBox = document.getElementById("searchBox");
     const results = document.getElementById("results");
     if (!searchBox || !results) return;
 
-    // Small debounce so GA isn’t spammed
+    // Debounce helper
     let t = null;
     const debounce = (fn, d=120) => (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), d); };
+
+    // Build a resilient index:
+    // - supports `var keywords = [...]` (global var),
+    // - supports `window.keywords = [...]`,
+    // - falls back to SCHEMATICS when present.
+    function getSearchIndex(){
+      const fromVar = (typeof keywords !== "undefined" && Array.isArray(keywords)) ? keywords : [];
+      const fromWin = Array.isArray(window.keywords) ? window.keywords : [];
+      const fromSchematics = Array.isArray(window.SCHEMATICS)
+        ? window.SCHEMATICS.map(({title, href}) => ({ url: href, keyword: title, meta: title }))
+        : [];
+
+      // Merge + dedupe by url (or by keyword if url missing)
+      const merged = [...fromVar, ...fromWin, ...fromSchematics];
+      const seen = new Set();
+      const out = [];
+      for (const k of merged) {
+        const key = k.url || ("__kw__:" + (k.keyword || ""));
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push(k);
+        }
+      }
+      return out;
+    }
+
+    const index = getSearchIndex();
 
     const runSearch = () => {
       const query = searchBox.value.trim().toLowerCase();
@@ -236,13 +254,14 @@
       if (query.length < 2) return;
 
       const parts = query.split(/\s+/);
-      const list = (window.keywords || []); // expects keywords.js to define window.keywords
 
-      const matches = list.filter(k =>
+      const matches = index.filter(k =>
         parts.every(q =>
           (k.keyword && k.keyword.toLowerCase().includes(q)) ||
           (k.slogan && k.slogan.toLowerCase().includes(q)) ||
-          (k.meta && k.meta.toLowerCase().includes(q))
+          (k.meta && k.meta.toLowerCase().includes(q)) ||
+          // optionally match the URL path itself
+          (k.url && k.url.toLowerCase().includes(q))
         )
       );
 
@@ -274,7 +293,6 @@
 
     searchBox.addEventListener("input", debounce(runSearch));
 
-    // Utility to avoid injecting raw HTML
     function escapeHTML(s){
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
