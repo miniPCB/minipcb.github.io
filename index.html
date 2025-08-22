@@ -68,10 +68,10 @@
 </div>
 </section>
 
-<!-- Tabs -->
 <div class="tabs">
   <button id="list-tab" class="tab active" onclick="showTab('list')">List</button>
   <button id="catalog-tab" class="tab" onclick="showTab('catalog')">Catalog</button>
+  <button id="search-tab" class="tab" onclick="showTab('search')">Search</button>
 </div>
 
     <!-- LIST (Active by default) -->
@@ -106,6 +106,21 @@
       </div>
     </section>
   </section>
+      <!-- SEARCH -->
+      <section id="search" class="tab-content" aria-labelledby="search-tab">
+      <div class="search-container">
+      <label for="searchBox" class="visually-hidden">Search miniPCB pages</label>
+      <input
+            type="text"
+            id="searchBox"
+            placeholder="Search by keyword, title, or slogan…"
+            aria-label="Search miniPCB pages"
+            class="search-input"
+      />
+      </div>
+
+      <ul id="results" class="search-results" aria-live="polite"></ul>
+      </section>
 </main>
 <footer>
    © 2025 miniPCB. All rights reserved.
@@ -187,5 +202,85 @@
 })();
 
 </script>
+<!-- Your generated datasets -->
+<script src="schematics-data.js"></script>
+<script src="keywords.js"></script>
+
+<script>
+  // Tab switcher: keep existing behavior; add focus when opening Search
+  function showTab(id) {
+    document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.tab[onclick="showTab('${id}')"]`)?.classList.add('active');
+    document.getElementById(id)?.classList.add('active');
+
+    if (id === 'search') {
+      // Focus the input shortly after the panel becomes visible
+      setTimeout(() => document.getElementById('searchBox')?.focus(), 0);
+    }
+  }
+
+  // ------- Search wiring (from your search page, adapted to live in-tab) -------
+  (function attachSearch(){
+    const searchBox = document.getElementById("searchBox");
+    const results = document.getElementById("results");
+    if (!searchBox || !results) return;
+
+    // Small debounce so GA isn’t spammed
+    let t = null;
+    const debounce = (fn, d=120) => (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), d); };
+
+    const runSearch = () => {
+      const query = searchBox.value.trim().toLowerCase();
+      results.innerHTML = "";
+      if (query.length < 2) return;
+
+      const parts = query.split(/\s+/);
+      const list = (window.keywords || []); // expects keywords.js to define window.keywords
+
+      const matches = list.filter(k =>
+        parts.every(q =>
+          (k.keyword && k.keyword.toLowerCase().includes(q)) ||
+          (k.slogan && k.slogan.toLowerCase().includes(q)) ||
+          (k.meta && k.meta.toLowerCase().includes(q))
+        )
+      );
+
+      // Track with GA if available
+      if (typeof gtag === 'function') {
+        gtag('event', 'search', {
+          search_term: query,
+          results_found: matches.length > 0,
+          results_count: matches.length
+        });
+      }
+
+      if (matches.length === 0) {
+        results.innerHTML = `<li>No results found for "<strong>${escapeHTML(query)}</strong>"</li>`;
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+      matches.forEach(match => {
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <a href="${match.url}">${escapeHTML(match.keyword || match.url)}</a>
+          ${match.slogan ? `<br><small><em>${escapeHTML(match.slogan)}</em></small>` : ""}
+        `;
+        frag.appendChild(li);
+      });
+      results.appendChild(frag);
+    };
+
+    searchBox.addEventListener("input", debounce(runSearch));
+
+    // Utility to avoid injecting raw HTML
+    function escapeHTML(s){
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+  })();
+</script>
+
+
 </body>
 </html>
