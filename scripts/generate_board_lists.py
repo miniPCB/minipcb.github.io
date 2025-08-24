@@ -3,7 +3,7 @@ import re
 import json
 
 # List of folders to scan
-catalog = ["00A", "02", "03", "04A", "04B","04C", "05", "06", "09A", "09D", "09H", "08D", "08G", "08H", "10", "11"]
+catalog = ["00A", "02", "03", "04A", "04B","04C", "05", "06", "09A", "09D", "09H", "08D", "08G", "08H", "10", "11", "13"]
 
 # Match filenames like '123-45.html', '12A-345.html' (3 alphanumeric + dash + 2–3 digits)
 pattern = re.compile(r"^[A-Z0-9]{3}-\d{2,3}\.html$", re.IGNORECASE)
