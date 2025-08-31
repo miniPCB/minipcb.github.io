@@ -774,9 +774,21 @@ const keywords = [
     "slogan": "13-series miniPCB catalog"
   },
   {
-    "keyword": "11B-10 | Differentiator, Adjustable",
+    "keyword": "13A-001 | Cascade Noise Amplifier",
     "url": "13/13A-001.html",
-    "meta": "11B-10, Differentiator, Adjustable, PCB Details, Schematic, Board Layout, Coming Soon, Expanded schematic, Top view, miniPCB, Adjustable differentiator design, Basic differentiator, Differentiator circuit, Electronics, PCB Design, Electronic Components, Circuit Board, Adjustable Circuit, Electronic Schematics, Circuit Design",
+    "meta": "13A-001, Cascade Noise Amplifier, PCB Details, Schematic, Board Layout, Coming Soon, Expanded schematic, Top view, miniPCB, Adjustable differentiator design, Basic differentiator, Differentiator circuit, Electronics, PCB Design, Electronic Components, Circuit Board, Adjustable Circuit, Electronic Schematics, Circuit Design",
+    "slogan": "A basic adjustable differentiator design."
+  },
+  {
+    "keyword": "All Games | miniPCB",
+    "url": "20/20.html",
+    "meta": "All Games, miniPCB, 13-series miniPCB, PCB Catalog, Digital PCB, Electronic Components, Miniature PCB, Digital Circuit Boards, High-tech PCB, PCB Online, PCB Design, All Games Products, Digital PCB Solutions, Advanced PCB, Compact PCB, 13-series Electronic Parts, PCB Series, Digital Technology, Electronics Catalog, All Games miniPCB Series",
+    "slogan": "13-series miniPCB catalog"
+  },
+  {
+    "keyword": "13A-001 | Cascade Noise Amplifier",
+    "url": "20/20A-30.html",
+    "meta": "13A-001, Cascade Noise Amplifier, PCB Details, Schematic, Board Layout, Coming Soon, Expanded schematic, Top view, miniPCB, Adjustable differentiator design, Basic differentiator, Differentiator circuit, Electronics, PCB Design, Electronic Components, Circuit Board, Adjustable Circuit, Electronic Schematics, Circuit Design",
     "slogan": "A basic adjustable differentiator design."
   },
   {

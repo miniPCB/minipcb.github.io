@@ -1,6 +1,6 @@
 import os, re, html
 
-ROOTS = ["./00A","./02","./03","./04A","./04B","./04C","./05","./06","./08D","./08H","./09A","./09H","./09D","./10","./11","./collections"]
+ROOTS = ["./00A","./02","./03","./04A","./04B","./04C","./05","./06","./08D","./08H","./09A","./09H","./09D","./10","./11","./13","./20","./collections"]
 out_path = "schematics-data.js"
 title_re = re.compile(r"<title>(.*?)</title>", re.IGNORECASE|re.DOTALL)
 
