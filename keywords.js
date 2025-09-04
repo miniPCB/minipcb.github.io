@@ -96,15 +96,15 @@ const keywords = [
     "slogan": "A basic prototyping board design."
   },
   {
-    "keyword": "00A-32 | Prototyping Board, 1 Piece",
+    "keyword": "00A-32 | Prototyping Board, V-scored,  9 Pieces",
     "url": "00A/00A-32.html",
-    "meta": "00A-32, Prototyping Board, 1 Piece, PCB Details, Board Layout, Coming Soon, Top view of miniPCB, Basic Prototyping Board Design, PCB, Prototyping, Board, Circuit Board, Prototype, Electronics, Board Design, Mini PCB, Electronic Components, PCB Layout, Single Piece, Prototyping Board Details",
+    "meta": "00A-32, Prototyping Board, 9 Piece, PCB Details, Board Layout, Coming Soon, Top view of miniPCB, Basic Prototyping Board Design, PCB, Prototyping, Board, Circuit Board, Prototype, Electronics, Board Design, Mini PCB, Electronic Components, PCB Layout, Single Piece, Prototyping Board Details",
     "slogan": "A basic prototyping board design."
   },
   {
-    "keyword": "00A-33 | Prototyping Board, 1 Piece",
+    "keyword": "00A-33 | Prototyping Board, V-scored, 28 Pieces",
     "url": "00A/00A-33.html",
-    "meta": "00A-33 Prototyping Board, 1 Piece, PCB Details, Board Layout, MiniPCB, Basic Prototyping Design, Prototyping Board, PCB, Electronic Components, Circuit Board Design, PCB Prototyping, Mini PCB, 1 Piece PCB, Board Prototype, Electronic Prototyping, Prototyping Board Details, PCB Layout, Mini Circuit Board, Single Piece Prototyping Board, PCB Design",
+    "meta": "00A-33 Prototyping Board, 28 Pieces, PCB Details, Board Layout, MiniPCB, Basic Prototyping Design, Prototyping Board, PCB, Electronic Components, Circuit Board Design, PCB Prototyping, Mini PCB, 28 Pieces PCB, Board Prototype, Electronic Prototyping, Prototyping Board Details, PCB Layout, Mini Circuit Board, Single Piece Prototyping Board, PCB Design",
     "slogan": "A basic prototyping board design."
   },
   {
@@ -780,16 +780,16 @@ const keywords = [
     "slogan": "A basic adjustable differentiator design."
   },
   {
-    "keyword": "All Games | miniPCB",
+    "keyword": "All Experiments | miniPCB",
     "url": "20/20.html",
-    "meta": "All Games, miniPCB, 13-series miniPCB, PCB Catalog, Digital PCB, Electronic Components, Miniature PCB, Digital Circuit Boards, High-tech PCB, PCB Online, PCB Design, All Games Products, Digital PCB Solutions, Advanced PCB, Compact PCB, 13-series Electronic Parts, PCB Series, Digital Technology, Electronics Catalog, All Games miniPCB Series",
-    "slogan": "13-series miniPCB catalog"
+    "meta": "All Experiments, miniPCB, 20-series miniPCB, PCB Catalog, Digital PCB, Electronic Components, Miniature PCB, Digital Circuit Boards, High-tech PCB, PCB Online, PCB Design, All Experiments Products, Digital PCB Solutions, Advanced PCB, Compact PCB, 20-series Electronic Parts, PCB Series, Digital Technology, Electronics Catalog, All Experiments miniPCB Series",
+    "slogan": "20-series miniPCB catalog"
   },
   {
-    "keyword": "13A-001 | Cascade Noise Amplifier",
+    "keyword": "20A-30 | Pulse Generator, Adjustable",
     "url": "20/20A-30.html",
-    "meta": "13A-001, Cascade Noise Amplifier, PCB Details, Schematic, Board Layout, Coming Soon, Expanded schematic, Top view, miniPCB, Adjustable differentiator design, Basic differentiator, Differentiator circuit, Electronics, PCB Design, Electronic Components, Circuit Board, Adjustable Circuit, Electronic Schematics, Circuit Design",
-    "slogan": "A basic adjustable differentiator design."
+    "meta": "20A-30, Pulse Generator, Adjustable, PCB Details, Schematic, Board Layout, Coming Soon, Expanded schematic, Top view, miniPCB, Adjustable differentiator design, Basic differentiator, Differentiator circuit, Electronics, PCB Design, Electronic Components, Circuit Board, Adjustable Circuit, Electronic Schematics, Circuit Design",
+    "slogan": "A basic adjustable pulse generator design."
   },
   {
     "keyword": "555 Timer Circuits",

@@ -85,14 +85,14 @@ const siteIndex = [
     "keywords": "Prototyping Board, 00A-31, V-scored, 4 Pieces, PCB Details, Board Layout, miniPCB, Top view, Basic Prototyping Board Design, Prototyping, V-scored Board, Electronic Prototyping, PCB Prototyping, 4 Piece Prototyping Board, Board Design, PCB Layout, Miniature PCB, PCB Prototyping Details, 00A-31 Prototyping Board, V-scored Prototyping"
   },
   {
-    "title": "00A-32 | Prototyping Board, 1 Piece",
+    "title": "00A-32 | Prototyping Board, V-scored,  9 Pieces",
     "url": "00A/00A-32.html",
-    "keywords": "00A-32, Prototyping Board, 1 Piece, PCB Details, Board Layout, Coming Soon, Top view of miniPCB, Basic Prototyping Board Design, PCB, Prototyping, Board, Circuit Board, Prototype, Electronics, Board Design, Mini PCB, Electronic Components, PCB Layout, Single Piece, Prototyping Board Details"
+    "keywords": "00A-32, Prototyping Board, 9 Piece, PCB Details, Board Layout, Coming Soon, Top view of miniPCB, Basic Prototyping Board Design, PCB, Prototyping, Board, Circuit Board, Prototype, Electronics, Board Design, Mini PCB, Electronic Components, PCB Layout, Single Piece, Prototyping Board Details"
   },
   {
-    "title": "00A-33 | Prototyping Board, 1 Piece",
+    "title": "00A-33 | Prototyping Board, V-scored, 28 Pieces",
     "url": "00A/00A-33.html",
-    "keywords": "00A-33 Prototyping Board, 1 Piece, PCB Details, Board Layout, MiniPCB, Basic Prototyping Design, Prototyping Board, PCB, Electronic Components, Circuit Board Design, PCB Prototyping, Mini PCB, 1 Piece PCB, Board Prototype, Electronic Prototyping, Prototyping Board Details, PCB Layout, Mini Circuit Board, Single Piece Prototyping Board, PCB Design"
+    "keywords": "00A-33 Prototyping Board, 28 Pieces, PCB Details, Board Layout, MiniPCB, Basic Prototyping Design, Prototyping Board, PCB, Electronic Components, Circuit Board Design, PCB Prototyping, Mini PCB, 28 Pieces PCB, Board Prototype, Electronic Prototyping, Prototyping Board Details, PCB Layout, Mini Circuit Board, Single Piece Prototyping Board, PCB Design"
   },
   {
     "title": "All Test Boards | miniPCB",
