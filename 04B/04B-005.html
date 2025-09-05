@@ -60,7 +60,6 @@
   <button class="tab" onclick="showTab('layout', this)">Layout</button>
   <button class="tab" onclick="showTab('downloads', this)">Downloads</button>
   <button class="tab" onclick="showTab('resources', this)">Additional Resources</button>
-  <button class="tab" onclick="showTab('epsa', this); preloadEpsaNetlist();">EPSA</button>
 </div>
 
 <div class="tab-content" id="details">
@@ -160,9 +159,7 @@
 </div>
 </div>
 <div class="tab-content active" id="schematic">
-<h2>
-      Schematic
-     </h2>
+<h2>Schematic</h2>
 <div class="lightbox-container">
 <img alt="Schematic" class="zoomable" onclick="openLightbox(this)" src="../images/04B-005_schematic_01.png"/>
 </div>
@@ -171,32 +168,22 @@
 </div>
 </div>
 <div class="tab-content" id="layout">
-<h2>
-      Board Layout
-     </h2>
-<img alt="Top view of miniPCB" class="zoomable" src="../images/04B-005_components_top.png"/>
+<h2>Board Layout</h2>
+<img alt="Top view of miniPCB" class="zoomable" onclick="openLightbox(this)" src="../images/04B-005_components_top.png"/>
 </div>
 <div class="tab-content" id="downloads">
-<h2>
-      Downloads
-     </h2>
+<h2>Downloads</h2>
 <ul class="download-list">
 <li>
-<a href="../datasheets/04B-005.pdf" target="_blank">
-        Datasheet (PDF)
-       </a>
+<a href="../datasheets/04B-005.pdf" target="_blank">Datasheet (PDF)</a>
 </li>
 <li>
-<a href="../ltspice/04B-005.asc" target="_blank">
-        LTspice File (.asc)
-       </a>
+<a href="../ltspice/04B-005.asc" target="_blank">LTspice File (.asc)</a>
 </li>
 </ul>
 </div>
 <div class="tab-content" id="resources">
-<h2>
-      YouTube
-     </h2>
+<h2>YouTube</h2>
 <div class="video-wrapper">
 <iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen="" referrerpolicy="strict-origin-when-cross-origin" src="https://www.youtube.com/embed/_riwtuZd-8c?si=EXBgXIqN1Nzd6Vpt" title="YouTube video player">
 </iframe>
@@ -222,24 +209,11 @@
 </iframe>
 </div>
 </div>
-<div class="tab-content" id="epsa">
-  <h2>Electrical Part Stress Analysis (EPSA)</h2>
-  <p class="hint">Paste an EAGLE 6.3 (or similar) netlist below, then click <em>Run EPSA</em>. Results will render as a Markdown table.</p>
-
-  <textarea id="epsa-netlist" placeholder="# Paste your netlist here"></textarea>
-
-  <div class="row">
-    <button id="epsa-run">Run EPSA</button>
-    <span id="epsa-status" class="hint"></span>
-  </div>
-  <div id="epsa-out">Results will appear here…</div>
-</div>
 </div>
 </main>
 <footer>
    © 2025 miniPCB. All rights reserved.
   </footer>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
      <script>
      function showTab(id, btn) {
      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -257,79 +231,5 @@
           document.getElementById('lightbox').style.display = 'none';
           }
      </script>
-     <script>
-     function preloadEpsaNetlist(){
-     const el = document.getElementById('epsa-netlist');
-     if(!el || el.value.trim()) return; // don't overwrite user text
-     el.value = [
-          '# Example netlist for 04B-005',
-          'Q1 2N3904',
-          'R1 47k', 'R2 10k', 'R3 100k',
-          'RE 1k', 'RC 3.3k',
-          'C2 10uF', 'C4 100uF',
-          'VCC 12V'
-     ].join('\n');   // <-- this
-     }
-     </script>
-  <script>
-  // Small status helper
-  function setEpsaStatus(msg, spinning=false){
-    const el = document.getElementById('epsa-status');
-    el.innerHTML = spinning ? '<span class="spinner" style="display:inline-block;width:1em;height:1em;border:2px solid #666;border-top-color:#ddd;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;"></span> ' + msg : msg;
-  }
-  // spin animation
-  (function(){const s=document.createElement('style');s.textContent='@keyframes spin{to{transform:rotate(360deg)}}';document.head.appendChild(s)})();
-
-  async function runEPSA(){
-    const btn = document.getElementById('epsa-run');
-    const out = document.getElementById('epsa-out');
-    const netlist = document.getElementById('epsa-netlist').value.trim();
-    if (netlist.length < 5) { alert('Please paste a valid netlist.'); return; }
-
-    btn.disabled = true;
-    setEpsaStatus('Analyzing…', true);
-    out.textContent = 'Working…';
-
-    // Same-origin in prod; localhost in dev
-    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-      ? 'http://localhost:8787'
-      : '';
-    const url = `${API_BASE}/api/epsa`;
-
-    try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ netlist })
-      });
-
-      const raw = await resp.text();               // read raw text first
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status} ${resp.statusText}\n${raw.slice(0,500)}`);
-      }
-
-      let data;
-      try { data = JSON.parse(raw); }              // then parse JSON
-      catch { throw new Error(`Non-JSON response from server:\n${raw.slice(0,500)}`); }
-
-      const md = data.markdown || '_No output returned._';
-      out.innerHTML = marked.parse(md);
-      setEpsaStatus('Done.');
-    } catch (e) {
-      console.error(e);
-      out.textContent = 'Error:\n' + e.message;
-      setEpsaStatus('Failed.');
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
-  // Hook up the button once DOM is ready
-  document.addEventListener('DOMContentLoaded', ()=>{
-    const btn = document.getElementById('epsa-run');
-    if(btn) btn.addEventListener('click', runEPSA);
-  });
-</script>
-
 </body>
 </html>
