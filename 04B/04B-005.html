@@ -53,28 +53,16 @@
 <main>
 <div class="tab-container">
 <div class="tabs">
-<button class="tab" onclick="showTab('details')">
-      Details
-     </button>
-<button class="tab" onclick="showTab('circuit-description')">
-      Circuit Description
-     </button>
-<button class="tab" onclick="showTab('videos')">
-      Videos
-     </button>
-<button class="tab active" onclick="showTab('schematic')">
-      Schematic
-     </button>
-<button class="tab" onclick="showTab('layout')">
-      Layout
-     </button>
-<button class="tab" onclick="showTab('downloads')">
-      Downloads
-     </button>
-<button class="tab" onclick="showTab('resources')">
-      Additional Resources
-     </button>
+  <button class="tab" onclick="showTab('details', this)">Details</button>
+  <button class="tab" onclick="showTab('circuit-description', this)">Circuit Description</button>
+  <button class="tab" onclick="showTab('videos', this)">Videos</button>
+  <button class="tab active" onclick="showTab('schematic', this)">Schematic</button>
+  <button class="tab" onclick="showTab('layout', this)">Layout</button>
+  <button class="tab" onclick="showTab('downloads', this)">Downloads</button>
+  <button class="tab" onclick="showTab('resources', this)">Additional Resources</button>
+  <button class="tab" onclick="showTab('epsa', this); preloadEpsaNetlist();">EPSA</button>
 </div>
+
 <div class="tab-content" id="details">
 <h2>
       PCB Details
@@ -234,27 +222,104 @@
 </iframe>
 </div>
 </div>
+<div class="tab-content" id="epsa">
+  <h2>Electrical Part Stress Analysis (EPSA)</h2>
+  <p class="hint">Paste an EAGLE 6.3 (or similar) netlist below, then click <em>Run EPSA</em>. Results will render as a Markdown table.</p>
+
+  <textarea id="epsa-netlist" placeholder="# Paste your netlist here"></textarea>
+
+  <div class="row">
+    <button id="epsa-run">Run EPSA</button>
+    <span id="epsa-status" class="hint"></span>
+  </div>
+  <div id="epsa-out">Results will appear here…</div>
+</div>
 </div>
 </main>
 <footer>
    © 2025 miniPCB. All rights reserved.
   </footer>
-<script>
-   function showTab(id) {
-        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-        event.currentTarget.classList.add('active');
-        }
-  </script>
-<script>
-   function openLightbox(img) {
-        document.getElementById('lightbox-img').src = img.src;
-        document.getElementById('lightbox').style.display = 'flex';
-        }
-        function closeLightbox() {
-        document.getElementById('lightbox').style.display = 'none';
-        }
-  </script>
+     <script>
+     function showTab(id, btn) {
+     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+     document.querySelectorAll('.tabs .tab').forEach(el => el.classList.remove('active'));
+     document.getElementById(id).classList.add('active');
+     if (btn) btn.classList.add('active');
+     }
+     </script>
+     <script>
+     function openLightbox(img) {
+          document.getElementById('lightbox-img').src = img.src;
+          document.getElementById('lightbox').style.display = 'flex';
+          }
+          function closeLightbox() {
+          document.getElementById('lightbox').style.display = 'none';
+          }
+     </script>
+     <script>
+     function preloadEpsaNetlist(){
+     const el = document.getElementById('epsa-netlist');
+     if(!el || el.value.trim()) return; // don't overwrite user text
+     el.value = [
+          '# Example netlist for 04B-005',
+          'Q1 2N3904',
+          'R1 47k', 'R2 10k', 'R3 100k',
+          'RE 1k', 'RC 3.3k',
+          'C2 10uF', 'C4 100uF',
+          'VCC 12V'
+     ].join('\n');   // <-- this
+     }
+     </script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+  // Small status helper
+  function setEpsaStatus(msg, spinning=false){
+    const el = document.getElementById('epsa-status');
+    el.innerHTML = spinning ? '<span class="spinner" style="display:inline-block;width:1em;height:1em;border:2px solid #666;border-top-color:#ddd;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;"></span> ' + msg : msg;
+  }
+  // spin animation
+  (function(){const s=document.createElement('style');s.textContent='@keyframes spin{to{transform:rotate(360deg)}}';document.head.appendChild(s)})();
+
+  async function runEPSA(){
+    const btn = document.getElementById('epsa-run');
+    const out = document.getElementById('epsa-out');
+    const netlist = document.getElementById('epsa-netlist').value.trim();
+    if(netlist.length < 5){ alert('Please paste a valid netlist.'); return; }
+
+    btn.disabled = true;
+    setEpsaStatus('Analyzing…', true);
+    out.textContent = 'Working…';
+
+    try{
+      const resp = await fetch('/api/epsa', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ netlist })
+      });
+      if(!resp.ok){
+        const err = await resp.json().catch(()=>({error:'Unknown error'}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      const md = data.markdown || '_No output returned._';
+      // Render Markdown to HTML
+      out.innerHTML = marked.parse(md);
+      setEpsaStatus('Done.');
+    }catch(e){
+      console.error(e);
+      out.textContent = 'Error: ' + e.message;
+      setEpsaStatus('Failed.');
+    }finally{
+      btn.disabled = false;
+    }
+  }
+
+  // Hook up the button once DOM is ready
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const btn = document.getElementById('epsa-run');
+    if(btn) btn.addEventListener('click', runEPSA);
+  });
+</script>
+
 </body>
 </html>
