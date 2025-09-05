@@ -239,6 +239,7 @@
 <footer>
    © 2025 miniPCB. All rights reserved.
   </footer>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
      <script>
      function showTab(id, btn) {
      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -270,7 +271,6 @@
      ].join('\n');   // <-- this
      }
      </script>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
   // Small status helper
   function setEpsaStatus(msg, spinning=false){
@@ -284,32 +284,42 @@
     const btn = document.getElementById('epsa-run');
     const out = document.getElementById('epsa-out');
     const netlist = document.getElementById('epsa-netlist').value.trim();
-    if(netlist.length < 5){ alert('Please paste a valid netlist.'); return; }
+    if (netlist.length < 5) { alert('Please paste a valid netlist.'); return; }
 
     btn.disabled = true;
     setEpsaStatus('Analyzing…', true);
     out.textContent = 'Working…';
 
-    try{
-      const resp = await fetch('/api/epsa', {
+    // Same-origin in prod; localhost in dev
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+      ? 'http://localhost:8787'
+      : '';
+    const url = `${API_BASE}/api/epsa`;
+
+    try {
+      const resp = await fetch(url, {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ netlist })
       });
-      if(!resp.ok){
-        const err = await resp.json().catch(()=>({error:'Unknown error'}));
-        throw new Error(err.error || `HTTP ${resp.status}`);
+
+      const raw = await resp.text();               // read raw text first
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status} ${resp.statusText}\n${raw.slice(0,500)}`);
       }
-      const data = await resp.json();
+
+      let data;
+      try { data = JSON.parse(raw); }              // then parse JSON
+      catch { throw new Error(`Non-JSON response from server:\n${raw.slice(0,500)}`); }
+
       const md = data.markdown || '_No output returned._';
-      // Render Markdown to HTML
       out.innerHTML = marked.parse(md);
       setEpsaStatus('Done.');
-    }catch(e){
+    } catch (e) {
       console.error(e);
-      out.textContent = 'Error: ' + e.message;
+      out.textContent = 'Error:\n' + e.message;
       setEpsaStatus('Failed.');
-    }finally{
+    } finally {
       btn.disabled = false;
     }
   }
