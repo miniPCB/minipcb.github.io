@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Electrical Part Stress Analyzer (EPSA)</title>
+  <!-- If this file lives at site root next to styles.css, this link will pick up your site's dark theme. -->
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Page‑specific light styling that plays nicely with your existing dark theme */
+    .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+    .page-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .muted { opacity: .8; font-size: .9rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+    .card { background: #2a2a2a; border-radius: 12px; padding: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+    .card h2, .card h3 { margin-top: 0; }
+    textarea, input[type="file"], select { width: 100%; background:#1f1f1f; color:#f0f0f0; border:1px solid #3a3a3a; border-radius: 8px; padding: .75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    textarea { min-height: 220px; resize: vertical; }
+    .controls { display:flex; flex-wrap: wrap; gap:.5rem; }
+    button { background:#3a3a3a; color:#fff; border:1px solid #555; padding:.6rem .9rem; border-radius:10px; cursor:pointer; }
+    button:hover { filter: brightness(1.1); }
+    .btn-primary { background:#4a7fff; border-color:#4a7fff; color:#fff; }
+    .btn-ghost { background:transparent; border-color:#555; }
+    .tag { display:inline-block; padding:.15rem .5rem; border-radius:999px; font-size:.8rem; border:1px solid #555; }
+    .tag.pass { color:#6be07d; border-color:#2a6b33; }
+    .tag.warn { color:#ffd56b; border-color:#6b5a2a; }
+    .tag.fail { color:#ff6b6b; border-color:#6b2a2a; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border-bottom:1px solid #3a3a3a; padding:.5rem .6rem; vertical-align: top; }
+    th { text-align:left; position: sticky; top: 0; background:#252525; z-index: 1; }
+    .scroll { max-height: 420px; overflow: auto; border:1px solid #333; border-radius: 8px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .small { font-size:.9rem; }
+    .flex { display:flex; gap:1rem; align-items:center; }
+    .space-between { justify-content: space-between; }
+    .danger { color:#ff6b6b; }
+    .success { color:#6be07d; }
+    .warning { color:#ffd56b; }
+    .notice { font-size: .9rem; opacity: .9; }
+    .kbd { border:1px solid #555; border-bottom-width:2px; border-radius:6px; padding:0 .35rem; font-family:inherit; }
+    .footer { margin-top:1.5rem; opacity:.8; font-size:.85rem; }
+  </style>
+</head>
+<body>
+  <header class="container">
+    <div class="page-title">
+      <h1>Electrical Part Stress Analyzer <span class="muted">(EPSA)</span></h1>
+      <div id="epsa-status" class="muted">Ready.</div>
+    </div>
+    <p class="notice">Paste a <strong>Part List</strong> (CSV or JSON) and an optional <strong>Netlist</strong> (SPICE‑like). The tool computes stress ratios against editable derating rules and produces a Markdown table you can copy into reports.</p>
+  </header>
+
+  <main class="container">
+    <div class="grid-3">
+      <!-- INPUTS -->
+      <section class="card">
+        <h2>1) Part List</h2>
+        <p class="small">CSV headers suggested (case‑insensitive, aliases allowed): <span class="mono">RefDes, Type, Value, Units, V_op, V_rating, I_op, I_rating, P_op, P_rating, T_op, T_rating, Notes</span></p>
+        <div class="controls">
+          <input id="parts-file" type="file" accept=".csv,.json,.txt" />
+          <button class="btn-ghost" id="load-parts">Load file</button>
+          <button class="btn-ghost" id="example-parts">Load Example</button>
+        </div>
+        <textarea id="parts-input" placeholder="Paste Part List CSV or JSON here..."></textarea>
+      </section>
+
+      <section class="card">
+        <h2>2) Netlist (optional)</h2>
+        <p class="small">SPICE‑style lines like <span class="mono">R1 N001 N002 10k</span>, <span class="mono">C3 OUT GND 0.1u</span>. Used for cross‑checking RefDes coverage only.</p>
+        <div class="controls">
+          <input id="netlist-file" type="file" accept=".cir,.sp,.txt" />
+          <button class="btn-ghost" id="load-net">Load file</button>
+          <button class="btn-ghost" id="example-net">Load Example</button>
+        </div>
+        <textarea id="netlist-input" placeholder="Paste SPICE‑like netlist here (optional)..."></textarea>
+      </section>
+
+      <section class="card">
+        <h2>3) Derating Rules</h2>
+        <p class="small">Edit as JSON. Keys match <span class="mono">Type</span> (normalized). Ratios are maximum allowed <em>applied/rated</em>.</p>
+        <div class="controls">
+          <button class="btn-ghost" id="reset-rules">Reset Defaults</button>
+          <button class="btn-ghost" id="save-rules">Save Rules</button>
+        </div>
+        <textarea id="rules-input" class="mono"></textarea>
+        <p class="notice small">Tip: You can add custom types, e.g., <span class="mono">"hall_sensor": {"V_max_ratio":0.8}</span>. Fallback limits used when a metric or type is missing.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="flex space-between">
+        <h2>4) Analyze</h2>
+        <div class="controls">
+          <button class="btn-primary" id="analyze">Run EPSA</button>
+          <button class="btn-ghost" id="copy-md">Copy Markdown</button>
+          <button class="btn-ghost" id="download-md">Download .md</button>
+          <button class="btn-ghost" id="download-csv">Download .csv</button>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <h3>Markdown Output</h3>
+          <textarea id="md-output" class="mono" style="min-height:260px" placeholder="Run EPSA to produce Markdown..."></textarea>
+        </div>
+        <div>
+          <h3>Rendered Preview</h3>
+          <div class="scroll">
+            <table id="html-table">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="summary" class="footer"></div>
+        </div>
+      </div>
+      <details style="margin-top:1rem;">
+        <summary>Warnings & Coverage</summary>
+        <pre id="warnings" class="mono small"></pre>
+      </details>
+    </section>
+
+    <section class="card">
+      <h3>Input Hints</h3>
+      <ul>
+        <li>Only metrics present in your data are evaluated. For example, if you provide <span class="mono">P_op</span> and <span class="mono">P_rating</span> for resistors, EPSA will compute a power stress check even if no voltage/current is provided.</li>
+        <li>Alias headers are recognized: <span class="mono">Vop, V_oper, V(applied)</span> → <span class="mono">V_op</span>; <span class="mono">Vr, Vrated</span> → <span class="mono">V_rating</span>; similarly for <span class="mono">I</span>, <span class="mono">P</span>, and <span class="mono">T</span>.</li>
+        <li>Netlist is optional and used only to flag missing/extra RefDes compared to your part list.</li>
+        <li>Derating rules are intentionally simple and editable. If you have program standards, paste them here as ratios.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    // --- Utilities ---------------------------------------------------------
+    const $ = sel => document.querySelector(sel);
+    const statusEl = $('#epsa-status');
+    function setStatus(msg, spinning=false){
+      statusEl.textContent = msg;
+    }
+
+    const DEFAULT_RULES = {
+      "generic": { "V_max_ratio": 0.8, "I_max_ratio": 0.8, "P_max_ratio": 0.5, "T_max_ratio": 1.0 },
+      "resistor": { "P_max_ratio": 0.5, "V_max_ratio": 0.8 },
+      "ceramic_capacitor": { "V_max_ratio": 0.5 },
+      "electrolytic_capacitor": { "V_max_ratio": 0.5, "Irms_max_ratio": 0.6 },
+      "film_capacitor": { "V_max_ratio": 0.6, "Irms_max_ratio": 0.6 },
+      "inductor": { "I_max_ratio": 0.8 },
+      "diode": { "I_max_ratio": 0.5, "Vr_max_ratio": 0.6, "P_max_ratio": 0.5 },
+      "bjt": { "I_max_ratio": 0.5, "Vce_max_ratio": 0.6, "P_max_ratio": 0.5 },
+      "mosfet": { "Id_max_ratio": 0.5, "Vds_max_ratio": 0.6, "P_max_ratio": 0.5 },
+      "opamp": { "Vs_max_ratio": 0.8, "T_max_ratio": 1.0 },
+      "connector": { "I_max_ratio": 0.7 }
+    };
+
+    // Case/alias normalization for part types and headers
+    function normType(s){ return String(s||'').toLowerCase().trim().replace(/\s+/g,'_'); }
+
+    const HEADER_ALIASES = new Map([
+      // canonical, [aliases]
+      ['RefDes', ['refdes','ref','designator','reference','ref_des','ref-des','refdes#','item','part']],
+      ['Type', ['type','category','class','parttype']],
+      ['Value', ['value','val','rating','nominal']],
+      ['Units', ['units','unit','uom']],
+      ['V_op', ['v_op','vop','v(applied)','vapplied','v_oper','v_operating','voltage_op','voltage_oper','voltage_applied']],
+      ['V_rating', ['v_rating','vrating','vr','vmax','voltage_rating','v_rated','vrated']],
+      ['I_op', ['i_op','iop','i(applied)','iapplied','i_oper','i_operating','current_op','current_oper']],
+      ['I_rating', ['i_rating','irating','imax','current_rating','i_rated','irated']],
+      ['P_op', ['p_op','pop','power_op','power_oper','pd_op','dissipation_op']],
+      ['P_rating', ['p_rating','prating','pmax','pd_max','power_rating','p_rated','prated']],
+      ['T_op', ['t_op','top','temp_op','temperature_op','tj_op','ta_op']],
+      ['T_rating', ['t_rating','trating','tmax','temperature_rating','tj_max','ta_max']],
+      ['Vr_op', ['vr_op','vreverse_op','reverse_v_op']],
+      ['Vr_rating', ['vr_rating','vreverse_rating','vrmax','reverse_v_rating']],
+      ['Irms_op', ['irms_op','i_rms_op','rms_current_op']],
+      ['Irms_rating', ['irms_rating','i_rms_rating','irms_max']],
+      ['Vds_op', ['vds_op']],
+      ['Vds_rating', ['vds_rating','vds_max']],
+      ['Vce_op', ['vce_op']],
+      ['Vce_rating', ['vce_rating','vce_max']],
+      ['Vs_op', ['vs_op','supply_v_op','supply_voltage_op']],
+      ['Vs_rating', ['vs_rating','supply_v_rating','supply_voltage_rating']],
+      ['Id_op', ['id_op','id']],
+      ['Id_rating', ['id_rating','id_max']],
+      ['Notes', ['notes','note','comment','comments']]
+    ]);
+
+    function canonicalizeHeader(h){
+      const raw = String(h||'').trim();
+      for(const [canon, aliases] of HEADER_ALIASES){
+        if (raw.toLowerCase() === canon.toLowerCase()) return canon;
+        if (aliases.some(a => raw.toLowerCase() === a)) return canon;
+      }
+      return raw; // keep unknowns
+    }
+
+    // Naive but robust CSV parser (handles quotes and commas)
+    function parseCSV(text){
+      const rows = [];
+      let i=0, field='', row=[], inQ=false; 
+      function pushField(){ row.push(field); field=''; }
+      function pushRow(){ rows.push(row); row=[]; }
+      while(i < text.length){
+        const c = text[i];
+        if (inQ){
+          if (c==='"' && text[i+1]==='"'){ field+='"'; i+=2; continue; }
+          if (c==='"'){ inQ=false; i++; continue; }
+          field+=c; i++; continue;
+        } else {
+          if (c==='"'){ inQ=true; i++; continue; }
+          if (c===','){ pushField(); i++; continue; }
+          if (c==='\n'){ pushField(); pushRow(); i++; continue; }
+          if (c==='\r'){ i++; continue; }
+          field+=c; i++; continue;
+        }
+      }
+      // flush
+      if (field.length || row.length){ pushField(); pushRow(); }
+      return rows;
+    }
+
+    function rowsToObjects(rows){
+      if (!rows.length) return [];
+      const headers = rows[0].map(canonicalizeHeader);
+      const out = [];
+      for(let r=1; r<rows.length; r++){
+        if (rows[r].every(c => String(c).trim()==='')) continue; // skip blanks
+        const o = {};
+        for(let c=0; c<headers.length; c++){
+          const key = headers[c] || `col${c}`;
+          o[key] = rows[r][c] ?? '';
+        }
+        out.push(o);
+      }
+      return out;
+    }
+
+    function tryParseParts(text){
+      // Accept JSON array/object or CSV
+      const trimmed = String(text||'').trim();
+      if (!trimmed) return [];
+      if (trimmed[0]==='[' || trimmed[0]==='{'){
+        try { 
+          let data = JSON.parse(trimmed);
+          if (!Array.isArray(data)) data = [data];
+          // Normalize keys
+          return data.map(row => {
+            const o={};
+            for (const [k,v] of Object.entries(row)){
+              o[canonicalizeHeader(k)] = v;
+            }
+            return o;
+          });
+        } catch(e){ /* fall through to CSV */ }
+      }
+      return rowsToObjects(parseCSV(trimmed));
+    }
+
+    function parseNetlist(text){
+      // Very light SPICE parser: returns set of RefDes tokens (first token on each non-comment line)
+      const set = new Set();
+      String(text||'').split(/\r?\n/).forEach(line => {
+        const s = line.trim();
+        if (!s || s.startsWith('*') || s.startsWith(';') || s.startsWith('//')) return;
+        const tok = s.split(/\s+/)[0];
+        if (tok) set.add(tok.toUpperCase());
+      });
+      return set;
+    }
+
+    function toNumber(x){
+      if (x==null) return NaN;
+      const s = String(x).trim();
+      if (s==='') return NaN;
+      // handle SI suffixes (basic): k, M, G, m, u, n, p
+      const m = s.match(/^([+-]?(?:\d+\.?\d*|\d*\.?\d+))(?:\s*([kKmMgGuUnNpP]))?$/);
+      if (m){
+        const num = parseFloat(m[1]);
+        const suf = (m[2]||'').toLowerCase();
+        const mult = { 'g':1e9, 'm':1e6, 'k':1e3, '':1, 'm_':1e-3, 'u':1e-6, 'n':1e-9, 'p':1e-12 };
+        if (suf==='m'){ return num*1e-3; }
+        if (suf && suf in {g:1,m:1,k:1,u:1,n:1,p:1}) return num*mult[suf];
+        return num;
+      }
+      // fallback: strip non-numeric (keeps ., -, e, E)
+      const cleaned = s.replace(/[^0-9eE+\-.]/g,'');
+      const v = parseFloat(cleaned);
+      return isNaN(v) ? NaN : v;
+    }
+
+    function getRuleFor(type, rules){
+      const t = normType(type);
+      if (t && rules[t]) return rules[t];
+      // try some light plural/singular fallbacks
+      const t2 = t.replace(/s$/, '');
+      if (rules[t2]) return rules[t2];
+      return rules["generic"] || {};
+    }
+
+    function computeStressRow(row, rules){
+      const t = getRuleFor(row.Type, rules);
+      const avail = [];
+      const checks = [];
+      const metrics = [];
+      const notes = [];
+      const pick = (k) => toNumber(row[k]);
+
+      // Build possible metric tuples: [label, opKey, ratKey, ruleKey, defaultLimit]
+      const METRIC_SET = [
+        ['V', 'V_op', 'V_rating', 'V_max_ratio', rules.generic?.V_max_ratio ?? 0.8],
+        ['Vr','Vr_op','Vr_rating','Vr_max_ratio', rules.generic?.V_max_ratio ?? 0.8],
+        ['I', 'I_op', 'I_rating', 'I_max_ratio', rules.generic?.I_max_ratio ?? 0.8],
+        ['Irms','Irms_op','Irms_rating','Irms_max_ratio', rules.generic?.I_max_ratio ?? 0.8],
+        ['P', 'P_op', 'P_rating', 'P_max_ratio', rules.generic?.P_max_ratio ?? 0.5],
+        ['Vds','Vds_op','Vds_rating','Vds_max_ratio', rules.generic?.V_max_ratio ?? 0.8],
+        ['Vce','Vce_op','Vce_rating','Vce_max_ratio', rules.generic?.V_max_ratio ?? 0.8],
+        ['Vs','Vs_op','Vs_rating','Vs_max_ratio', rules.generic?.V_max_ratio ?? 0.8],
+        ['Id','Id_op','Id_rating','Id_max_ratio', rules.generic?.I_max_ratio ?? 0.8],
+        ['T', 'T_op', 'T_rating', 'T_max_ratio', rules.generic?.T_max_ratio ?? 1.0]
+      ];
+
+      let worst = { label:'', stress: 0, limit: 0 };
+
+      for (const [label, opKey, ratKey, ruleKey, defLim] of METRIC_SET){
+        const op = pick(opKey);
+        const rat = pick(ratKey);
+        if (!isFinite(op) || !isFinite(rat) || rat <= 0 || op <= 0) {
+          metrics.push({label, op:null, rat:null, stress:null, limit:null});
+          continue;
+        }
+        const stress = op / rat; // applied / rating
+        const limit = (t[ruleKey] ?? defLim);
+        const status = stress > 1 ? 'FAIL' : (stress > limit ? 'WARN' : 'PASS');
+        metrics.push({label, op, rat, stress, limit, status});
+        avail.push(status);
+        if (stress > worst.stress){ worst = {label, stress, limit}; }
+      }
+
+      let overall = 'PASS';
+      if (avail.includes('FAIL')) overall = 'FAIL';
+      else if (avail.includes('WARN')) overall = 'WARN';
+
+      return {
+        RefDes: String(row.RefDes||'').trim(),
+        Type: String(row.Type||'').trim(),
+        Value: String(row.Value||'').trim(),
+        Units: String(row.Units||'').trim(),
+        Notes: String(row.Notes||'').trim(),
+        metrics,
+        worst,
+        overall
+      };
+    }
+
+    function toPercent(x){
+      if (!isFinite(x)) return '—';
+      return (x*100).toFixed(0) + '%';
+    }
+
+    function buildMarkdown(results){
+      const headers = ['RefDes','Type','Value','V (op/rat)','I (op/rat)','P (op/rat)','T (op/rat)','Worst','Limit','Margin','Status','Notes'];
+      const lines = [];
+      lines.push('| ' + headers.join(' | ') + ' |');
+      lines.push('| ' + headers.map(()=> '---').join(' | ') + ' |');
+      for (const r of results){
+        const get = (lbl) => {
+          const m = r.metrics.find(x=>x.label===lbl);
+          if (!m || m.op==null) return '—';
+          return `${fmtNum(m.op)}/${fmtNum(m.rat)} (${toPercent(m.stress)})`;
+        };
+        const margin = (isFinite(r.worst.limit) && isFinite(r.worst.stress)) ? toPercent(r.worst.limit - r.worst.stress) : '—';
+        const row = [
+          escMD(r.RefDes||''),
+          escMD(r.Type||''),
+          escMD(r.Value||''),
+          get('V'),
+          get('I'),
+          get('P'),
+          get('T'),
+          toPercent(r.worst.stress),
+          toPercent(r.worst.limit),
+          margin,
+          r.overall,
+          escMD(r.Notes||'')
+        ];
+        lines.push('| ' + row.join(' | ') + ' |');
+      }
+      return lines.join('\n');
+    }
+
+    function escMD(s){ return String(s).replace(/\|/g,'\\|'); }
+    function fmtNum(v){
+      if (!isFinite(v)) return '—';
+      if (Math.abs(v) >= 1000 || Math.abs(v) < 0.01) return v.toExponential(2);
+      return String(+v.toFixed(3));
+    }
+
+    function renderHTML(results){
+      const thead = $('#html-table thead');
+      const tbody = $('#html-table tbody');
+      thead.innerHTML = '<tr><th>RefDes</th><th>Type</th><th>Value</th><th>V</th><th>I</th><th>P</th><th>T</th><th>Worst</th><th>Limit</th><th>Margin</th><th>Status</th><th>Notes</th></tr>';
+      tbody.innerHTML = '';
+      for (const r of results){
+        const tr = document.createElement('tr');
+        const td = (...xs) => xs.map(x=>{ const el=document.createElement('td'); el.innerHTML = x; return el; });
+        function cell(lbl){
+          const m = r.metrics.find(x=>x.label===lbl);
+          if (!m || m.op==null) return '—';
+          const cls = m.status==='FAIL'?'fail':(m.status==='WARN'?'warn':'pass');
+          return `${fmtNum(m.op)} / ${fmtNum(m.rat)} <span class="tag ${cls}">${toPercent(m.stress)}</span>`;
+        }
+        const margin = (isFinite(r.worst.limit) && isFinite(r.worst.stress)) ? toPercent(r.worst.limit - r.worst.stress) : '—';
+        const statusCls = r.overall==='FAIL'?'fail':(r.overall==='WARN'?'warn':'pass');
+        const tds = td(
+          escHTML(r.RefDes),
+          escHTML(r.Type),
+          escHTML(r.Value),
+          cell('V'),
+          cell('I'),
+          cell('P'),
+          cell('T'),
+          toPercent(r.worst.stress),
+          toPercent(r.worst.limit),
+          margin,
+          `<span class="tag ${statusCls}">${r.overall}</span>`,
+          escHTML(r.Notes)
+        );
+        tds.forEach(el=>tr.appendChild(el));
+        tbody.appendChild(tr);
+      }
+    }
+
+    function escHTML(s){ return String(s).replace(/[&<>\"]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    function summarize(results){
+      let pass=0,warn=0,fail=0;
+      results.forEach(r=>{ if(r.overall==='PASS') pass++; else if (r.overall==='WARN') warn++; else fail++; });
+      $('#summary').innerHTML = `Summary: <span class="success">${pass} PASS</span>, <span class="warning">${warn} WARN</span>, <span class="danger">${fail} FAIL</span>.`;
+    }
+
+    // --- File helpers -----------------------------------------------------
+    async function readFileToText(file){
+      if (!file) return '';
+      return await file.text();
+    }
+
+    function download(filename, text){
+      const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 500);
+    }
+
+    async function copyToClipboard(text){
+      try { await navigator.clipboard.writeText(text); setStatus('Markdown copied to clipboard.'); }
+      catch(e){ setStatus('Copy failed. Select and copy manually.'); }
+    }
+
+    // --- Wire up UI -------------------------------------------------------
+    function loadDefaults(){
+      const savedRules = localStorage.getItem('epsa_rules_json');
+      $('#rules-input').value = savedRules ? savedRules : JSON.stringify(DEFAULT_RULES, null, 2);
+    }
+
+    function loadExamples(){
+      const parts = `RefDes,Type,Value,Units,V_op,V_rating,I_op,I_rating,P_op,P_rating,T_op,T_rating,Notes\n`+
+        `R1,Resistor,10k,Ω,,,,,0.08,0.25,45,125,Divider top resistor\n`+
+        `C1,Ceramic Capacitor,0.1uF,F,5,50,,,,,40,85,Bypass cap\n`+
+        `Q1,MOSFET,IRLZ44N,,10,55,5,30,1.2,2.0,55,175,Load switch MOSFET`;
+      const net = `* Example SPICE-ish netlist\nR1 N001 N002 10k\nC1 N002 GND 0.1u\nQ1 OUT N001 GND IRLZ44N`;
+      $('#parts-input').value = parts;
+      $('#netlist-input').value = net;
+    }
+
+    function parseRules(){
+      try {
+        const rules = JSON.parse($('#rules-input').value || '{}');
+        // Ensure generic exists
+        if (!rules.generic) rules.generic = DEFAULT_RULES.generic;
+        return rules;
+      } catch(e){
+        throw new Error('Rules JSON is invalid.');
+      }
+    }
+
+    function analyze(){
+      setStatus('Analyzing...');
+      const parts = tryParseParts($('#parts-input').value);
+      const rules = parseRules();
+      const netset = parseNetlist($('#netlist-input').value);
+
+      const warnings = [];
+      if (!parts.length) warnings.push('Part List is empty or could not be parsed.');
+
+      // Coverage checks
+      if (netset.size){
+        const partRefs = new Set(parts.map(p => String(p.RefDes||'').toUpperCase()));
+        const missing = [...netset].filter(r => !partRefs.has(r));
+        const extra = [...partRefs].filter(r => !netset.has(r));
+        if (missing.length) warnings.push(`In netlist but missing from part list: ${missing.join(', ')}`);
+        if (extra.length) warnings.push(`In part list but not in netlist: ${extra.join(', ')}`);
+      }
+
+      // Compute stress rows
+      const results = parts.map(p => computeStressRow(p, rules));
+
+      // Build outputs
+      const md = buildMarkdown(results);
+      $('#md-output').value = md;
+      renderHTML(results);
+      summarize(results);
+
+      // Additional warnings: rows with no metrics computed
+      const noMetrics = results.filter(r => r.metrics.every(m => m.op==null));
+      if (noMetrics.length) warnings.push(`No computable metrics for: ${noMetrics.map(r=>r.RefDes||'?').join(', ')}. Provide *_op and *_rating columns.`);
+
+      $('#warnings').textContent = warnings.join('\n');
+      setStatus('Done.');
+    }
+
+    // --- Events -----------------------------------------------------------
+    $('#load-parts').addEventListener('click', async ()=>{
+      const f = $('#parts-file').files[0];
+      if (!f) { setStatus('Choose a Part List file first.'); return; }
+      $('#parts-input').value = await readFileToText(f);
+    });
+    $('#load-net').addEventListener('click', async ()=>{
+      const f = $('#netlist-file').files[0];
+      if (!f) { setStatus('Choose a Netlist file first.'); return; }
+      $('#netlist-input').value = await readFileToText(f);
+    });
+    $('#example-parts').addEventListener('click', loadExamples);
+    $('#example-net').addEventListener('click', loadExamples);
+    $('#reset-rules').addEventListener('click', ()=>{ $('#rules-input').value = JSON.stringify(DEFAULT_RULES, null, 2); setStatus('Rules reset.'); });
+    $('#save-rules').addEventListener('click', ()=>{ localStorage.setItem('epsa_rules_json', $('#rules-input').value); setStatus('Rules saved to this browser.'); });
+    $('#analyze').addEventListener('click', analyze);
+    $('#copy-md').addEventListener('click', ()=> copyToClipboard($('#md-output').value));
+    $('#download-md').addEventListener('click', ()=> download('epsa_results.md', $('#md-output').value || ''));
+    $('#download-csv').addEventListener('click', ()=>{
+      // Convert current HTML table to CSV for convenience
+      const table = $('#html-table');
+      const rows = [...table.querySelectorAll('tr')].map(tr => [...tr.children].map(td => td.textContent.replace(/\s+/g,' ').trim()));
+      const csv = rows.map(r => r.map(cell => /[",\n]/.test(cell) ? '"'+cell.replace(/"/g,'""')+'"' : cell).join(',')).join('\n');
+      download('epsa_results.csv', csv);
+    });
+
+    // Initialize
+    loadDefaults();
+    setStatus('Ready. Paste your Part List and optionally a Netlist, then click "Run EPSA".');
+  </script>
+</body>
+</html>
