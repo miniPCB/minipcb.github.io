@@ -332,10 +332,8 @@ def main():
     out_text = "\n".join(out_lines).rstrip() + "\n"
     out_path = args.out if args.out else sch_path.with_name(f"{pn}_{rev}.md")
 
-    if out_path.exists() and not args.force:
-        print(f"ERROR: Refusing to overwrite existing file: {out_path} (use --force)", file=sys.stderr)
-        sys.exit(3)
-
+    out_path = args.out if args.out else sch_path.with_name(f"{pn}_{rev}.md")
+    # Always overwrite
     out_path.write_text(out_text, encoding='utf-8')
     print(f"✅ Wrote: {out_path}")
 
