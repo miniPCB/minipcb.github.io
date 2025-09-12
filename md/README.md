@@ -12,33 +12,31 @@
 ## Change Tracking
 
 - **Revision History** (Rev, Date, Change Summary)
-- **Engineering Change Log (ECL)** link
 
 ---
 
-## Circuit Content
+## Circuit Information
 
 - **Introduction** (short description of what the circuit does)
-- **Circuit Description** (walk-through of function by blocks)
-- **Circuit Theory** (deeper analysis of operation, equations, expected behaviors)
-- **Circuit Analysis** (commentary on chosen values, gain, biasing, impedance, etc.)
+- **Description** (walk-through of function by blocks)
+- **Theory** (deeper analysis of operation, equations, expected behaviors)
+- **Analysis** (commentary on chosen values, gain, biasing, impedance, etc.)
 
 ---
 
-## Data Tables
+## Schematic Information
 
 - **Netlist** (Net, Part, Pad, Pin, Sheet)
 - **Partlist** (Ref Des, Part Type, Value/Description)
-- **Part Placement Table** (where components go, keyed to board)
 - **Header / Pinout Tables** (P1 or other connectors with signal names)
 
 ---
 
-## Layout & Physical
+## Board Information
 
-- **Layer Stack-Up** (layers, copper thickness, arrangement)
-- **Layout & Routing Notes** (critical traces, clearances, test points)
-- **Signal Integrity Analysis** (plans and reports referenced in section below)
+- **Layer Stack-Up**
+- **Placements and Orientations**
+- **Netlist and Trace Impedances**
 
 ---
 
@@ -47,7 +45,7 @@
 - **EPSA** (Electrical Part Stress Analysis — Plan + Report)
 - **WCCA** (Worst Case Circuit Analysis — Plan + Report)
 - **FMEA** (Failure Modes & Effects Analysis — Plan + Report)
-- **Signal Integrity Analysis** (Plan + Report documents)
+- **SIA** (Signal Integrity Analysis — Plan + Report documents)
 
 # Ground Truth Documents
 ## CAD-Generated Files
@@ -63,9 +61,9 @@ These are created by **EAGLE ULPs** or similar automation. Each should follow yo
 - **`PN_REV_brd.md`**  
     Exported from the **board** with a ULP.  
     Contains:
-    - Part placement table (coordinates, layer, rotation)
-    - Layer stack-up (copper layers, thicknesses, dielectric stack)
-    - Layout & routing notes (testpoints, diff pairs, clearances — can be partly manual if ULP can’t capture)
+    - Layer Stack-Up
+    - Placements and Orientations
+    - Netlist and Trace Impedances
 
 ---
 
