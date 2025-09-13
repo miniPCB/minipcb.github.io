@@ -115,9 +115,9 @@ Deliverable (Markdown only):
 - After the table, add a "Checks Performed" list.
 
 Rules:
-- **Do not** invent new component IDs or nets beyond the Allowed lists.
-- Flag any refdes/net that appears in the datasheet but is not in Allowed lists.
-- Call out obvious typos (e.g., 'CMS' where 'CMOS' is intended) and unit/style problems.
+- **Do not** invent new component IDs beyond the net and part lists.
+- Flag any refdes that appears in the datasheet but is not in Allowed lists.
+- Call out obvious typos and unit/style problems.
 
 Context — DATASHEET:
 ```

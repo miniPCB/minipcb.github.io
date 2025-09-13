@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-mi_taza.py — MiniPCB CLI with "depth" transitions + Select-All
+mi_taza.py — MiniPCB CLI with "depth" transitions + Select-All + Non-Interactive runs
 
-New:
-- On schematic screen, press **A** to select **all** schematics.
-- When a script number is chosen, it will run once per selected schematic, with clear banners between runs.
+New CLI:
+- --all : select all *_sch.md files (no interactive 'A' needed)
+- --script-index N : pick N-th script (1-based) and run immediately if selection present
+- --script-name NAME : pick script by filename (exact → prefix → substring)
+- --run-all-scripts : run every discovered script (table order) over the selection
+- Non-interactive fast path: if you specify a script selector and a schematic selection
+  (--all or --select), the tool runs immediately, with no prompts/menus.
+- Use --no-clear to disable clears and pauses (good for CI/logs).
 
-Other features:
-- Cross-platform screen clear at strategic points (Windows/macOS/Linux).
-- Comma-separated script globs (e.g., "taza_*.py,tava_*.py").
-- Verbose run banners + pause after each run.
-- `--no-clear` flag disables clears and pauses (useful for logs/CI).
+Existing features:
+- Cross-platform screen clear
+- Comma-separated script globs (e.g., "taza_*.py,tava_*.py")
+- Verbose run banners
 """
 from __future__ import annotations
 
@@ -36,8 +40,9 @@ def clear_screen(enabled: bool = True) -> None:
     except Exception:
         pass
 
+# replace your pause() with this
 def pause(enabled: bool = True, msg: str = "Press Enter to continue...") -> None:
-    if not enabled:
+    if not enabled or not sys.stdin.isatty():
         return
     try:
         input(msg)
@@ -153,7 +158,7 @@ def open_folder(path: Path) -> None:
     except Exception as e:
         print(f"(Could not open folder: {e})")
 
-def run_script(script_path: Path, sch: Path, clear_enabled: bool, pause_enabled: bool) -> int:
+def run_one(script_path: Path, sch: Path, clear_enabled: bool, pause_enabled: bool) -> int:
     clear_screen(clear_enabled)
     print(banner(f"RUNNING SCRIPT: {script_path.name}\nWITH SCHEMATIC: {sch}", "="))
     print()
@@ -175,15 +180,38 @@ def run_script(script_path: Path, sch: Path, clear_enabled: bool, pause_enabled:
     pause(pause_enabled, "Press Enter to continue...")
     return rc
 
+def choose_script_by_name(scripts: List[Tuple[Path, str]], name: str) -> Optional[Path]:
+    if not scripts or not name:
+        return None
+    # Exact
+    for p, _ in scripts:
+        if p.name == name:
+            return p
+    # Prefix
+    for p, _ in scripts:
+        if p.name.startswith(name):
+            return p
+    # Substring
+    for p, _ in scripts:
+        if name in p.name:
+            return p
+    return None
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="List *_sch.md then show & run scripts that process them.")
-    p.add_argument("--root", type=Path, default=Path.cwd(), help="Project root for *_sch.md (default: CWD)." )
+    p.add_argument("--root", type=Path, default=Path.cwd(), help="Project root for *_sch.md (default: CWD).")
     p.add_argument("--sch-glob", default=SCH_GLOB_DEFAULT, help=f"Glob for schematic MD (default: {SCH_GLOB_DEFAULT}).")
-    p.add_argument("--scripts-dir", type=Path, default=None, help="Directory containing scripts (default: <root>/scripts)." )
+    p.add_argument("--scripts-dir", type=Path, default=None, help="Directory containing scripts (default: <root>/scripts).")
     p.add_argument("--scripts-glob", default=SCRIPTS_GLOB_DEFAULT, help=f"Script globs, comma-separated (default: {SCRIPTS_GLOB_DEFAULT}).")
     p.add_argument("--select", type=int, default=None, help="Non-interactive 1-based selection index for a single schematic.")
+    p.add_argument("--all", action="store_true", help="Select all discovered schematics (non-interactive).")
     p.add_argument("--max", dest="max_items", type=int, default=9999, help="Limit how many schematics to display.")
     p.add_argument("--no-clear", action="store_true", help="Disable clears and pauses.")
+    # Script selection for non-interactive runs:
+    p.add_argument("--script-index", type=int, default=None, help="Pick N-th script (1-based) to run immediately.")
+    p.add_argument("--script-name", type=str, default=None, help="Pick script by filename (exact→prefix→substring).")
+    p.add_argument("--run-all-scripts", action="store_true", help="Run all discovered scripts over the selection.")
+    p.add_argument("--batch", action="store_true", help="Shorthand for --all --run-all-scripts with no pauses/clears.")
     return p.parse_args()
 
 def choose_index_or_all(n: int, prompt: str) -> Optional[Union[int, str]]:
@@ -203,8 +231,60 @@ def choose_index_or_all(n: int, prompt: str) -> Optional[Union[int, str]]:
             return i
         print(f"Enter a number between 1 and {n}, or 'A' for all.")
 
+def run_batch(scripts_to_run: List[Path],
+              selected_indices: List[int],
+              sch_files: List[Path],
+              no_clear: bool,
+              step_mode: bool) -> int:
+    if not scripts_to_run:
+        print("[ERR] No scripts selected to run.")
+        return 4
+    total_jobs = len(scripts_to_run) * len(selected_indices)
+    job = 0
+    for script_path in scripts_to_run:
+        for i, sel_idx in enumerate(selected_indices, start=1):
+            job += 1
+            sch = sch_files[sel_idx - 1]
+            title = (
+                f"RUN {job}/{total_jobs} — {script_path.name}"
+                f"\nWITH SCHEMATIC: {sch}"
+            )
+            clear_screen(not no_clear)
+            print(banner(title, "=")); print()
+            try:
+                subprocess.run(
+                    [sys.executable, str(script_path), str(sch)],
+                    cwd=str(script_path.parent),
+                    capture_output=False,
+                    text=False,
+                    check=False,
+                )
+                rc = 0
+            except Exception as e:
+                print(f"[ERR] Could not run {script_path.name}: {e}")
+                rc = 1
+            print("\n" + banner(f"FINISHED ({job}/{total_jobs}): exit {rc}", "=")); print()
+            # Pause between schematics only in step-through mode
+            if step_mode and i != len(selected_indices):
+                pause(not no_clear, "Press Enter for next schematic...")
+    # Final pause only in step-through mode
+    if step_mode:
+        pause(not no_clear, "All runs finished. Press Enter to return...")
+    return 0
+
 def main() -> int:
     args = parse_args()
+
+    # Derive step/consecutive from flags (step wins if both given)
+    step_mode = bool(getattr(args, "step", False) and not getattr(args, "consecutive", False))
+
+    # Optional one-switch batch: expand to flags
+    if getattr(args, "batch", False):
+        args.all = True
+        args.run_all_scripts = True
+        # Only force no_clear if not stepping; in step-through we allow pauses
+        if not step_mode:
+            args.no_clear = True
 
     root: Path = args.root.resolve()
     scripts_dir: Path = (args.scripts_dir or (root / "scripts")).resolve()
@@ -216,13 +296,14 @@ def main() -> int:
     clear_screen(not args.no_clear)
     sch_files = find_sch_files(root, args.sch_glob, args.max_items)
     print_sch_table(sch_files)
-
     if not sch_files:
         return 0
 
-    # Selection
+    # Build selection (may be interactive)
     selected_indices: List[int]
-    if args.select is not None:
+    if args.all:
+        selected_indices = list(range(1, len(sch_files) + 1))
+    elif args.select is not None:
         if 1 <= args.select <= len(sch_files):
             selected_indices = [args.select]
         else:
@@ -237,7 +318,34 @@ def main() -> int:
         else:
             selected_indices = [int(sel)]
 
-    # Loop on scripts view; if multiple schematics, show count and first selection path
+    # Discover scripts
+    scripts = list_scripts(scripts_dir, args.scripts_glob)
+
+    # ---------- Non-interactive fast path ----------
+    scripts_to_run: List[Path] = []
+    if getattr(args, "run_all_scripts", False):
+        scripts_to_run = [p for (p, _) in scripts]
+    elif args.script_index is not None:
+        if 1 <= args.script_index <= len(scripts):
+            scripts_to_run = [scripts[args.script_index - 1][0]]
+        else:
+            print(f"--script-index out of range (1..{len(scripts)}).", file=sys.stderr)
+            return 5
+    elif args.script_name:
+        chosen = choose_script_by_name(scripts, args.script_name)
+        if chosen:
+            scripts_to_run = [chosen]
+        else:
+            print(f"--script-name '{args.script_name}' not found among discovered scripts.", file=sys.stderr)
+            return 6
+
+    if scripts_to_run:
+        # In fast path, force fully non-interactive behavior unless user asked for step-through
+        if not step_mode:
+            args.no_clear = True
+        return run_batch(scripts_to_run, selected_indices, sch_files, args.no_clear, step_mode)
+
+    # ---------- Interactive path ----------
     while True:
         clear_screen(not args.no_clear)
         if len(selected_indices) == 1:
@@ -247,63 +355,49 @@ def main() -> int:
             first = sch_files[selected_indices[0] - 1]
             print(f"Selected: {len(selected_indices)} schematics (first: {first})\n")
 
-        scripts = list_scripts(scripts_dir, args.scripts_glob)
         print_scripts_table(scripts, scripts_dir, args.scripts_glob)
 
-        # Menu
+        mode_label = "Step-through" if step_mode else "Consecutive"
         if scripts:
-            menu = """
+            menu = f"""
 Options:
-  [#]  Run script on {} schematic(s)
+  [#]  Run script on {len(selected_indices)} schematic(s)
+  [T]  Toggle mode (currently: {mode_label})
   [R]  Reselect schematic(s)
   [C]  Change scripts dir
   [O]  Open scripts dir
   [Q]  Quit
-""".format(len(selected_indices))
+""".strip()
         else:
-            menu = """
+            menu = f"""
 Options:
+  [T]  Toggle mode (currently: {mode_label})
   [R]  Reselect schematic(s)
   [C]  Change scripts dir
   [O]  Open scripts dir
   [Q]  Quit
-"""
-        print(menu.strip())
+""".strip()
+        print(menu)
 
-        choice = input("Enter choice (number/R/C/O/Q): ").strip().lower()
+        choice = input("Enter choice (number/T/R/C/O/Q): ").strip().lower()
 
         if choice.isdigit():
             idx = int(choice)
             if 1 <= idx <= len(scripts):
                 script_path = scripts[idx - 1][0]
-                # Run across all selected schematics
-                for i, sel_idx in enumerate(selected_indices, start=1):
-                    sch = sch_files[sel_idx - 1]
-                    title = f"RUN {i}/{len(selected_indices)} — {script_path.name}"                            f"\nWITH SCHEMATIC: {sch}"
-                    clear_screen(not args.no_clear)
-                    print(banner(title, "=")); print()
-                    try:
-                        subprocess.run(
-                            [sys.executable, str(script_path), str(sch)],
-                            cwd=str(script_path.parent),
-                            capture_output=False,
-                            text=False,
-                            check=False,
-                        )
-                        rc = 0
-                    except Exception as e:
-                        print(f"[ERR] Could not run {script_path.name}: {e}")
-                        rc = 1
-                    print("\n" + banner(f"FINISHED ({i}/{len(selected_indices)}): exit {rc}", "=")); print()
-                    if i != len(selected_indices):
-                        pause(not args.no_clear, "Press Enter for next schematic...")
-                pause(not args.no_clear, "All runs finished. Press Enter to return...")
+                rc = run_batch([script_path], selected_indices, sch_files, args.no_clear, step_mode)
+                if rc != 0:
+                    return rc
+                # rediscover scripts each loop in case folder changed externally
+                scripts = list_scripts(scripts_dir, args.scripts_glob)
                 continue
             else:
                 print(f"Number out of range. Enter 1..{len(scripts)}."); pause(not args.no_clear); continue
 
-        if choice in ("q", ""):  # allow Enter to quit here as well
+        if choice in ("q", ""):
             return 0
+        elif choice == "t":
+            step_mode = not step_mode
         elif choice == "r":
             clear_screen(not args.no_clear)
             print_sch_table(sch_files)
@@ -319,10 +413,11 @@ Options:
             if new_dir:
                 scripts_dir = Path(new_dir).expanduser().resolve()
                 print(f"Scripts directory set to: {scripts_dir}"); pause(not args.no_clear)
+            scripts = list_scripts(scripts_dir, args.scripts_glob)
         elif choice == "o":
             print(f"Opening folder: {scripts_dir}"); open_folder(scripts_dir); pause(not args.no_clear)
         else:
-            print("Unrecognized option. Choose a script number, or R, C, O, Q."); pause(not args.no_clear)
+            print("Unrecognized option. Choose a script number, T, R, C, O, or Q."); pause(not args.no_clear)
 
 if __name__ == "__main__":
     sys.exit(main())
