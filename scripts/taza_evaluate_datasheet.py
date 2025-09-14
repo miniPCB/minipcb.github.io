@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Generate feedback on a datasheet using an LLM.
+
 taza_evaluate.py
 
 Evaluate PN_REV.md and generate PN_REV_feedback.md using an LLM.

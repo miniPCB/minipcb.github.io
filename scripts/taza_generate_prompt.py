@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Generate PN_REV_prompt.md from PN_REV_sch.md
+
 tava_generate_prompt.py
 
 Generate a structured AI prompt markdown file (PN_REV_prompt.md) from a schematic

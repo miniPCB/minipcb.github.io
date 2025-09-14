@@ -25,6 +25,11 @@ const siteIndex = [
     "keywords": "miniPCB, Contact miniPCB, PCB Manufacturer, PCB Design, Custom PCB, PCB Services, PCB Production, PCB Supplier, PCB Contact, Electronics Manufacturing, Circuit Board Design, PCB Assembly, PCB Fabrication, High-quality PCB, Contact Electronics Manufacturer, PCB Inquiry, PCB Technology, PCB Support, Industrial PCB, PCB Solutions"
   },
   {
+    "title": "Electrical Part Stress Analyzer (EPSA)",
+    "url": "epsa.html",
+    "keywords": ""
+  },
+  {
     "title": "History \u2013 miniPCB\u2122",
     "url": "history.html",
     "keywords": "\"History of miniPCB, PCB Design, Flashlight-tag sensor, Animal box trap, Electronics, Surface mount 555 Timer kit, myDAQ interface, myDAQ board design, myDAQ dock evolution, Concept designs, 2015 concept, 2017 concept, 2020 concept, Experimental transformer, Audio filter attempt, miniPCB logo, Original miniPCB idea, Electronic Components, PCB layout\""

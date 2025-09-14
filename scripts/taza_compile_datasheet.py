@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Compile a datasheet-style Markdown from *_sch.md and *_man.md
+
 taza_compile_datasheet.py
 
 Pure compiler: merges content from a schematic export Markdown (*_sch.md or *_shc.md)
