@@ -90,7 +90,7 @@ const siteIndex = [
     "keywords": "Prototyping Board, 00A-31, V-scored, 4 Pieces, PCB Details, Board Layout, miniPCB, Top view, Basic Prototyping Board Design, Prototyping, V-scored Board, Electronic Prototyping, PCB Prototyping, 4 Piece Prototyping Board, Board Design, PCB Layout, Miniature PCB, PCB Prototyping Details, 00A-31 Prototyping Board, V-scored Prototyping"
   },
   {
-    "title": "00A-32 | Prototyping Board, V-scored,  9 Pieces",
+    "title": "00A-32 | Prototyping Board, V-scored, 9 Pieces",
     "url": "00A/00A-32.html",
     "keywords": "00A-32, Prototyping Board, 9 Piece, PCB Details, Board Layout, Coming Soon, Top view of miniPCB, Basic Prototyping Board Design, PCB, Prototyping, Board, Circuit Board, Prototype, Electronics, Board Design, Mini PCB, Electronic Components, PCB Layout, Single Piece, Prototyping Board Details"
   },
@@ -200,6 +200,11 @@ const siteIndex = [
     "keywords": "Opamp Amplifiers, miniPCB, 04A-series miniPCB, miniPCB catalog, All Opamp, Amplifiers miniPCB, PCB components, Electrical Parts, Electronic Components, Amplifier Components, Opamp Devices, Miniature PCB, Circuit Board Amplifiers, Opamp Amplifiers Catalog, Opamp miniPCB series, 04A-series Amplifiers, miniPCB products, Opamp PCB parts, High quality Opamp, Opamp Amplifier miniPCB"
   },
   {
+    "title": "",
+    "url": "04B/04B-000.html",
+    "keywords": ""
+  },
+  {
     "title": "04B-005 | Common Emitter Amplifier",
     "url": "04B/04B-005.html",
     "keywords": "04B-005, Common Emitter Amplifier, PCB Details, Power Supply Conditioning, Input Coupling, Biasing, Feedback Network, Collector Network, Output, Emitter Network, Stability, Transistor Configuration, Schematic, Board Layout, Downloads, YouTube, BJT amplifier, teaching gain, small-signal response, miniPCB."
@@ -268,11 +273,6 @@ const siteIndex = [
     "title": "04C-05 | Ultrasound Analog Front End",
     "url": "04C/04C-05.html",
     "keywords": "Ultrasound Analog Front End, 04C-05, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End"
-  },
-  {
-    "title": "04C-25 | Resistance Measurement Circuit",
-    "url": "04C/04C-25.html",
-    "keywords": "Resistance Measurement Circuit, 04C-25, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End"
   },
   {
     "title": "All Specialty Amplifiers | miniPCB",

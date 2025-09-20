@@ -102,7 +102,7 @@ const keywords = [
     "slogan": "A basic prototyping board design."
   },
   {
-    "keyword": "00A-32 | Prototyping Board, V-scored,  9 Pieces",
+    "keyword": "00A-32 | Prototyping Board, V-scored, 9 Pieces",
     "url": "00A/00A-32.html",
     "meta": "00A-32, Prototyping Board, 9 Piece, PCB Details, Board Layout, Coming Soon, Top view of miniPCB, Basic Prototyping Board Design, PCB, Prototyping, Board, Circuit Board, Prototype, Electronics, Board Design, Mini PCB, Electronic Components, PCB Layout, Single Piece, Prototyping Board Details",
     "slogan": "A basic prototyping board design."
@@ -234,6 +234,12 @@ const keywords = [
     "slogan": "04A-series miniPCB catalog"
   },
   {
+    "keyword": "",
+    "url": "04B/04B-000.html",
+    "meta": "",
+    "slogan": ""
+  },
+  {
     "keyword": "04B-005 | Common Emitter Amplifier",
     "url": "04B/04B-005.html",
     "meta": "04B-005, Common Emitter Amplifier, PCB Details, Power Supply Conditioning, Input Coupling, Biasing, Feedback Network, Collector Network, Output, Emitter Network, Stability, Transistor Configuration, Schematic, Board Layout, Downloads, YouTube, BJT amplifier, teaching gain, small-signal response, miniPCB.",
@@ -316,12 +322,6 @@ const keywords = [
     "url": "04C/04C-05.html",
     "meta": "Ultrasound Analog Front End, 04C-05, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End",
     "slogan": "A basic ultrasound transducer pre-amplifier circuit design."
-  },
-  {
-    "keyword": "04C-25 | Resistance Measurement Circuit",
-    "url": "04C/04C-25.html",
-    "meta": "Resistance Measurement Circuit, 04C-25, PCB Details, Schematic, Board Layout, miniPCB, Circuit Board, PCB Design, Sensor Interface, LM324, Instrumentation Amplifier, Ratiometric Sensing, Pressure Sensor Front-End",
-    "slogan": "A basic circuit design to measure resistance."
   },
   {
     "keyword": "All Specialty Amplifiers | miniPCB",
