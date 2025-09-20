@@ -9,7 +9,8 @@ miniPCB Catalog — PyQt5
 - Collection table: right-click Add Row Above/Below
 - Update HTML button upgrades file to current template (keeps data)
 - PN→image paths fix; Google tag handled; scripts only on board pages
-- NEW: Page Components (checkboxes) to show/hide Description, Videos, Downloads, Additional Resources tabs
+- Page Components checkboxes show/hide Description, Videos, Downloads, Additional Resources tabs
+- FIX: Updating formatting forces 'Schematic' tab active (not 'Details')
 """
 
 from __future__ import annotations
@@ -294,9 +295,9 @@ class DescProxyModel(QSortFilterProxyModel):
             try:
                 txt = path.read_text(encoding="utf-8", errors="ignore")
                 if BS4_AVAILABLE:
-                    soup = BeautifulSoup(txt, "html.parser"); 
+                    soup = BeautifulSoup(txt, "html.parser")
                     return (soup.title.string.strip() if soup.title and soup.title.string else "")
-                m = re.search(r"<title>(.*?)</title>", txt, re.I | re.S); 
+                m = re.search(r"<title>(.*?)</title>", txt, re.I | re.S)
                 return (m.group(1).strip() if m else "")
             except Exception: return ""
         if index.column() >= 2 and role == Qt.DisplayRole: return ""
@@ -412,7 +413,7 @@ class CatalogWindow(QMainWindow):
         # Sections host
         self.sections_host = QWidget(self); sh_v = QVBoxLayout(self.sections_host); sh_v.setContentsMargins(0,0,0,0); sh_v.setSpacing(8)
 
-        # NEW: Page Components (checkboxes)
+        # Page Components
         comp_box = QGroupBox("Page Components"); comp_row = QHBoxLayout(comp_box); comp_row.setSpacing(12)
         self.chk_desc = QCheckBox("Description"); self.chk_videos = QCheckBox("Videos"); self.chk_downloads = QCheckBox("Downloads"); self.chk_resources = QCheckBox("Additional Resources")
         for c in (self.chk_desc, self.chk_videos, self.chk_downloads, self.chk_resources): c.setChecked(True)
@@ -499,7 +500,7 @@ class CatalogWindow(QMainWindow):
         if not BS4_AVAILABLE:
             self._info("BeautifulSoup not found", "Install with:\n\n  pip install beautifulsoup4")
 
-    # --- Settings dialog (put this inside CatalogWindow) ---
+    # --- Settings dialog (choose content root) ---
     def open_settings_dialog(self):
         """Choose the content root folder where your .html files live."""
         settings = get_settings()
@@ -1026,11 +1027,13 @@ class CatalogWindow(QMainWindow):
         if self.page_mode == "collection":
             self._save_collection_into_soup(soup); self._strip_detail_scripts(soup)
         else:
-            self._save_detail_into_soup(soup); self._ensure_detail_scripts(soup)
+            # Force 'schematic' active whenever we are updating to the template
+            self._save_detail_into_soup(soup, force_active=("schematic" if use_template else None))
+            self._ensure_detail_scripts(soup)
         return soup
 
     def _strip_detail_scripts(self, soup: BeautifulSoup):
-        lb = soup.find(id="lightbox"); 
+        lb = soup.find(id="lightbox")
         if lb: lb.decompose()
         for s in soup.find_all("script"): s.decompose()
 
@@ -1165,7 +1168,7 @@ class CatalogWindow(QMainWindow):
         if hidden: div["data-hidden"] = "true"
         else: div.attrs.pop("data-hidden", None)
 
-    def _rebuild_tabs_header(self, soup: BeautifulSoup):
+    def _rebuild_tabs_header(self, soup: BeautifulSoup, force_active: Optional[str] = None):
         tabc, tabs = self._ensure_container_and_tabs_div(soup)
         # Build enabled mapping/order
         enabled = {
@@ -1182,6 +1185,10 @@ class CatalogWindow(QMainWindow):
         # Determine active content
         active_div = tabc.find("div", class_="tab-content", id=re.compile(r".*"), attrs={"class":re.compile(r"\bactive\b")})
         active_id = active_div.get("id") if active_div else "schematic"
+        # If we're forcing a specific active tab (e.g., during template update), do it.
+        if force_active:
+            active_id = force_active
+        # If chosen active tab not enabled, fall back to schematic
         if active_id not in enabled or not enabled.get(active_id, False):
             active_id = "schematic"
         # Rebuild buttons
@@ -1201,7 +1208,7 @@ class CatalogWindow(QMainWindow):
                 classes = [c for c in classes if c != "active"]
             div["class"] = classes
 
-    def _save_detail_into_soup(self, soup: BeautifulSoup):
+    def _save_detail_into_soup(self, soup: BeautifulSoup, force_active: Optional[str] = None):
         # ----- Details -----
         det_div = self._ensure_section(soup, "details", "PCB Details")
         for node in list(det_div.find_all(recursive=False))[1:]: node.decompose()
@@ -1274,7 +1281,7 @@ class CatalogWindow(QMainWindow):
         self._mark_section_hidden(soup, "resources", not self.chk_resources.isChecked())
 
         # Rebuild the tab buttons to include only enabled components
-        self._rebuild_tabs_header(soup)
+        self._rebuild_tabs_header(soup, force_active=force_active)
 
     def _sanitize_ai_fragment(self, html_fragment: str, soup: BeautifulSoup) -> List[Tag]:
         try:
@@ -1523,7 +1530,7 @@ class CatalogWindow(QMainWindow):
             self._error("Error", f"Failed to create file:\n{e}"); return
         sidx = self.fs_model.index(str(target))
         if sidx.isValid():
-            pidx = self.proxy.mapFromSource(sidx); 
+            pidx = self.proxy.mapFromSource(sidx)
             if pidx.isValid(): self.tree.setCurrentIndex(pidx)
 
     def rename_item(self):
@@ -1668,6 +1675,13 @@ class CatalogWindow(QMainWindow):
                 href = "/" + rel if not rel.startswith("/") else rel
                 self.nav_tbl.setItem(r, 1, QTableWidgetItem(href))
             self._on_any_changed()
+
+    # ---------- API key helper ----------
+    def _set_api_key(self):
+        key, ok = self._ask_text("OpenAI API Key", "Enter your OpenAI API key:", "")
+        if ok:
+            self.openai_key = key.strip()
+            s = get_settings(); s.setValue(KEY_OPENAI_KEY, self.openai_key)
 
 # ---------- Boot ----------
 def ensure_content_root() -> Path:
