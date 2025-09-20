@@ -7,11 +7,10 @@ Autosave (30s) + Dirty indicator • Description AI (seed → generated) with ET
 Persists AI timing stats in minipcb_catalog.json
 
 New in this build
-- Collection table: right-click → "Add row above / below"
-- Navigation tab (both Detail & Collection views): edit the top-of-page nav links
-- New-file wizard prompts for collection pages to include in nav (links + labels)
-- New-file template includes chosen nav links (not just Home)
-- Review pane reflects latest form state (including Navigation)
+- Navigation tab: "Add Link" opens a picker dialog of collection pages to insert links.
+- Right-click on tables: "Add row above / below" (Navigation & Collection tables).
+- "Update Template" button: reworks current HTML to the latest template (keeps all current form data).
+- Part number change now reliably updates schematic/layout image paths (flows through).
 
 Notes
 - OpenAI usage is optional and entirely local (no backend). Reads OPENAI_API_KEY and OPENAI_MODEL (default "gpt-5").
@@ -374,6 +373,7 @@ class CatalogWindow(QMainWindow):
         self._dirty = False
         self._loading = False
         self._desc_generated_raw = ""  # saved verbatim; sanitized (no inline styles)
+        self._last_partno_for_images = ""  # track previous part no for path replacing
 
         # OpenAI settings
         s = get_settings()
@@ -405,6 +405,10 @@ class CatalogWindow(QMainWindow):
         tb.addSeparator()
         self.act_save = QAction("💾 Save (Ctrl+S)", self); self.act_save.setShortcut(QKeySequence.Save)
         self.act_save.triggered.connect(self.save_from_form); tb.addAction(self.act_save)
+        act_update_template = QAction("🧱 Update Template", self)
+        act_update_template.setToolTip("Rewrite current HTML to the latest template without losing any form data")
+        act_update_template.triggered.connect(self.update_to_template)
+        tb.addAction(act_update_template)
         tb.addSeparator()
         act_set_model = QAction("🤖 Set Model…", self); act_set_model.triggered.connect(self._set_model); tb.addAction(act_set_model)
         act_set_key   = QAction("🔑 Set API Key…", self); act_set_key.triggered.connect(self._set_api_key); tb.addAction(act_set_key)
@@ -466,13 +470,15 @@ class CatalogWindow(QMainWindow):
         self.nav_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         nav_v.addWidget(self.nav_table, 1)
         nav_btns = QHBoxLayout()
-        b_nav_add = QPushButton("Add Link"); b_nav_del = QPushButton("Remove Selected")
-        b_nav_add.clicked.connect(lambda: (self.nav_table.insertRow(self.nav_table.rowCount()), self._on_any_changed()))
+        self.btn_nav_add = QPushButton("Add Link")
+        b_nav_del = QPushButton("Remove Selected")
+        self.btn_nav_add.clicked.connect(self._on_nav_add_clicked)  # open picker dialog
         b_nav_del.clicked.connect(lambda: (self.nav_table.removeRow(self.nav_table.currentRow()) if self.nav_table.currentRow()>=0 else None, self._on_any_changed()))
-        nav_btns.addWidget(b_nav_add); nav_btns.addWidget(b_nav_del); nav_btns.addStretch(1)
+        nav_btns.addWidget(self.btn_nav_add); nav_btns.addWidget(b_nav_del); nav_btns.addStretch(1)
         nav_v.addLayout(nav_btns)
         self.tabs.addTab(self.nav_tab, "Navigation")
-        self._install_row_context_menu(self.nav_table)  # bonus: same convenience menu
+        # Context menu on Navigation table (add row above/below)
+        self._install_row_context_menu(self.nav_table)
 
         # Sections (Detail pages)
         self.sections_host = QWidget(self); sh_v = QVBoxLayout(self.sections_host); sh_v.setContentsMargins(0,0,0,0)
@@ -613,7 +619,7 @@ class CatalogWindow(QMainWindow):
         det_form.addRow("Panel Size:", self.det_panel)
         for ed in (self.det_part, self.det_title, self.det_board, self.det_pieces, self.det_panel):
             ed.textChanged.connect(self._on_any_changed)
-        # auto-fill schematic/layout when part number changes
+        # auto-fill/update schematic/layout when part number changes
         self.det_part.textChanged.connect(self._on_partno_changed_update_paths)
         self.sections_tabs.addTab(w_details, "Details")
 
@@ -734,6 +740,25 @@ class CatalogWindow(QMainWindow):
             self._on_any_changed()
         table.customContextMenuRequested.connect(show_menu)
 
+    # ---------- NAV: Add Link button opens picker ----------
+    def _on_nav_add_clicked(self):
+        base_dir = self.current_path.parent if (self.current_path and self.current_path.exists()) else self.content_root
+        candidates = self._find_collection_candidates(base_dir)
+        if not candidates:
+            # fallback: just add an empty row
+            self.nav_table.insertRow(self.nav_table.rowCount())
+            self._on_any_changed()
+            return
+        dlg = NavPickerDialog(self, candidates, base_dir=base_dir)
+        apply_windows_dark_titlebar(dlg)
+        if dlg.exec_() == dlg.Accepted:
+            for label, href in dlg.selected_links():
+                r = self.nav_table.rowCount()
+                self.nav_table.insertRow(r)
+                self.nav_table.setItem(r, 0, QTableWidgetItem(label))
+                self.nav_table.setItem(r, 1, QTableWidgetItem(href))
+            self._on_any_changed()
+
     # Context menu for collection table (requested)
     def _collection_context_menu(self, pos: QPoint):
         r = self.collection_tbl.indexAt(pos).row()
@@ -849,6 +874,7 @@ class CatalogWindow(QMainWindow):
         if hasattr(self, "desc_seed"): self.desc_seed.blockSignals(True); self.desc_seed.clear(); self.desc_seed.blockSignals(False)
         if hasattr(self, "desc_generated"): self.desc_generated.clear()
         self._desc_generated_raw = ""
+        self._last_partno_for_images = ""
         self.review_raw.blockSignals(True); self.review_raw.clear(); self.review_raw.blockSignals(False)
         self._review_dirty = False
         self._set_ai_status_idle()
@@ -878,7 +904,9 @@ class CatalogWindow(QMainWindow):
                 pattern = rf"^{re.escape(label_text.rstrip(':'))}\s*:?\s*"
                 return re.sub(pattern, "", full, flags=re.I)
             return ""
-        self.det_part.setText(_get_detail("Part No"))
+        pn = _get_detail("Part No")
+        self.det_part.setText(pn)
+        self._last_partno_for_images = pn or ""  # remember current to enable replacement on change
         self.det_title.setText(_get_detail("Title"))
         self.det_board.setText(_get_detail("Board Size"))
         self.det_pieces.setText(_get_detail("Pieces per Panel"))
@@ -1102,6 +1130,7 @@ class CatalogWindow(QMainWindow):
         # Raw writer wins if edited
         if self._review_dirty:
             text = ascii_sanitize(self.review_raw.toPlainText())
+            text = self._ensure_doctype(text)
             try:
                 tmp = self.current_path.with_suffix(self.current_path.suffix + f".tmp.{os.getpid()}.{now_stamp()}")
                 tmp.write_text(text, encoding="utf-8")
@@ -1138,6 +1167,8 @@ class CatalogWindow(QMainWindow):
         self._upsert_metadata_into_soup(soup)
         # --- Update navigation (both modes)
         self._save_nav_into_soup(soup)
+        # --- Ensure head has required template bits (Google tag, meta, styles)
+        self._ensure_head_template(soup)
 
         # --- Branch by page mode
         if self.page_mode == "collection":
@@ -1145,8 +1176,11 @@ class CatalogWindow(QMainWindow):
             self._remove_detail_scripts_and_lightbox(soup)
         else:
             self._save_detail_into_soup(soup)
+            self._ensure_lightbox(soup)
+            self._ensure_detail_scripts(soup)
 
         out_txt = ascii_sanitize(compact_html_for_readability(soup))
+        out_txt = self._ensure_doctype(out_txt)
         try:
             tmp = self.current_path.with_suffix(self.current_path.suffix + f".tmp.{os.getpid()}.{now_stamp()}")
             tmp.write_text(out_txt, encoding="utf-8")
@@ -1162,6 +1196,63 @@ class CatalogWindow(QMainWindow):
         self._set_stats(self.current_path)
         self.proxy.refresh_desc(self.current_path)
         self._set_dirty(False)
+
+    # ---------- Update Template (normalize HTML structure) ----------
+    def update_to_template(self):
+        """Rebuild the HTML structure to match the latest template, preserving all form data."""
+        if not self.current_path or not self.current_path.exists():
+            self._info("Update Template", "Select an HTML file first.")
+            return
+        if not BS4_AVAILABLE:
+            self._warn("BeautifulSoup required", "Install with:\n\n    pip install beautifulsoup4")
+            return
+        try:
+            raw = self.current_path.read_text(encoding="utf-8")
+        except Exception as e:
+            self._error("Read error", f"Failed to read file:\n{e}")
+            return
+
+        soup = BeautifulSoup(raw, "html.parser")
+
+        # Always ensure <html>, <head>, <body> nodes exist
+        if not soup.html:
+            html = soup.new_tag("html", lang="en"); soup.insert(0, html)
+        if not soup.head:
+            soup.html.insert(0, soup.new_tag("head"))
+        if not soup.body:
+            soup.html.append(soup.new_tag("body"))
+
+        # Metadata / nav / content from the current UI
+        self._upsert_metadata_into_soup(soup)
+        self._save_nav_into_soup(soup)
+        self._ensure_head_template(soup)
+
+        if self.page_mode == "collection":
+            self._save_collection_into_soup(soup)
+            self._remove_detail_scripts_and_lightbox(soup)
+        else:
+            self._save_detail_into_soup(soup)
+            self._ensure_lightbox(soup)
+            self._ensure_detail_scripts(soup)
+
+        out_txt = ascii_sanitize(compact_html_for_readability(soup))
+        out_txt = self._ensure_doctype(out_txt)
+        try:
+            tmp = self.current_path.with_suffix(self.current_path.suffix + f".tmp.{os.getpid()}.{now_stamp()}")
+            tmp.write_text(out_txt, encoding="utf-8")
+            os.replace(str(tmp), str(self.current_path))
+        except Exception as e:
+            try:
+                if 'tmp' in locals() and tmp.exists(): tmp.unlink()
+            except Exception:
+                pass
+            self._error("Update error", f"Failed to write file:\n{e}")
+            return
+
+        self._set_stats(self.current_path)
+        self.proxy.refresh_desc(self.current_path)
+        self._set_dirty(False)
+        self._info("Template Updated", "The file has been normalized to the latest template.")
 
     # ---------- Save helpers (common) ----------
     def _upsert_metadata_into_soup(self, soup: BeautifulSoup):
@@ -1197,21 +1288,130 @@ class CatalogWindow(QMainWindow):
         h1 = soup.find("h1")
         if h1: h1.clear(); h1.append(new_h1)
         else:
-            parent = soup.find("main") or soup.body or soup.html
+            parent = soup.find("header") or (soup.body or soup.html)
             if parent:
                 nh = soup.new_tag("h1"); nh.string = new_h1
-                if parent.contents: parent.insert(0, nh)
-                else: parent.append(nh)
+                parent.append(nh)
 
         # <p class="slogan">
         new_slogan = self.ed_slogan.text().strip()
         slog = soup.find("p", class_="slogan")
         if slog: slog.clear(); slog.append(new_slogan)
         else:
-            parent = soup.find("header") or soup.body or soup.html
+            parent = soup.find("header") or (soup.body or soup.html)
             if parent:
                 ps = soup.new_tag("p", **{"class":"slogan"}); ps.string = new_slogan
                 parent.append(ps)
+
+    def _ensure_head_template(self, soup: BeautifulSoup):
+        # Ensure <html lang="en">
+        if soup.html and not soup.html.has_attr("lang"):
+            soup.html["lang"] = "en"
+
+        # Ensure <meta charset="utf-8">
+        meta_charset = soup.find("meta", attrs={"charset": True})
+        if not meta_charset:
+            mc = soup.new_tag("meta", charset="utf-8")
+            soup.head.insert(0, mc)
+        else:
+            meta_charset["charset"] = "utf-8"
+
+        # Ensure viewport
+        meta_view = soup.find("meta", attrs={"name":"viewport"})
+        if not meta_view:
+            mv = soup.new_tag("meta", **{"name":"viewport","content":"width=device-width, initial-scale=1.0"})
+            soup.head.append(mv)
+        else:
+            meta_view["content"] = "width=device-width, initial-scale=1.0"
+
+        # Ensure favicon
+        icon = soup.find("link", attrs={"rel": ["icon","shortcut icon"]})
+        if not icon:
+            li = soup.new_tag("link", **{"rel":"icon","type":"image/png","href":"/favicon.png"})
+            soup.head.append(li)
+        else:
+            icon["href"] = "/favicon.png"
+            icon["type"] = "image/png"
+            icon["rel"] = "icon"
+
+        # Ensure styles.css link (absolute to site root)
+        css = None
+        for l in soup.find_all("link", rel=True):
+            if "stylesheet" in " ".join(l["rel"]).lower():
+                css = l; break
+        if not css:
+            lc = soup.new_tag("link", **{"rel":"stylesheet","href":"/styles.css"})
+            soup.head.append(lc)
+        else:
+            css["href"] = "/styles.css"
+
+        # Ensure Google tag present
+        has_gtag = False
+        for sc in soup.find_all("script"):
+            src = sc.get("src","")
+            if "googletagmanager.com/gtag/js" in src:
+                has_gtag = True; break
+        if not has_gtag:
+            s1 = soup.new_tag("script", src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2", **{"async": True})
+            s2 = soup.new_tag("script")
+            s2.string = (
+                "window.dataLayer = window.dataLayer || [];\n"
+                "function gtag(){dataLayer.push(arguments);} \n"
+                "gtag('js', new Date());\n"
+                "gtag('config', 'G-9ZM2D6XGT2');"
+            )
+            soup.head.insert(1, s2)
+            soup.head.insert(1, s1)
+
+        # Ensure <nav> skeleton exists
+        if not soup.find("nav"):
+            nav = soup.new_tag("nav")
+            container = soup.new_tag("div", **{"class":"nav-container"})
+            ul = soup.new_tag("ul", **{"class":"nav-links"})
+            container.append(ul); nav.append(container)
+            (soup.body or soup).insert(0, nav)
+
+    def _ensure_lightbox(self, soup: BeautifulSoup):
+        if not soup.find("div", id="lightbox"):
+            lb = soup.new_tag("div", id="lightbox", **{"aria-hidden":"true","role":"dialog","aria-label":"Image viewer"})
+            img = soup.new_tag("img", id="lightbox-img", alt="Expanded image")
+            lb.append(img)
+            (soup.body or soup).append(lb)
+
+    def _ensure_detail_scripts(self, soup: BeautifulSoup):
+        # Add the tab/lightbox script once
+        has = False
+        for s in soup.find_all("script"):
+            s_text = (s.string or "") + " ".join(s.stripped_strings)
+            if "showTab(" in s_text and "openLightbox(" in s_text:
+                has = True; break
+        if not has:
+            scr = soup.new_tag("script")
+            scr.string = (
+                "function showTab(id, btn) {\n"
+                "  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));\n"
+                "  document.querySelectorAll('.tabs .tab').forEach(el => el.classList.remove('active'));\n"
+                "  var pane = document.getElementById(id);\n"
+                "  if (pane) pane.classList.add('active');\n"
+                "  if (btn) btn.classList.add('active');\n"
+                "}\n"
+                "const lb = document.getElementById('lightbox');\n"
+                "const lbImg = document.getElementById('lightbox-img');\n"
+                "function openLightbox(imgEl) {\n"
+                "  const src = (imgEl.dataset && imgEl.dataset.full) ? imgEl.dataset.full : imgEl.src;\n"
+                "  lbImg.src = src; lb.classList.add('open'); lb.setAttribute('aria-hidden','false'); document.body.classList.add('no-scroll');\n"
+                "}\n"
+                "function closeLightbox(){ lb.classList.remove('open'); lb.setAttribute('aria-hidden','true'); document.body.classList.remove('no-scroll'); setTimeout(()=>{lbImg.src='';},150); }\n"
+                "lb && lb.addEventListener('click', (e)=>{ if (e.target===lb) closeLightbox(); });\n"
+                "window.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && lb && lb.classList.contains('open')) closeLightbox(); });\n"
+            )
+            (soup.body or soup).append(scr)
+
+    def _ensure_doctype(self, text: str) -> str:
+        t = text.lstrip()
+        if not t.lower().startswith("<!doctype html>"):
+            return "<!DOCTYPE html>\n" + text
+        return text
 
     # ---------- Save helpers (Detail pages) ----------
     def _ensure_section(self, soup: BeautifulSoup, sec_id: str, heading_text: str):
@@ -1973,30 +2173,48 @@ class CatalogWindow(QMainWindow):
                 # Rebuild from current form state:
                 self._upsert_metadata_into_soup(soup)
                 self._save_nav_into_soup(soup)
+                self._ensure_head_template(soup)
                 if self.page_mode == "collection":
                     self._save_collection_into_soup(soup)
                     self._remove_detail_scripts_and_lightbox(soup)
                 else:
                     self._save_detail_into_soup(soup)
+                    self._ensure_lightbox(soup)
+                    self._ensure_detail_scripts(soup)
 
                 snapshot = compact_html_for_readability(soup)
+                snapshot = self._ensure_doctype(snapshot)
                 self.review_raw.blockSignals(True)
                 self.review_raw.setPlainText(snapshot)
                 self.review_raw.blockSignals(False)
             except Exception:
                 pass
 
-    # ---------- Part number change handler ----------
+    # ---------- Part number change handler (flows into image links) ----------
     def _on_partno_changed_update_paths(self):
-        if self._loading: return
+        if self._loading: 
+            self._last_partno_for_images = self.det_part.text().strip()
+            return
         pn = self.det_part.text().strip()
-        if not pn: return
-        sch = f"../images/{pn}_schematic_01.png"
-        lay = f"../images/{pn}_components_top.png"
-        if not self.sch_src.text().strip():
-            self.sch_src.setText(sch)
-        if not self.lay_src.text().strip():
-            self.lay_src.setText(lay)
+        prev = self._last_partno_for_images or ""
+        def update_field(field: QLineEdit, template_suffix: str):
+            cur = field.text().strip()
+            default_prev = f"../images/{prev}{template_suffix}" if prev else ""
+            default_new  = f"../images/{pn}{template_suffix}" if pn else ""
+            if not cur:
+                field.setText(default_new); return
+            if prev and prev in cur:
+                field.setText(cur.replace(prev, pn)); return
+            # If it exactly matches old default, replace with new default
+            if default_prev and cur == default_prev:
+                field.setText(default_new); return
+            # If it matches an images path but without prev, keep user's custom path
+        update_field(self.sch_src, "_schematic_01.png")
+        update_field(self.lay_src, "_components_top.png")
+        self._last_partno_for_images = pn
+        self._on_any_changed()
+        self._update_preview('schematic')
+        self._update_preview('layout')
 
 # ---------- App boot ----------
 def ensure_content_root() -> Path:
