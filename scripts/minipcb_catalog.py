@@ -6,20 +6,16 @@ Dark theme • HTML-first • Fixed Site Tabs + Collections • Image previews
 Autosave (30s) + Dirty indicator • Description AI (seed → generated) with ETA
 Persists AI timing stats in minipcb_catalog.json
 
-Tabs mapped to site (detail pages) and order:
-- details
-- description   (NEW; between Details and Schematic)
-- simulation    (UI label: "Videos")
-- schematic
-- layout
-- downloads
-- resources
+New in this build
+- Collection table: right-click → "Add row above / below"
+- Navigation tab (both Detail & Collection views): edit the top-of-page nav links
+- New-file wizard prompts for collection pages to include in nav (links + labels)
+- New-file template includes chosen nav links (not just Home)
+- Review pane reflects latest form state (including Navigation)
 
 Notes
 - OpenAI usage is optional and entirely local (no backend). Reads OPENAI_API_KEY and OPENAI_MODEL (default "gpt-5").
 - Timing stats (for ETA): content_root / minipcb_catalog.json
-- Review tab shows a live snapshot of the current UI (not just the on-disk file).
-- Collection pages never get tab/lightbox scripts injected.
 """
 
 from __future__ import annotations
@@ -43,14 +39,15 @@ except Exception:
     OpenAI = None
     OPENAI_AVAILABLE = False
 
-from PyQt5.QtCore import Qt, QSortFilterProxyModel, QModelIndex, QSettings, QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QSortFilterProxyModel, QModelIndex, QSettings, QTimer, QThread, pyqtSignal, QPoint
 from PyQt5.QtGui import QKeySequence, QIcon, QPixmap, QPainter, QFont
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFileSystemModel, QTreeView, QToolBar, QAction, QFileDialog,
     QInputDialog, QMessageBox, QLabel, QAbstractItemView, QFormLayout,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QGroupBox, QSplitter, QTabWidget, QTextEdit, QStyleFactory
+    QGroupBox, QSplitter, QTabWidget, QTextEdit, QStyleFactory, QMenu,
+    QDialog, QDialogButtonBox, QListWidget, QListWidgetItem
 )
 
 APP_TITLE = "miniPCB Catalog"
@@ -128,14 +125,11 @@ def strip_inline_styles_from_fragment(html: str) -> str:
         return ""
     try:
         soup = BeautifulSoup(html, "html.parser")
-        # Remove inline style attrs, Qt spans, excessive attributes
         for tag in soup.find_all(True):
             if tag.has_attr("style"):
                 del tag["style"]
-            # drop Qt list indent artifacts
             if tag.has_attr("-qt-block-indent"):
                 del tag["-qt-block-indent"]
-            # unwrap plain spans
             if tag.name == "span" and not tag.attrs:
                 tag.unwrap()
         allowed = {"p","ul","ol","li","div","section","h3","h4","strong","em","code","pre","br"}
@@ -148,26 +142,16 @@ def strip_inline_styles_from_fragment(html: str) -> str:
 
 def compact_html_for_readability(soup) -> str:
     """
-    Compact pretty-print without wrecking tables/lists; keeps output readable
-    and avoids exploding into too many lines. Safe for saving & Review.
+    Compact pretty-print without wrecking tables/lists; keeps output readable.
     """
     txt = str(soup)
-
-    # Collapse generic inter-tag whitespace
     txt = re.sub(r">\s+<", "><", txt)
-
-    # Put common block ends on their own lines
     txt = re.sub(r"(</(h[1-6]|p|div|section|header|footer|main|nav)>)", r"\1\n", txt)
-
-    # Ensure list/table structure is readable
     txt = re.sub(r"(<(ul|ol|li|table|thead|tbody|tfoot|tr|th|td)[^>]*>)", r"\n\1", txt)
     txt = re.sub(r"(</(ul|ol|li|table|thead|tbody|tfoot|tr|th|td)>)", r"\1\n", txt)
-
-    # Gentle squeeze
     txt = re.sub(r"\n{3,}", "\n\n", txt)
     txt = re.sub(r">\s{2,}", "> ", txt)
     txt = re.sub(r"\s{2,}<", " <", txt)
-
     return txt.strip()
 
 # ---------- Preview label ----------
@@ -296,10 +280,10 @@ class DescAIWorker(QThread):
                 f"- Part No: {self.part_no}\n\n"
                 f"SEED (editor-provided):\n{self.seed}\n\n"
                 "TASK:\n"
-                "• Generate a concise, skimmable description of this board suitable for the page's Description tab.\n"
+                "• Generate a concise, skimmable description suitable for the page's Description tab.\n"
                 "• Include 2–4 short paragraphs and, if helpful, ONE bullet list (3–6 items max).\n"
                 "• Avoid marketing fluff; focus on what the circuit does, how it works, notable components/constraints,\n"
-                "  and typical use-cases. Keep it under ~180–260 words total.\n"
+                "  and typical use-cases. ~180–260 words total.\n"
                 "• Use neutral, professional tone. Use <strong> sparingly for key specs.\n"
                 "• Output: ONLY an HTML fragment. No outer wrapper beyond section-level tags."
             )
@@ -338,13 +322,51 @@ class DescAIWorker(QThread):
             elapsed = time.time() - start
             self.finished.emit({"ok": False, "error": str(e), "elapsed": elapsed})
 
+# ---------- New-file: choose nav links dialog ----------
+class NavPickerDialog(QDialog):
+    def __init__(self, parent, candidates: List[Tuple[str,str,Path]], base_dir: Path):
+        """
+        candidates: list of (label, href, path)
+        """
+        super().__init__(parent)
+        self.setWindowTitle("Choose Navigation Links")
+        self.resize(520, 540)
+        v = QVBoxLayout(self)
+        lab = QLabel("Select collection pages to include in the navigation bar.\n(Home is always included.)")
+        v.addWidget(lab)
+        self.list = QListWidget(self)
+        self.list.setSelectionMode(QListWidget.NoSelection)
+        v.addWidget(self.list, 1)
+
+        # Populate
+        for label, href, p in candidates:
+            item = QListWidgetItem(f"{label}  —  {href}")
+            item.setData(Qt.UserRole, (label, href))
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            # Pre-check items in the same folder as base_dir
+            item.setCheckState(Qt.Checked if p.parent.resolve() == base_dir.resolve() else Qt.Unchecked)
+            self.list.addItem(item)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal, self)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        v.addWidget(btns)
+
+    def selected_links(self) -> List[Tuple[str,str]]:
+        out = []
+        for i in range(self.list.count()):
+            it = self.list.item(i)
+            if it.checkState() == Qt.Checked:
+                out.append(it.data(Qt.UserRole))
+        return out
+
 # ---------- Main Window ----------
 class CatalogWindow(QMainWindow):
     def __init__(self, content_root: Path, app_icon: QIcon):
         super().__init__()
         self.setWindowTitle(APP_TITLE)
         self.setWindowIcon(app_icon)
-        self.resize(1400, 900)
+        self.resize(1440, 920)
 
         self.content_root = content_root
         self.current_path: Optional[Path] = None
@@ -434,11 +456,29 @@ class CatalogWindow(QMainWindow):
         meta_form.addRow("Slogan:", self.ed_slogan)
         self.tabs.addTab(self.meta_tab, "Metadata")
 
+        # Navigation tab (new)
+        self.nav_tab = QWidget(self)
+        nav_v = QVBoxLayout(self.nav_tab); nav_v.setContentsMargins(0,0,0,0)
+        self.nav_table = QTableWidget(0, 2)
+        self.nav_table.setHorizontalHeaderLabels(["Label", "Href"])
+        self.nav_table.verticalHeader().setVisible(False)
+        self.nav_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.nav_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        nav_v.addWidget(self.nav_table, 1)
+        nav_btns = QHBoxLayout()
+        b_nav_add = QPushButton("Add Link"); b_nav_del = QPushButton("Remove Selected")
+        b_nav_add.clicked.connect(lambda: (self.nav_table.insertRow(self.nav_table.rowCount()), self._on_any_changed()))
+        b_nav_del.clicked.connect(lambda: (self.nav_table.removeRow(self.nav_table.currentRow()) if self.nav_table.currentRow()>=0 else None, self._on_any_changed()))
+        nav_btns.addWidget(b_nav_add); nav_btns.addWidget(b_nav_del); nav_btns.addStretch(1)
+        nav_v.addLayout(nav_btns)
+        self.tabs.addTab(self.nav_tab, "Navigation")
+        self._install_row_context_menu(self.nav_table)  # bonus: same convenience menu
+
         # Sections (Detail pages)
         self.sections_host = QWidget(self); sh_v = QVBoxLayout(self.sections_host); sh_v.setContentsMargins(0,0,0,0)
         self.sections_tabs = QTabWidget(self.sections_host); sh_v.addWidget(self.sections_tabs, 1)
         self.tabs.addTab(self.sections_host, "Sections")
-        self._build_fixed_section_editors()  # builds + wires signals
+        self._build_fixed_section_editors()
 
         # Page mode (detail vs collection)
         self.page_mode = "detail"
@@ -460,6 +500,9 @@ class CatalogWindow(QMainWindow):
         row.addWidget(b_add); row.addWidget(b_del); row.addStretch(1)
         col_v.addLayout(row)
         self.tabs.addTab(self.collection_host, "Collection")
+        # Context menu for collection table (requested)
+        self.collection_tbl.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.collection_tbl.customContextMenuRequested.connect(self._collection_context_menu)
 
         self.idx_sections_tab = self.tabs.indexOf(self.sections_host)
         self.idx_collection_tab = self.tabs.indexOf(self.collection_host)
@@ -483,7 +526,7 @@ class CatalogWindow(QMainWindow):
         st.addRow("Last edited:", self.stat_edited)
         self.tabs.addTab(self.stats_tab, "Stats")
 
-        # After all tabs exist, wire currentChanged (fixes earlier AttributeError)
+        # After all tabs exist, wire currentChanged (keeps Review synced)
         self.tabs.currentChanged.connect(self._on_tabs_changed)
 
         right_v.addWidget(self.tabs, 1)
@@ -524,6 +567,7 @@ class CatalogWindow(QMainWindow):
             QTabBar::tab:selected { background:#3A3F44; } QTabBar::tab:hover { background:#34383D; }
             QTableWidget { background:#1E2124; color:#E6E6E6; gridline-color:#3A3F44;
                            border:1px solid #3A3F44; border-radius:6px; }
+            QMenu { background:#2A2D31; color:#E6E6E6; border:1px solid #3A3F44; }
         """)
 
     # ---------- Dialog helpers ----------
@@ -651,6 +695,7 @@ class CatalogWindow(QMainWindow):
         self.ed_h1.textChanged.connect(self._on_any_changed)
         self.ed_slogan.textChanged.connect(self._on_any_changed)
 
+    # ---------- Small UI helpers ----------
     def _make_table(self, headers: List[str]) -> QTableWidget:
         tbl = QTableWidget(0, len(headers))
         tbl.setHorizontalHeaderLabels(headers)
@@ -670,6 +715,40 @@ class CatalogWindow(QMainWindow):
         row.addWidget(b_add); row.addWidget(b_del); row.addStretch(1)
         v.addLayout(row)
         return w
+
+    def _install_row_context_menu(self, table: QTableWidget):
+        table.setContextMenuPolicy(Qt.CustomContextMenu)
+        def show_menu(pos: QPoint):
+            r = table.indexAt(pos).row()
+            if r < 0: return
+            m = QMenu(table)
+            a_above = m.addAction("Add row above")
+            a_below = m.addAction("Add row below")
+            act = m.exec_(table.viewport().mapToGlobal(pos))
+            if act == a_above:
+                table.insertRow(r)
+            elif act == a_below:
+                table.insertRow(r+1)
+            else:
+                return
+            self._on_any_changed()
+        table.customContextMenuRequested.connect(show_menu)
+
+    # Context menu for collection table (requested)
+    def _collection_context_menu(self, pos: QPoint):
+        r = self.collection_tbl.indexAt(pos).row()
+        if r < 0: return
+        m = QMenu(self.collection_tbl)
+        a_above = m.addAction("Add row above")
+        a_below = m.addAction("Add row below")
+        act = m.exec_(self.collection_tbl.viewport().mapToGlobal(pos))
+        if act == a_above:
+            self.collection_tbl.insertRow(r)
+        elif act == a_below:
+            self.collection_tbl.insertRow(r+1)
+        else:
+            return
+        self._on_any_changed()
 
     # ---------- Page mode toggle ----------
     def _switch_page_mode(self, mode: str):
@@ -737,6 +816,8 @@ class CatalogWindow(QMainWindow):
                 else:
                     self._switch_page_mode("collection")
                     self._load_collection_page_from_soup(soup)
+                # in both cases, load nav
+                self._load_nav_from_soup(soup)
             else:
                 self._switch_page_mode("detail")
 
@@ -759,7 +840,8 @@ class CatalogWindow(QMainWindow):
                    getattr(self, 'sch_src', None), getattr(self, 'sch_alt', None),
                    getattr(self, 'lay_src', None), getattr(self, 'lay_alt', None)):
             if isinstance(ed, QLineEdit): ed.clear()
-        for tbl in (getattr(self, 'sim_table', None), getattr(self, 'dl_table', None), getattr(self, 'res_table', None)):
+        for tbl in (getattr(self, 'sim_table', None), getattr(self, 'dl_table', None), getattr(self, 'res_table', None),
+                    getattr(self, 'nav_table', None), getattr(self, 'collection_tbl', None)):
             if isinstance(tbl, QTableWidget):
                 tbl.blockSignals(True); tbl.setRowCount(0); tbl.blockSignals(False)
         if hasattr(self, "sch_preview"): self.sch_preview.set_pixmap(None)
@@ -875,31 +957,71 @@ class CatalogWindow(QMainWindow):
         main = soup.find("main")
         if main: tbl = main.find("table")
         if not tbl: tbl = soup.find("table")
-        if not tbl:
-            self.collection_tbl.blockSignals(False); return
-
-        # Rows
-        tbody = tbl.find("tbody") or tbl
-        for tr in tbody.find_all("tr"):
-            tds = tr.find_all(["td","th"])
-            if not tds: continue
-            part_no = tds[0].get_text(strip=True) if len(tds) >= 1 else ""
-            title_text, href = "", ""
-            if len(tds) >= 2:
-                a = tds[1].find("a")
-                if a:
-                    title_text = a.get_text(strip=True)
-                    href = a.get("href","")
-                else:
-                    title_text = tds[1].get_text(strip=True)
-                    href = ""
-            pieces = tds[2].get_text(strip=True) if len(tds) >= 3 else ""
-            r = self.collection_tbl.rowCount(); self.collection_tbl.insertRow(r)
-            self.collection_tbl.setItem(r, 0, QTableWidgetItem(part_no))
-            self.collection_tbl.setItem(r, 1, QTableWidgetItem(title_text))
-            self.collection_tbl.setItem(r, 2, QTableWidgetItem(href))
-            self.collection_tbl.setItem(r, 3, QTableWidgetItem(pieces))
+        if tbl:
+            tbody = tbl.find("tbody") or tbl
+            for tr in tbody.find_all("tr"):
+                tds = tr.find_all(["td","th"])
+                if not tds: continue
+                part_no = tds[0].get_text(strip=True) if len(tds) >= 1 else ""
+                title_text, href = "", ""
+                if len(tds) >= 2:
+                    a = tds[1].find("a")
+                    if a:
+                        title_text = a.get_text(strip=True)
+                        href = a.get("href","")
+                    else:
+                        title_text = tds[1].get_text(strip=True)
+                        href = ""
+                pieces = tds[2].get_text(strip=True) if len(tds) >= 3 else ""
+                r = self.collection_tbl.rowCount(); self.collection_tbl.insertRow(r)
+                self.collection_tbl.setItem(r, 0, QTableWidgetItem(part_no))
+                self.collection_tbl.setItem(r, 1, QTableWidgetItem(title_text))
+                self.collection_tbl.setItem(r, 2, QTableWidgetItem(href))
+                self.collection_tbl.setItem(r, 3, QTableWidgetItem(pieces))
         self.collection_tbl.blockSignals(False)
+
+    # ---------- Navigation: load & save ----------
+    def _load_nav_from_soup(self, soup: BeautifulSoup):
+        self.nav_table.blockSignals(True)
+        self.nav_table.setRowCount(0)
+        nav = soup.find("nav")
+        if nav:
+            ul = nav.find("ul", class_="nav-links") or nav.find("ul")
+            if ul:
+                for li in ul.find_all("li", recursive=False):
+                    a = li.find("a")
+                    if not a: continue
+                    label = a.get_text(strip=True)
+                    href = a.get("href","")
+                    r = self.nav_table.rowCount(); self.nav_table.insertRow(r)
+                    self.nav_table.setItem(r, 0, QTableWidgetItem(label))
+                    self.nav_table.setItem(r, 1, QTableWidgetItem(href))
+        self.nav_table.blockSignals(False)
+
+    def _save_nav_into_soup(self, soup: BeautifulSoup):
+        nav = soup.find("nav")
+        if not nav:
+            nav = soup.new_tag("nav")
+            (soup.body or soup).insert(0, nav)
+        container = nav.find("div", class_="nav-container")
+        if not container:
+            container = soup.new_tag("div", **{"class":"nav-container"})
+            nav.append(container)
+        ul = container.find("ul", class_="nav-links")
+        if not ul:
+            ul = soup.new_tag("ul", **{"class":"nav-links"})
+            container.append(ul)
+        # clear and rebuild
+        for child in list(ul.children):
+            child.decompose()
+        for r in range(self.nav_table.rowCount()):
+            label = self.nav_table.item(r,0).text().strip() if self.nav_table.item(r,0) else ""
+            href = self.nav_table.item(r,1).text().strip() if self.nav_table.item(r,1) else ""
+            if not (label or href): continue
+            li = soup.new_tag("li")
+            a = soup.new_tag("a", href=(href or "#"))
+            a.string = label or href
+            li.append(a); ul.append(li)
 
     # ---------- Common helpers (iframes, tables) ----------
     def _populate_iframe_table(self, table: QTableWidget, container):
@@ -988,7 +1110,6 @@ class CatalogWindow(QMainWindow):
                 self._set_stats(self.current_path)
                 self.proxy.refresh_desc(self.current_path)
                 self._set_dirty(False)
-                # no popups after save
             except Exception as e:
                 try:
                     if 'tmp' in locals() and tmp.exists(): tmp.unlink()
@@ -1015,6 +1136,8 @@ class CatalogWindow(QMainWindow):
 
         # --- Update common metadata
         self._upsert_metadata_into_soup(soup)
+        # --- Update navigation (both modes)
+        self._save_nav_into_soup(soup)
 
         # --- Branch by page mode
         if self.page_mode == "collection":
@@ -1039,7 +1162,6 @@ class CatalogWindow(QMainWindow):
         self._set_stats(self.current_path)
         self.proxy.refresh_desc(self.current_path)
         self._set_dirty(False)
-        # no popups after save
 
     # ---------- Save helpers (common) ----------
     def _upsert_metadata_into_soup(self, soup: BeautifulSoup):
@@ -1097,22 +1219,18 @@ class CatalogWindow(QMainWindow):
         if not main:
             main = soup.new_tag("main")
             (soup.body or soup).append(main)
-        # ensure tab-container exists
         tc = main.find("div", class_="tab-container")
         if not tc:
             tc = soup.new_tag("div", **{"class":"tab-container"})
             main.append(tc)
-        # ensure tabs header exists with our buttons (we won't duplicate)
         tabs_div = tc.find("div", class_="tabs")
         if not tabs_div:
             tabs_div = soup.new_tag("div", **{"class":"tabs"})
             tc.insert(0, tabs_div)
-        # ensure content div
         div = tc.find("div", id=sec_id, class_="tab-content")
         if not div:
             div = soup.new_tag("div", **{"class":"tab-content", "id":sec_id})
             tc.append(div)
-        # ensure a heading (h2) as first element
         h2 = None
         for ch in div.children:
             if getattr(ch, "name", None) == "h2": h2 = ch; break
@@ -1120,12 +1238,10 @@ class CatalogWindow(QMainWindow):
             h2 = soup.new_tag("h2"); h2.string = heading_text
             div.insert(0, h2)
         else:
-            if not h2.get_text(strip=True): h2.string = heading_text
-            else: h2.string.replace_with(heading_text)
+            h2.string = heading_text
         return div, tabs_div, tc
 
     def _order_detail_sections(self, soup: BeautifulSoup):
-        """Ensure button order and tab-content order: details, description, simulation, schematic, layout, downloads, resources."""
         desired = [
             ("details", "Details"),
             ("description", "Description"),
@@ -1142,32 +1258,27 @@ class CatalogWindow(QMainWindow):
         tabs_div = tc.find("div", class_="tabs")
         if not tabs_div: return
 
-        # Rebuild buttons in desired order (preserve 'active' on first existing)
-        existing_buttons = {btn.get_text(strip=True): btn for btn in tabs_div.find_all("button")}
-        # Clear and rebuild
+        # Rebuild buttons in desired order
         tabs_div.clear()
         for sec_id, label in desired:
             btn = soup.new_tag("button", **{"class":"tab"})
             btn.attrs["onclick"] = f"showTab('{sec_id}', this)"
             btn.string = label
             tabs_div.append(btn)
-        # Ensure one 'active' remains on schematic by default if present
+        # Active on schematic by default
         for btn in tabs_div.find_all("button"):
             btn["class"] = "tab"
         for btn in tabs_div.find_all("button"):
             if btn.get_text(strip=True).lower() == "schematic":
-                btn["class"] = "tab active"
-                break
+                btn["class"] = "tab active"; break
 
-        # Reorder tab-content blocks according to desired
+        # Reorder contents
         id_to_block = {div.get("id"): div for div in tc.find_all("div", class_="tab-content", recursive=False)}
-        # Move in order; 'active' content on schematic by default
         first_active_set = False
         for sec_id, _ in desired:
             blk = id_to_block.get(sec_id)
             if blk:
                 tc.append(blk)
-                # ensure schematic active, others not
                 if sec_id == "schematic" and not first_active_set:
                     for c in tc.find_all("div", class_="tab-content", recursive=False):
                         c["class"] = "tab-content"
@@ -1194,17 +1305,9 @@ class CatalogWindow(QMainWindow):
         dsc_div, _, _ = self._ensure_section(soup, "description", "Description")
         for node in list(dsc_div.find_all(recursive=False))[1:]:
             node.decompose()
-
-        # Seed
-        h3s = soup.new_tag("h3"); h3s.string = "AI Seed"
-        dsc_div.append(h3s)
-        pseed = soup.new_tag("p")
-        pseed.string = self.desc_seed.toPlainText().strip()
-        dsc_div.append(pseed)
-
-        # Generated (class only; no inline styles)
-        h3g = soup.new_tag("h3"); h3g.string = "AI Generated"
-        dsc_div.append(h3g)
+        h3s = soup.new_tag("h3"); h3s.string = "AI Seed"; dsc_div.append(h3s)
+        pseed = soup.new_tag("p"); pseed.string = self.desc_seed.toPlainText().strip(); dsc_div.append(pseed)
+        h3g = soup.new_tag("h3"); h3g.string = "AI Generated"; dsc_div.append(h3g)
         wrap = soup.new_tag("div", **{"class":"generated"})
         frag = (self._desc_generated_raw or "").strip()
         if frag:
@@ -1215,11 +1318,10 @@ class CatalogWindow(QMainWindow):
                 for node in nodes:
                     wrap.append(node if isinstance(node, str) else node)
             except Exception:
-                p = soup.new_tag("p"); p.string = re.sub(r"<[^>]+>", "", frag)
-                wrap.append(p)
+                p = soup.new_tag("p"); p.string = re.sub(r"<[^>]+>", "", frag); wrap.append(p)
         dsc_div.append(wrap)
 
-        # ----- Videos (id="simulation" for site compatibility) -----
+        # ----- Videos -----
         sim_div, _, _ = self._ensure_section(soup, "simulation", "Videos")
         for node in list(sim_div.find_all(recursive=False))[1:]:
             node.decompose()
@@ -1236,8 +1338,7 @@ class CatalogWindow(QMainWindow):
             "alt": self.sch_alt.text().strip() or "Schematic",
         })
         img.attrs["onclick"] = "openLightbox(this)"
-        lb.append(img)
-        sch_div.append(lb)
+        lb.append(img); sch_div.append(lb)
 
         # ----- Layout -----
         lay_div, _, _ = self._ensure_section(soup, "layout", "Layout")
@@ -1269,10 +1370,8 @@ class CatalogWindow(QMainWindow):
             node.decompose()
         self._write_iframe_list(soup, res_div, self._table_to_list(self.res_table))
 
-        # Ensure desired ordering (buttons + contents)
+        # Ensure order
         self._order_detail_sections(soup)
-
-        # Ensure global lightbox and script IF they already exist; we do not force-inject new ones here
 
     # ---------- Save helpers (Collection pages) ----------
     def _save_collection_into_soup(self, soup: BeautifulSoup):
@@ -1284,21 +1383,18 @@ class CatalogWindow(QMainWindow):
             section = soup.new_tag("section"); main.append(section)
 
         tbl = section.find("table") or main.find("table")
-        create_new = tbl is None
-        if create_new:
-            tbl = soup.new_tag("table")
-            section.append(tbl)
+        if not tbl:
+            tbl = soup.new_tag("table"); section.append(tbl)
 
-        # Preserve thead if present
+        # Preserve header if present; else create
         thead = tbl.find("thead")
         if not thead:
-            # create a header only if none exists
             thead = soup.new_tag("thead"); trh = soup.new_tag("tr")
             for name in ("Part No", "Title", "Pieces per Panel"):
                 th = soup.new_tag("th"); th.string = name; trh.append(th)
             thead.append(trh); tbl.append(thead)
 
-        # Rebuild tbody only (keep header intact)
+        # Rebuild tbody only
         old_tbody = tbl.find("tbody")
         if old_tbody: old_tbody.decompose()
         tbody = soup.new_tag("tbody")
@@ -1326,12 +1422,50 @@ class CatalogWindow(QMainWindow):
         # Global lightbox div
         lb = soup.find("div", id="lightbox")
         if lb: lb.decompose()
-
         # Remove tab/lightbox scripts by signature
         for s in list(soup.find_all("script")):
             s_text = (s.string or "") + " ".join(s.stripped_strings)
             if any(sig in s_text for sig in ("showTab(", "openLightbox(", "closeLightbox()", ".tabs .tab")):
                 s.decompose()
+
+    # ---------- New-file helpers (nav candidates) ----------
+    def _detect_collection_page(self, soup: BeautifulSoup) -> bool:
+        is_detail = bool(soup.find("div", class_="tab-container"))
+        if is_detail: return False
+        return bool(soup.find("table"))
+
+    def _find_collection_candidates(self, base_dir: Path) -> List[Tuple[str,str,Path]]:
+        cands: List[Tuple[str,str,Path]] = []
+        max_files = 2000
+        count = 0
+        for root, dirs, files in os.walk(self.content_root):
+            for fn in files:
+                if not fn.lower().endswith((".html",".htm")): continue
+                path = Path(root) / fn
+                count += 1
+                if count > max_files: break
+                try:
+                    txt = path.read_text(encoding="utf-8", errors="ignore")
+                    if not BS4_AVAILABLE:
+                        continue
+                    soup = BeautifulSoup(txt, "html.parser")
+                    if not self._detect_collection_page(soup):
+                        continue
+                    label = None
+                    h1 = soup.find("h1")
+                    if h1 and h1.get_text(strip=True): label = h1.get_text(strip=True)
+                    if not label and soup.title and soup.title.string: label = soup.title.string.strip()
+                    if not label: label = path.stem
+                    href = "/" + str(path.relative_to(self.content_root).as_posix())
+                    cands.append((label, href, path))
+                except Exception:
+                    continue
+        # Sort: prefer same-folder first
+        def key(x):
+            label, href, p = x
+            return (0 if p.parent.resolve()==base_dir.resolve() else 1, href.lower())
+        cands.sort(key=key)
+        return cands
 
     # ---------- Settings ----------
     def open_settings_dialog(self):
@@ -1390,8 +1524,23 @@ class CatalogWindow(QMainWindow):
         if target.exists():
             self._warn("Exists", "A file with that name already exists."); return
 
+        # Gather collection candidates for nav
+        candidates = self._find_collection_candidates(base)
+        nav_pairs: List[Tuple[str,str]] = [("Home", "/index.html")]  # Home always included
+
+        if candidates:
+            dlg = NavPickerDialog(self, candidates, base_dir=base)
+            apply_windows_dark_titlebar(dlg)
+            if dlg.exec_() == dlg.Accepted:
+                nav_pairs.extend(dlg.selected_links())
+            else:
+                # user cancelled → keep only Home
+                pass
+
+        # Build nav HTML <li> list from nav_pairs
+        nav_li = "\n".join([f'        <li><a href="{href}">{label}</a></li>' for (label, href) in nav_pairs])
+
         year = datetime.date.today().year
-        # Clean, readable template with Google tag; Description between Details and Schematic
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1417,7 +1566,7 @@ class CatalogWindow(QMainWindow):
   <nav>
     <div class="nav-container">
       <ul class="nav-links">
-        <li><a href="/index.html">Home</a></li>
+{nav_li}
       </ul>
     </div>
   </nav>
@@ -1635,12 +1784,11 @@ class CatalogWindow(QMainWindow):
             self._dirty = True
             self.autosave_secs_left = self.autosave_interval
             self.autosave_label.setText(f"Autosave in: {self.autosave_secs_left}s")
-            self.path_label.setStyleSheet("color:#4CE06A; font-weight:600;")  # green while unsaved
+            self.path_label.setStyleSheet("color:#4CE06A; font-weight:600;")
         else:
             self._dirty = False
-            # show "-" when no countdown
             self.autosave_label.setText("Autosave in: -")
-            self.path_label.setStyleSheet("")  # default theme color
+            self.path_label.setStyleSheet("")
 
     def _autosave_tick(self):
         if not self.current_path:
@@ -1672,17 +1820,13 @@ class CatalogWindow(QMainWindow):
         h1 = self.ed_h1.text().strip()
         part_no = self.det_part.text().strip()
 
-        # Start ETA from stats
         self._ai_eta_sec = self._estimate_eta_sec(doc_type="description")
         self._ai_start_ts = datetime.datetime.now()
         self._ai_running = True
         self.btn_desc_generate.setEnabled(False)
         self._update_ai_label(elapsed=0, eta=self._ai_eta_sec, status="running")
-
-        # Start timer UI
         self.ai_timer.start(250)
 
-        # Kick worker
         self.worker = DescAIWorker(
             api_key=self.openai_key,
             model_name=self.openai_model,
@@ -1718,7 +1862,6 @@ class CatalogWindow(QMainWindow):
         self.lbl_desc_ai.setText(txt)
 
     def _on_desc_ai_finished(self, result: dict):
-        # stop timer ASAP
         elapsed = int(result.get("elapsed", 0))
         self._update_ai_label(elapsed=elapsed, eta=self._ai_eta_sec, status="done")
         self.ai_timer.stop()
@@ -1736,9 +1879,8 @@ class CatalogWindow(QMainWindow):
             clean = strip_inline_styles_from_fragment(html)
             self._desc_generated_raw = clean
             self.desc_generated.setHtml(clean)
-            self._on_any_changed()  # mark dirty
+            self._on_any_changed()
 
-        # record stats
         self._record_run(duration_sec=max(1, elapsed), doc_type="description", ok=True)
 
     # ---------- AI stats persistence (ETA) ----------
@@ -1800,35 +1942,29 @@ class CatalogWindow(QMainWindow):
         stats = self._load_stats()
         edges = stats.get("bin_edges_sec", [15,30,60,120,300,600])
         idx = self._bin_index(edges, duration_sec)
-        # ensure slot
         by = stats.setdefault("by_doc_type", {})
         slot = by.setdefault(doc_type, {"runs":0,"hist":[0]*(len(edges)+1),"ewma_sec":None,"last_durations_sec":[]})
         overall = stats.setdefault("overall", {"runs":0,"hist":[0]*(len(edges)+1),"ewma_sec":None,"last_durations_sec":[]})
-
-        # updates
         slot["runs"] += 1
-        if len(slot["hist"]) < len(edges)+1: slot["hist"] = slot["hist"] + [0]*((len(edges)+1)-len(slot["hist"]))
+        if len(slot["hist"]) < len(edges)+1: slot["hist"] += [0]*((len(edges)+1)-len(slot["hist"]))
         slot["hist"][idx] += 1
         lst = slot["last_durations_sec"]; lst.append(int(duration_sec))
         if len(lst) > 50: del lst[:len(lst)-50]
         a = 0.25
         slot["ewma_sec"] = (a * duration_sec + (1-a) * slot["ewma_sec"]) if slot.get("ewma_sec") else duration_sec
-
         overall["runs"] += 1
-        if len(overall["hist"]) < len(edges)+1: overall["hist"] = overall["hist"] + [0]*((len(edges)+1)-len(overall["hist"]))
+        if len(overall["hist"]) < len(edges)+1: overall["hist"] += [0]*((len(edges)+1)-len(overall["hist"]))
         overall["hist"][idx] += 1
         olst = overall["last_durations_sec"]; olst.append(int(duration_sec))
         if len(olst) > 50: del olst[:len(olst)-50]
         overall["ewma_sec"] = (a * duration_sec + (1-a) * overall["ewma_sec"]) if overall.get("ewma_sec") else duration_sec
-
         stats["updated_at"] = today_iso()
         self._save_stats(stats)
 
     # ---------- Tabs change: Refresh Review snapshot ----------
     def _on_tabs_changed(self, idx: int):
         rv = getattr(self, "review_tab", None)
-        if rv is None:
-            return
+        if rv is None: return
         if self.tabs.widget(idx) is rv and not self._review_dirty and BS4_AVAILABLE and self.current_path and self.current_path.exists():
             try:
                 raw = self.current_path.read_text(encoding="utf-8")
@@ -1836,9 +1972,9 @@ class CatalogWindow(QMainWindow):
 
                 # Rebuild from current form state:
                 self._upsert_metadata_into_soup(soup)
+                self._save_nav_into_soup(soup)
                 if self.page_mode == "collection":
                     self._save_collection_into_soup(soup)
-                    # ensure collection pages stay clean (no detail chrome)
                     self._remove_detail_scripts_and_lightbox(soup)
                 else:
                     self._save_detail_into_soup(soup)
@@ -1855,7 +1991,6 @@ class CatalogWindow(QMainWindow):
         if self._loading: return
         pn = self.det_part.text().strip()
         if not pn: return
-        # compute expected image paths
         sch = f"../images/{pn}_schematic_01.png"
         lay = f"../images/{pn}_components_top.png"
         if not self.sch_src.text().strip():
@@ -1863,7 +1998,7 @@ class CatalogWindow(QMainWindow):
         if not self.lay_src.text().strip():
             self.lay_src.setText(lay)
 
-    # ---------- App boot ----------
+# ---------- App boot ----------
 def ensure_content_root() -> Path:
     settings = get_settings()
     saved = settings.value(KEY_CONTENT_DIR, None)
