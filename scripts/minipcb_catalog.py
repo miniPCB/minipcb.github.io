@@ -2,32 +2,23 @@
 # -*- coding: utf-8 -*-
 """
 miniPCB Catalog — PyQt5
-
-What’s inside:
-- PyQt5 GUI for maintaining single-board “detail” pages and “collection” pages
-- Tabs for Metadata, Sections (Details, AI Description, Videos, Schematic, Layout, Downloads, FMEA, Resources),
-  Navigation, Review (live preview of the HTML you’re about to save), and Stats
-- AI generators (Description + FMEA) with per-task timers, ETA displays, and progress bars
-- Compact HTML formatter (table rows render on a single line; cells are inline)
-- Component visibility toggles (show/hide Description, Videos, Downloads, Resources, FMEA) without losing content
-- “Update HTML” upgrades any page to the current template without losing filled-in data
-- Collection table right-click menu (“Add Row Above/Below”)
-- Navigation link picker
-- Part Number → image path autogeneration (prevents duplicate PN in filenames)
-- Google tag included in both templates; no extra JS on collection pages
-- FMEA tab renders a wide/full-width section (add CSS for .wide/.fmea-table to reduce scrolling)
-
-Requires:
-  pip install PyQt5 beautifulsoup4
-Optional for AI:
-  pip install openai
-Set OPENAI_API_KEY (and optionally OPENAI_MODEL) in env or via the UI prompt.
+- Clean, compact HTML formatter (keeps tables compact; one <tr> per line)
+- Review tab always renders current unsaved state
+- No inline styles in AI output (uses <div class="generated"> and table classes)
+- Navigation tab (Board + Collection) with link picker (opens on "Add Link")
+- Collection table: right-click Add Row Above/Below
+- Update HTML button upgrades file to current template (keeps data) and sets Schematic active
+- PN→image paths fix; Google tag handled; scripts only on board pages
+- Page Components checkboxes (Description, Videos, Downloads, Additional Resources, FMEA)
+- FMEA tab: multi-level seeds (L0–L3), seed builder matrix, custom prompts per level,
+  seed snapshots (double-click to load), AI FMEA table generation with progress + ETA
+- File-tree icon refresh (fast & full) and auto-refresh after save/update
 """
 
 from __future__ import annotations
 import sys, os, re, json, shutil, subprocess, datetime, platform, time
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict, Any
 from urllib.parse import urlparse, unquote
 
 # ---- HTML parsing
@@ -35,19 +26,14 @@ try:
     from bs4 import BeautifulSoup, Comment, NavigableString, Tag
     BS4_AVAILABLE = True
 except Exception:
-    BeautifulSoup = None
-    Comment = None
-    NavigableString = None
-    Tag = None
-    BS4_AVAILABLE = False
+    BeautifulSoup = None; Comment = None; NavigableString = None; Tag = None; BS4_AVAILABLE = False
 
 # ---- OpenAI (optional)
 try:
     from openai import OpenAI
     OPENAI_AVAILABLE = True
 except Exception:
-    OpenAI = None
-    OPENAI_AVAILABLE = False
+    OpenAI = None; OPENAI_AVAILABLE = False
 
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QModelIndex, QSettings, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QKeySequence, QIcon, QPixmap, QPainter, QFont, QCursor
@@ -57,7 +43,7 @@ from PyQt5.QtWidgets import (
     QInputDialog, QMessageBox, QLabel, QAbstractItemView, QFormLayout,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QGroupBox, QSplitter, QTabWidget, QTextEdit, QStyleFactory, QMenu, QDialog,
-    QListWidget, QListWidgetItem, QDialogButtonBox, QCheckBox, QProgressBar
+    QListWidget, QListWidgetItem, QDialogButtonBox, QCheckBox, QProgressBar, QGridLayout
 )
 
 APP_TITLE = "miniPCB Catalog"
@@ -123,31 +109,23 @@ def make_emoji_icon(emoji: str, px: int = 220) -> QIcon:
     p = QPainter(pm)
     try:
         f = QFont("Segoe UI Emoji", int(px * 0.64))
-        f.setStyleStrategy(QFont.PreferQuality)
+        f.setStyleStrategy(QFont.PreferAntialias)
+        p.setFont(f)
         p.drawText(pm.rect(), Qt.AlignCenter, emoji)
     finally:
         p.end()
     return QIcon(pm)
 
-# ---------- Pretty HTML formatter ----------
+# ---------- Pretty HTML formatter (compact tables) ----------
 VOID_TAGS = {"area","base","br","col","embed","hr","img","input","link","meta","param","source","track","wbr"}
-BLOCK_TAGS = {
-    "html","head","body","nav","header","main","footer","section","div",
-    "table","thead","tbody","tfoot","tr",
-    "ul","ol","li",
-    "h1","h2","h3","h4","h5","h6","p","script","noscript","style",
-    "form","button","label","iframe","pre"
-}
-INLINE_KEEP_ONE_LINE = {
-    "p","li","h1","h2","h3","h4","h5","h6","button","label","a","strong","em","span","code",
-    "td","th"  # keep cells compact
-}
-ATTR_ORDER = ["lang","charset","name","content","http-equiv","rel","type","href","src","async","defer","id","class","role","aria-label","title","alt","width","height","target","referrerpolicy","allow","allowfullscreen","frameborder","data-full","onclick","data-hidden","data-wide"]
+INLINE_KEEP_ONE_LINE = {"p","li","h1","h2","h3","h4","h5","h6","button","label","a","strong","em","span","code"}
+ATTR_ORDER = ["lang","charset","name","content","http-equiv","rel","type","href","src","async","defer",
+              "id","class","role","aria-label","title","alt","width","height","target","referrerpolicy",
+              "allow","allowfullscreen","frameborder","data-full","onclick","data-hidden"]
 
 def _attrs_sorted(tag: Tag) -> List[Tuple[str, str]]:
     if not isinstance(tag, Tag): return []
-    items = list(tag.attrs.items())
-    norm = []
+    items = list(tag.attrs.items()); norm = []
     for k, v in items:
         if isinstance(v, list): v = " ".join(v)
         if v is True: v = "True"
@@ -176,38 +154,14 @@ def _text_collapse(s: str) -> str:
     return s.strip()
 
 def minipcb_format_html(soup: BeautifulSoup) -> str:
-    """
-    Serializer that keeps standard blocks readable but renders <tr> with compact inline <td>/<th> cells.
-    """
     lines: List[str] = []
     indent = 0
     def write(line=""):
         lines.append(("  " * indent) + line if line else "")
-
-    def _serialize_inline_tag(t: Tag) -> str:
-        if not isinstance(t, Tag):
-            return str(t)
-        simple = True
-        buf = []
-        for c in t.contents or []:
-            if isinstance(c, NavigableString):
-                buf.append(_text_collapse(str(c)))
-            elif isinstance(c, Tag) and (c.name in (INLINE_KEEP_ONE_LINE | VOID_TAGS | {"sup","sub","small","br","i","b","u","em","strong","code"})):
-                if c.name in VOID_TAGS:
-                    buf.append(_tag_selfclose(c))
-                else:
-                    inner = "".join(_text_collapse(str(x)) if isinstance(x, NavigableString) else str(x) for x in c.contents or [])
-                    buf.append(_tag_open(c)[:-1] + ">" + inner + f"</{c.name}>")
-            else:
-                simple = False
-                break
-        if simple:
-            return _tag_open(t)[:-1] + ">" + " ".join([x for x in buf if x]) + f"</{t.name}>"
-        return str(t)
-
     def emit(node):
         nonlocal indent
         if isinstance(node, Comment):
+            # keep comments on a single line
             write(f"<!--{str(node)}-->"); return
         if isinstance(node, NavigableString):
             txt = _text_collapse(str(node))
@@ -217,9 +171,7 @@ def minipcb_format_html(soup: BeautifulSoup) -> str:
                 else:
                     write(txt)
             return
-        if not isinstance(node, Tag):
-            return
-
+        if not isinstance(node, Tag): return
         name = node.name.lower()
         if name in VOID_TAGS:
             write(_tag_selfclose(node)); return
@@ -230,29 +182,46 @@ def minipcb_format_html(soup: BeautifulSoup) -> str:
             for ln in raw.split("\n"): write(ln.rstrip())
             indent -= 1; write(f"</{name}>"); return
 
-        if name in {"table","thead","tbody","tfoot"}:
+        # Compact tables: one <tr> per line, collapse <td>/<th> contents
+        if name == "tr":
+            buf = [_tag_open(node)[:-1] + ">"]
+            for c in node.contents or []:
+                if isinstance(c, NavigableString):
+                    txt = _text_collapse(str(c))
+                    if txt: buf.append(txt)
+                elif isinstance(c, Tag):
+                    if c.name in {"td","th"}:
+                        inner = []
+                        for g in c.contents or []:
+                            if isinstance(g, NavigableString):
+                                t = _text_collapse(str(g))
+                                if t: inner.append(t)
+                            elif isinstance(g, Tag):
+                                inner.append(_tag_open(g)[:-1] + ">" + "".join(_text_collapse(str(x)) if isinstance(x, NavigableString) else str(x) for x in g.contents or []) + f"</{g.name}>")
+                        buf.append(f"<{c.name}>" + " ".join(inner) + f"</{c.name}>")
+                    else:
+                        # allow other tags within row; keep compact
+                        buf.append(_tag_open(c)[:-1] + ">" + "".join(_text_collapse(str(x)) if isinstance(x, NavigableString) else str(x) for x in c.contents or []) + f"</{c.name}>")
+            buf.append(f"</{name}>")
+            write("".join(buf)); return
+
+        if name in {"thead","tbody","tfoot"}:
             write(_tag_open(node)); indent += 1
             for c in node.contents or []:
                 if isinstance(c, NavigableString) and not _text_collapse(str(c)): continue
                 emit(c)
             indent -= 1; write(f"</{name}>"); return
 
-        if name == "tr":
-            cells = []
+        if name == "table":
+            write(_tag_open(node)); indent += 1
             for c in node.contents or []:
-                if isinstance(c, NavigableString):
-                    if _text_collapse(str(c)):
-                        cells.append(_text_collapse(str(c)))
-                    continue
-                if isinstance(c, Tag) and c.name in {"td","th"}:
-                    cells.append(_serialize_inline_tag(c))
-                elif isinstance(c, Tag):
-                    cells.append(_text_collapse(str(c)))
-            write(_tag_open(node)[:-1] + ">" + "".join(cells) + "</tr>")
-            return
+                if isinstance(c, NavigableString) and not _text_collapse(str(c)): continue
+                emit(c)
+            indent -= 1; write(f"</{name}>"); return
 
+        # Inline one-liners
         if name in INLINE_KEEP_ONE_LINE and all(
-            not isinstance(c, Tag) or c.name in (INLINE_KEEP_ONE_LINE | VOID_TAGS | {"sup","sub","small","br","iframe","i","b","u"})
+            not isinstance(c, Tag) or c.name in (INLINE_KEEP_ONE_LINE | VOID_TAGS | {"sup","sub","small","br","iframe"})
             for c in node.contents or []
         ):
             open_tag = _tag_open(node)[:-1]
@@ -261,14 +230,13 @@ def minipcb_format_html(soup: BeautifulSoup) -> str:
                 if isinstance(c, NavigableString):
                     buf.append(_text_collapse(str(c)))
                 elif isinstance(c, Tag):
-                    if c.name in VOID_TAGS:
-                        buf.append(_tag_selfclose(c))
+                    if c.name in VOID_TAGS: buf.append(_tag_selfclose(c))
                     else:
                         inner = "".join(_text_collapse(str(x)) if isinstance(x, NavigableString) else str(x) for x in c.contents or [])
                         buf.append(_tag_open(c)[:-1] + ">" + inner + f"</{c.name}>")
-            write(open_tag + ">" + " ".join([t for t in buf if t]) + f"</{name}>")
-            return
+            write(open_tag + ">" + " ".join([t for t in buf if t]) + f"</{name}>"); return
 
+        # Default block handling
         write(_tag_open(node)); indent += 1
         for c in node.contents or []:
             if isinstance(c, NavigableString) and not _text_collapse(str(c)): continue
@@ -283,107 +251,40 @@ def minipcb_format_html(soup: BeautifulSoup) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 # ---------- AI Workers ----------
-class DescAIWorker(QThread):
-    finished = pyqtSignal(dict)
-    def __init__(self, api_key: str, model_name: str, seed_text: str, page_title: str, h1: str, part_no: str, timeout: int = 180):
+class BaseAIWorker(QThread):
+    finished = pyqtSignal(dict)  # {ok,bundle/error,elapsed}
+    def __init__(self, api_key: str, model_name: str, sys_prompt: str, user_prompt: str, timeout: int = 120):
         super().__init__()
-        self.api_key = api_key; self.model = model_name; self.seed = seed_text or ""
-        self.page_title = page_title or ""; self.h1 = h1 or ""; self.part_no = part_no or ""; self.timeout = timeout
+        self.api_key = api_key; self.model = model_name
+        self.sys_prompt = sys_prompt; self.user_prompt = user_prompt; self.timeout = timeout
     def run(self):
         start = time.time()
         try:
             if not OPENAI_AVAILABLE: raise RuntimeError("OpenAI SDK not installed. pip install openai")
             if not self.api_key: raise RuntimeError("OPENAI_API_KEY not set.")
             client = OpenAI(api_key=self.api_key)
-            sys_prompt = ("You are an expert technical copywriter for a hardware mini PCB catalog.\n"
-                          "Write crisp, accurate, helpful product descriptions. Return ONLY an HTML fragment (p/ul/li/h3 ok).")
-            user_prompt = (
-                f"PAGE CONTEXT:\n- Page Title: {self.page_title}\n- H1: {self.h1}\n- Part No: {self.part_no}\n\n"
-                f"SEED:\n{self.seed}\n\n"
-                "TASK:\n• 2–4 short paragraphs + (optional) ONE bullet list (3–6 items).\n"
-                "• 180–260 words; neutral, technical; no marketing fluff.\n"
-                "• Output ONLY an HTML fragment; no <html>/<body>; no inline styles."
-            )
-            html = ""
+            out_text = ""
             try:
-                resp = client.responses.create(model=self.model,
-                                               input=[{"role":"system","content":sys_prompt},{"role":"user","content":user_prompt}],
-                                               timeout=self.timeout)
-                html = getattr(resp, "output_text", None) or ""
-                if not html:
-                    try: html = resp.output[0].content[0].text
-                    except Exception: html = ""
+                resp = client.responses.create(
+                    model=self.model,
+                    input=[{"role":"system","content":self.sys_prompt},{"role":"user","content":self.user_prompt}],
+                    timeout=self.timeout
+                )
+                out_text = getattr(resp, "output_text", None) or ""
+                if not out_text:
+                    try: out_text = resp.output[0].content[0].text
+                    except Exception: out_text = ""
             except Exception:
-                cc = client.chat.completions.create(model=self.model,
-                                                    messages=[{"role":"system","content":sys_prompt},{"role":"user","content":user_prompt}],
-                                                    timeout=self.timeout)
-                try: html = cc.choices[0].message.content or ""
-                except Exception: html = ""
-            if not html: raise RuntimeError("Model returned empty content.")
-            elapsed = time.time() - start; self.finished.emit({"ok": True, "html": html.strip(), "elapsed": elapsed})
+                cc = client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role":"system","content":self.sys_prompt},{"role":"user","content":self.user_prompt}],
+                    timeout=self.timeout
+                )
+                out_text = cc.choices[0].message.content or ""
+            if not out_text: raise RuntimeError("Model returned empty content.")
+            self.finished.emit({"ok": True, "bundle": out_text, "elapsed": time.time() - start})
         except Exception as e:
-            elapsed = time.time() - start; self.finished.emit({"ok": False, "error": str(e), "elapsed": elapsed})
-
-class FMEAAIWorker(QThread):
-    finished = pyqtSignal(dict)
-    def __init__(self, api_key: str, model_name: str, seed_text: str, page_title: str, h1: str, part_no: str, timeout: int = 240):
-        super().__init__()
-        self.api_key = api_key; self.model = model_name; self.seed = seed_text or ""
-        self.page_title = page_title or ""; self.h1 = h1 or ""; self.part_no = part_no or ""; self.timeout = timeout
-    def run(self):
-        start = time.time()
-        try:
-            if not OPENAI_AVAILABLE: raise RuntimeError("OpenAI SDK not installed. pip install openai")
-            if not self.api_key: raise RuntimeError("OPENAI_API_KEY not set.")
-            client = OpenAI(api_key=self.api_key)
-            sys_prompt = (
-                "You are a reliability engineer generating an FMEA for a small analog PCB.\n"
-                "Return ONLY an HTML fragment containing a single <table> (with thead/tbody, compact tags).\n"
-                "Columns: ID, Item, Failure Mode, Effect, Detection (TP#…), Test ID, Severity, Occurrence, Detectability, RPN.\n"
-                "Use IDs like FM-001 and tests T-001 etc. Choose 20–45 rows. No inline styles."
-            )
-            user_prompt = (
-                f"CONTEXT:\n- Page Title: {self.page_title}\n- H1: {self.h1}\n- Part No: {self.part_no}\n\n"
-                f"SEED / NOTES:\n{self.seed}\n\n"
-                "TASK:\n- Include common modes: SC (short), OC (open), OOT high/low, drift, misadjust, stuck open/closed.\n"
-                "- Use realistic test instructions referencing test points (TP#). Keep concise.\n"
-                "- Provide Severity/Occurrence/Detectability as integers 1–10 and RPN = product.\n"
-                "- Output only a compact HTML table; no paragraphs outside the table."
-            )
-            html = ""
-            try:
-                resp = client.responses.create(model=self.model,
-                                               input=[{"role":"system","content":sys_prompt},{"role":"user","content":user_prompt}],
-                                               timeout=self.timeout)
-                html = getattr(resp, "output_text", None) or ""
-                if not html:
-                    try: html = resp.output[0].content[0].text
-                    except Exception: html = ""
-            except Exception:
-                cc = client.chat.completions.create(model=self.model),
-                # fallback safety
-                html = ""
-            if not html: raise RuntimeError("Model returned empty content.")
-            elapsed = time.time() - start; self.finished.emit({"ok": True, "html": html.strip(), "elapsed": elapsed})
-        except Exception as e:
-            elapsed = time.time() - start; self.finished.emit({"ok": False, "error": str(e), "elapsed": elapsed})
-
-# ---------- Preview label ----------
-class PreviewLabel(QLabel):
-    def __init__(self, parent=None):
-        super().__init__(parent); self._pix: Optional[QPixmap] = None
-        self.setMinimumHeight(220); self.setAlignment(Qt.AlignCenter); self.setText("(no image)")
-        self.setStyleSheet("QLabel { border:1px solid #3A3F44; border-radius:6px; padding:6px; }")
-    def set_pixmap(self, pix: Optional[QPixmap]):
-        self._pix = pix; self._render()
-    def resizeEvent(self, e):
-        super().resizeEvent(e); self._render()
-    def _render(self):
-        if not self._pix or self._pix.isNull():
-            self.setText("(no image)"); self.setPixmap(QPixmap()); return
-        w = max(64, self.width() - 12); h = max(64, self.height() - 12)
-        scaled = self._pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.setPixmap(scaled); self.setText("")
+            self.finished.emit({"ok": False, "error": str(e), "elapsed": time.time() - start})
 
 # ---------- FS proxy ----------
 class DescProxyModel(QSortFilterProxyModel):
@@ -418,7 +319,8 @@ class DescProxyModel(QSortFilterProxyModel):
 class LinkPickerDialog(QDialog):
     def __init__(self, parent, content_root: Path, current_dir: Path):
         super().__init__(parent)
-        self.setWindowTitle("Select navigation links"); self.resize(600, 480)
+        self.setWindowTitle("Select navigation links")
+        self.resize(640, 520)
         v = QVBoxLayout(self)
         self.cb_include_parent = QCheckBox("Show only likely collections (folder landing pages)")
         self.cb_include_parent.setChecked(True); v.addWidget(self.cb_include_parent)
@@ -443,11 +345,76 @@ class LinkPickerDialog(QDialog):
     def selected(self) -> List[str]:
         return [it.data(Qt.UserRole) for it in self.listw.selectedItems()]
 
+# ---------- Seed Builder dialog (FMEA L0–L3) ----------
+class SeedBuilderDialog(QDialog):
+    """
+    Matrix of sources (rows) × levels (L0..L3) with checkboxes + custom prompts per level.
+    Also enforces the rule: L3 can consider L2 (and base data) but not itself/future content.
+    """
+    def __init__(self, parent, sources: Dict[str, str], defaults: Dict[str, List[str]]):
+        super().__init__(parent)
+        self.setWindowTitle("Build FMEA Seeds")
+        self.resize(900, 640)
+        v = QVBoxLayout(self)
+
+        # Grid of checkboxes
+        gb = QGroupBox("Select sources to consider at each level")
+        grid = QGridLayout(gb); grid.setHorizontalSpacing(14); grid.setVerticalSpacing(6)
+        levels = ["L0","L1","L2","L3"]
+        header = QLabel("")
+        grid.addWidget(header, 0, 0)
+        for c, lv in enumerate(levels, start=1):
+            lbl = QLabel(lv); lbl.setStyleSheet("font-weight:600;")
+            grid.addWidget(lbl, 0, c)
+
+        self.matrix: Dict[Tuple[str,str], QCheckBox] = {}
+        row = 1
+        for key, text in sources.items():
+            lbl = QLabel(key); grid.addWidget(lbl, row, 0)
+            for c, lv in enumerate(levels, start=1):
+                cb = QCheckBox(); grid.addWidget(cb, row, c)
+                self.matrix[(key, lv)] = cb
+                # Disable illegal combos: no future-level introspection
+                if key in ("Seed L1", "Seed L2", "Seed L3"):
+                    # L1 seed usable by L2/L3 only; L2 seed usable by L3 only; L3 seed by none.
+                    if key == "Seed L1" and lv not in ("L2","L3"): cb.setEnabled(False)
+                    if key == "Seed L2" and lv not in ("L3",): cb.setEnabled(False)
+                    if key == "Seed L3": cb.setEnabled(False)
+            row += 1
+        v.addWidget(gb)
+
+        # Custom prompts per level
+        prm = QGroupBox("Custom prompts (optional)")
+        pv = QFormLayout(prm)
+        self.prompts = {lv: QTextEdit() for lv in levels}
+        for lv in levels:
+            self.prompts[lv].setAcceptRichText(False); self.prompts[lv].setPlaceholderText(f"Add guidance for {lv}…")
+            self.prompts[lv].setMinimumHeight(60)
+            pv.addRow(f"{lv} Prompt:", self.prompts[lv])
+        v.addWidget(prm, 1)
+
+        # Defaults
+        for key, arr in (defaults or {}).items():
+            for lv in arr:
+                cb = self.matrix.get((key, lv))
+                if cb and cb.isEnabled(): cb.setChecked(True)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal, self)
+        v.addWidget(btns); btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
+
+    def selections(self) -> Dict[str, List[str]]:
+        out: Dict[str, List[str]] = {"L0":[], "L1":[], "L2":[], "L3":[]}
+        for (key, lv), cb in self.matrix.items():
+            if cb.isChecked() and cb.isEnabled():
+                out[lv].append(key)
+        prompts = {lv: self.prompts[lv].toPlainText().strip() for lv in self.prompts}
+        return {"sources_by_level": out, "prompts": prompts}
+
 # ---------- Main Window ----------
 class CatalogWindow(QMainWindow):
     def __init__(self, content_root: Path, app_icon: QIcon):
         super().__init__()
-        self.setWindowTitle(APP_TITLE); self.setWindowIcon(app_icon); self.resize(1400, 900)
+        self.setWindowTitle(APP_TITLE); self.setWindowIcon(app_icon); self.resize(1480, 950)
         self.content_root = content_root; self.current_path: Optional[Path] = None
         self._dirty = False; self._review_dirty = False; self._loading = False
 
@@ -460,12 +427,9 @@ class CatalogWindow(QMainWindow):
         self.autosave_interval = 30; self.autosave_secs_left = self.autosave_interval
         self.autosave_timer = QTimer(self); self.autosave_timer.timeout.connect(self._autosave_tick); self.autosave_timer.start(1000)
 
-        # AI timers (separate: Description and FMEA)
-        self.ai_desc_timer = QTimer(self); self.ai_desc_timer.timeout.connect(self._tick_ai_desc_ui)
-        self._ai_desc_start_ts: Optional[datetime.datetime] = None; self._ai_desc_eta: Optional[int] = None; self._ai_desc_running = False
-
-        self.ai_fmea_timer = QTimer(self); self.ai_fmea_timer.timeout.connect(self._tick_ai_fmea_ui)
-        self._ai_fmea_start_ts: Optional[datetime.datetime] = None; self._ai_fmea_eta: Optional[int] = None; self._ai_fmea_running = False
+        # AI timers
+        self.ai_timer = QTimer(self); self.ai_timer.timeout.connect(self._tick_ai_ui)
+        self._ai_start_ts: Optional[datetime.datetime] = None; self._ai_eta_sec: Optional[int] = None; self._ai_running = False
 
         # Toolbar
         tb = QToolBar("Main", self); tb.setMovable(False); self.addToolBar(tb)
@@ -480,7 +444,11 @@ class CatalogWindow(QMainWindow):
         self.act_save.triggered.connect(lambda: self.save_from_form(silent=False)); tb.addAction(self.act_save)
         act_update = QAction("🛠️ Update HTML", self); act_update.triggered.connect(self.update_html_to_template); tb.addAction(act_update)
         tb.addSeparator()
-        act_set_root = QAction("📁 Set Content Folder…", self); act_set_root.triggered.connect(self.open_settings_dialog); tb.addAction(act_set_root)
+        self.act_refresh_icons = QAction("🔄 Refresh Icons", self)
+        self.act_refresh_icons.triggered.connect(lambda: self.refresh_file_icons(light=False))
+        tb.addAction(self.act_refresh_icons)
+        tb.addSeparator()
+        act_set_root = QAction("📁 Set Content Root…", self); act_set_root.triggered.connect(self.open_settings_dialog); tb.addAction(act_set_root)
 
         # FS model + tree
         self.fs_model = QFileSystemModel(self); self.fs_model.setReadOnly(False)
@@ -494,8 +462,11 @@ class CatalogWindow(QMainWindow):
         self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeToContents); self.tree.header().setSectionResizeMode(1, QHeaderView.Stretch)
         self.tree.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tree.selectionModel().selectionChanged.connect(self.on_tree_selection)
+        # Tree context menu for refresh
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._tree_context_menu)
 
-        # Right side
+        # Right pane heading/status
         right = QWidget(self); right_v = QVBoxLayout(right); right_v.setContentsMargins(0,0,0,0); right_v.setSpacing(8)
         top_row = QHBoxLayout()
         self.path_label = QLabel("", self)
@@ -523,9 +494,11 @@ class CatalogWindow(QMainWindow):
         # Sections host
         self.sections_host = QWidget(self); sh_v = QVBoxLayout(self.sections_host); sh_v.setContentsMargins(0,0,0,0); sh_v.setSpacing(8)
 
-        # Page Components
+        # Page Components (checkboxes)
         comp_box = QGroupBox("Page Components"); comp_row = QHBoxLayout(comp_box); comp_row.setSpacing(12)
-        self.chk_desc = QCheckBox("Description"); self.chk_videos = QCheckBox("Videos"); self.chk_downloads = QCheckBox("Downloads"); self.chk_resources = QCheckBox("Additional Resources"); self.chk_fmea = QCheckBox("FMEA")
+        self.chk_desc = QCheckBox("Description"); self.chk_videos = QCheckBox("Videos")
+        self.chk_downloads = QCheckBox("Downloads"); self.chk_resources = QCheckBox("Additional Resources")
+        self.chk_fmea = QCheckBox("FMEA")
         for c in (self.chk_desc, self.chk_videos, self.chk_downloads, self.chk_resources, self.chk_fmea): c.setChecked(True)
         btn_show_all = QPushButton("Show All"); btn_hide_all = QPushButton("Hide All")
         btn_show_all.clicked.connect(lambda: self._set_all_components(True)); btn_hide_all.clicked.connect(lambda: self._set_all_components(False))
@@ -601,7 +574,7 @@ class CatalogWindow(QMainWindow):
         # Splitter
         splitter = QSplitter(Qt.Horizontal, self)
         splitter.addWidget(self.tree); splitter.addWidget(right)
-        splitter.setStretchFactor(0, 1); splitter.setStretchFactor(1, 2); splitter.setSizes([420, 980])
+        splitter.setStretchFactor(0, 1); splitter.setStretchFactor(1, 2); splitter.setSizes([430, 1050])
         central = QWidget(self); outer = QHBoxLayout(central); outer.setContentsMargins(8,8,8,8); outer.setSpacing(8); outer.addWidget(splitter); self.setCentralWidget(central)
 
         self.apply_dark_styles(); apply_windows_dark_titlebar(self)
@@ -610,18 +583,18 @@ class CatalogWindow(QMainWindow):
         if not BS4_AVAILABLE:
             self._info("BeautifulSoup not found", "Install with:\n\n  pip install beautifulsoup4")
 
-    # --- Settings dialog
+    # --- Settings dialog (pick content root) ---
     def open_settings_dialog(self):
         settings = get_settings()
         cur = settings.value(KEY_CONTENT_DIR, str(default_content_root()))
         dlg = QFileDialog(self); dlg.setFileMode(QFileDialog.Directory); dlg.setOption(QFileDialog.ShowDirsOnly, True)
-        dlg.setWindowTitle("Select Content Root (where your .html live)")
-        apply_windows_dark_titlebar(dlg)
+        dlg.setWindowTitle("Select Content Root (where your .html live)"); apply_windows_dark_titlebar(dlg)
         if cur and Path(cur).exists(): dlg.setDirectory(str(cur))
         if not dlg.exec_(): return
         sel = dlg.selectedFiles()
         if not sel: return
         root = Path(sel[0]); settings.setValue(KEY_CONTENT_DIR, str(root)); self.content_root = root
+        # Re-root model and tree
         self.fs_model.setRootPath(str(self.content_root))
         self.tree.setRootIndex(self.proxy.mapFromSource(self.fs_model.index(str(self.content_root))))
         self.path_label.setText(f"Folder: {root}")
@@ -642,8 +615,7 @@ class CatalogWindow(QMainWindow):
             QTabBar::tab { background:#2A2D31; color:#E6E6E6; padding:8px 12px; margin-right:2px; border-top-left-radius:6px; border-top-right-radius:6px; }
             QTabBar::tab:selected { background:#3A3F44; } QTabBar::tab:hover { background:#34383D; }
             QTableWidget { background:#1E2124; color:#E6E6E6; gridline-color:#3A3F44; border:1px solid #3A3F44; border-radius:6px; }
-            QProgressBar { background:#2A2D31; border:1px solid #3A3F44; border-radius:6px; text-align:center; padding:2px; }
-            QProgressBar::chunk { background:#4C8BF5; }
+            QProgressBar { border:1px solid #3A3F44; border-radius:6px; text-align:center; }
         """)
 
     # ---------- UI builders ----------
@@ -667,12 +639,10 @@ class CatalogWindow(QMainWindow):
         gen_box = QGroupBox("AI Generated"); gen_v = QVBoxLayout(gen_box)
         self.desc_generated = QTextEdit(); self.desc_generated.setReadOnly(True); self.desc_generated.setAcceptRichText(True); self.desc_generated.setMinimumHeight(140)
         gen_v.addWidget(self.desc_generated)
-        controls = QHBoxLayout()
-        self.btn_desc_generate = QPushButton("Generate")
-        self.btn_desc_generate.clicked.connect(self._start_desc_ai)
+        controls = QHBoxLayout(); self.btn_desc_generate = QPushButton("Generate"); self.btn_desc_generate.clicked.connect(self._start_desc_ai)
         self.lbl_desc_ai = QLabel("AI: idle"); self.lbl_desc_ai.setStyleSheet("color:#C8E6C9;")
-        self.pb_desc = QProgressBar(); self.pb_desc.setRange(0, 100); self.pb_desc.setValue(0); self.pb_desc.setFixedWidth(180)
-        controls.addWidget(self.btn_desc_generate); controls.addSpacing(12); controls.addWidget(self.lbl_desc_ai); controls.addSpacing(12); controls.addWidget(self.pb_desc); controls.addStretch(1)
+        self.pb_desc = QProgressBar(); self.pb_desc.setMaximum(0); self.pb_desc.setValue(0); self.pb_desc.hide()
+        controls.addWidget(self.btn_desc_generate); controls.addSpacing(12); controls.addWidget(self.lbl_desc_ai); controls.addStretch(1); controls.addWidget(self.pb_desc)
         vdesc.addWidget(seed_box); vdesc.addLayout(controls); vdesc.addWidget(gen_box, 1)
         self.sections_tabs.addTab(self.w_desc, "Description")
 
@@ -706,26 +676,50 @@ class CatalogWindow(QMainWindow):
         self.w_downloads = dls_widget
         self.sections_tabs.addTab(self.w_downloads, "Downloads")
 
-        # FMEA (AI)
-        self.w_fmea = QWidget(); vfmea = QVBoxLayout(self.w_fmea); vfmea.setSpacing(8); vfmea.setContentsMargins(6,6,6,6)
-        fseed_box = QGroupBox("FMEA Notes / Seed (optional)"); fseed_form = QVBoxLayout(fseed_box)
-        self.fmea_seed = QTextEdit(); self.fmea_seed.setAcceptRichText(False); self.fmea_seed.setPlaceholderText("List known TPs, rails, blocks, and any constraints…")
-        self.fmea_seed.setMinimumHeight(100); self.fmea_seed.textChanged.connect(self._on_any_changed); fseed_form.addWidget(self.fmea_seed)
-        fgen_box = QGroupBox("AI Generated FMEA Table"); fgen_v = QVBoxLayout(fgen_box)
-        self.fmea_generated = QTextEdit(); self.fmea_generated.setReadOnly(True); self.fmea_generated.setAcceptRichText(True); self.fmea_generated.setMinimumHeight(160)
-        fgen_v.addWidget(self.fmea_generated)
-        fcontrols = QHBoxLayout()
-        self.btn_fmea_generate = QPushButton("Generate FMEA"); self.btn_fmea_generate.clicked.connect(self._start_fmea_ai)
-        self.lbl_fmea_ai = QLabel("AI: idle"); self.lbl_fmea_ai.setStyleSheet("color:#C8E6C9;")
-        self.pb_fmea = QProgressBar(); self.pb_fmea.setRange(0, 100); self.pb_fmea.setValue(0); self.pb_fmea.setFixedWidth(180)
-        fcontrols.addWidget(self.btn_fmea_generate); fcontrols.addSpacing(12); fcontrols.addWidget(self.lbl_fmea_ai); fcontrols.addSpacing(12); fcontrols.addWidget(self.pb_fmea); fcontrols.addStretch(1)
-        vfmea.addWidget(fseed_box); vfmea.addLayout(fcontrols); vfmea.addWidget(fgen_box, 1)
-        self.sections_tabs.addTab(self.w_fmea, "FMEA")
-
         # Resources
         res_widget = self._wrap_table_with_buttons(self._make_resources_table(), "video")
         self.w_resources = res_widget
         self.sections_tabs.addTab(self.w_resources, "Additional Resources")
+
+        # FMEA (new)
+        self.w_fmea = QWidget(); vf = QVBoxLayout(self.w_fmea); vf.setSpacing(8); vf.setContentsMargins(6,6,6,6)
+        # Seed editors
+        seeds_box = QGroupBox("FMEA Seeds"); sform = QFormLayout(seeds_box)
+        self.ed_seed_l0 = QTextEdit(); self.ed_seed_l1 = QTextEdit(); self.ed_seed_l2 = QTextEdit(); self.ed_seed_l3 = QTextEdit()
+        for ed in (self.ed_seed_l0, self.ed_seed_l1, self.ed_seed_l2, self.ed_seed_l3):
+            ed.setAcceptRichText(False); ed.setMinimumHeight(70); ed.textChanged.connect(self._on_any_changed)
+        sform.addRow("Seed L0:", self.ed_seed_l0); sform.addRow("Seed L1:", self.ed_seed_l1)
+        sform.addRow("Seed L2:", self.ed_seed_l2); sform.addRow("Seed L3:", self.ed_seed_l3)
+        vf.addWidget(seeds_box, 1)
+        # Seed controls
+        seed_ctrl = QHBoxLayout()
+        self.btn_seed_build = QPushButton("Build FMEA Seeds…"); self.btn_seed_build.clicked.connect(self._open_seed_builder)
+        self.btn_seed_snapshot = QPushButton("Snapshot Seeds"); self.btn_seed_snapshot.clicked.connect(self._snapshot_seeds)
+        self.btn_seed_save_html = QPushButton("Save Seeds → HTML"); self.btn_seed_save_html.clicked.connect(self._save_seeds_to_html)
+        seed_ctrl.addWidget(self.btn_seed_build); seed_ctrl.addSpacing(8)
+        seed_ctrl.addWidget(self.btn_seed_snapshot); seed_ctrl.addWidget(self.btn_seed_save_html); seed_ctrl.addStretch(1)
+        vf.addLayout(seed_ctrl)
+
+        # Seed history
+        hist_box = QGroupBox("Seed History (double-click to load)"); hv = QVBoxLayout(hist_box)
+        self.list_seed_history = QListWidget(); self.list_seed_history.itemDoubleClicked.connect(self._load_seed_history_item)
+        hv.addWidget(self.list_seed_history, 1); vf.addWidget(hist_box, 1)
+
+        # FMEA output
+        out_box = QGroupBox("AI FMEA Table (HTML)"); ov = QVBoxLayout(out_box)
+        self.fmea_html = QTextEdit(); self.fmea_html.setAcceptRichText(True); self.fmea_html.setReadOnly(True); self.fmea_html.setMinimumHeight(220)
+        ov.addWidget(self.fmea_html, 1)
+        vf.addWidget(out_box, 2)
+
+        # AI controls
+        row_ai = QHBoxLayout()
+        self.btn_fmea_generate = QPushButton("Generate FMEA with AI"); self.btn_fmea_generate.clicked.connect(self._start_fmea_ai)
+        self.lbl_fmea_ai = QLabel("AI: idle"); self.lbl_fmea_ai.setStyleSheet("color:#C8E6C9;")
+        self.pb_fmea = QProgressBar(); self.pb_fmea.setMaximum(0); self.pb_fmea.setValue(0); self.pb_fmea.hide()
+        row_ai.addWidget(self.btn_fmea_generate); row_ai.addSpacing(12); row_ai.addWidget(self.lbl_fmea_ai); row_ai.addStretch(1); row_ai.addWidget(self.pb_fmea)
+        vf.addLayout(row_ai)
+
+        self.sections_tabs.addTab(self.w_fmea, "FMEA")
 
     def _make_video_table(self) -> QTableWidget:
         self.sim_table = QTableWidget(0, 1)
@@ -764,8 +758,8 @@ class CatalogWindow(QMainWindow):
 
     # ---------- Components visibility ----------
     def _set_all_components(self, state: bool):
-        for chk in (self.chk_desc, self.chk_videos, self.chk_downloads, self.chk_resources, self.chk_fmea):
-            chk.setChecked(state)
+        for c in (self.chk_desc, self.chk_videos, self.chk_downloads, self.chk_resources, self.chk_fmea):
+            c.setChecked(state)
 
     def _on_components_changed(self, _checked: bool):
         self._apply_component_visibility_to_editor(); self._on_any_changed()
@@ -776,7 +770,7 @@ class CatalogWindow(QMainWindow):
             self.w_videos: self.chk_videos.isChecked(),
             self.w_downloads: self.chk_downloads.isChecked(),
             self.w_resources: self.chk_resources.isChecked(),
-            self.w_fmea: self.chk_fmea.isChecked()
+            self.w_fmea: self.chk_fmea.isChecked(),
         }
         for w, on in cfg.items():
             idx = self.sections_tabs.indexOf(w)
@@ -798,6 +792,17 @@ class CatalogWindow(QMainWindow):
         elif action == act_below:
             r = 0 if r < 0 else r+1
             self.collection_tbl.insertRow(r); self._on_any_changed()
+
+    # ---------- Tree context menu ----------
+    def _tree_context_menu(self, pos):
+        menu = QMenu(self)
+        act_light = menu.addAction("Refresh Icons (Fast)")
+        act_heavy = menu.addAction("Refresh Icons (Full)")
+        act = menu.exec_(self.tree.viewport().mapToGlobal(pos))
+        if act is act_light:
+            self.refresh_file_icons(light=True)
+        elif act is act_heavy:
+            self.refresh_file_icons(light=False)
 
     # ---------- Selection ----------
     def selected_source_index(self) -> Optional[QModelIndex]:
@@ -868,12 +873,15 @@ class CatalogWindow(QMainWindow):
         if hasattr(self, "lay_preview"): self.lay_preview.set_pixmap(None)
         if hasattr(self, "desc_seed"): self.desc_seed.blockSignals(True); self.desc_seed.clear(); self.desc_seed.blockSignals(False)
         if hasattr(self, "desc_generated"): self.desc_generated.clear()
-        if hasattr(self, "fmea_seed"): self.fmea_seed.blockSignals(True); self.fmea_seed.clear(); self.fmea_seed.blockSignals(False)
-        if hasattr(self, "fmea_generated"): self.fmea_generated.clear()
+        # FMEA seeds, history, html
+        for ed in (getattr(self,'ed_seed_l0',None), getattr(self,'ed_seed_l1',None), getattr(self,'ed_seed_l2',None), getattr(self,'ed_seed_l3',None)):
+            if isinstance(ed, QTextEdit): ed.blockSignals(True); ed.clear(); ed.blockSignals(False)
+        if hasattr(self, "list_seed_history"): self.list_seed_history.clear()
+        if hasattr(self, "fmea_html"): self.fmea_html.clear()
         self.review_raw.blockSignals(True); self.review_raw.clear(); self.review_raw.blockSignals(False)
         self._review_dirty = False
-        self._set_ai_desc_idle(); self._set_ai_fmea_idle()
-        # reset components to default show
+        self._set_ai_status_idle_all()
+        # reset components default show
         for c in (getattr(self,'chk_desc',None), getattr(self,'chk_videos',None), getattr(self,'chk_downloads',None), getattr(self,'chk_resources',None), getattr(self,'chk_fmea',None)):
             if isinstance(c, QCheckBox): c.blockSignals(True); c.setChecked(True); c.blockSignals(False)
         self._apply_component_visibility_to_editor()
@@ -924,8 +932,9 @@ class CatalogWindow(QMainWindow):
         self.desc_seed.blockSignals(True); self.desc_seed.setPlainText(seed_text or ""); self.desc_seed.blockSignals(False)
         self.desc_generated.setHtml(gen_html or "")
 
-        # Videos
+        # Videos / Resources
         self._populate_iframe_table(self.sim_table, soup.find("div", class_="tab-content", id="simulation"))
+        self._populate_iframe_table(self.res_table, soup.find("div", class_="tab-content", id="resources"))
 
         # Schematic / Layout
         sch = soup.find("div", class_="tab-content", id="schematic")
@@ -945,30 +954,27 @@ class CatalogWindow(QMainWindow):
                 self.dl_table.setItem(r, 1, QTableWidgetItem(a.get("href","")))
         self.dl_table.blockSignals(False)
 
-        # FMEA (if present)
+        # FMEA seeds + output (from hidden script)
+        self._load_fmea_seeds_from_soup(soup)
         fmea_div = soup.find("div", class_="tab-content", id="fmea")
         if fmea_div:
-            # Store raw HTML of first table (if any)
-            t = fmea_div.find("table")
-            self.fmea_generated.setHtml(str(t) if t else "")
-
-        # Resources
-        self._populate_iframe_table(self.res_table, soup.find("div", class_="tab-content", id="resources"))
+            tbl = fmea_div.find("table")
+            if tbl:
+                self.fmea_html.setHtml(str(tbl))
 
     def _read_component_flags(self, soup: BeautifulSoup):
         present = set()
         tabs = soup.find("div", class_="tabs")
         if tabs:
             for b in tabs.find_all("button", class_="tab"):
-                oc = b.get("onclick","")
-                m = re.search(r"showTab\('([^']+)'", oc)
+                oc = b.get("onclick",""); m = re.search(r"showTab\('([^']+)'", oc)
                 if m: present.add(m.group(1))
         def exists(sec_id): return soup.find("div", id=sec_id, class_="tab-content") is not None
         f_desc = "description" in present if tabs else exists("description")
         f_vids = "simulation" in present if tabs else exists("simulation")
-        f_dl   = "downloads" in present if tabs else exists("downloads")
-        f_res  = "resources" in present if tabs else exists("resources")
-        f_fmea = "fmea" in present if tabs else exists("fmea")
+        f_dl   = "downloads"   in present if tabs else exists("downloads")
+        f_res  = "resources"   in present if tabs else exists("resources")
+        f_fmea = "fmea"        in present if tabs else exists("fmea")
         return f_desc, f_vids, f_dl, f_res, f_fmea
 
     def _load_collection_page_from_soup(self, soup: BeautifulSoup):
@@ -1076,7 +1082,6 @@ class CatalogWindow(QMainWindow):
     # ---------- PN → image path ----------
     def _update_image_field_from_pn(self, field: QLineEdit, pn: str, kind: str):
         cur = (field.text() or "").strip()
-        # Derive dir and ext from current value if present; else defaults
         dirpath = "../images"; ext = "png"; nn = "01" if kind == "schematic" else None
         if cur:
             d = os.path.dirname(cur) or dirpath; dirpath = d
@@ -1085,7 +1090,6 @@ class CatalogWindow(QMainWindow):
             if kind == "schematic":
                 m2 = re.search(r"_schematic_(\d+)\.[A-Za-z0-9]+$", cur)
                 if m2: nn = m2.group(1)
-        # Always rebuild filename from PN to avoid duplicate PN segments
         filename = f"{pn}_schematic_{nn}.{ext}" if kind=="schematic" else f"{pn}_components_top.{ext}"
         new_path = (dirpath.rstrip("/").rstrip("\\") + "/" + filename)
         field.blockSignals(True); field.setText(new_path); field.blockSignals(False)
@@ -1118,6 +1122,7 @@ class CatalogWindow(QMainWindow):
             if not silent: self._error("Save error", f"Failed to save:\n{e}")
             return
         self._set_stats(self.current_path); self._set_dirty(False)
+        self.refresh_file_icons(light=True)
 
     def update_html_to_template(self):
         if not self.current_path or not self.current_path.exists():
@@ -1135,6 +1140,7 @@ class CatalogWindow(QMainWindow):
             except Exception: pass
             self._error("Update error", f"Failed to update:\n{e}"); return
         self._set_stats(self.current_path); self._set_dirty(False)
+        self.refresh_file_icons(light=True)
 
     # ---------- Build soup from current UI ----------
     def _build_soup_from_ui(self, use_template: bool) -> BeautifulSoup:
@@ -1152,13 +1158,11 @@ class CatalogWindow(QMainWindow):
         if self.page_mode == "collection":
             self._save_collection_into_soup(soup); self._strip_detail_scripts(soup)
         else:
-            # Force schematic active when updating template for readability
-            self._save_detail_into_soup(soup, force_active=("schematic" if use_template else None))
-            self._ensure_detail_scripts(soup)
+            self._save_detail_into_soup(soup, force_active="schematic" if use_template else None); self._ensure_detail_scripts(soup)
         return soup
 
     def _strip_detail_scripts(self, soup: BeautifulSoup):
-        lb = soup.find(id="lightbox"); 
+        lb = soup.find(id="lightbox")
         if lb: lb.decompose()
         for s in soup.find_all("script"): s.decompose()
 
@@ -1302,22 +1306,25 @@ class CatalogWindow(QMainWindow):
             "schematic": True,
             "layout": True,
             "downloads": self.chk_downloads.isChecked(),
-            "fmea": self.chk_fmea.isChecked(),
             "resources": self.chk_resources.isChecked(),
+            "fmea": self.chk_fmea.isChecked(),
         }
         order = [("details","Details"), ("description","Description"), ("simulation","Videos"),
                  ("schematic","Schematic"), ("layout","Layout"), ("downloads","Downloads"),
-                 ("fmea","FMEA"), ("resources","Additional Resources")]
+                 ("resources","Additional Resources"), ("fmea","FMEA")]
+
         active_div = tabc.find("div", class_="tab-content", id=re.compile(r".*"), attrs={"class":re.compile(r"\bactive\b")})
         active_id = force_active or (active_div.get("id") if active_div else "schematic")
         if active_id not in enabled or not enabled.get(active_id, False):
             active_id = "schematic"
+
         for ch in list(tabs.children):
             if isinstance(ch, Tag): ch.decompose()
         for sec_id, label in order:
             if not enabled.get(sec_id, False): continue
             btn = soup.new_tag("button", **{"class":"tab" + (" active" if sec_id==active_id else ""), "onclick":f"showTab('{sec_id}', this)"})
             btn.string = label; tabs.append(btn)
+
         for div in tabc.find_all("div", class_="tab-content"):
             classes = (div.get("class") or [])
             if "tab-content" not in classes: continue
@@ -1347,7 +1354,7 @@ class CatalogWindow(QMainWindow):
         pseed = soup.new_tag("p"); pseed.string = self.desc_seed.toPlainText().strip(); dsc_div.append(pseed)
         h3g = soup.new_tag("h3"); h3g.string = "AI Generated"; dsc_div.append(h3g)
         wrap = soup.new_tag("div", **{"class":"generated"})
-        frag = self.desc_generated.toHtml(); clean_nodes = self._sanitize_ai_fragment(frag, soup, allow_tables=False)
+        frag = self.desc_generated.toHtml(); clean_nodes = self._sanitize_ai_fragment(frag, soup)
         for node in clean_nodes: wrap.append(node)
         dsc_div.append(wrap)
 
@@ -1388,67 +1395,49 @@ class CatalogWindow(QMainWindow):
             li.append(a); ul.append(li)
         dl_div.append(ul)
 
-        # ----- FMEA -----
-        fmea_div = self._ensure_section(soup, "fmea", "FMEA")
-        # Make FMEA a wide/full-width section to reduce scrolling (style in /styles.css)
-        classes = set(fmea_div.get("class", [])); classes.update(["tab-content","wide","wide-content"])
-        fmea_div["class"] = list(classes); fmea_div["data-wide"] = "true"
-        for node in list(fmea_div.find_all(recursive=False))[1:]: node.decompose()
-        ffrag = self.fmea_generated.toHtml()
-        f_nodes = self._sanitize_ai_fragment(ffrag, soup, allow_tables=True, table_class="fmea-table")
-        added = False
-        for n in f_nodes:
-            if isinstance(n, Tag) and n.name == "table":
-                fmea_div.append(n); added = True; break
-        if not added and f_nodes:
-            fmea_div.append(soup.new_tag("p")).string = "FMEA content available, but not a table."
-
         # ----- Resources -----
         res_div = self._ensure_section(soup, "resources", "Additional Resources")
         for node in list(res_div.find_all(recursive=False))[1:]: node.decompose()
         self._write_iframe_list(soup, res_div, self._table_to_list(self.res_table))
 
-        # Mark hidden sections based on checkboxes (data not lost)
+        # ----- FMEA -----
+        fmea_div = self._ensure_section(soup, "fmea", "FMEA")
+        # Keep only heading, then inject compact table (if any)
+        for node in list(fmea_div.find_all(recursive=False))[1:]: node.decompose()
+        frag_html = self.fmea_html.toHtml().strip()
+        if frag_html:
+            try:
+                frag = BeautifulSoup(frag_html, "html.parser")
+                tbl = frag.find("table")
+                if tbl:
+                    # ensure classes; strip inline styles
+                    tbl["class"] = (tbl.get("class", []) + ["fmea-table"])
+                    for tag in tbl.find_all(True):
+                        tag.attrs.pop("style", None)
+                    fmea_div.append(tbl)
+            except Exception:
+                pass
+
+        # Hidden FMEA seeds JSON
+        self._upsert_fmea_seeds_json(soup)
+
+        # Mark hidden sections based on checkboxes
         self._mark_section_hidden(soup, "description", not self.chk_desc.isChecked())
         self._mark_section_hidden(soup, "simulation", not self.chk_videos.isChecked())
         self._mark_section_hidden(soup, "downloads", not self.chk_downloads.isChecked())
         self._mark_section_hidden(soup, "resources", not self.chk_resources.isChecked())
         self._mark_section_hidden(soup, "fmea", not self.chk_fmea.isChecked())
 
-        # Rebuild the tab buttons; schematic forced active if requested
+        # Rebuild tab buttons (Description between Details and Schematic, FMEA last)
         self._rebuild_tabs_header(soup, force_active=force_active)
 
-    def _sanitize_ai_fragment(self, html_fragment: str, soup: BeautifulSoup, allow_tables: bool, table_class: Optional[str]=None) -> List[Tag]:
-        # Allowed tags
-        allowed = {"p","ul","ol","li","a","strong","em","code","span","br"}
-        if allow_tables:
-            allowed |= {"table","thead","tbody","tfoot","tr","td","th"}
+    def _sanitize_ai_fragment(self, html_fragment: str, soup: BeautifulSoup) -> List[Tag]:
         try:
             frag = BeautifulSoup(html_fragment or "", "html.parser")
         except Exception:
             frag = BeautifulSoup("", "html.parser")
         body = frag.find("body") or frag
         result: List[Tag] = []
-
-        def clone_clean(t: Tag) -> Optional[Tag]:
-            if t.name not in allowed: return None
-            nt = soup.new_tag(t.name)
-            # Keep only safe attrs
-            keep = {"href","title","alt"}
-            for k, v in (t.attrs or {}).items():
-                if k in keep: nt.attrs[k] = v
-            # Add class to any table
-            if table_class and t.name == "table":
-                nt.attrs["class"] = table_class
-            for c in t.children or []:
-                if isinstance(c, NavigableString):
-                    txt = _text_collapse(str(c))
-                    if txt: nt.append(txt)
-                elif isinstance(c, Tag):
-                    child = clone_clean(c)
-                    if child is not None: nt.append(child)
-            return nt
-
         for node in list(body.children):
             if isinstance(node, NavigableString):
                 txt = _text_collapse(str(node))
@@ -1456,12 +1445,27 @@ class CatalogWindow(QMainWindow):
                     p = soup.new_tag("p"); p.string = txt; result.append(p)
                 continue
             if isinstance(node, Tag):
-                cleaned = clone_clean(node)
-                if cleaned is not None: result.append(cleaned)
+                cleaned = self._strip_styles_deep(node, soup); result.append(cleaned)
         return result
+
+    def _strip_styles_deep(self, node: Tag, soup: BeautifulSoup) -> Tag:
+        def clone(t: Tag) -> Tag:
+            nt = soup.new_tag(t.name)
+            keep = {"href","title","alt"}
+            for k, v in (t.attrs or {}).items():
+                if k in keep: nt.attrs[k] = v
+            for c in t.children or []:
+                if isinstance(c, NavigableString):
+                    txt = _text_collapse(str(c))
+                    if txt: nt.append(txt)
+                elif isinstance(c, Tag):
+                    nt.append(clone(c))
+            return nt
+        return clone(node)
 
     def _write_iframe_list(self, soup: BeautifulSoup, container, urls: List[str]):
         for url in urls:
+            if not url: continue
             wrap = soup.new_tag("div", **{"class":"video-wrapper"})
             ifr = soup.new_tag("iframe", **{
                 "width":"560", "height":"315", "src":url, "title":"YouTube video player", "frameborder":"0",
@@ -1502,6 +1506,49 @@ class CatalogWindow(QMainWindow):
             td_pieces = soup.new_tag("td"); td_pieces.string = pieces; tr.append(td_pieces)
             tbody.append(tr)
         tbl.append(tbody); section.append(tbl)
+
+    # ---------- FMEA seeds in HTML ----------
+    def _upsert_fmea_seeds_json(self, soup: BeautifulSoup):
+        payload = {
+            "L0": self.ed_seed_l0.toPlainText().strip(),
+            "L1": self.ed_seed_l1.toPlainText().strip(),
+            "L2": self.ed_seed_l2.toPlainText().strip(),
+            "L3": self.ed_seed_l3.toPlainText().strip(),
+        }
+        body = soup.body or soup
+        tag = soup.find("script", id="ai-seeds-fmea", attrs={"type":"application/json"})
+        if not tag:
+            tag = soup.new_tag("script", id="ai-seeds-fmea", type="application/json")
+            tag["data-hidden"] = "true"
+            body.append(tag)
+        tag.string = json.dumps(payload, ensure_ascii=False, indent=0)
+
+    def _load_fmea_seeds_from_soup(self, soup: BeautifulSoup):
+        tag = soup.find("script", id="ai-seeds-fmea", attrs={"type":"application/json"})
+        if not tag or not (tag.string or "").strip():
+            return
+        try:
+            obj = json.loads(tag.string)
+            self.ed_seed_l0.setPlainText(obj.get("L0",""))
+            self.ed_seed_l1.setPlainText(obj.get("L1",""))
+            self.ed_seed_l2.setPlainText(obj.get("L2",""))
+            self.ed_seed_l3.setPlainText(obj.get("L3",""))
+            # also snapshot to history
+            self._push_seed_history(obj, label="Loaded from HTML")
+        except Exception:
+            pass
+
+    def _save_seeds_to_html(self):
+        if not self.current_path or not self.current_path.exists() or not BS4_AVAILABLE:
+            self._warn("Save Seeds", "Open a detail page first."); return
+        soup = self._build_soup_from_ui(use_template=False)
+        out_txt = minipcb_format_html(soup)
+        try:
+            self.current_path.write_text(out_txt, encoding="utf-8")
+            self._set_stats(self.current_path); self._set_dirty(False)
+            self._info("Seeds Saved", "FMEA seeds saved into HTML (hidden JSON).")
+        except Exception as e:
+            self._error("Save error", str(e))
 
     # ---------- Template ----------
     def _template_html(self, mode: str) -> str:
@@ -1572,8 +1619,8 @@ class CatalogWindow(QMainWindow):
       <div id="schematic" class="tab-content active"><h2>Schematic</h2><div class="lightbox-container"><img class="zoomable" alt="Schematic" src="" onclick="openLightbox(this)"/></div></div>
       <div id="layout" class="tab-content"><h2>Layout</h2><div class="lightbox-container"><img class="zoomable" alt="Board Layout" src="" onclick="openLightbox(this)"/></div></div>
       <div id="downloads" class="tab-content"><h2>Downloads</h2><ul class="download-list"></ul></div>
-      <div id="fmea" class="tab-content wide" data-wide="true"><h2>FMEA</h2></div>
       <div id="resources" class="tab-content"><h2>Additional Resources</h2></div>
+      <div id="fmea" class="tab-content"><h2>FMEA</h2></div>
     </div>
   </main>
   <footer>© {year} miniPCB. All rights reserved.</footer>
@@ -1764,116 +1811,240 @@ class CatalogWindow(QMainWindow):
 
     # ---------- AI (Description) ----------
     def _start_desc_ai(self):
-        if self._ai_desc_running: return
+        if self._ai_running: return
         if not OPENAI_AVAILABLE:
             self._warn("OpenAI not installed", "pip install openai"); return
         if not self.openai_key:
-            self._set_api_key()
-            if not self.openai_key:
-                self._warn("API key required", "OpenAI API key not set."); return
+            self._warn("API key required", "OpenAI API key not set."); return
         seed = self.desc_seed.toPlainText().strip(); page_title = self.ed_title.text().strip()
         h1 = self.ed_h1.text().strip(); part_no = self.det_part.text().strip()
-        self._ai_desc_eta = 90; self._ai_desc_start_ts = datetime.datetime.now()
-        self._ai_desc_running = True; self.btn_desc_generate.setEnabled(False)
-        self._update_ai_desc_label(elapsed=0, eta=self._ai_desc_eta); self.ai_desc_timer.start(250)
-        self.pb_desc.setRange(0, 100); self.pb_desc.setValue(0)
-        self.desc_worker = DescAIWorker(self.openai_key, self.openai_model, seed, page_title, h1, part_no, timeout=180)
-        self.desc_worker.finished.connect(self._on_desc_ai_finished); self.desc_worker.start()
-
-    def _set_api_key(self):
-        key, ok = self._ask_text("OpenAI API Key", "Enter OPENAI_API_KEY (stored locally):", "")
-        if ok and key.strip():
-            self.openai_key = key.strip(); s = get_settings(); s.setValue(KEY_OPENAI_KEY, self.openai_key)
-
-    def _set_ai_desc_idle(self):
-        self._ai_desc_running = False; self._ai_desc_start_ts = None; self._ai_desc_eta = None
-        self.ai_desc_timer.stop(); self.lbl_desc_ai.setText("AI: idle"); self.btn_desc_generate.setEnabled(True)
-        self.pb_desc.setValue(0)
-
-    def _tick_ai_desc_ui(self):
-        if not self._ai_desc_running or not self._ai_desc_start_ts: return
-        elapsed = int((datetime.datetime.now() - self._ai_desc_start_ts).total_seconds())
-        self._update_ai_desc_label(elapsed=elapsed, eta=self._ai_desc_eta)
-        if self._ai_desc_eta:
-            pct = min(100, int(100 * elapsed / max(1, self._ai_desc_eta)))
-            self.pb_desc.setValue(pct)
-
-    def _update_ai_desc_label(self, elapsed: int, eta: Optional[int]):
-        def fmt(sec: Optional[int]) -> str:
-            if sec is None: return "--:--"
-            m, s = divmod(max(0, int(sec)), 60); return f"{m:02d}:{s:02d}"
-        self.lbl_desc_ai.setText(f"AI: {fmt(elapsed)} / ETA ≈ {fmt(eta)}")
-
-    def _on_desc_ai_finished(self, result: dict):
-        elapsed = int(result.get("elapsed", 0))
-        self._update_ai_desc_label(elapsed=elapsed, eta=self._ai_desc_eta)
-        self.ai_desc_timer.stop(); self._ai_desc_running = False; self.btn_desc_generate.setEnabled(True)
-        self.pb_desc.setValue(100)
-        ok = result.get("ok", False)
-        if not ok:
-            self._error("AI Error", result.get("error", "Unknown error")); return
-        html = result.get("html","").strip()
-        if html:
-            clean_nodes = self._sanitize_ai_fragment(html, BeautifulSoup("<div></div>", "html.parser"), allow_tables=False)
-            frag_html = "".join(str(n) for n in clean_nodes)
-            self.desc_generated.setHtml(frag_html); self._on_any_changed()
+        sys_prompt = ("You are an expert technical copywriter for a hardware mini PCB catalog.\n"
+                      "Write crisp, accurate, helpful product descriptions. Return ONLY an HTML fragment (p/ul/li/h3 ok), no inline styles.")
+        user = (
+            f"PAGE CONTEXT:\n- Page Title: {page_title}\n- H1: {h1}\n- Part No: {part_no}\n\n"
+            f"SEED:\n{seed}\n\n"
+            "TASK:\n• 2–4 short paragraphs + (optional) one bullet list (3–6 items).\n"
+            "• 180–260 words; neutral, technical; no marketing fluff.\n"
+            "• Output ONLY an HTML fragment; no <html>/<body>; no inline styles."
+        )
+        self._kick_ai(sys_prompt, user, target="desc")
 
     # ---------- AI (FMEA) ----------
     def _start_fmea_ai(self):
-        if self._ai_fmea_running: return
+        if self._ai_running: return
         if not OPENAI_AVAILABLE:
             self._warn("OpenAI not installed", "pip install openai"); return
         if not self.openai_key:
-            self._set_api_key()
-            if not self.openai_key:
-                self._warn("API key required", "OpenAI API key not set."); return
-        seed = self.fmea_seed.toPlainText().strip(); page_title = self.ed_title.text().strip()
-        h1 = self.ed_h1.text().strip(); part_no = self.det_part.text().strip()
-        self._ai_fmea_eta = 150; self._ai_fmea_start_ts = datetime.datetime.now()
-        self._ai_fmea_running = True; self.btn_fmea_generate.setEnabled(False)
-        self._update_ai_fmea_label(elapsed=0, eta=self._ai_fmea_eta); self.ai_fmea_timer.start(250)
-        self.pb_fmea.setRange(0, 100); self.pb_fmea.setValue(0)
-        self.fmea_worker = FMEAAIWorker(self.openai_key, self.openai_model, seed, page_title, h1, part_no, timeout=240)
-        self.fmea_worker.finished.connect(self._on_fmea_ai_finished); self.fmea_worker.start()
+            self._warn("API key required", "OpenAI API key not set."); return
 
-    def _set_ai_fmea_idle(self):
-        self._ai_fmea_running = False; self._ai_fmea_start_ts = None; self._ai_fmea_eta = None
-        self.ai_fmea_timer.stop(); self.lbl_fmea_ai.setText("AI: idle"); self.btn_fmea_generate.setEnabled(True)
-        self.pb_fmea.setValue(0)
+        # Build final FMEA prompt from L3 + context
+        seeds = {
+            "L0": self.ed_seed_l0.toPlainText().strip(),
+            "L1": self.ed_seed_l1.toPlainText().strip(),
+            "L2": self.ed_seed_l2.toPlainText().strip(),
+            "L3": self.ed_seed_l3.toPlainText().strip(),
+        }
+        details = {
+            "Part No": self.det_part.text().strip(),
+            "Title": self.det_title.text().strip(),
+            "Board Size": self.det_board.text().strip(),
+            "Pieces per Panel": self.det_pieces.text().strip(),
+            "Panel Size": self.det_panel.text().strip(),
+        }
+        pagectx = f"PAGE: title={self.ed_title.text().strip()} h1={self.ed_h1.text().strip()} part_no={details['Part No']}"
+        sys_prompt = (
+            "You are an expert test engineer. Generate a compact HTML <table> (no inline styles) for an FMEA.\n"
+            "Headers: ID | Item | Failure Mode | Effect | Detection (TP#…) | Test ID | Severity | Occurrence | Detectability | RPN.\n"
+            "Use concise sentences; numeric S/O/D 1–10; compute RPN = S*O*D. No extra text around the table."
+        )
+        user = (
+            f"{pagectx}\nDETAILS:\n{json.dumps(details, ensure_ascii=False)}\n"
+            f"L0:\n{seeds['L0']}\n\nL1:\n{seeds['L1']}\n\nL2:\n{seeds['L2']}\n\nFINAL L3:\n{seeds['L3']}\n\n"
+            "TASK:\nReturn ONLY a single <table> element with the specified header. Use class=\"fmea-table\"."
+        )
+        self._kick_ai(sys_prompt, user, target="fmea")
 
-    def _tick_ai_fmea_ui(self):
-        if not self._ai_fmea_running or not self._ai_fmea_start_ts: return
-        elapsed = int((datetime.datetime.now() - self._ai_fmea_start_ts).total_seconds())
-        self._update_ai_fmea_label(elapsed=elapsed, eta=self._ai_fmea_eta)
-        if self._ai_fmea_eta:
-            pct = min(100, int(100 * elapsed / max(1, self._ai_fmea_eta)))
-            self.pb_fmea.setValue(pct)
+    # ---------- Seed Builder flow ----------
+    def _open_seed_builder(self):
+        # Gather sources
+        src: Dict[str,str] = {
+            "Title": self.ed_title.text().strip(),
+            "Slogan": self.ed_slogan.text().strip(),
+            "Details": "\n".join(filter(None, [
+                f"Part No: {self.det_part.text().strip()}",
+                f"Board Size: {self.det_board.text().strip()}",
+                f"Pieces per Panel: {self.det_pieces.text().strip()}",
+                f"Panel Size: {self.det_panel.text().strip()}",
+            ])),
+            "Description Seed": self.desc_seed.toPlainText().strip(),
+            "Description Generated": self.desc_generated.toPlainText().strip() if hasattr(self.desc_generated, "toPlainText") else "",
+            "Videos": "\n".join(self._table_to_list(self.sim_table)),
+            "Downloads": "\n".join([f"{t} -> {h}" for (t,h) in self._iter_download_rows()]),
+            "Resources": "\n".join(self._table_to_list(self.res_table)),
+            "Seed L1": self.ed_seed_l1.toPlainText().strip(),
+            "Seed L2": self.ed_seed_l2.toPlainText().strip(),
+            "Seed L3": self.ed_seed_l3.toPlainText().strip(),
+        }
+        defaults = {
+            "Title": ["L0","L1","L2","L3"],
+            "Slogan": ["L0","L1","L2","L3"],
+            "Details": ["L0","L1","L2","L3"],
+            "Description Seed": ["L0","L1","L2"],
+            "Description Generated": ["L1","L2"],
+            "Videos": ["L1","L2"],
+            "Downloads": ["L1","L2"],
+            "Resources": ["L1","L2"],
+            "Seed L1": ["L2","L3"],
+            "Seed L2": ["L3"],
+            "Seed L3": [],  # never considered
+        }
+        dlg = SeedBuilderDialog(self, src, defaults)
+        apply_windows_dark_titlebar(dlg)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+        sel = dlg.selections()
+        prompts = sel["prompts"]
 
-    def _update_ai_fmea_label(self, elapsed: int, eta: Optional[int]):
+        # Build seeds in sequence L0->L1->L2->L3 (each with matrix-selected sources)
+        levels = ["L0","L1","L2","L3"]
+        outputs: Dict[str,str] = {}
+        self._ai_seq_running = True
+        self._ai_seq_progress = 0
+        total = len(levels)
+        self._start_seq_progress("Building Seeds…", total)
+
+        try:
+            for lv in levels:
+                used = sel["sources_by_level"].get(lv, [])
+                # Compose material from selected sources
+                bundle = []
+                for key in used:
+                    if key.startswith("Seed "):
+                        # pull previous seeds from current outputs
+                        if key == "Seed L1": bundle.append(f"L1 (so far):\n{outputs.get('L1','')}")
+                        if key == "Seed L2": bundle.append(f"L2 (so far):\n{outputs.get('L2','')}")
+                        if key == "Seed L3": pass
+                    else:
+                        txt = src.get(key,"")
+                        if txt: bundle.append(f"{key}:\n{txt}")
+                cp = prompts.get(lv, "")
+                sys_prompt = (
+                    "You are assisting with an FMEA planning workflow. Produce a compact, neutral SEED NOTE for the given level.\n"
+                    "Keep to 120–220 words. Use plain text or minimal bullets. No HTML, no styling."
+                )
+                user = f"LEVEL: {lv}\nCUSTOM PROMPT:\n{cp}\n\nMATERIAL TO CONSIDER:\n" + ("\n\n".join(bundle) if bundle else "(none)")
+                # Run synchronously for simplicity (small payload); reuse worker class by blocking with loop
+                worker = BaseAIWorker(self.openai_key, self.openai_model, sys_prompt, user, timeout=120)
+                out = self._run_worker_blocking(worker)
+                if not out["ok"]:
+                    self._error("Seed Builder", out.get("error","Unknown error")); break
+                outputs[lv] = out["bundle"].strip()
+                self._bump_seq_progress()
+        finally:
+            self._finish_seq_progress()
+
+        # Fill editors and snapshot
+        if outputs:
+            self.ed_seed_l0.setPlainText(outputs.get("L0",""))
+            self.ed_seed_l1.setPlainText(outputs.get("L1",""))
+            self.ed_seed_l2.setPlainText(outputs.get("L2",""))
+            self.ed_seed_l3.setPlainText(outputs.get("L3",""))
+            self._push_seed_history(outputs, label=f"Built {today_iso()} {datetime.datetime.now().strftime('%H:%M:%S')}")
+            self._on_any_changed()
+
+    def _run_worker_blocking(self, worker: BaseAIWorker) -> dict:
+        # Minimal local loop to block; updates a tiny spinner-like ETA label if desired
+        done = {"res": None}
+        def _fin(d): done["res"] = d
+        worker.finished.connect(_fin); worker.start()
+        t0 = time.time()
+        while done["res"] is None:
+            QApplication.processEvents()
+            time.sleep(0.05)
+        return done["res"]
+
+    def _push_seed_history(self, obj: Dict[str,str], label: str):
+        # Snapshot from current form fields (unsaved state)
+        item = QListWidgetItem(label); item.setData(Qt.UserRole, json.dumps(obj, ensure_ascii=False))
+        self.list_seed_history.insertItem(0, item)
+
+    def _snapshot_seeds(self):
+        snap = {
+            "L0": self.ed_seed_l0.toPlainText().strip(),
+            "L1": self.ed_seed_l1.toPlainText().strip(),
+            "L2": self.ed_seed_l2.toPlainText().strip(),
+            "L3": self.ed_seed_l3.toPlainText().strip(),
+        }
+        self._push_seed_history(snap, label=f"Snapshot {today_iso()} {datetime.datetime.now().strftime('%H:%M:%S')}")
+
+    def _load_seed_history_item(self, item: QListWidgetItem):
+        try:
+            obj = json.loads(item.data(Qt.UserRole))
+            self.ed_seed_l0.setPlainText(obj.get("L0",""))
+            self.ed_seed_l1.setPlainText(obj.get("L1",""))
+            self.ed_seed_l2.setPlainText(obj.get("L2",""))
+            self.ed_seed_l3.setPlainText(obj.get("L3",""))
+            self._on_any_changed()
+        except Exception:
+            pass
+
+    # ---------- AI orchestration (shared) ----------
+    def _kick_ai(self, sys_prompt: str, user_prompt: str, target: str):
+        # shared spinner/timer/progress
+        self._ai_running = True; self._ai_start_ts = datetime.datetime.now(); self._ai_eta_sec = 75
+        if target == "desc":
+            self.lbl_desc_ai.setText("AI: starting…"); self.pb_desc.show()
+        elif target == "fmea":
+            self.lbl_fmea_ai.setText("AI: starting…"); self.pb_fmea.show()
+        self.ai_timer.start(250)
+        self._worker = BaseAIWorker(self.openai_key, self.openai_model, sys_prompt, user_prompt, timeout=240)
+        self._worker.finished.connect(lambda res, tgt=target: self._on_ai_finished(res, tgt))
+        self._worker.start()
+
+    def _on_ai_finished(self, result: dict, target: str):
+        elapsed = int(result.get("elapsed", 0))
+        self._update_ai_label(elapsed=elapsed, eta=self._ai_eta_sec, target=target, status="done")
+        self.ai_timer.stop(); self._ai_running = False
+        if target == "desc": self.pb_desc.hide()
+        if target == "fmea": self.pb_fmea.hide()
+        if not result.get("ok", False):
+            self._error("AI Error", result.get("error","Unknown error")); return
+        html = result.get("bundle","").strip()
+        if target == "desc":
+            clean_nodes = self._sanitize_ai_fragment(html, BeautifulSoup("<div></div>", "html.parser"))
+            frag_html = "".join(str(n) for n in clean_nodes)
+            self.desc_generated.setHtml(frag_html); self._on_any_changed()
+        elif target == "fmea":
+            # Expect a <table> only; sanitize styles and add class
+            try:
+                frag = BeautifulSoup(html, "html.parser"); tbl = frag.find("table")
+                if tbl:
+                    for tag in tbl.find_all(True): tag.attrs.pop("style", None)
+                    tbl["class"] = (tbl.get("class", []) + ["fmea-table"])
+                    self.fmea_html.setHtml(str(tbl)); self._on_any_changed()
+                else:
+                    # put raw anyway
+                    self.fmea_html.setHtml(html); self._on_any_changed()
+            except Exception:
+                self.fmea_html.setHtml(html); self._on_any_changed()
+
+    def _set_ai_status_idle_all(self):
+        self._ai_running = False; self._ai_start_ts = None; self._ai_eta_sec = None; self.ai_timer.stop()
+        self.lbl_desc_ai.setText("AI: idle"); self.btn_desc_generate.setEnabled(True); self.pb_desc.hide()
+        self.lbl_fmea_ai.setText("AI: idle"); self.btn_fmea_generate.setEnabled(True); self.pb_fmea.hide()
+
+    def _tick_ai_ui(self):
+        if not self._ai_running or not self._ai_start_ts: return
+        elapsed = int((datetime.datetime.now() - self._ai_start_ts).total_seconds())
+        self._update_ai_label(elapsed=elapsed, eta=self._ai_eta_sec, target="both", status="running")
+
+    def _update_ai_label(self, elapsed: int, eta: Optional[int], target: str, status: str):
         def fmt(sec: Optional[int]) -> str:
             if sec is None: return "--:--"
             m, s = divmod(max(0, int(sec)), 60); return f"{m:02d}:{s:02d}"
-        self.lbl_fmea_ai.setText(f"AI: {fmt(elapsed)} / ETA ≈ {fmt(eta)}")
-
-    def _on_fmea_ai_finished(self, result: dict):
-        elapsed = int(result.get("elapsed", 0))
-        self._update_ai_fmea_label(elapsed=elapsed, eta=self._ai_fmea_eta)
-        self.ai_fmea_timer.stop(); self._ai_fmea_running = False; self.btn_fmea_generate.setEnabled(True)
-        self.pb_fmea.setValue(100)
-        ok = result.get("ok", False)
-        if not ok:
-            self._error("AI Error", result.get("error", "Unknown error")); return
-        html = result.get("html","").strip()
-        if html:
-            # Sanitize to a single table and inject class
-            tmp_soup = BeautifulSoup("<div></div>", "html.parser")
-            clean_nodes = self._sanitize_ai_fragment(html, tmp_soup, allow_tables=True, table_class="fmea-table")
-            table_html = ""
-            for n in clean_nodes:
-                if isinstance(n, Tag) and n.name == "table":
-                    table_html = str(n); break
-            self.fmea_generated.setHtml(table_html or "")
-            self._on_any_changed()
+        msg = f"AI: {fmt(elapsed)} / ETA ≈ {fmt(eta)}"
+        if target in ("desc","both"): self.lbl_desc_ai.setText(msg)
+        if target in ("fmea","both"): self.lbl_fmea_ai.setText(msg)
 
     # ---------- Navigation picker ----------
     def _add_nav_link_via_picker(self):
@@ -1889,6 +2060,90 @@ class CatalogWindow(QMainWindow):
                 href = "/" + rel if not rel.startswith("/") else rel
                 self.nav_tbl.setItem(r, 1, QTableWidgetItem(href))
             self._on_any_changed()
+
+    # ---------- File icon refresh ----------
+    def _get_expanded_paths(self) -> list:
+        paths = []
+        def walk(idx):
+            if not idx.isValid(): return
+            if self.tree.isExpanded(idx):
+                sidx = self.proxy.mapToSource(idx)
+                try:
+                    p = Path(self.fs_model.filePath(sidx))
+                    if p.exists(): paths.append(str(p.resolve()))
+                except Exception: pass
+            rows = self.proxy.rowCount(idx)
+            for r in range(rows): walk(self.proxy.index(r, 0, idx))
+        walk(self.tree.rootIndex()); return paths
+
+    def _restore_expanded_paths(self, paths: list):
+        for p in paths or []:
+            sidx = self.fs_model.index(p)
+            if sidx.isValid():
+                pidx = self.proxy.mapFromSource(sidx)
+                self.tree.setExpanded(pidx, True)
+
+    def _rebuild_fs_model(self):
+        sel = self.selected_path(); expanded = self._get_expanded_paths()
+        self.tree.setModel(None)
+        self.fs_model = QFileSystemModel(self); self.fs_model.setReadOnly(False)
+        self.fs_model.setRootPath(str(self.content_root))
+        self.fs_model.setNameFilters(["*.html", "*.htm"]); self.fs_model.setNameFilterDisables(False)
+        self.proxy.setSourceModel(self.fs_model)
+        self.tree.setModel(self.proxy)
+        self.tree.setRootIndex(self.proxy.mapFromSource(self.fs_model.index(str(self.content_root))))
+        self.tree.setSortingEnabled(True); self.tree.sortByColumn(0, Qt.AscendingOrder)
+        self._restore_expanded_paths(expanded)
+        if sel and sel.exists():
+            sidx = self.fs_model.index(str(sel))
+            if sidx.isValid():
+                pidx = self.proxy.mapFromSource(sidx)
+                self.tree.setCurrentIndex(pidx)
+
+    def _emit_data_changed_visible(self):
+        root = self.tree.rootIndex()
+        def emit_for(idx):
+            if not idx.isValid(): return
+            sidx = self.proxy.mapToSource(idx)
+            try: self.fs_model.dataChanged.emit(sidx, sidx)
+            except Exception: pass
+            rows = self.proxy.rowCount(idx)
+            for r in range(rows): emit_for(self.proxy.index(r, 0, idx))
+        emit_for(root)
+
+    def _nudge_shell_icon_cache(self, path: Optional[Path]):
+        if platform.system() != "Windows" or not path: return
+        try:
+            import ctypes
+            from ctypes import wintypes
+            SHCNE_UPDATEITEM = 0x00002000
+            SHCNF_PATHW = 0x00000005
+            ctypes.windll.shell32.SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, wintypes.LPCWSTR(str(path)), None)
+        except Exception:
+            pass
+
+    def refresh_file_icons(self, light: bool = True):
+        base = self.selected_path() or self.content_root
+        self._nudge_shell_icon_cache(base if isinstance(base, Path) else None)
+        if light: self._emit_data_changed_visible()
+        else: self._rebuild_fs_model()
+
+# ---------- Preview label ----------
+class PreviewLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent); self._pix: Optional[QPixmap] = None
+        self.setMinimumHeight(220); self.setAlignment(Qt.AlignCenter); self.setText("(no image)")
+        self.setStyleSheet("QLabel { border:1px solid #3A3F44; border-radius:6px; padding:6px; }")
+    def set_pixmap(self, pix: Optional[QPixmap]):
+        self._pix = pix; self._render()
+    def resizeEvent(self, e):
+        super().resizeEvent(e); self._render()
+    def _render(self):
+        if not self._pix or self._pix.isNull():
+            self.setText("(no image)"); self.setPixmap(QPixmap()); return
+        w = max(64, self.width() - 12); h = max(64, self.height() - 12)
+        scaled = self._pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.setPixmap(scaled); self.setText("")
 
 # ---------- Boot ----------
 def ensure_content_root() -> Path:
