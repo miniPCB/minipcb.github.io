@@ -8,12 +8,12 @@ Persists AI timing stats in minipcb_catalog.json
 
 Tabs mapped to site (detail pages):
 - details
-- videos       (legacy id "simulation" is supported on load/save)
+- description  (seed + AI generated)
+- videos       (legacy: simulation)
 - schematic
 - layout
 - downloads
 - resources
-- description  (seed + AI generated)
 
 Notes
 - OpenAI usage is optional and entirely local (no backend). Reads OPENAI_API_KEY and OPENAI_MODEL (default "gpt-5").
@@ -28,7 +28,7 @@ from urllib.parse import urlparse, unquote
 
 # ---- HTML parsing
 try:
-    from bs4 import BeautifulSoup, NavigableString, Comment
+    from bs4 import BeautifulSoup, NavigableString
     BS4_AVAILABLE = True
 except Exception:
     BS4_AVAILABLE = False
@@ -201,7 +201,7 @@ class DescProxyModel(QSortFilterProxyModel):
     @staticmethod
     def _read_title_from_html(path: Path) -> str:
         try:
-            txt = path.read_text(encoding="utf-8", errors="ignore")
+            txt = path.read_text(encoding="utf-8")
             if BS4_AVAILABLE:
                 soup = BeautifulSoup(txt, "html.parser")
                 return (soup.title.string.strip() if soup.title and soup.title.string else "")
@@ -214,7 +214,7 @@ class DescProxyModel(QSortFilterProxyModel):
 class DescAIWorker(QThread):
     finished = pyqtSignal(dict)  # {"ok":True,"html":str,"elapsed":float} OR {"ok":False,"error":str,"elapsed":float}
 
-    def __init__(self, api_key: str, model_name: str, seed_text: str, page_title: str, h1: str, part_no: str, timeout: int = 120):
+    def __init__(self, api_key: str, model_name: str, seed_text: str, page_title: str, h1: str, part_no: str, timeout: int = 180):
         super().__init__()
         self.api_key = api_key
         self.model = model_name
@@ -246,11 +246,14 @@ class DescAIWorker(QThread):
                 f"- Part No: {self.part_no}\n\n"
                 f"SEED (editor-provided):\n{self.seed}\n\n"
                 "TASK:\n"
-                "• 2–4 short paragraphs and optionally ONE bullet list (3–6 items).\n"
-                "• Neutral, professional tone; <strong> sparingly for key specs.\n"
-                "• Output: ONLY an HTML fragment."
+                "• Generate a concise, skimmable description suitable for the Description tab.\n"
+                "• Include 2–4 short paragraphs and, at most, ONE bullet list (3–6 items).\n"
+                "• Avoid marketing fluff; focus on function, operation, key components/constraints, and typical use-cases.\n"
+                "• Keep it under ~180–260 words total. Use <strong> sparingly.\n"
+                "• Output: ONLY an HTML fragment. No outer wrapper."
             )
 
+            # Prefer Responses API; fallback to Chat Completions
             html = ""
             try:
                 resp = client.responses.create(
@@ -278,8 +281,9 @@ class DescAIWorker(QThread):
             if not html:
                 raise RuntimeError("Model returned empty content.")
 
+            html = html.strip()
             elapsed = time.time() - start
-            self.finished.emit({"ok": True, "html": html.strip(), "elapsed": elapsed})
+            self.finished.emit({"ok": True, "html": html, "elapsed": elapsed})
         except Exception as e:
             elapsed = time.time() - start
             self.finished.emit({"ok": False, "error": str(e), "elapsed": elapsed})
@@ -316,9 +320,6 @@ class CatalogWindow(QMainWindow):
         self._ai_start_ts: Optional[datetime.datetime] = None
         self._ai_eta_sec: Optional[int] = None
         self._ai_running = False
-
-        # Keep raw generated HTML to save exact content
-        self._desc_generated_raw_html: str = ""
 
         # Toolbar
         tb = QToolBar("Main", self); tb.setMovable(False); self.addToolBar(tb)
@@ -386,12 +387,12 @@ class CatalogWindow(QMainWindow):
         self.sections_host = QWidget(self); sh_v = QVBoxLayout(self.sections_host); sh_v.setContentsMargins(0,0,0,0)
         self.sections_tabs = QTabWidget(self.sections_host); sh_v.addWidget(self.sections_tabs, 1)
         self.tabs.addTab(self.sections_host, "Sections")
-        self._build_fixed_section_editors()
+        self._build_fixed_section_editors()  # builds + wires signals
 
         # Page mode (detail vs collection)
         self.page_mode = "detail"
 
-        # Collection editor
+        # Collection editor (Group/Collection pages)
         self.collection_host = QWidget(self); col_v = QVBoxLayout(self.collection_host); col_v.setContentsMargins(0,0,0,0); col_v.setSpacing(8)
         self.collection_tbl = QTableWidget(0, 4)
         self.collection_tbl.setHorizontalHeaderLabels(["Part No", "Title Text", "Href", "Pieces per Panel"])
@@ -514,9 +515,10 @@ class CatalogWindow(QMainWindow):
         det_form.addRow("Panel Size:", self.det_panel)
         for ed in (self.det_part, self.det_title, self.det_board, self.det_pieces, self.det_panel):
             ed.textChanged.connect(self._on_any_changed)
+        self.det_part.textEdited.connect(self._on_part_edited)  # auto-fill media paths
         self.sections_tabs.addTab(w_details, "Details")
 
-        # Description: seed + generated + AI controls
+        # Description (Seed + Generated)
         w_desc = QWidget()
         vdesc = QVBoxLayout(w_desc); vdesc.setSpacing(8); vdesc.setContentsMargins(6,6,6,6)
 
@@ -548,12 +550,12 @@ class CatalogWindow(QMainWindow):
         vdesc.addWidget(gen_box, 1)
         self.sections_tabs.addTab(w_desc, "Description")
 
-        # Videos
+        # Videos: table of video src
         self.sim_table = self._make_table(["Video URL"])
         self.sim_table.cellChanged.connect(lambda *_: self._on_any_changed())
         self.sections_tabs.addTab(self._wrap_table_with_buttons(self.sim_table, "video"), "Videos")
 
-        # Schematic
+        # Schematic: image src/alt + preview
         w_sch = QWidget(); schf = QFormLayout(w_sch); schf.setVerticalSpacing(8)
         self.sch_src = QLineEdit(); self.sch_alt = QLineEdit()
         self.sch_src.setPlaceholderText("../images/xxx_schematic_01.png")
@@ -565,7 +567,7 @@ class CatalogWindow(QMainWindow):
         schf.addRow("Preview:", self.sch_preview)
         self.sections_tabs.addTab(w_sch, "Schematic")
 
-        # Layout
+        # Layout: image src/alt + preview
         w_lay = QWidget(); layf = QFormLayout(w_lay); layf.setVerticalSpacing(8)
         self.lay_src = QLineEdit(); self.lay_alt = QLineEdit()
         self.lay_src.setPlaceholderText("../images/xxx_components_top.png")
@@ -577,12 +579,12 @@ class CatalogWindow(QMainWindow):
         layf.addRow("Preview:", self.lay_preview)
         self.sections_tabs.addTab(w_lay, "Layout")
 
-        # Downloads
+        # Downloads: Text + Href
         self.dl_table = self._make_table(["Text", "Href"])
         self.dl_table.cellChanged.connect(lambda *_: self._on_any_changed())
         self.sections_tabs.addTab(self._wrap_table_with_buttons(self.dl_table, "download"), "Downloads")
 
-        # Resources
+        # Resources: table of video src
         self.res_table = self._make_table(["Video URL"])
         self.res_table.cellChanged.connect(lambda *_: self._on_any_changed())
         self.sections_tabs.addTab(self._wrap_table_with_buttons(self.res_table, "video"), "Additional Resources")
@@ -673,7 +675,7 @@ class CatalogWindow(QMainWindow):
 
             if BS4_AVAILABLE:
                 soup = BeautifulSoup(text, "html.parser")
-                is_detail = bool(soup.find("div", class_="tab-container")) or bool(soup.find("div", id="details"))
+                is_detail = bool(soup.find("div", class_="tab-container")) or bool(soup.find("div", class_="tab-content"))
                 if is_detail:
                     self._switch_page_mode("detail")
                     self._load_detail_from_soup(soup)
@@ -689,25 +691,6 @@ class CatalogWindow(QMainWindow):
             self._set_dirty(False)
         finally:
             self._loading = False
-
-    # ---------- Utility for skipping trivial siblings ----------
-    def _next_nontrivial_sibling(self, node):
-        cur = getattr(node, "next_sibling", None)
-        while cur is not None:
-            if isinstance(cur, NavigableString):
-                if not str(cur).strip():
-                    cur = cur.next_sibling
-                    continue
-                return cur
-            if isinstance(cur, Comment):
-                cur = cur.next_sibling
-                continue
-            nm = getattr(cur, "name", "") or ""
-            if nm.lower() in ("h1","h2","h3","h4","h5","h6"):
-                cur = cur.next_sibling
-                continue
-            return cur
-        return None
 
     # ---------- UI population (Detail pages) ----------
     def _clear_ui(self):
@@ -726,10 +709,8 @@ class CatalogWindow(QMainWindow):
                 tbl.blockSignals(True); tbl.setRowCount(0); tbl.blockSignals(False)
         if hasattr(self, "sch_preview"): self.sch_preview.set_pixmap(None)
         if hasattr(self, "lay_preview"): self.lay_preview.set_pixmap(None)
-        if hasattr(self, "desc_seed"):
-            self.desc_seed.blockSignals(True); self.desc_seed.clear(); self.desc_seed.blockSignals(False)
+        if hasattr(self, "desc_seed"): self.desc_seed.blockSignals(True); self.desc_seed.clear(); self.desc_seed.blockSignals(False)
         if hasattr(self, "desc_generated"): self.desc_generated.clear()
-        self._desc_generated_raw_html = ""
         self.review_raw.blockSignals(True); self.review_raw.clear(); self.review_raw.blockSignals(False)
         self._review_dirty = False
         self._set_ai_status_idle()
@@ -745,7 +726,7 @@ class CatalogWindow(QMainWindow):
         h1 = soup.find("h1"); self.ed_h1.setText(h1.get_text(strip=True) if h1 else "")
         slog = soup.find("p", class_="slogan"); self.ed_slogan.setText(slog.get_text(strip=True) if slog else "")
 
-        # Details
+        # Details (robustly strip label + optional colon)
         details = soup.find("div", class_="tab-content", id="details")
         def _get_detail(label: str) -> str:
             if not details: return ""
@@ -767,43 +748,51 @@ class CatalogWindow(QMainWindow):
 
         # Description (seed + generated)
         desc_div = soup.find("div", class_="tab-content", id="description")
-        seed_text, gen_html = "", ""
+        seed_text = ""
+        gen_html = ""
         if desc_div:
-            seed_h = None
-            for h in desc_div.find_all(["h3", "h4"]):
-                txt = h.get_text(" ", strip=True).lower()
-                if "seed" in txt:
-                    seed_h = h; break
-            seed_block = None
-            if seed_h:
-                seed_block = self._next_nontrivial_sibling(seed_h)
-                if seed_block is not None:
-                    if getattr(seed_block, "name", None):
-                        seed_text = seed_block.get_text("\n", strip=True)
-                    else:
-                        seed_text = str(seed_block).strip()
+            # Accept headings "AI Seed" or "Seed"; "AI Generated" or "Generated"
+            # Collect all content between <h3>AI Seed</h3> and next <h3>, as well as
+            # the first block after <h3>AI Generated</h3>
+            def _collect_until_next_h3(start):
+                parts = []
+                n = start.find_next_sibling()
+                while n and getattr(n, "name", None) and n.name.lower() != "h3":
+                    parts.append(n)
+                    n = n.find_next_sibling()
+                return parts
 
-            gen_block = desc_div.find("div", class_="generated")
-            if not gen_block:
-                gen_h = None
-                for h in desc_div.find_all(["h3", "h4"]):
-                    txt = h.get_text(" ", strip=True).lower()
-                    if "generated" in txt:
-                        gen_h = h; break
-                if gen_h:
-                    gen_block = self._next_nontrivial_sibling(gen_h)
-            if gen_block:
-                gen_html = "".join(str(x) for x in getattr(gen_block, "contents", [])).strip() or gen_block.decode_contents()
+            for h3 in desc_div.find_all(["h3","h4"]):
+                t = h3.get_text(strip=True).lower()
+                if t in ("seed", "ai seed"):
+                    blocks = _collect_until_next_h3(h3)
+                    if blocks:
+                        seed_text = "\n".join(
+                            b.get_text("\n", strip=True) for b in blocks if getattr(b, "name", "")
+                        ).strip()
+                if t in ("ai generated", "generated", "ai"):
+                    blocks = _collect_until_next_h3(h3)
+                    # Prefer a div.generated if present
+                    gen_block = None
+                    for b in blocks:
+                        if "generated" in (b.get("class") or []):
+                            gen_block = b
+                            break
+                    if not gen_block and blocks:
+                        gen_block = blocks[0]
+                    if gen_block:
+                        gen_html = gen_block.decode_contents()
+
         self.desc_seed.blockSignals(True)
         self.desc_seed.setPlainText(seed_text or "")
         self.desc_seed.blockSignals(False)
         self.desc_generated.setHtml(gen_html or "")
-        self._desc_generated_raw_html = gen_html or ""
 
-        # Videos (id="videos" or legacy id="simulation")
-        sim_container = (soup.find("div", class_="tab-content", id="videos")
-                         or soup.find("div", class_="tab-content", id="simulation"))
-        self._populate_iframe_table(self.sim_table, sim_container)
+        # Videos (iframes) — read from id="videos" OR legacy id="simulation"
+        vids = soup.find("div", class_="tab-content", id="videos")
+        if not vids:
+            vids = soup.find("div", class_="tab-content", id="simulation")
+        self._populate_iframe_table(self.sim_table, vids)
 
         # Schematic image
         sch = soup.find("div", class_="tab-content", id="schematic")
@@ -833,6 +822,7 @@ class CatalogWindow(QMainWindow):
 
     # ---------- UI population (Collection pages) ----------
     def _load_collection_page_from_soup(self, soup: BeautifulSoup):
+        # Common metadata also editable
         title = (soup.title.string if soup.title and soup.title.string else "") if soup.title else ""
         self.ed_title.setText((title or "").strip())
         kw = soup.find("meta", attrs={"name":"keywords"})
@@ -842,11 +832,16 @@ class CatalogWindow(QMainWindow):
         h1 = soup.find("h1"); self.ed_h1.setText(h1.get_text(strip=True) if h1 else "")
         slog = soup.find("p", class_="slogan"); self.ed_slogan.setText(slog.get_text(strip=True) if slog else "")
 
+        # Parse first table under <main> (or anywhere)
         self.collection_tbl.blockSignals(True)
         self.collection_tbl.setRowCount(0)
-        tbl = soup.find("table")
+        tbl = None
+        main = soup.find("main")
+        if main: tbl = main.find("table")
+        if not tbl: tbl = soup.find("table")
         if not tbl:
             self.collection_tbl.blockSignals(False); return
+
         tbody = tbl.find("tbody") or tbl
         for tr in tbody.find_all("tr"):
             tds = tr.find_all(["td","th"])
@@ -869,7 +864,7 @@ class CatalogWindow(QMainWindow):
             self.collection_tbl.setItem(r, 3, QTableWidgetItem(pieces))
         self.collection_tbl.blockSignals(False)
 
-    # ---------- Common helpers ----------
+    # ---------- Common helpers (iframes, tables) ----------
     def _populate_iframe_table(self, table: QTableWidget, container):
         table.blockSignals(True)
         table.setRowCount(0)
@@ -898,10 +893,11 @@ class CatalogWindow(QMainWindow):
         for url in urls:
             wrap = soup.new_tag("div", **{"class":"video-wrapper"})
             ifr = soup.new_tag("iframe", **{
-                "width":"560", "height":"315", "src":url,
-                "title":"YouTube video player", "frameborder":"0",
+                "src": url,
+                "title":"YouTube video player",
                 "allow":"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
-                "allowfullscreen": True, "referrerpolicy":"strict-origin-when-cross-origin"
+                "allowfullscreen": True,
+                "referrerpolicy":"strict-origin-when-cross-origin",
             })
             wrap.append(ifr); container.append(wrap)
 
@@ -980,11 +976,18 @@ class CatalogWindow(QMainWindow):
         else:
             self._save_detail_into_soup(soup)
 
-        out_txt = ascii_sanitize(str(soup))
-        out_txt = self._format_for_humans(out_txt)
+        # Ensure tabs header contains everything in right order (keeps active)
+        self._ensure_tabs_header(soup)
+
+        # Ensure global lightbox exists at end of body (single instance)
+        self._ensure_global_lightbox(soup)
+
+        # Pretty-print output
+        out_html = self._pretty_html(soup)
+
         try:
             tmp = self.current_path.with_suffix(self.current_path.suffix + f".tmp.{os.getpid()}.{now_stamp()}")
-            tmp.write_text(out_txt, encoding="utf-8")
+            tmp.write_text(out_html, encoding="utf-8")
             os.replace(str(tmp), str(self.current_path))
         except Exception as e:
             try:
@@ -997,50 +1000,11 @@ class CatalogWindow(QMainWindow):
         self._set_stats(self.current_path)
         self.proxy.refresh_desc(self.current_path)
         self._set_dirty(False)
+        # Intentionally no success popup (per request)
 
     # ---------- Save helpers (common) ----------
-    def _ensure_tab_container(self, soup: BeautifulSoup):
-        main = soup.find("main")
-        if not main:
-            main = soup.new_tag("main"); (soup.body or soup).append(main)
-        tbc = main.find("div", class_="tab-container")
-        if not tbc:
-            tbc = soup.new_tag("div", **{"class":"tab-container"})
-            main.insert(0, tbc)
-        return tbc
-
-    def _ensure_section_with_comment(self, soup: BeautifulSoup, sec_id: str, heading_text: str, comment_text: str):
-        tbc = self._ensure_tab_container(soup)
-        div = None
-        for cand in tbc.find_all("div", class_="tab-content", recursive=False):
-            if cand.get("id") == sec_id:
-                div = cand; break
-        if not div:
-            div = soup.new_tag("div", **{"class":"tab-content", "id":sec_id})
-            tbc.append(div)
-        # Ensure comment immediately before section (if missing)
-        prev = div.previous_sibling
-        needs_comment = True
-        while prev and isinstance(prev, NavigableString) and not str(prev).strip():
-            prev = prev.previous_sibling
-        if isinstance(prev, Comment):
-            if comment_text.lower() in prev.strip().lower():
-                needs_comment = False
-        if needs_comment:
-            div.insert_before(Comment(f" {comment_text} "))
-            div.insert_before("\n")
-        # Ensure H2
-        h2 = None
-        for ch in div.children:
-            if getattr(ch, "name", None) == "h2": h2 = ch; break
-        if not h2:
-            h2 = soup.new_tag("h2"); h2.string = heading_text
-            div.insert(0, h2)
-        else:
-            h2.string = heading_text
-        return div
-
     def _upsert_metadata_into_soup(self, soup: BeautifulSoup):
+        # <title>
         new_title = self.ed_title.text().strip()
         if soup.title:
             if soup.title.string: soup.title.string.replace_with(new_title)
@@ -1052,10 +1016,12 @@ class CatalogWindow(QMainWindow):
             t = soup.new_tag("title"); t.string = new_title
             soup.head.append(t)
 
+        # meta keywords/description
         def upsert_meta(name: str, value: str):
             tag = soup.find("meta", attrs={"name": name})
             if tag is None:
-                tag = soup.new_tag("meta"); tag.attrs["name"] = name
+                tag = soup.new_tag("meta")
+                tag.attrs["name"] = name
                 if not soup.head:
                     if not soup.html: soup.append(soup.new_tag("html"))
                     soup.html.insert(0, soup.new_tag("head"))
@@ -1065,15 +1031,18 @@ class CatalogWindow(QMainWindow):
         upsert_meta("keywords", condense_meta(self.ed_keywords.toPlainText()))
         upsert_meta("description", condense_meta(self.ed_description.toPlainText()))
 
+        # First <h1>
         new_h1 = self.ed_h1.text().strip()
         h1 = soup.find("h1")
         if h1: h1.clear(); h1.append(new_h1)
         else:
-            parent = soup.find("header") or soup.body or soup.html
+            parent = soup.find("main") or soup.body or soup.html
             if parent:
                 nh = soup.new_tag("h1"); nh.string = new_h1
-                parent.append(nh)
+                if parent.contents: parent.insert(0, nh)
+                else: parent.append(nh)
 
+        # <p class="slogan">
         new_slogan = self.ed_slogan.text().strip()
         slog = soup.find("p", class_="slogan")
         if slog: slog.clear(); slog.append(new_slogan)
@@ -1083,19 +1052,87 @@ class CatalogWindow(QMainWindow):
                 ps = soup.new_tag("p", **{"class":"slogan"}); ps.string = new_slogan
                 parent.append(ps)
 
+    # ---------- Tabs header normalization ----------
+    def _ensure_tabs_header(self, soup: BeautifulSoup):
+        # Desired order & labels
+        order = [
+            ("details", "Details"),
+            ("description", "Description"),
+            ("videos", "Videos"),
+            ("schematic", "Schematic"),
+            ("layout", "Layout"),
+            ("downloads", "Downloads"),
+            ("resources", "Additional Resources"),
+        ]
+
+        main = soup.find("main")
+        if not main:
+            return
+        tcontainer = main.find("div", class_="tab-container")
+        if not tcontainer:
+            return
+
+        tabs = tcontainer.find("div", class_="tabs")
+        if not tabs:
+            tabs = soup.new_tag("div", **{"class": "tabs"})
+            tcontainer.insert(0, tabs)
+
+        # Detect active pane
+        active_id = None
+        for pane in tcontainer.find_all("div", class_="tab-content"):
+            if "active" in (pane.get("class") or []):
+                active_id = pane.get("id")
+                break
+        if not active_id:
+            # Sane default
+            active_id = "schematic"
+
+        # Rebuild buttons in correct order
+        tabs.clear()
+        for sec_id, label in order:
+            # Only create if section exists (create Description, Videos placeholders if absent)
+            sec = tcontainer.find("div", class_="tab-content", id=sec_id)
+            if not sec:
+                if sec_id == "description":
+                    sec = self._ensure_section(soup, "description", "Description")
+                elif sec_id == "videos":
+                    sec = self._ensure_section(soup, "videos", "Videos")
+                else:
+                    continue
+            b = soup.new_tag("button", **{"class":"tab"})
+            b.attrs["onclick"] = f"showTab('{sec_id}', this)"
+            b.string = label
+            if sec_id == active_id:
+                b["class"] = "tab active"
+            tabs.append(b)
+
     # ---------- Save helpers (Detail pages) ----------
-    def _ensure_global_lightbox(self, soup: BeautifulSoup):
-        if soup.find(id="lightbox"): return
-        body = soup.body or soup
-        glb = soup.new_tag("div", id="lightbox", **{"aria-hidden":"true", "role":"dialog", "aria-label":"Image viewer"})
-        glb_img = soup.new_tag("img", id="lightbox-img", alt="Expanded image")
-        glb.append(glb_img)
-        body.append(glb)
+    def _ensure_section(self, soup: BeautifulSoup, sec_id: str, heading_text: str):
+        main = soup.find("main")
+        if not main:
+            main = soup.new_tag("main")
+            (soup.body or soup).append(main)
+        div = main.find("div", class_="tab-content", id=sec_id)
+        if not div:
+            div = soup.new_tag("div", **{"class":"tab-content", "id":sec_id})
+            main.append(div)
+        # ensure a heading (h2) as first element
+        h2 = None
+        for ch in div.children:
+            if getattr(ch, "name", None) == "h2": h2 = ch; break
+        if not h2:
+            h2 = soup.new_tag("h2"); h2.string = heading_text
+            div.insert(0, h2)
+        else:
+            if not h2.get_text(strip=True): h2.string = heading_text
+            else: h2.string.replace_with(heading_text)
+        return div
 
     def _save_detail_into_soup(self, soup: BeautifulSoup):
-        # DETAILS
-        det_div = self._ensure_section_with_comment(soup, "details", "PCB Details", "DETAILS TAB")
-        for node in list(det_div.find_all(recursive=False))[1:]: node.decompose()
+        # ----- Details -----
+        det_div = self._ensure_section(soup, "details", "PCB Details")
+        for node in list(det_div.find_all(recursive=False))[1:]:
+            node.decompose()
         def mk_detail(label: str, value: str):
             p = soup.new_tag("p")
             strong = soup.new_tag("strong"); strong.string = f"{label}:"
@@ -1107,35 +1144,59 @@ class CatalogWindow(QMainWindow):
         det_div.append(mk_detail("Pieces per Panel", self.det_pieces.text().strip()))
         det_div.append(mk_detail("Panel Size", self.det_panel.text().strip()))
 
-        # DESCRIPTION
-        dsc_div = self._ensure_section_with_comment(soup, "description", "Description", "DESCRIPTION TAB")
-        for node in list(dsc_div.find_all(recursive=False))[1:]: node.decompose()
+        # ----- Description (seed + generated) -----
+        dsc_div = self._ensure_section(soup, "description", "Description")
+        for node in list(dsc_div.find_all(recursive=False))[1:]:
+            node.decompose()
 
-        h3s = soup.new_tag("h3"); h3s.string = "AI Seed"; dsc_div.append(h3s)
-        pseed = soup.new_tag("p"); pseed.string = self.desc_seed.toPlainText().strip(); dsc_div.append(pseed)
-        h3g = soup.new_tag("h3"); h3g.string = "AI Generated"; dsc_div.append(h3g)
+        # Seed
+        h3s = soup.new_tag("h3"); h3s.string = "AI Seed"
+        dsc_div.append(h3s)
+        # Preserve line breaks as a paragraph with <br> for readability
+        seed_text = self.desc_seed.toPlainText().strip()
+        pseed = soup.new_tag("p")
+        if seed_text:
+            for i, line in enumerate(seed_text.splitlines()):
+                if i: pseed.append(soup.new_tag("br"))
+                pseed.append(line)
+        dsc_div.append(pseed)
+
+        # Generated
+        h3g = soup.new_tag("h3"); h3g.string = "AI Generated"
+        dsc_div.append(h3g)
         wrap = soup.new_tag("div", **{"class":"generated"})
-        gen_html = (self._desc_generated_raw_html or "").strip()
-        if gen_html:
-            temp = BeautifulSoup(f"<div id='__gen__'>{gen_html}</div>", "html.parser")
-            container = temp.find(id="__gen__")
-            for child in list(container.contents):
-                frag = BeautifulSoup(str(child), "html.parser")
-                for cc in list(frag.contents):
-                    wrap.append(cc)
+
+        # Insert generated HTML fragment safely (strip QTextEdit wrappers)
+        frag = self.desc_generated.toHtml().strip()
+        try:
+            inner = BeautifulSoup(frag, "html.parser")
+            body = inner.find("body")
+            nodes = (body.contents if body else inner.contents)
+            # Copy nodes into wrap (avoid moving same instances across soups)
+            for node in nodes:
+                if isinstance(node, NavigableString):
+                    wrap.append(NavigableString(str(node)))
+                else:
+                    wrap.append(BeautifulSoup(str(node), "html.parser"))
+        except Exception:
+            p = soup.new_tag("p"); p.string = self.desc_generated.toPlainText()
+            wrap.append(p)
         dsc_div.append(wrap)
 
-        # VIDEOS (prefer existing id)
-        tbc = self._ensure_tab_container(soup)
-        existing_videos = tbc.find("div", id="videos")
-        sim_id = "videos" if existing_videos else "simulation"
-        sim_div = self._ensure_section_with_comment(soup, sim_id, "Videos", "VIDEOS TAB")
-        for node in list(sim_div.find_all(recursive=False))[1:]: node.decompose()
-        self._write_iframe_list(soup, sim_div, self._table_to_list(self.sim_table))
+        # ----- Videos (canonical id="videos"; merge legacy if present) -----
+        vids_div = self._ensure_section(soup, "videos", "Videos")
+        for node in list(vids_div.find_all(recursive=False))[1:]:
+            node.decompose()
+        self._write_iframe_list(soup, vids_div, self._table_to_list(self.sim_table))
+        # Remove legacy "simulation" section if it exists (we’ve migrated)
+        legacy = soup.find("div", class_="tab-content", id="simulation")
+        if legacy:
+            legacy.decompose()
 
-        # SCHEMATIC
-        sch_div = self._ensure_section_with_comment(soup, "schematic", "Schematic", "SCHEMATIC TAB")
-        for node in list(sch_div.find_all(recursive=False))[1:]: node.decompose()
+        # ----- Schematic -----
+        sch_div = self._ensure_section(soup, "schematic", "Schematic")
+        for node in list(sch_div.find_all(recursive=False))[1:]:
+            node.decompose()
         lb = soup.new_tag("div", **{"class":"lightbox-container"})
         img = soup.new_tag("img", **{
             "class": "zoomable",
@@ -1143,25 +1204,27 @@ class CatalogWindow(QMainWindow):
             "alt": self.sch_alt.text().strip() or "Schematic",
             "onclick": "openLightbox(this)",
         })
-        lb.append(img); sch_div.append(lb)
+        lb.append(img)
+        sch_div.append(lb)
 
-        # LAYOUT
-        lay_div = self._ensure_section_with_comment(soup, "layout", "Layout", "LAYOUT TAB")
-        for node in list(lay_div.find_all(recursive=False))[1:]: node.decompose()
+        # ----- Layout -----
+        lay_div = self._ensure_section(soup, "layout", "Layout")
+        for node in list(lay_div.find_all(recursive=False))[1:]:
+            node.decompose()
         limg = soup.new_tag("img", **{
             "class": "zoomable",
             "src": self.lay_src.text().strip(),
-            "alt": self.lay_alt.text().strip() or "Board Layout",
+            "alt": self.lay_alt.text().strip() or "Top view of miniPCB",
             "onclick": "openLightbox(this)",
         })
-        lay_div.append(limg)
+        lb2 = soup.new_tag("div", **{"class":"lightbox-container"})
+        lb2.append(limg)
+        lay_div.append(lb2)
 
-        # LIGHTBOX
-        self._ensure_global_lightbox(soup)
-
-        # DOWNLOADS
-        dl_div = self._ensure_section_with_comment(soup, "downloads", "Downloads", "DOWNLOADS TAB")
-        for node in list(dl_div.find_all(recursive=False))[1:]: node.decompose()
+        # ----- Downloads -----
+        dl_div = self._ensure_section(soup, "downloads", "Downloads")
+        for node in list(dl_div.find_all(recursive=False))[1:]:
+            node.decompose()
         ul = soup.new_tag("ul", **{"class":"download-list"})
         for text, href in self._iter_download_rows():
             if not (text or href): continue
@@ -1171,9 +1234,10 @@ class CatalogWindow(QMainWindow):
             li.append(a); ul.append(li)
         dl_div.append(ul)
 
-        # RESOURCES
-        res_div = self._ensure_section_with_comment(soup, "resources", "Additional Resources", "RESOURCES TAB")
-        for node in list(res_div.find_all(recursive=False))[1:]: node.decompose()
+        # ----- Resources -----
+        res_div = self._ensure_section(soup, "resources", "Additional Resources")
+        for node in list(res_div.find_all(recursive=False))[1:]:
+            node.decompose()
         self._write_iframe_list(soup, res_div, self._table_to_list(self.res_table))
 
     # ---------- Save helpers (Collection pages) ----------
@@ -1185,102 +1249,112 @@ class CatalogWindow(QMainWindow):
         if not section:
             section = soup.new_tag("section"); main.append(section)
 
-        existing_tbl = section.find("table") or main.find("table")
-        if existing_tbl:
-            tbody = existing_tbl.find("tbody")
-            if not tbody:
-                tbody = soup.new_tag("tbody")
-                existing_tbl.append(tbody)
-            for tr in list(tbody.find_all("tr")): tr.decompose()
-            for r in range(self.collection_tbl.rowCount()):
-                part = (self.collection_tbl.item(r,0).text().strip() if self.collection_tbl.item(r,0) else "")
-                title_text = (self.collection_tbl.item(r,1).text().strip() if self.collection_tbl.item(r,1) else "")
-                href = (self.collection_tbl.item(r,2).text().strip() if self.collection_tbl.item(r,2) else "")
-                pieces = (self.collection_tbl.item(r,3).text().strip() if self.collection_tbl.item(r,3) else "")
-                if not (part or title_text or href or pieces): continue
-                tr = soup.new_tag("tr")
-                td_part = soup.new_tag("td"); td_part.string = part; tr.append(td_part)
-                td_title = soup.new_tag("td")
-                if title_text or href:
-                    a = soup.new_tag("a", href=(href or "#"))
-                    a.string = title_text or href
-                    td_title.append(a)
-                tr.append(td_title)
-                td_pieces = soup.new_tag("td"); td_pieces.string = pieces; tr.append(td_pieces)
-                tbody.append(tr)
-        else:
-            tbl = soup.new_tag("table")
-            thead = soup.new_tag("thead"); trh = soup.new_tag("tr")
-            for name in ("Part No", "Title", "Pieces per Panel"):
-                th = soup.new_tag("th"); th.string = name; trh.append(th)
-            thead.append(trh); tbl.append(thead)
-            tbody = soup.new_tag("tbody")
-            for r in range(self.collection_tbl.rowCount()):
-                part = (self.collection_tbl.item(r,0).text().strip() if self.collection_tbl.item(r,0) else "")
-                title_text = (self.collection_tbl.item(r,1).text().strip() if self.collection_tbl.item(r,1) else "")
-                href = (self.collection_tbl.item(r,2).text().strip() if self.collection_tbl.item(r,2) else "")
-                pieces = (self.collection_tbl.item(r,3).text().strip() if self.collection_tbl.item(r,3) else "")
-                if not (part or title_text or href or pieces): continue
-                tr = soup.new_tag("tr")
-                td_part = soup.new_tag("td"); td_part.string = part; tr.append(td_part)
-                td_title = soup.new_tag("td")
-                if title_text or href:
-                    a = soup.new_tag("a", href=(href or "#"))
-                    a.string = title_text or href
-                    td_title.append(a)
-                tr.append(td_title)
-                td_pieces = soup.new_tag("td"); td_pieces.string = pieces; tr.append(td_pieces)
-                tbody.append(tr)
-            tbl.append(tbody)
-            section.append(tbl)
+        old_tbl = section.find("table") or main.find("table")
+        if old_tbl: old_tbl.decompose()
 
-    # ---------- Pretty formatting ----------
-    def _format_for_humans(self, html: str) -> str:
+        tbl = soup.new_tag("table")
+        thead = soup.new_tag("thead"); trh = soup.new_tag("tr")
+        for name in ("Part No", "Title", "Pieces per Panel"):
+            th = soup.new_tag("th"); th.string = name; trh.append(th)
+        thead.append(trh); tbl.append(thead)
+
+        tbody = soup.new_tag("tbody")
+        for r in range(self.collection_tbl.rowCount()):
+            part = (self.collection_tbl.item(r,0).text().strip() if self.collection_tbl.item(r,0) else "")
+            title_text = (self.collection_tbl.item(r,1).text().strip() if self.collection_tbl.item(r,1) else "")
+            href = (self.collection_tbl.item(r,2).text().strip() if self.collection_tbl.item(r,2) else "")
+            pieces = (self.collection_tbl.item(r,3).text().strip() if self.collection_tbl.item(r,3) else "")
+            if not (part or title_text or href or pieces):
+                continue
+            tr = soup.new_tag("tr")
+            td_part = soup.new_tag("td"); td_part.string = part; tr.append(td_part)
+            td_title = soup.new_tag("td")
+            if title_text or href:
+                a = soup.new_tag("a", href=(href or "#"))
+                a.string = title_text or href
+                td_title.append(a)
+            tr.append(td_title)
+            td_pieces = soup.new_tag("td"); td_pieces.string = pieces; tr.append(td_pieces)
+            tbody.append(tr)
+        tbl.append(tbody)
+        section.append(tbl)
+
+    # ---------- Global lightbox ----------
+    def _ensure_global_lightbox(self, soup: BeautifulSoup):
+        body = soup.body or soup
+        lb = soup.find("div", id="lightbox")
+        if not lb:
+            lb = soup.new_tag("div", id="lightbox", **{"aria-hidden":"true", "role":"dialog", "aria-label":"Image viewer"})
+            img = soup.new_tag("img", id="lightbox-img", alt="Expanded image")
+            lb.append(img)
+            body.append(lb)
+
+        # Ensure the script block for tabs/lightbox exists (and uses showTab(id, this))
+        have_script = False
+        for sc in body.find_all("script"):
+            if sc.string and "function showTab" in sc.string:
+                have_script = True; break
+        if not have_script:
+            sc = soup.new_tag("script")
+            sc.string = """
+    // Tabs
+    function showTab(id, btn) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tabs .tab').forEach(el => el.classList.remove('active'));
+      var pane = document.getElementById(id);
+      if (pane) pane.classList.add('active');
+      if (btn) btn.classList.add('active');
+    }
+
+    // Lightbox
+    const lb = document.getElementById('lightbox');
+    const lbImg = document.getElementById('lightbox-img');
+
+    function openLightbox(imgEl) {
+      const src = imgEl.dataset && imgEl.dataset.full ? imgEl.dataset.full : imgEl.src;
+      lbImg.src = src;
+      lb.classList.add('open');
+      lb.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('no-scroll');
+    }
+
+    function closeLightbox() {
+      lb.classList.remove('open');
+      lb.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('no-scroll');
+      setTimeout(() => { lbImg.src = ''; }, 150);
+    }
+
+    lb.addEventListener('click', (e) => { if (e.target === lb) closeLightbox(); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && lb.classList.contains('open')) closeLightbox();
+    });
+            """.strip("\n")
+            body.append(sc)
+
+    # ---------- Prettifier ----------
+    def _pretty_html(self, soup: BeautifulSoup) -> str:
         """
-        Make common blocks easy to read:
-          - Keep <!-- comments --> on their own lines
-          - Put UL/OL/LI and TABLE/THEAD/TBODY/TR/TH/TD on their own lines
-          - Put P, H1–H6, BUTTON on their own lines
-          - Separate tab containers, tab-content, video-wrapper, lightbox
-          - Tidy <script>, <link>, <meta> spacing
-          - Collapse runs of blank lines
+        Make HTML human-readable:
+          - Use prettify() for indentation
+          - Re-introduce <!DOCTYPE html>
+          - Small attribute cleanups (allowfullscreen boolean)
         """
-        if not html:
-            return html
+        # Ensure Google tag stays in <head> order (if present)
+        # (We don't reorder aggressively here to avoid surprises.)
 
-        # Comments on own lines
-        html = re.sub(r"\s*<!--", r"\n<!--", html)
-        html = re.sub(r"-->[\t ]*", r"-->\n", html)
+        # Prettify
+        pretty = soup.prettify(formatter="html5")
 
-        # Table/list blocks
-        tbl = r"(table|thead|tbody|tfoot|tr|th|td|ul|ol|li)"
-        html = re.sub(r"\s*<(?=" + tbl + r"\b)", r"\n<", html, flags=re.I)
-        html = re.sub(r"</(" + tbl + r")>\s*", r"</\1>\n", html, flags=re.I)
+        # boolean attr: allowfullscreen="True" -> allowfullscreen
+        pretty = re.sub(r' allowfullscreen="?(True|true|1)"?', ' allowfullscreen', pretty)
 
-        # Paragraphs/headings/buttons
-        html = re.sub(r"\s*<(p|h[1-6]|button)\b", r"\n<\1", html, flags=re.I)
-        html = re.sub(r"</(p|h[1-6])>\s*", r"</\1>\n", html, flags=re.I)
+        # Some older attrs sometimes sneak in; keep minimal cleanup.
+        # Ensure doctype present
+        if not re.match(r'(?i)^\s*<!DOCTYPE html>', pretty):
+            pretty = "<!DOCTYPE html>\n" + pretty
 
-        # Wrappers
-        html = re.sub(r"\s*<(div[^>]*\b(tab-container|tabs|tab-content|video-wrapper|lightbox-container)\b[^>]*)>", r"\n<\1>", html, flags=re.I)
-
-        # Main structural elements
-        html = re.sub(r"\s*<(nav|header|main|footer|section)\b", r"\n<\1", html, flags=re.I)
-        html = re.sub(r"</(nav|header|main|footer|section)>\s*", r"</\1>\n", html, flags=re.I)
-
-        # Scripts/links/meta
-        html = re.sub(r"\s*<(script|link|meta)\b", r"\n<\1", html, flags=re.I)
-        html = re.sub(r"</script>\s*", r"</script>\n", html, flags=re.I)
-
-        # Body/html endings
-        html = re.sub(r"</(body|html)>\s*$", r"</\1>\n", html, flags=re.I)
-
-        # Collapse extra blank lines
-        html = re.sub(r"\n{3,}", "\n\n", html)
-
-        # Trim trailing spaces
-        html = "\n".join(line.rstrip() for line in html.splitlines())
-        return html
+        return pretty
 
     # ---------- Settings ----------
     def open_settings_dialog(self):
@@ -1356,8 +1430,8 @@ class CatalogWindow(QMainWindow):
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{safe}</title>
 
-  <link rel="stylesheet" href="../styles.css"/>
   <link rel="icon" type="image/png" href="/favicon.png"/>
+  <link rel="stylesheet" href="/styles.css"/>
   <meta name="keywords" content=""/>
   <meta name="description" content=""/>
 </head>
@@ -1365,7 +1439,7 @@ class CatalogWindow(QMainWindow):
   <nav>
     <div class="nav-container">
       <ul class="nav-links">
-        <li><a href="../index.html">Home</a></li>
+        <li><a href="/index.html">Home</a></li>
       </ul>
     </div>
   </nav>
@@ -1379,12 +1453,12 @@ class CatalogWindow(QMainWindow):
     <div class="tab-container">
       <div class="tabs">
         <button class="tab" onclick="showTab('details', this)">Details</button>
+        <button class="tab" onclick="showTab('description', this)">Description</button>
+        <button class="tab" onclick="showTab('videos', this)">Videos</button>
         <button class="tab active" onclick="showTab('schematic', this)">Schematic</button>
         <button class="tab" onclick="showTab('layout', this)">Layout</button>
-        <button class="tab" onclick="showTab('videos', this)">Videos</button>
         <button class="tab" onclick="showTab('downloads', this)">Downloads</button>
         <button class="tab" onclick="showTab('resources', this)">Additional Resources</button>
-        <button class="tab" onclick="showTab('description', this)">Description</button>
       </div>
 
       <!-- DETAILS TAB -->
@@ -1397,16 +1471,25 @@ class CatalogWindow(QMainWindow):
         <p><strong>Panel Size:</strong> </p>
       </div>
 
+      <!-- DESCRIPTION TAB -->
+      <div id="description" class="tab-content">
+        <h2>Description</h2>
+        <h3>AI Seed</h3>
+        <p></p>
+        <h3>AI Generated</h3>
+        <div class="generated"></div>
+      </div>
+
+      <!-- VIDEOS TAB -->
+      <div id="videos" class="tab-content">
+        <h2>Videos</h2>
+      </div>
+
       <!-- SCHEMATIC TAB -->
       <div id="schematic" class="tab-content active">
         <h2>Schematic</h2>
         <div class="lightbox-container">
-          <img
-            src=""
-            alt="Schematic"
-            class="zoomable"
-            onclick="openLightbox(this)"
-          />
+          <img class="zoomable" alt="Schematic" src="" onclick="openLightbox(this)"/>
         </div>
       </div>
 
@@ -1414,18 +1497,8 @@ class CatalogWindow(QMainWindow):
       <div id="layout" class="tab-content">
         <h2>Layout</h2>
         <div class="lightbox-container">
-          <img
-            src=""
-            alt="Board Layout"
-            class="zoomable"
-            onclick="openLightbox(this)"
-          />
+          <img class="zoomable" alt="Top view of miniPCB" src="" onclick="openLightbox(this)"/>
         </div>
-      </div>
-
-      <!-- VIDEOS TAB -->
-      <div id="videos" class="tab-content">
-        <h2>Videos</h2>
       </div>
 
       <!-- DOWNLOADS TAB -->
@@ -1438,41 +1511,23 @@ class CatalogWindow(QMainWindow):
       <div id="resources" class="tab-content">
         <h2>Additional Resources</h2>
       </div>
-
-      <!-- DESCRIPTION TAB -->
-      <div id="description" class="tab-content">
-        <h2>Description</h2>
-        <h3>AI Seed</h3>
-        <p></p>
-        <h3>AI Generated</h3>
-        <div class="generated"></div>
-      </div>
     </div>
   </main>
 
-  <footer>© {year} miniPCB. All rights reserved.</footer>
+  <footer>&copy; {year} miniPCB. All rights reserved.</footer>
 
-  <!-- Global lightbox at end of body -->
+  <!-- Global lightbox lives at the end of <body>, not inside a tab -->
   <div id="lightbox" aria-hidden="true" role="dialog" aria-label="Image viewer">
     <img id="lightbox-img" alt="Expanded image"/>
   </div>
 
   <script>
-    // Tabs: works with showTab('id') or showTab('id', this)
+    // Tabs
     function showTab(id, btn) {{
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tabs .tab').forEach(el => el.classList.remove('active'));
       var pane = document.getElementById(id);
       if (pane) pane.classList.add('active');
-
-      // If no button passed, try to locate by inline onclick content
-      if (!btn) {{
-        try {{
-          var q = Array.from(document.querySelectorAll('.tabs .tab'))
-            .find(b => (b.getAttribute('onclick')||'').indexOf(\"'\"+id+\"'\") !== -1);
-          if (q) btn = q;
-        }} catch (e) {{}}
-      }}
       if (btn) btn.classList.add('active');
     }}
 
@@ -1481,7 +1536,7 @@ class CatalogWindow(QMainWindow):
     const lbImg = document.getElementById('lightbox-img');
 
     function openLightbox(imgEl) {{
-      const src = imgEl.dataset.full || imgEl.src;
+      const src = imgEl.dataset && imgEl.dataset.full ? imgEl.dataset.full : imgEl.src;
       lbImg.src = src;
       lb.classList.add('open');
       lb.setAttribute('aria-hidden', 'false');
@@ -1597,8 +1652,10 @@ class CatalogWindow(QMainWindow):
             self.path_label.setStyleSheet("color:#4CE06A; font-weight:600;")  # green while unsaved
         else:
             self._dirty = False
+            self.autosave_secs_left = self.autosave_interval
+            # Show idle marker (no countdown)
             self.autosave_label.setText("Autosave in: --s")
-            self.path_label.setStyleSheet("")
+            self.path_label.setStyleSheet("")  # default theme color
 
     def _autosave_tick(self):
         if not self.current_path:
@@ -1610,11 +1667,15 @@ class CatalogWindow(QMainWindow):
             if self.autosave_secs_left == 0:
                 self.save_from_form(silent=True)
         else:
+            # idle
+            if self.autosave_secs_left != self.autosave_interval:
+                self.autosave_secs_left = self.autosave_interval
             self.autosave_label.setText("Autosave in: --s")
 
     # ---------- Description AI: UI/state ----------
     def _start_desc_ai(self):
-        if self._ai_running: return
+        if self._ai_running:
+            return
         if not OPENAI_AVAILABLE:
             self._warn("OpenAI not installed", "Install with:\n\n    pip install openai\n")
             return
@@ -1629,13 +1690,17 @@ class CatalogWindow(QMainWindow):
         h1 = self.ed_h1.text().strip()
         part_no = self.det_part.text().strip()
 
+        # Start ETA from stats
         self._ai_eta_sec = self._estimate_eta_sec(doc_type="description")
         self._ai_start_ts = datetime.datetime.now()
         self._ai_running = True
         self.btn_desc_generate.setEnabled(False)
         self._update_ai_label(elapsed=0, eta=self._ai_eta_sec, status="running")
+
+        # Start timer UI
         self.ai_timer.start(250)
 
+        # Kick worker
         self.worker = DescAIWorker(
             api_key=self.openai_key,
             model_name=self.openai_model,
@@ -1671,6 +1736,7 @@ class CatalogWindow(QMainWindow):
         self.lbl_desc_ai.setText(txt)
 
     def _on_desc_ai_finished(self, result: dict):
+        # stop timer ASAP
         elapsed = int(result.get("elapsed", 0))
         self._update_ai_label(elapsed=elapsed, eta=self._ai_eta_sec, status="done")
         self.ai_timer.stop()
@@ -1685,10 +1751,10 @@ class CatalogWindow(QMainWindow):
 
         html = result.get("html","").strip()
         if html:
-            self._desc_generated_raw_html = html
             self.desc_generated.setHtml(html)
-            self._on_any_changed()
+            self._on_any_changed()  # mark dirty so save will persist
 
+        # record stats
         self._record_run(duration_sec=max(1, elapsed), doc_type="description", ok=True)
 
     # ---------- AI stats persistence (ETA) ----------
@@ -1744,30 +1810,83 @@ class CatalogWindow(QMainWindow):
         if len(overall_recent) >= 3:
             med = self._percentile(overall_recent, 0.5)
             if med: return int(round(med))
-        return 60
+        return 60  # default ETA
 
     def _record_run(self, duration_sec: float, doc_type: str, ok: bool=True):
         stats = self._load_stats()
         edges = stats.get("bin_edges_sec", [15,30,60,120,300,600])
         idx = self._bin_index(edges, duration_sec)
+        # ensure slot
         by = stats.setdefault("by_doc_type", {})
         slot = by.setdefault(doc_type, {"runs":0,"hist":[0]*(len(edges)+1),"ewma_sec":None,"last_durations_sec":[]})
         overall = stats.setdefault("overall", {"runs":0,"hist":[0]*(len(edges)+1),"ewma_sec":None,"last_durations_sec":[]})
+
+        # updates
         slot["runs"] += 1
-        if len(slot["hist"]) < len(edges)+1: slot["hist"] += [0]*((len(edges)+1)-len(slot["hist"]))
+        if len(slot["hist"]) < len(edges)+1: slot["hist"] = slot["hist"] + [0]*((len(edges)+1)-len(slot["hist"]))
         slot["hist"][idx] += 1
         lst = slot["last_durations_sec"]; lst.append(int(duration_sec))
         if len(lst) > 50: del lst[:len(lst)-50]
         a = 0.25
         slot["ewma_sec"] = (a * duration_sec + (1-a) * slot["ewma_sec"]) if slot.get("ewma_sec") else duration_sec
+
         overall["runs"] += 1
-        if len(overall["hist"]) < len(edges)+1: overall["hist"] += [0]*((len(edges)+1)-len(overall["hist"]))
+        if len(overall["hist"]) < len(edges)+1: overall["hist"] = overall["hist"] + [0]*((len(edges)+1)-len(overall["hist"]))
         overall["hist"][idx] += 1
         olst = overall["last_durations_sec"]; olst.append(int(duration_sec))
         if len(olst) > 50: del olst[:len(olst)-50]
         overall["ewma_sec"] = (a * duration_sec + (1-a) * overall["ewma_sec"]) if overall.get("ewma_sec") else duration_sec
+
         stats["updated_at"] = today_iso()
         self._save_stats(stats)
+
+    # ---------- Part No auto-fill ----------
+    def _on_part_edited(self, txt: str):
+        if self._loading:
+            return
+        part = (txt or "").strip()
+        if not part:
+            return
+
+        sch_suggest = f"../images/{part}_schematic_01.png"
+        lay_suggest = f"../images/{part}_components_top.png"
+
+        auto_rx = re.compile(
+            r"^\.\./images/([A-Za-z0-9_.\-]+)_(schematic_01|components_top)\.(png|jpg|jpeg|gif|webp)$",
+            re.I,
+        )
+
+        def _should_fill(current_value: str, new_value: str) -> bool:
+            cv = (current_value or "").strip()
+            if not cv:
+                return True
+            m = auto_rx.match(cv)
+            if not m:
+                return False
+            old_part = m.group(1)
+            return old_part != part
+
+        if _should_fill(self.sch_src.text(), sch_suggest):
+            self.sch_src.setText(sch_suggest)
+        if _should_fill(self.lay_src.text(), lay_suggest):
+            self.lay_src.setText(lay_suggest)
+
+        title = (self.det_title.text() or "").strip()
+        schem_alt_suggest = f"Schematic for {part} {title}".strip()
+        lay_alt_suggest = f"Top view of miniPCB {part}"
+
+        def _alt_should_fill(current_value: str, prefix: str) -> bool:
+            cv = (current_value or "").strip()
+            return (not cv) or cv.startswith(prefix)
+
+        if _alt_should_fill(self.sch_alt.text(), "Schematic for "):
+            self.sch_alt.setText(schem_alt_suggest)
+        if _alt_should_fill(self.lay_alt.text(), "Top view of miniPCB"):
+            self.lay_alt.setText(lay_alt_suggest)
+
+        self._update_preview('schematic')
+        self._update_preview('layout')
+        self._on_any_changed()
 
 # ---------- App boot ----------
 def ensure_content_root() -> Path:
