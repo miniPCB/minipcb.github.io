@@ -26,20 +26,19 @@ from ..services.image_service import ImageService
 from ..services.index_service import IndexService
 from ..services.template_service import TemplateService
 
+# Qt / stdlib imports go here …
 
-# ---------- Plain Qt icons (no overlays)
-class _PlainIconProvider(QFileIconProvider):
-    def icon(self, info):
-        try:
-            from PyQt5.QtCore import QFileInfo
-            if isinstance(info, QFileInfo):
-                if info.isDir():
-                    return QApplication.style().standardIcon(QStyle.SP_DirIcon)
-                return QApplication.style().standardIcon(QStyle.SP_FileIcon)
-        except Exception:
-            pass
-        return QApplication.style().standardIcon(QStyle.SP_FileIcon)
-
+# ✅ Correct package-relative imports (ui → utils)
+from .widgets import PlainIconProvider, FitImageLabel
+from ..utils.table_utils import make_table
+from ..utils import (
+    nav_utils,
+    sections_utils,
+    testing_utils,
+    header_utils,
+    seeds_utils,
+    image_preview,
+)
 
 # ---------- Helpers
 def _now_stamp() -> str:
@@ -53,42 +52,6 @@ def _rel_href(from_file: Path, site_root: Path, target_rel_to_root: Path) -> str
         return str(rel).replace("\\", "/")
     except Exception:
         return target_rel_to_root.as_posix()
-
-
-class _FitImageLabel(QLabel):
-    """Keep original pixmap; scale-to-fit on resize (no crop)."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._orig: Optional[QPixmap] = None
-        self.setAlignment(Qt.AlignCenter)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setMinimumHeight(320)
-        self.setText("")
-
-    def set_image_path(self, path: str):
-        self._orig = None
-        self.clear()
-        if not path:
-            self.setText("No image")
-            return
-        pix = QPixmap(path)
-        if pix.isNull():
-            self.setText(f"Image not found:\n{path}")
-            return
-        self._orig = pix
-        self._rescale()
-
-    def resizeEvent(self, e):
-        super().resizeEvent(e)
-        self._rescale()
-
-    def _rescale(self):
-        if self._orig is None:
-            return
-        size = self.size()
-        if size.width() <= 0 or size.height() <= 0:
-            return
-        self.setPixmap(self._orig.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
 
 # ========================= Main Window =========================
@@ -190,7 +153,7 @@ class MainWindow(QMainWindow):
 
         # Left: file explorer
         self.fs_model = QFileSystemModel(self)
-        self.fs_model.setIconProvider(_PlainIconProvider())
+        self.fs_model.setIconProvider(PlainIconProvider())
         self.fs_model.setRootPath(str(self.ctx.root))
         self.fs_model.setFilter(QDir.AllDirs | QDir.Files | QDir.NoDotAndDotDot)
         self.fs_model.setNameFilters(["*.html", "*.htm", "*.md", "*.markdown"])
@@ -343,7 +306,7 @@ class MainWindow(QMainWindow):
         self.sch_src.textChanged.connect(lambda *_: (self._on_dirty(True), self._maybe_refresh_image_preview("Schematic")))
         self.sch_alt.textChanged.connect(lambda *_: self._on_dirty(True))
         schf.addRow("Image src:", self.sch_src); schf.addRow("Alt text:", self.sch_alt)
-        self.sch_preview = _FitImageLabel(self.w_schematic)
+        self.sch_preview = FitImageLabel(self.w_schematic)
         schf.addRow(self.sch_preview)
         self.subtabs.addTab(self.w_schematic, "Schematic")
 
@@ -354,7 +317,7 @@ class MainWindow(QMainWindow):
         self.lay_src.textChanged.connect(lambda *_: (self._on_dirty(True), self._maybe_refresh_image_preview("Layout")))
         self.lay_alt.textChanged.connect(lambda *_: self._on_dirty(True))
         layf.addRow("Image src:", self.lay_src); layf.addRow("Alt text:", self.lay_alt)
-        self.lay_preview = _FitImageLabel(self.w_layout)
+        self.lay_preview = FitImageLabel(self.w_layout)
         layf.addRow(self.lay_preview)
         self.subtabs.addTab(self.w_layout, "Layout")
 
@@ -742,109 +705,35 @@ class MainWindow(QMainWindow):
             tbl.setRowCount(0)
 
     def _set_details_from_html(self, html_fragment: str):
-        def _grab(label):
-            m = re.search(rf"<strong>\s*{re.escape(label)}\s*:\s*</strong>\s*([^<]+)", html_fragment, re.I)
-            return (m.group(1).strip() if m else "")
-        self.det_part.setText(_grab("Part No"))
-        self.det_title.setText(_grab("Title"))
-        self.det_board.setText(_grab("Board Size"))
-        self.det_pieces.setText(_grab("Pieces per Panel"))
-        self.det_panel.setText(_grab("Panel Size"))
+        sections_utils.set_details_from_html(self, html_fragment)
 
     def _set_videos_from_html(self, html_fragment: str):
-        self.tbl_videos.setRowCount(0)
-        for m in self._IFRAME_SRC_RX.finditer(html_fragment or ""):
-            r = self.tbl_videos.rowCount(); self.tbl_videos.insertRow(r)
-            self.tbl_videos.setItem(r, 0, QTableWidgetItem(m.group(1)))
+        sections_utils.set_videos_from_html(self, html_fragment)
 
     def _set_resources_from_html(self, html_fragment: str):
-        self.tbl_resources.setRowCount(0)
-        for m in self._IFRAME_SRC_RX.finditer(html_fragment or ""):
-            r = self.tbl_resources.rowCount(); self.tbl_resources.insertRow(r)
-            self.tbl_resources.setItem(r, 0, QTableWidgetItem(m.group(1)))
+        sections_utils.set_resources_from_html(self, html_fragment)
 
     def _set_downloads_from_html(self, html_fragment: str):
-        self.tbl_downloads.setRowCount(0)
-        for m in re.finditer(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html_fragment or "", re.I | re.S):
-            href, text = m.group(1), re.sub(r"\s+", " ", m.group(2)).strip()
-            r = self.tbl_downloads.rowCount(); self.tbl_downloads.insertRow(r)
-            self.tbl_downloads.setItem(r, 0, QTableWidgetItem(text or href))
-            self.tbl_downloads.setItem(r, 1, QTableWidgetItem(href))
+        sections_utils.set_downloads_from_html(self, html_fragment)
 
     def _set_image_fields_from_html(self, section_html: str, which: str):
-        src = ""; alt = ""
-        m = self._IMG_SRC_RX.search(section_html or "")
-        if m: src = m.group(1).strip()
-        m = self._IMG_ALT_RX.search(section_html or "")
-        if m: alt = m.group(1).strip()
-        if which == "schematic":
-            self.sch_src.setText(src); self.sch_alt.setText(alt)
-        else:
-            self.lay_src.setText(src); self.lay_alt.setText(alt)
+        sections_utils.set_image_fields_from_html(self, section_html, which)
 
     def _set_testing_from_html(self, testing_html: str):
-        dtp_out = ""
-        atp_out = ""
-        blocks = re.split(r'(<h3[^>]*>.*?</h3>)', testing_html or "", flags=re.I | re.S)
-        if len(blocks) <= 1:
-            dtp_out = testing_html or ""
-        else:
-            current = None
-            for chunk in blocks:
-                if re.search(r'Developmental\s+Test\s+Plan', chunk, re.I):
-                    current = "dtp"; continue
-                if re.search(r'Automated\s+Test\s+Plan', chunk, re.I):
-                    current = "atp"; continue
-                if current == "dtp": dtp_out += chunk
-                elif current == "atp": atp_out += chunk
-        self.txt_dtp_out.setHtml((dtp_out or "").strip())
-        self.txt_atp_out.setHtml((atp_out or "").strip())
+        testing_utils.set_testing_from_html(self, testing_html)
 
     # ---------- Navigation parse/save
     def _set_nav_from_html(self, html: str):
-        self.tbl_nav.setRowCount(0)
-        m = self._NAV_UL_RX.search(html)
-        if not m:
-            return
-        body = m.group("body")
-        for a in re.finditer(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', body, re.I | re.S):
-            href = a.group(1).strip()
-            text = re.sub(r"\s+", " ", a.group(2)).strip()
-            r = self.tbl_nav.rowCount()
-            self.tbl_nav.insertRow(r)
-            self.tbl_nav.setItem(r, 0, QTableWidgetItem(text or href))
-            self.tbl_nav.setItem(r, 1, QTableWidgetItem(href or "#"))
+        # delegate to utils
+        nav_utils.set_nav_from_html(self, html)
 
     def _write_nav_to_html(self, html: str) -> str:
-        items = []
-        for r in range(self.tbl_nav.rowCount()):
-            text = self.tbl_nav.item(r, 0).text().strip() if self.tbl_nav.item(r, 0) else ""
-            href = self.tbl_nav.item(r, 1).text().strip() if self.tbl_nav.item(r, 1) else ""
-            if not (text or href):
-                continue
-            items.append(f'<li><a href="{href or "#"}">{text or href or "Link"}</a></li>')
-        new_body = "".join(items) if items else ""
-        def repl(m):
-            return m.group(1) + new_body + m.group(3)
-        if self._NAV_UL_RX.search(html):
-            return self._NAV_UL_RX.sub(repl, html, count=1)
-        ul_block = f'<ul class="nav-links">{new_body}</ul>'
-        if "</nav>" in html:
-            return html.replace("</nav>", ul_block + "</nav>", 1)
-        if "<body" in html:
-            return re.sub(r'(<body[^>]*>)', r'\1<nav>' + ul_block + '</nav>', html, count=1, flags=re.I)
-        return html
+        # delegate to utils
+        return nav_utils.write_nav_to_html(self, html)
 
     # ---------- Compose helpers
     def _compose_details_html(self) -> str:
-        def row(label, val): return f'<p><strong>{label}:</strong> {val}</p>' if val else ""
-        return "".join([
-            row("Part No", self.det_part.text().strip()),
-            row("Title", self.det_title.text().strip()),
-            row("Board Size", self.det_board.text().strip()),
-            row("Pieces per Panel", self.det_pieces.text().strip()),
-            row("Panel Size", self.det_panel.text().strip()),
-        ])
+        return sections_utils.compose_details_html(self)
 
     def _compose_iframe_list_html(self, tbl: QTableWidget) -> str:
         out = []
@@ -855,14 +744,7 @@ class MainWindow(QMainWindow):
         return "\n".join(out)
 
     def _compose_downloads_html(self, tbl: QTableWidget) -> str:
-        items = []
-        for r in range(tbl.rowCount()):
-            text = tbl.item(r, 0).text().strip() if tbl.item(r, 0) else ""
-            href = tbl.item(r, 1).text().strip() if tbl.item(r, 1) else ""
-            if not (text or href): continue
-            a = f'<a href="{href or "#"}">{text or href or "Download"}</a>'
-            items.append(f"<li>{a}</li>")
-        return f"<ul>\n{''.join(items)}\n</ul>" if items else ""
+        return sections_utils.compose_downloads_html(tbl)
 
     def _compose_img_block(self, src: str, alt: str) -> str:
         if not src:
@@ -883,12 +765,8 @@ class MainWindow(QMainWindow):
 
     # ---------- Tables helpers
     def _make_table(self, headers: List[str]) -> QTableWidget:
-        tbl = QTableWidget(0, len(headers))
-        tbl.setHorizontalHeaderLabels(headers)
-        tbl.verticalHeader().setVisible(False)
-        for i in range(len(headers)):
-            mode = QHeaderView.Stretch if i == len(headers)-1 else QHeaderView.ResizeToContents
-            tbl.horizontalHeader().setSectionResizeMode(i, mode)
+        # make_table is imported at top from ..utils.table_utils
+        tbl = make_table(headers)
         tbl.cellChanged.connect(lambda *_: self._on_dirty(True))
         return tbl
 
@@ -897,28 +775,16 @@ class MainWindow(QMainWindow):
         v.addWidget(tbl, 1)
         row = QHBoxLayout()
         b_add = QPushButton("Add"); b_add.clicked.connect(lambda: (tbl.insertRow(tbl.rowCount()), self._on_dirty(True)))
-        b_del = QPushButton("Remove Selected")
-        b_del.clicked.connect(lambda: (tbl.removeRow(tbl.currentRow()) if tbl.currentRow() >= 0 else None, self._on_dirty(True)))
+        b_del = QPushButton("Remove Selected"); b_del.clicked.connect(lambda: (tbl.removeRow(tbl.currentRow()) if tbl.currentRow() >= 0 else None, self._on_dirty(True)))
         row.addWidget(b_add); row.addWidget(b_del); row.addStretch(1)
         v.addLayout(row)
         return w
 
     def _nav_del_row(self):
-        r = self.tbl_nav.currentRow()
-        if r >= 0: self.tbl_nav.removeRow(r)
+        nav_utils.nav_del_row(self)
 
     def _move_row(self, tbl: QTableWidget, delta: int):
-        r = tbl.currentRow()
-        if r < 0: return
-        nr = max(0, min(r + delta, tbl.rowCount()-1))
-        if nr == r: return
-        tbl.insertRow(nr)
-        for c in range(tbl.columnCount()):
-            it = tbl.takeItem(r + (1 if nr<r else 0), c)
-            if it is None: it = QTableWidgetItem("")
-            tbl.setItem(nr, c, it)
-        tbl.removeRow(r + (1 if nr<r else 0))
-        tbl.setCurrentCell(nr, 0)
+        nav_utils.move_row(tbl, delta)
 
     # ---------- Components visibility
     def _on_components_changed(self, *_):
@@ -947,35 +813,19 @@ class MainWindow(QMainWindow):
         self._open_seed_dialog("FMEA", target=self._seed_fmea)
 
     def _open_testing_seeds_dialog(self):
-        dlg = QDialog(self); dlg.setWindowTitle("Edit Testing Seeds"); dlg.resize(760, 560)
-        v = QVBoxLayout(dlg)
-        grid = QGridLayout()
-        lbl1 = QLabel("DTP Seed:"); lbl2 = QLabel("ATP Seed:")
-        ed1 = QTextEdit(); ed1.setAcceptRichText(False); ed1.setPlainText(self._seed_dtp.toPlainText()); ed1.setMinimumHeight(200)
-        ed2 = QTextEdit(); ed2.setAcceptRichText(False); ed2.setPlainText(self._seed_atp.toPlainText()); ed2.setMinimumHeight(200)
-        grid.addWidget(lbl1, 0, 0); grid.addWidget(ed1, 0, 1)
-        grid.addWidget(lbl2, 1, 0); grid.addWidget(ed2, 1, 1)
-        v.addLayout(grid)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal, dlg)
-        v.addWidget(btns)
-        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
-        if dlg.exec_() == QDialog.Accepted:
-            self._seed_dtp.setPlainText(ed1.toPlainText().strip())
-            self._seed_atp.setPlainText(ed2.toPlainText().strip())
+        from .dialogs import open_testing_seeds_dialog
+        res = open_testing_seeds_dialog(self, self._seed_dtp.toPlainText(), self._seed_atp.toPlainText())
+        if res:
+            dtp, atp = res
+            self._seed_dtp.setPlainText(dtp)
+            self._seed_atp.setPlainText(atp)
             self._on_dirty(True)
 
     def _open_seed_dialog(self, label: str, target: QTextEdit):
-        dlg = QDialog(self); dlg.setWindowTitle(f"Edit {label} Seed"); dlg.resize(760, 540)
-        v = QVBoxLayout(dlg)
-        info = QLabel(f"Enter seed notes for {label}. Plain text only.")
-        info.setWordWrap(True); v.addWidget(info)
-        ed = QTextEdit(); ed.setAcceptRichText(False); ed.setPlainText(target.toPlainText()); ed.setMinimumHeight(380)
-        v.addWidget(ed, 1)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal, dlg)
-        v.addWidget(btns)
-        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
-        if dlg.exec_() == QDialog.Accepted:
-            target.setPlainText(ed.toPlainText().strip())
+        from .dialogs import open_seed_dialog
+        new_text = open_seed_dialog(self, f"Edit {label} Seed", target.toPlainText())
+        if new_text is not None:
+            target.setPlainText(new_text)
             self._on_dirty(True)
 
     # ---------- Autosave / Dirty / Stats
@@ -1000,8 +850,10 @@ class MainWindow(QMainWindow):
         self.save_current_page()
 
     def _update_autosave_label(self):
-        if self.dirty:
+        if self.dirty and self._countdown > 0:
             self.lbl_autosave.setText(f"Autosave in {self._countdown}s")
+        elif self.dirty:
+            self.lbl_autosave.setText("Autosaving…")
         else:
             self.lbl_autosave.setText("Saved")
 
@@ -1094,49 +946,29 @@ class MainWindow(QMainWindow):
         self._maybe_refresh_image_preview(name)
 
     def _resolve_image_path(self, p: str) -> str:
-        p = (p or "").strip()
-        if not p:
-            return ""
-        if self.current_path and not Path(p).is_absolute():
-            return str((self.current_path.parent / p).resolve())
-        return p
+        return image_preview.resolve_image_path(self, p)
 
     def _maybe_refresh_image_preview(self, name: str):
-        if name == "Schematic":
-            self.sch_preview.set_image_path(self._resolve_image_path(self.sch_src.text()))
-        elif name == "Layout":
-            self.lay_preview.set_image_path(self._resolve_image_path(self.lay_src.text()))
+        image_preview.maybe_refresh_image_preview(self, name)
 
     # ---------- H1 / Slogan helpers
     def _extract_h1(self, html: str) -> str:
-        m = re.search(r'<header[^>]*>\s*<h1[^>]*>(.*?)</h1>', html, re.I | re.S)
-        if m: return re.sub(r'\s+', ' ', m.group(1)).strip()
+        return header_utils.extract_h1(html)
         m = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.I | re.S)
         return re.sub(r'\s+', ' ', m.group(1)).strip() if m else ""
 
     def _extract_slogan(self, html: str) -> str:
-        m = re.search(r'<p[^>]*class=["\']slogan["\'][^>]*>(.*?)</p>', html, re.I | re.S)
-        return re.sub(r'\s+', ' ', m.group(1)).strip() if m else ""
+        return header_utils.extract_slogan(html)
 
     def _set_h1(self, html: str, text: str) -> str:
-        def repl(m): return m.group(1) + text + m.group(3)
-        m = re.search(r'(<header[^>]*>\s*<h1[^>]*>)(.*?)(</h1>)', html, re.I | re.S)
-        if m: return re.sub(r'(<header[^>]*>\s*<h1[^>]*>)(.*?)(</h1>)', repl, html, count=1, flags=re.I | re.S)
-        m = re.search(r'(<h1[^>]*>)(.*?)(</h1>)', html, re.I | re.S)
-        if m: return re.sub(r'(<h1[^>]*>)(.*?)(</h1>)', repl, html, count=1, flags=re.I | re.S)
-        return html
+        return header_utils.set_h1(html, text)
 
     def _set_slogan(self, html: str, text: str) -> str:
-        def repl(m): return m.group(1) + text + m.group(3)
-        m = re.search(r'(<p[^>]*class=["\']slogan["\'][^>]*>)(.*?)(</p>)', html, re.I | re.S)
-        if m: return re.sub(r'(<p[^>]*class=["\']slogan["\'][^>]*>)(.*?)(</p>)', repl, html, count=1, flags=re.I | re.S)
-        return html
+        return header_utils.set_slogan(html, text)
 
     # ---------- AI seeds helpers
     def _read_ai_seeds_from_html(self, html: str) -> Dict[str, Any]:
-        m = self._SEEDS_SCRIPT_RX.search(html)
-        if not m:
-            return {"description_seed": "", "fmea_seed": "", "testing": {"dtp_seed": "", "atp_seed": ""}}
+        return seeds_utils.read_ai_seeds_from_html(html)
         try:
             data = json.loads(m.group(2).strip())
             fmea_seed = data.get("fmea_seed")
@@ -1178,108 +1010,14 @@ class MainWindow(QMainWindow):
 
     # ---------- Navigation: Add Link dialog with filtering
     def _nav_add_link_dialog(self):
-        if not self.ctx.root or not self.ctx.root.exists():
-            QMessageBox.warning(self, "Add Link", "Site root not found."); return
-
-        dlg = QDialog(self); dlg.setWindowTitle("Add Navigation Link"); dlg.resize(820, 600)
-        v = QVBoxLayout(dlg)
-
-        # Filters
-        filt_row = QHBoxLayout()
-        edt_search = QLineEdit(); edt_search.setPlaceholderText("Search by filename or title…")
-        cmb_ext = QComboBox(); cmb_ext.addItems(["All", "HTML", "Markdown"])
-        filt_row.addWidget(QLabel("Filter:"))
-        filt_row.addWidget(edt_search, 1)
-        filt_row.addWidget(QLabel("Type:"))
-        filt_row.addWidget(cmb_ext)
-        v.addLayout(filt_row)
-
-        lst = QListWidget(); v.addWidget(lst, 1)
-
-        frm = QFormLayout()
-        out_text = QLineEdit()
-        out_href = QLineEdit()
-        frm.addRow("Text:", out_text)
-        frm.addRow("Href:", out_href)
-        v.addLayout(frm)
-
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal, dlg)
-        v.addWidget(btns)
-        btns.accepted.connect(dlg.accept); btns.rejected.connect(dlg.reject)
-
-        all_files: List[Path] = []
-        for pat in ("*.html","*.htm","*.md","*.markdown"):
-            all_files.extend(sorted(self.ctx.root.rglob(pat)))
-
-        title_cache: Dict[Path, str] = {}
-        title_rx = re.compile(r'<title[^>]*>(.*?)</title>', re.I | re.S)
-
-        def _get_title(p: Path) -> str:
-            if p in title_cache: return title_cache[p]
-            t = ""
-            try:
-                if p.suffix.lower() in {".html",".htm"}:
-                    txt = p.read_text("utf-8", errors="ignore")
-                    m = title_rx.search(txt)
-                    if m:
-                        t = re.sub(r"\s+", " ", m.group(1)).strip()
-            except Exception:
-                t = ""
-            title_cache[p] = t
-            return t
-
-        def _ext_ok(p: Path) -> bool:
-            if cmb_ext.currentText() == "All": return True
-            if cmb_ext.currentText() == "HTML": return p.suffix.lower() in {".html",".htm"}
-            if cmb_ext.currentText() == "Markdown": return p.suffix.lower() in {".md",".markdown"}
-            return True
-
-        def _score(p: Path) -> int:
-            name = p.name.lower()
-            if name == "index.html": return -100
-            if "index" in name: return -50
-            return 0
-
-        def _apply_filter():
-            lst.clear()
-            q = edt_search.text().strip().lower()
-            items = []
-            for p in all_files:
-                if not _ext_ok(p): continue
-                rel = p.relative_to(self.ctx.root)
-                title = _get_title(p)
-                text = f"{rel.as_posix()} — {title}" if title else rel.as_posix()
-                if q and q not in text.lower(): continue
-                items.append((p, text))
-            items.sort(key=lambda t: (_score(t[0]), t[1].lower()))
-            for p, text in items:
-                it = QListWidgetItem(text)
-                it.setData(Qt.UserRole, str(p))
-                lst.addItem(it)
-
-        _apply_filter()
-        edt_search.textChanged.connect(_apply_filter)
-        cmb_ext.currentIndexChanged.connect(_apply_filter)
-
-        def _on_select():
-            it = lst.currentItem()
-            if not it: return
-            p = Path(it.data(Qt.UserRole))
-            rel = p.relative_to(self.ctx.root)
-            title = _get_title(p)
-            out_text.setText(title or p.stem)
-            href = _rel_href(self.current_path or p, self.ctx.root, rel)
-            out_href.setText(href)
-        lst.currentItemChanged.connect(lambda *_: _on_select())
-        if lst.count() > 0: lst.setCurrentRow(0)
-
-        if dlg.exec_() == QDialog.Accepted:
-            text = out_text.text().strip()
-            href = out_href.text().strip()
-            if not (text or href): return
+        from .dialogs import NavLinkDialog
+        dlg = NavLinkDialog(self.ctx, self.current_path, self)
+        res = dlg.run()
+        if res:
+            text, href = res
             r = self.tbl_nav.rowCount(); self.tbl_nav.insertRow(r)
-            self.tbl_nav.setItem(r, 0, QTableWidgetItem(text or href))
-            self.tbl_nav.setItem(r, 1, QTableWidgetItem(href or "#"))
+            self.tbl_nav.setItem(r, 0, QTableWidgetItem(text))
+            self.tbl_nav.setItem(r, 1, QTableWidgetItem(href))
             self._on_dirty(True)
 
     # ---------- Part change (suggest default image filenames)
