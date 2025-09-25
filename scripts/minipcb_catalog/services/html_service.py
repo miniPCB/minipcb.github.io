@@ -1,206 +1,501 @@
-# minipcb_catalog/services/html_service.py
-"""
-HTMLService — section-aware operations for miniPCB Catalog.
-
-Centralizes how we:
-- Extract/apply section content using comment markers from constants.SECTIONS
-- Ensure missing sections exist (idempotent migration support)
-- Get/set metadata (<title>, keywords, status/slogan)
-- Get/set image src by stable <img id="...">
-- Prettify (light) the HTML without changing semantic content
-- Extract the first <table> in <main> (Collection pages)
-
-This wraps the low-level helpers in utils.html so the rest of the app
-doesn't need to know about markers or regex details.
-"""
-
 from __future__ import annotations
 
-from typing import Dict, Any, List, Tuple
+import re
+from typing import Optional, Dict
 
-from .. import constants
-from ..utils import html as H
+# --------- Regexes (DOTALL, non-greedy) ---------
+
+_TITLE_RX = re.compile(r'(<title[^>]*>)(.*?)(</title>)', re.I | re.S)
+
+# meta name="description"
+_META_DESC_RX = re.compile(
+    r'(<meta[^>]*\bname=["\']description["\'][^>]*\bcontent=["\'])(.*?)((["\'][^>]*>))',
+    re.I | re.S,
+)
+
+# meta name="keywords"
+_META_KEYS_RX = re.compile(
+    r'(<meta[^>]*\bname=["\']keywords["\'][^>]*\bcontent=["\'])(.*?)((["\'][^>]*>))',
+    re.I | re.S,
+)
+
+# <head ...>
+_HEAD_OPEN_RX = re.compile(r'(<head[^>]*>)', re.I)
+
+# <main ...>
+_MAIN_OPEN_RX = re.compile(r'(<main[^>]*>)', re.I)
+
+# Image tag with a specific id
+def _compile_img_tag_rx(img_id: str) -> re.Pattern[str]:
+    esc = re.escape(img_id)
+    # whole <img ...id="img_id"...> tag
+    return re.compile(rf'(<img[^>]*\bid=["\']{esc}["\'][^>]*>)', re.I | re.S)
+
+# generic attribute matchers (run against the single <img> tag string)
+_SRC_RX = re.compile(r'(\bsrc=["\'])([^"\']*)(["\'])', re.I)
+_ALT_RX = re.compile(r'(\balt=["\'])([^"\']*)(["\'])', re.I)
+
+# Section <div id="...">...</div>
+def _compile_section_rx(section_id: str) -> re.Pattern[str]:
+    esc = re.escape(section_id)
+    return re.compile(
+        rf'(<div[^>]*\bid=["\']{esc}["\'][^>]*>)(.*?)(</div>)',
+        re.I | re.S,
+    )
 
 
-class HTMLService:
-    # ---------------------------------------------------------------------
-    # Sections (comment-bounded as specified in constants.SECTIONS)
-    # ---------------------------------------------------------------------
+# --------- Sanitizer for Qt-rich-text & inline styles ---------
 
-    def extract_sections(self, page_html: str) -> Dict[str, str]:
-        """
-        Return a dict {section_id: inner_html} for all known sections.
-        Missing blocks yield the default HTML from constants.SECTION_DEFAULT_HTML.
-        """
-        out: Dict[str, str] = {}
-        S = constants.SECTIONS
-        D = constants.SECTION_DEFAULT_HTML
-        for sid, spec in S.items():
-            if "begin" in spec and "end" in spec:
-                out[sid] = H.get_block_inner(
-                    page_html or "",
-                    spec["begin"],
-                    spec["end"],
-                    D.get(sid, "")
-                ).strip()
-        return out
+_DOCTYPE_RX = re.compile(r'<!DOCTYPE[^>]*>\s*', re.I | re.S)
+_HTML_WRAPPER_RX = re.compile(r'</?html[^>]*>', re.I)
+_HEAD_BLOCK_RX = re.compile(r'<head[^>]*>.*?</head>', re.I | re.S)
+_BODY_BLOCK_RX = re.compile(r'<body[^>]*>(.*?)</body>', re.I | re.S)
+_META_ANY_RX = re.compile(r'<meta[^>]*>', re.I | re.S)
+_STYLE_BLOCK_RX = re.compile(r'<style[^>]*>.*?</style>', re.I | re.S)
+_INLINE_STYLE_RX = re.compile(r'\sstyle="[^"]*"', re.I)
+_SPAN_OPEN_RX = re.compile(r'<span[^>]*>', re.I)
+_SPAN_CLOSE_RX = re.compile(r'</span>', re.I)
+_EMPTY_P_BR_RX = re.compile(r'<p[^>]*>\s*(?:<br\s*/?>)?\s*</p>', re.I | re.S)
+_QT_MARKER_RX = re.compile(r'qrichtext|-qt-', re.I)  # quick detection
 
-    def apply_sections(self, page_html: str, sections: Dict[str, str]) -> str:
-        """
-        Replace (or create) the inner HTML for any provided sections and return updated full HTML.
-        Only applies to comment-bounded sections (those that have begin/end markers).
-        """
-        html = page_html or ""
-        S = constants.SECTIONS
-        D = constants.SECTION_DEFAULT_HTML
-        for sid, new_inner in sections.items():
-            spec = S.get(sid)
-            if not spec or "begin" not in spec or "end" not in spec:
-                continue
-            html = H.set_block_inner(
-                html,
-                spec["begin"],
-                spec["end"],
-                new_inner,
-                D.get(sid, "")
-            )
-        return html
-
-    def ensure_section(self, page_html: str, section_id: str) -> str:
-        """
-        Ensure a given section exists (create an empty/default block if missing).
-        No-op if the section already exists.
-        """
-        spec = constants.SECTIONS.get(section_id)
-        if not spec or "begin" not in spec or "end" not in spec:
-            return page_html
-        default_inner = constants.SECTION_DEFAULT_HTML.get(section_id, "")
-        return H.ensure_block(page_html or "", spec["begin"], spec["end"], default_inner)
-
-    # ---------------------------------------------------------------------
-    # Metadata
-    # ---------------------------------------------------------------------
-
-    def get_title(self, page_html: str) -> str:
-        return H.get_title(page_html or "")
-
-    def set_title(self, page_html: str, new_title: str) -> str:
-        """
-        Safe title setter; uses utils.html to avoid duplicated/garbled titles.
-        """
-        return H.set_title(page_html or "", new_title or "")
-
-    def get_keywords(self, page_html: str) -> str:
-        return H.get_keywords(page_html or "")
-
-    def set_keywords(self, page_html: str, kw: str) -> str:
-        return H.set_keywords(page_html or "", kw or "")
-
-    def get_status_tag(self, page_html: str) -> str:
-        """
-        Reads the <p class="slogan">…</p> text (used as "Slogan"/status tag).
-        """
-        return H.get_status_tag(page_html or "")
-
-    def set_status_tag(self, page_html: str, txt: str) -> str:
-        """
-        Sets (or inserts into <header>) the <p class="slogan">…</p> text.
-        """
-        return H.set_status_tag(page_html or "", txt or "")
-
-    # ---------------------------------------------------------------------
-    # Images by known ids (schematic/layout)
-    # ---------------------------------------------------------------------
-
-    def get_image_src(self, page_html: str, kind: str) -> str:
-        """
-        kind: keys in constants.SECTIONS that carry a 'css' value referencing an <img id="...">,
-              typically "schematic_img" or "layout_img" depending on your constants.
-        """
-        spec = constants.SECTIONS.get(kind, {})
-        css = spec.get("css", "")
-        # We support the convention img#schematic / img#layout
-        if css == "img#schematic":
-            return H.get_img_src_by_id(page_html or "", "schematic")
-        if css == "img#layout":
-            return H.get_img_src_by_id(page_html or "", "layout")
+def sanitize_fragment(fragment: str) -> str:
+    """Strip Qt's rich-text wrappers/doctype/styles and inline style junk.
+    Keep semantic structure (p, ul/ol/li, b/strong/i/em, code/pre, h1..h6, tables)."""
+    if not fragment:
         return ""
 
-    def set_image_src(self, page_html: str, kind: str, src: str) -> str:
-        spec = constants.SECTIONS.get(kind, {})
-        css = spec.get("css", "")
-        if css == "img#schematic":
-            return H.set_img_src_by_id(page_html or "", "schematic", src or "")
-        if css == "img#layout":
-            return H.set_img_src_by_id(page_html or "", "layout", src or "")
-        return page_html
+    f = fragment
 
-    # ---------------------------------------------------------------------
-    # Formatting
-    # ---------------------------------------------------------------------
+    # If it looks like Qt rich text (doctype, qrichtext, or <body>), extract body first
+    looks_qt = (
+        _QT_MARKER_RX.search(f) is not None
+        or _DOCTYPE_RX.search(f) is not None
+        or '<body' in f.lower()
+        or '<html' in f.lower()
+    )
 
-    def prettify(self, html: str) -> str:
-        """
-        Lightweight "pretty print" that keeps content intact:
-        - Normalizes whitespace between tags
-        - Indents nested blocks
-        - Preserves <script>/<style> contents
-        This is implemented in utils.html consumers (MainWindow calls into this).
-        """
-        # Reuse the same logic as earlier version by performing a simple indentation pass.
-        # Implemented inline to avoid adding a new dependency.
-        import re  # local import to keep module surface small
+    if looks_qt:
+        # Drop doctype & head; keep body inner if present
+        f = _DOCTYPE_RX.sub('', f)
+        f = _HEAD_BLOCK_RX.sub('', f)
+        m = _BODY_BLOCK_RX.search(f)
+        if m:
+            f = m.group(1)
+        # remove html wrappers if any remain
+        f = _HTML_WRAPPER_RX.sub('', f)
 
-        if not html:
-            return html
+    # Remove remaining meta/style blocks and inline style attrs
+    f = _META_ANY_RX.sub('', f)
+    f = _STYLE_BLOCK_RX.sub('', f)
+    f = _INLINE_STYLE_RX.sub('', f)
 
-        placeholders: List[str] = []
+    # Remove span wrappers (keep their inner text/children)
+    f = _SPAN_OPEN_RX.sub('', f)
+    f = _SPAN_CLOSE_RX.sub('', f)
 
-        def _protect(m):
-            placeholders.append(m.group(0))
-            return f"__PRESERVE_BLOCK_{len(placeholders)-1}__"
+    # Remove empty paragraphs like <p><br></p> or whitespace-only
+    f = _EMPTY_P_BR_RX.sub('', f)
 
-        safe = re.sub(r'(<(script|style)[^>]*>.*?</\2>)', _protect, html, flags=re.I | re.S)
-        safe = re.sub(r'>\s+<', '><', safe)
-        safe = re.sub(r'(</(div|section|header|footer|nav|main|ul|ol|li|table|thead|tbody|tr)>)',
-                      r'\1\n', safe, flags=re.I)
-        safe = re.sub(r'(<(div|section|header|footer|nav|main|ul|ol|li|table|thead|tbody|tr)[^>]*>)',
-                      r'\n\1\n', safe, flags=re.I)
-        safe = re.sub(r'\n{3,}', '\n\n', safe)
+    # Basic tidy: strip surrounding whitespace
+    f = f.strip()
 
-        lines = [ln for ln in safe.splitlines()]
-        out: List[str] = []
-        indent = 0
-        opens = re.compile(r'<(div|section|header|footer|nav|main|ul|ol|table|thead|tbody|tr)\b[^>]*>', re.I)
-        closes = re.compile(r'</(div|section|header|footer|nav|main|ul|ol|table|thead|tbody|tr)>', re.I)
-        singleline = re.compile(r'<(li|tr|td|th)\b[^>]*>.*?</\1>', re.I)
+    return f
 
-        for raw in lines:
-            ln = raw.strip()
-            if not ln:
-                continue
-            if closes.match(ln) and not opens.search(ln):
-                indent = max(0, indent - 1)
-            out.append(('  ' * indent) + ln)
-            if opens.search(ln) and not closes.search(ln) and not singleline.search(ln):
-                indent += 1
 
-        pretty = "\n".join(out).strip()
+# --------- Title helpers (multi-line safe, no re.escape on content) ---------
 
-        def _restore(m):
-            idx = int(m.group(1))
-            return placeholders[idx] if 0 <= idx < len(placeholders) else m.group(0)
+def get_title(html: str) -> str:
+    m = _TITLE_RX.search(html or "")
+    if not m:
+        return ""
+    import re as _re
+    return _re.sub(r"\s+", " ", (m.group(2) or "")).strip()
 
-        pretty = re.sub(r'__PRESERVE_BLOCK_(\d+)__', _restore, pretty)
-        return pretty + "\n"
 
-    # ---------------------------------------------------------------------
-    # Collection pages — extract first table in <main>
-    # ---------------------------------------------------------------------
+def set_title(html: str, text: str) -> str:
+    """Replace or insert <title>…</title> using callable replacement to avoid
+    backreference issues. Never use re.escape on user text.
+    """
+    def repl(m):
+        return m.group(1) + (text or "") + m.group(3)
 
-    def extract_collection_table(self, page_html: str) -> Tuple[List[str], List[List[str]]]:
-        """
-        Convenience proxy to utils.html.extract_main_table.
-        Returns (headers, rows) for the first table within <main>.
-        """
-        return H.extract_main_table(page_html or "")
+    if _TITLE_RX.search(html or ""):
+        return _TITLE_RX.sub(repl, html, count=1)
+
+    # No <title>: insert inside <head> if present
+    h = _HEAD_OPEN_RX.search(html or "")
+    if h:
+        idx = h.end(1)
+        return (html or "")[:idx] + f"<title>{text or ''}</title>" + (html or "")[idx:]
+
+    # No <head>: fail-safe append
+    return (html or "") + f"<head><title>{text or ''}</title></head>"
+
+
+# --------- Meta description helpers ---------
+
+def get_meta_description(html: str) -> str:
+    m = _META_DESC_RX.search(html or "")
+    return (m.group(2) or "").strip() if m else ""
+
+
+def set_meta_description(html: str, content: str) -> str:
+    """Replace or insert <meta name="description" content="...">."""
+    def repl(m):
+        return m.group(1) + (content or "") + m.group(3)
+
+    if _META_DESC_RX.search(html or ""):
+        return _META_DESC_RX.sub(repl, html, count=1)
+
+    h = _HEAD_OPEN_RX.search(html or "")
+    tag = f'<meta name="description" content="{content or ""}">'
+    if h:
+        idx = h.end(1)
+        return (html or "")[:idx] + tag + (html or "")[idx:]
+    return (html or "") + f"<head>{tag}</head>"
+
+
+# --------- Meta keywords helpers ---------
+
+def get_meta_keywords(html: str) -> str:
+    m = _META_KEYS_RX.search(html or "")
+    return (m.group(2) or "").strip() if m else ""
+
+
+def set_meta_keywords(html: str, content: str) -> str:
+    """Replace or insert <meta name="keywords" content="...">."""
+    def repl(m):
+        return m.group(1) + (content or "") + m.group(3)
+
+    if _META_KEYS_RX.search(html or ""):
+        return _META_KEYS_RX.sub(repl, html, count=1)
+
+    h = _HEAD_OPEN_RX.search(html or "")
+    tag = f'<meta name="keywords" content="{content or ""}">'
+    if h:
+        idx = h.end(1)
+        return (html or "")[:idx] + tag + (html or "")[idx:]
+    return (html or "") + f"<head>{tag}</head>"
+
+
+# --------- Legacy alias helpers (compat names used by MainWindow) ---------
+
+def get_description(html: str) -> str:
+    return get_meta_description(html)
+
+def set_description(html: str, content: str) -> str:
+    return set_meta_description(html, content)
+
+def get_keywords(html: str) -> str:
+    return get_meta_keywords(html)
+
+def set_keywords(html: str, content: str) -> str:
+    return set_meta_keywords(html, content)
+
+
+# --------- Section helpers (used by MainWindow) ---------
+
+def get_section(html: str, section_id: str) -> str:
+    """Return the inner HTML of <div id="{section_id}">…</div>, or '' if not found."""
+    rx = _compile_section_rx(section_id)
+    m = rx.search(html or "")
+    return (m.group(2) if m else "") or ""
+
+def set_section(html: str, section_id: str, body_html: str) -> str:
+    """Replace or create <div id="{section_id}">…</div> with body_html."""
+    rx = _compile_section_rx(section_id)
+    clean = sanitize_fragment(body_html or "")
+
+    def repl(m):
+        return m.group(1) + clean + m.group(3)
+
+    if rx.search(html or ""):
+        return rx.sub(repl, html, count=1)
+
+    # Not found: create a new section block. Prefer appending inside <main>.
+    block = f'<div id="{section_id}" class="tab-content">{clean}</div>'
+
+    main_open = _MAIN_OPEN_RX.search(html or "")
+    if main_open:
+        idx = main_open.end(1)
+        return (html or "")[:idx] + block + (html or "")[idx:]
+
+    # Otherwise, insert before </body> if available
+    if "</body>" in (html or ""):
+        return (html or "").replace("</body>", block + "</body>", 1)
+
+    # Fallback: append at end
+    return (html or "") + block
+
+def ensure_section(html: str, section_id: str) -> str:
+    """Ensure a <div id="{section_id}">…</div> exists. If missing, create an empty one."""
+    rx = _compile_section_rx(section_id)
+    if rx.search(html or ""):
+        return html or ""
+    return set_section(html or "", section_id, "")
+
+def apply_sections(html: str, updates: Dict[str, str]) -> str:
+    """Apply multiple section updates, sanitizing each fragment first."""
+    out = html or ""
+    if not updates:
+        return out
+    for sid, body in updates.items():
+        out = set_section(out, sid, body or "")
+    return out
+
+
+# --------- Image helpers (used by ImageService) ---------
+
+def get_image_src(html: str, img_id: str) -> str:
+    """Return the value of src for <img id="{img_id}" ...>, or '' if not found."""
+    tag_rx = _compile_img_tag_rx(img_id)
+    m = tag_rx.search(html or "")
+    if not m:
+        return ""
+    tag = m.group(1)
+    m_src = _SRC_RX.search(tag or "")
+    return (m_src.group(2) if m_src else "") or ""
+
+def get_image_alt(html: str, img_id: str) -> str:
+    """Return the value of alt for <img id="{img_id}" ...>, or '' if not found."""
+    tag_rx = _compile_img_tag_rx(img_id)
+    m = tag_rx.search(html or "")
+    if not m:
+        return ""
+    tag = m.group(1)
+    m_alt = _ALT_RX.search(tag or "")
+    return (m_alt.group(2) if m_alt else "") or ""
+
+def _replace_img_tag(tag: str, *, src: Optional[str] = None, alt: Optional[str] = None) -> str:
+    """Return a modified <img ...> tag string with src/alt updated or inserted."""
+    out = tag
+    if src is not None:
+        if _SRC_RX.search(out):
+            out = _SRC_RX.sub(lambda m: m.group(1) + (src or "") + m.group(3), out, count=1)
+        else:
+            out = re.sub(r'>\s*$', f' src="{src or ""}">', out, count=1)
+    if alt is not None:
+        if _ALT_RX.search(out):
+            out = _ALT_RX.sub(lambda m: m.group(1) + (alt or "") + m.group(3), out, count=1)
+        else:
+            out = re.sub(r'>\s*$', f' alt="{alt or ""}">', out, count=1)
+    return out
+
+def set_image_src(html: str, img_id: str, src: str, alt: Optional[str] = None) -> str:
+    """Update (or create) an <img id="{img_id}"> with the given src (and optional alt)."""
+    tag_rx = _compile_img_tag_rx(img_id)
+    m = tag_rx.search(html or "")
+    if m:
+        old_tag = m.group(1)
+        new_tag = _replace_img_tag(old_tag, src=src, alt=alt)
+        return (html or "")[:m.start(1)] + new_tag + (html or "")[m.end(1):]
+
+    new_tag = f'<img id="{img_id}" src="{src or ""}"' + (f' alt="{alt}"' if alt is not None else "") + '>'
+    main_open = _MAIN_OPEN_RX.search(html or "")
+    if main_open:
+        idx = main_open.end(1)
+        return (html or "")[:idx] + new_tag + (html or "")[idx:]
+    if "</body>" in (html or ""):
+        return (html or "")[: html.rfind("</body>") ] + new_tag + "</body>"
+    return (html or "") + new_tag
+
+def set_image_alt(html: str, img_id: str, alt: str) -> str:
+    """Update (or create) alt on <img id="{img_id}"> (leaves src unchanged)."""
+    tag_rx = _compile_img_tag_rx(img_id)
+    m = tag_rx.search(html or "")
+    if m:
+        old_tag = m.group(1)
+        new_tag = _replace_img_tag(old_tag, alt=alt)
+        return (html or "")[:m.start(1)] + new_tag + (html or "")[m.end(1):]
+    new_tag = f'<img id="{img_id}" alt="{alt or ""}">'
+    main_open = _MAIN_OPEN_RX.search(html or "")
+    if main_open:
+        idx = main_open.end(1)
+        return (html or "")[:idx] + new_tag + (html or "")[idx:]
+    if "</body>" in (html or ""):
+        return (html or "")[: html.rfind("</body>") ] + new_tag + "</body>"
+    return (html or "") + new_tag
+
+
+# --------- One-stop head updater ---------
+
+def update_head(
+    html: str,
+    *,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    keywords: Optional[str] = None,
+) -> str:
+    out = html or ""
+    if title is not None:
+        out = set_title(out, title)
+    if description is not None:
+        out = set_meta_description(out, description)
+    if keywords is not None:
+        out = set_meta_keywords(out, keywords)
+    return out
+
+# --- Add near other regexes ---
+_MAIN_RX = re.compile(r'(<main[^>]*>)(.*?)(</main>)', re.I | re.S)
+
+def replace_main_inner(html: str, inner_html: str) -> str:
+    """Replace only the INNER content of the first <main>…</main> block.
+    If <main> is missing, create one after <header> or before </body>.
+    """
+    clean_inner = sanitize_fragment(inner_html or "")
+    m = _MAIN_RX.search(html or "")
+    if m:
+        return (html or "")[:m.start(2)] + clean_inner + (html or "")[m.end(2):]
+
+    # No <main> present: try inserting after </header> if present
+    if "</header>" in (html or ""):
+        return (html or "").replace("</header>", "</header>\n<main>" + clean_inner + "</main>", 1)
+
+    # Else insert before </body>, else append
+    if "</body>" in (html or ""):
+        return (html or "").replace("</body>", "<main>" + clean_inner + "</main></body>", 1)
+    return (html or "") + "<main>" + clean_inner + "</main>"
+
+def render_collection_main(title_h1: str, rows: list[dict]) -> str:
+    """Return the <main> inner HTML for a collection page: a header + a table.
+    rows: [{part:'04B-005', title:'Common Emitter Amplifier', href:'04B-005.html', pieces:'4'}, ...]
+    """
+    # sanitize cell content
+    def esc(s: str) -> str:
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    thead = (
+        "<thead><tr>"
+        "<th>Part No</th>"
+        "<th>Title</th>"
+        "<th>Pieces per Panel</th>"
+        "</tr></thead>"
+    )
+
+    trows = []
+    for r in rows:
+        part = esc(r.get("part", ""))
+        title = esc(r.get("title", ""))
+        href = esc(r.get("href", "")) or f"{part}.html"
+        pieces = esc(r.get("pieces", ""))
+        trows.append(
+            "<tr>"
+            f"<td>{part}</td>"
+            f"<td><a href=\"{href}\">{title}</a></td>"
+            f"<td>{pieces}</td>"
+            "</tr>"
+        )
+    tbody = "<tbody>" + "".join(trows) + "</tbody>"
+
+    return (
+        "<section>\n"
+        f"  <h1>{esc(title_h1)}</h1>\n"
+        '  <p class="slogan">04B-series miniPCB catalog</p>\n'
+        "  <table>\n"
+        f"    {thead}\n"
+        f"    {tbody}\n"
+        "  </table>\n"
+        "</section>"
+    )
+
+# --------- Backward-compatible class API ---------
+
+class HTMLService:
+    """Compatibility wrapper exposing the old class API."""
+
+    # Title
+    @staticmethod
+    def get_title(html: str) -> str:
+        return get_title(html)
+
+    @staticmethod
+    def set_title(html: str, text: str) -> str:
+        return set_title(html, text)
+
+    # Description (legacy + meta)
+    @staticmethod
+    def get_description(html: str) -> str:
+        return get_meta_description(html)
+
+    @staticmethod
+    def set_description(html: str, content: str) -> str:
+        return set_meta_description(html, content)
+
+    @staticmethod
+    def get_meta_description(html: str) -> str:
+        return get_meta_description(html)
+
+    @staticmethod
+    def set_meta_description(html: str, content: str) -> str:
+        return set_meta_description(html, content)
+
+    # Keywords (legacy + meta)
+    @staticmethod
+    def get_keywords(html: str) -> str:
+        return get_meta_keywords(html)
+
+    @staticmethod
+    def set_keywords(html: str, content: str) -> str:
+        return set_meta_keywords(html, content)
+
+    @staticmethod
+    def get_meta_keywords(html: str) -> str:
+        return get_meta_keywords(html)
+
+    @staticmethod
+    def set_meta_keywords(html: str, content: str) -> str:
+        return set_meta_keywords(html, content)
+
+    # Sections
+    @staticmethod
+    def get_section(html: str, section_id: str) -> str:
+        return get_section(html, section_id)
+
+    @staticmethod
+    def set_section(html: str, section_id: str, body_html: str) -> str:
+        return set_section(html, section_id, body_html)
+
+    @staticmethod
+    def ensure_section(html: str, section_id: str) -> str:
+        return ensure_section(html, section_id)
+
+    @staticmethod
+    def apply_sections(html: str, updates: Dict[str, str]) -> str:
+        return apply_sections(html, updates)
+
+    # Images
+    @staticmethod
+    def get_image_src(html: str, img_id: str) -> str:
+        return get_image_src(html, img_id)
+
+    @staticmethod
+    def set_image_src(html: str, img_id: str, src: str, alt: Optional[str] = None) -> str:
+        return set_image_src(html, img_id, src, alt)
+
+    @staticmethod
+    def get_image_alt(html: str, img_id: str) -> str:
+        return get_image_alt(html, img_id)
+
+    @staticmethod
+    def set_image_alt(html: str, img_id: str, alt: str) -> str:
+        return set_image_alt(html, img_id, alt)
+
+    # Collection helpers
+    @staticmethod
+    def replace_main_inner(html: str, inner_html: str) -> str:
+        return replace_main_inner(html, inner_html)
+
+    @staticmethod
+    def render_collection_main(title_h1: str, rows: list[dict]) -> str:
+        return render_collection_main(title_h1, rows)
+
+    # Head updates
+    @staticmethod
+    def update_head(
+        html: str,
+        *,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        keywords: Optional[str] = None,
+    ) -> str:
+        return update_head(html, title=title, description=description, keywords=keywords)

@@ -5,6 +5,9 @@ from typing import Optional, List, Tuple, Dict, Any, Callable
 import re
 import json
 import datetime
+import os
+
+from PyQt5 import QtCore  # or PyQt5/PySide6 — match your project’s existing imports
 
 from PyQt5.QtCore import Qt, QDir, QTimer, QPoint
 from PyQt5.QtGui import QCloseEvent, QPixmap
@@ -731,6 +734,108 @@ class MainWindow(QMainWindow):
         # delegate to utils
         return nav_utils.write_nav_to_html(self, html)
 
+    def _is_collection_filename(self, path: str) -> bool:
+        base = os.path.basename(path).lower()
+        name, ext = os.path.splitext(base)
+        return ext == ".html" and len(name) in (2, 3)
+
+    def _show_collection_ui(self, show: bool) -> None:
+        # hide normal product-tab editors when showing collection editor
+        for w in (
+            getattr(self, "grp_details", None),
+            getattr(self, "grp_description", None),
+            getattr(self, "grp_schematic", None),
+            getattr(self, "grp_layout", None),
+            getattr(self, "grp_downloads", None),
+            getattr(self, "grp_resources", None),
+            getattr(self, "grp_fmea", None),
+            getattr(self, "grp_testing", None),
+        ):
+            if w is not None:
+                w.setVisible(not show)
+        self.grp_collection.setVisible(show)
+
+    def _parse_collection_rows(self, html: str) -> list[dict]:
+        """Pull rows from <tbody>…</tbody>. Returns list of dicts."""
+        rows: list[dict] = []
+        m = re.search(r"<tbody>(.*?)</tbody>", html or "", re.I | re.S)
+        if not m:
+            return rows
+        body = m.group(1)
+        for tr in re.findall(r"<tr>(.*?)</tr>", body, flags=re.I | re.S):
+            tds = re.findall(r"<td>(.*?)</td>", tr, flags=re.I | re.S)
+            # normalize cell content by stripping tags except <a>
+            def clean_cell(s: str) -> str:
+                s = re.sub(r"\s+", " ", s).strip()
+                return s
+            part = clean_cell(tds[0]) if len(tds) > 0 else ""
+            title_cell = tds[1] if len(tds) > 1 else ""
+            mlink = re.search(r'href=["\']([^"\']+)["\']', title_cell, flags=re.I)
+            link = mlink.group(1) if mlink else ""
+            title = re.sub(r"<[^>]+>", "", title_cell or "").strip()
+            pieces = clean_cell(tds[2]) if len(tds) > 2 else ""
+            rows.append({"part": part, "title": title, "href": link, "pieces": pieces})
+        return rows
+
+    def _load_collection_into_table(self, rows: list[dict]) -> None:
+        tbl = self.tbl_collection
+        tbl.setRowCount(0)
+        for r in rows:
+            row = tbl.rowCount()
+            tbl.insertRow(row)
+            for col, key in enumerate(("part", "title", "pieces", "href")):
+                item = QtWidgets.QTableWidgetItem(r.get(key, ""))
+                tbl.setItem(row, col, item)
+
+    def _collect_table_rows(self) -> list[dict]:
+        tbl = self.tbl_collection
+        out: list[dict] = []
+        for row in range(tbl.rowCount()):
+            def val(c):
+                it = tbl.item(row, c)
+                return it.text().strip() if it else ""
+            out.append({
+                "part": val(0),
+                "title": val(1),
+                "pieces": val(2),
+                "href": val(3),
+            })
+        # drop empty rows
+        out = [r for r in out if any(r.values())]
+        return out
+
+    def _run_countdown(self, label, seconds: int, on_done):
+        t = getattr(self, "_ai_countdown_timer", None)
+        if t:
+            try: t.stop()
+            except Exception: pass
+
+        self._ai_countdown_remaining = max(0, int(seconds))
+
+        if not getattr(self, "_ai_countdown_timer", None):
+            self._ai_countdown_timer = QtCore.QTimer(self)
+            self._ai_countdown_timer.setInterval(1000)
+            self._ai_countdown_timer.timeout.connect(
+                lambda: self._on_ai_countdown_tick(label, on_done)
+            )
+
+        try: label.setText(f"Generating… {self._ai_countdown_remaining}s")
+        except Exception: pass
+        self._ai_countdown_timer.start()
+
+    def _on_ai_countdown_tick(self, label, on_done):
+        self._ai_countdown_remaining -= 1
+        if self._ai_countdown_remaining > 0:
+            try: label.setText(f"Generating… {self._ai_countdown_remaining}s")
+            except Exception: pass
+            return
+        self._ai_countdown_timer.stop()
+        try: label.setText("Generating… done")
+        except Exception: pass
+        try: on_done()
+        except Exception:
+            import traceback; traceback.print_exc()
+
     # ---------- Compose helpers
     def _compose_details_html(self) -> str:
         return sections_utils.compose_details_html(self)
@@ -1065,7 +1170,7 @@ class MainWindow(QMainWindow):
             else:
                 self.txt_desc_generated.append(f"<p><em>Auto-generated ({_now_stamp()}):</em> Midband gain, biasing, and bandwidth trade-offs are explained with typical values.</p>")
             self._on_dirty(True)
-        self._countdown(self.lbl_desc_ai, eta, _done)
+        self._run_countdown(self.lbl_desc_ai, eta, _done)
 
     def _gen_fmea(self):
         seed = self._seed_fmea.toPlainText().strip()
