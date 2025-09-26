@@ -1276,6 +1276,45 @@ class BoardForms(QtWidgets.QTabWidget):
             "testing": self.opt_testing.isChecked(),
         }
 
+    def _find_iframes(self, html_fragment: str) -> List[Tuple[str, str]]:
+        """Return list[(title, src)] from any <iframe ...> in the given HTML."""
+        out = []
+        if not html_fragment:
+            return out
+        for m in re.finditer(r'(?is)<iframe\b[^>]*>', html_fragment):
+            tag = m.group(0)
+            src = re.search(r'src=["\']([^"\']+)["\']', tag)
+            ttl = re.search(r'title=["\']([^"\']+)["\']', tag)
+            out.append((
+                html_lib.unescape(ttl.group(1)) if ttl else "",
+                html_lib.unescape(src.group(1)) if src else ""
+            ))
+        return out
+
+    def _slice_after_section_until_next_tab(self, html_text: str, sec_id: str, scan_limit: int = 8000) -> str:
+        """
+        Return HTML segment that starts just after the closing </div> of sec_id
+        and ends at the next tab-content <div ...> (or up to scan_limit chars).
+        """
+        m = re.search(rf'(?is)<div\s+id=["\']{re.escape(sec_id)}["\'][^>]*>.*?</div\s*>', html_text)
+        if not m:
+            return ""
+        start = m.end()
+        tail = html_text[start:start + scan_limit]
+        n = re.search(r'(?is)<div\s+id=["\'][a-z0-9_\-]+["\']\s+class=["\']tab-content', tail)
+        return tail[:n.start()] if n else tail
+
+    def _extract_links_anywhere(self, html_fragment: str) -> List[Tuple[str, str]]:
+        """Extract <a href> links from any HTML fragment (not limited to <ul>)."""
+        out = []
+        if not html_fragment:
+            return out
+        for a in re.finditer(r'(?is)<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html_fragment):
+            url = html_lib.unescape(a.group(1).strip())
+            label = html_lib.unescape(re.sub(r"<[^>]+>", "", a.group(2))).strip()
+            out.append((label or url, url))
+        return out
+
     def _apply_tabs_strip(self, html: str) -> str:
         flags = self._optional_flags()
         buttons = []
