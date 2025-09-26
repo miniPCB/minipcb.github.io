@@ -1275,7 +1275,6 @@ class BoardForms(QtWidgets.QTabWidget):
             "fmea": self.opt_fmea.isChecked(),
             "testing": self.opt_testing.isChecked(),
         }
-
     def _find_iframes(self, html_fragment: str) -> List[Tuple[str, str]]:
         """Return list[(title, src)] from any <iframe ...> in the given HTML."""
         out = []
