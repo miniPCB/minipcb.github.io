@@ -2,7 +2,6 @@ import os, shutil
 from pathlib import Path
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTreeView, QFileSystemModel, QMenu, QInputDialog, QMessageBox
 from PyQt5.QtCore import pyqtSignal, Qt, QPoint
-from PyQt5.QtGui import QCursor
 from services.file_service import FileService
 
 class FolderTree(QWidget):
@@ -21,7 +20,8 @@ class FolderTree(QWidget):
         self.view.setModel(self.model)
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self._on_context_menu)
-        self.view.doubleClicked.connect(self._on_double)
+        # Single-click selection:
+        self.view.clicked.connect(self._on_clicked)
 
         # Drag & Drop move support
         self.view.setDragEnabled(True)
@@ -38,7 +38,7 @@ class FolderTree(QWidget):
         self.view.setRootIndex(self.model.index(str(root_path)))
 
     # ------- Events -------
-    def _on_double(self, idx):
+    def _on_clicked(self, idx):
         path = self.model.filePath(idx)
         if path:
             self.fileSelected.emit(path)
@@ -72,7 +72,6 @@ class FolderTree(QWidget):
 
     # ------- Operations -------
     def _new_file(self, target_path: Path):
-        # If a directory is selected, create inside; if a file, create alongside
         folder = target_path if target_path.is_dir() else target_path.parent
         name, ok = QInputDialog.getText(self, "New File", "File name:")
         if not ok or not name.strip(): return
