@@ -1,7 +1,7 @@
 from pydoc import html
 import re
 import json
-
+from contextlib import contextmanager
 from pathlib import Path
 from PyQt5.QtWidgets import (
     QWidget, QTabWidget, QVBoxLayout, QFormLayout, QLineEdit, QTextEdit, QListWidget,
@@ -469,33 +469,60 @@ class MainTabs(QWidget):
         super().__init__(parent)
         self.ctx = ctx
         self.get_editor_text = get_editor_text_callable
+
+        # --- file/context state
         self.current_path: Path | None = None
-        self.current_type: str = 'other'
+        self.current_type: str = "other"
         self.templates = None
         self.htmlsvc: HtmlService | None = None
         self._suppress_form_signals = False
 
+        # --- optional sections state/guards
+        self._opt_checks: dict[str, QCheckBox] = {}
+        self._opt_visibility: dict[str, bool] = {}
+        self._is_updating_optionals: bool = False   # reentrancy guard for optionals
+        self._current_html: str = ""                # last loaded/edited HTML
+
+        # ---------- Outer layout ----------
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        # ---- View bar (checkboxes for optional tabs) ----
+        # ---------- View bar (optional sections checkboxes) ----------
         self._view_bar = QWidget(self)
         self._view_bar_layout = QHBoxLayout(self._view_bar)
         self._view_bar_layout.setContentsMargins(6, 2, 6, 2)
         self._view_bar_layout.setSpacing(10)
+
+        # map: id -> label
+        opt_defs = {
+            "description": "Description",
+            "videos":      "Videos",
+            "layout":      "Layout",
+            "downloads":   "Downloads",
+            "resources":   "Additional Resources",
+            "fmea":        "FMEA",
+            "testing":     "Testing",
+        }
         self._opt_checks = {}
         self._opt_visibility = {}
-        for name in ["Description", "Videos", "Layout", "Downloads", "Resources", "FMEA", "Testing"]:
+
+        # Build the checkbox row exactly once here.
+        from functools import partial
+        optional_names = ["Description", "Videos", "Layout", "Downloads", "Resources", "FMEA", "Testing"]
+        for name in optional_names:
             cb = QCheckBox(name, self._view_bar)
-            cb.setChecked(True)  # default visible
-            cb.toggled.connect(lambda checked, n=name: self._on_toggle_optional(n, checked))
+            # Default visible unless later overridden by _set_optional_checkboxes_from_html()
+            cb.setChecked(True)
+            # Connect once; use partial to avoid late-binding issues in lambdas
+            cb.toggled.connect(partial(self._on_toggle_optional, name))
             self._view_bar_layout.addWidget(cb)
             self._opt_checks[name] = cb
             self._opt_visibility[name] = True
+
         self._view_bar_layout.addStretch(1)
         outer.addWidget(self._view_bar)
 
-        # ---- Forms tabs ----
+        # ---------- Forms tabs ----------
         self.forms = QTabWidget(self)
         self.forms.setMinimumHeight(320)
         self.forms.currentChanged.connect(self._on_forms_current_changed)  # remember focus
@@ -504,32 +531,37 @@ class MainTabs(QWidget):
         # Default visible content so the area isn't blank
         self._clear_forms()
         placeholder = QWidget()
-        v = QVBoxLayout(placeholder)
+        vbox = QVBoxLayout(placeholder)
         lbl = QLabel("No file loaded. Select a collection or board HTML page.")
         lbl.setAlignment(Qt.AlignCenter)
-        v.addWidget(lbl)
+        vbox.addWidget(lbl)
         self.forms.addTab(placeholder, "Forms")
 
-        # Remember last selected indices
+        # ---------- Remember last selected indices ----------
         self._last_main_tab_index = 0
         self._last_meta_sub_index = 0  # used when Metadata sub-tabs exist
 
-        # Debounce timer: sync forms -> editor ~700ms after last change
+        # ---------- Debounce timer: sync forms -> editor after idle ----------
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
-        self._debounce.setInterval(700)
+        self._debounce.setInterval(700)  # ms
         self._debounce.timeout.connect(self._sync_forms_to_editor)
 
-        # Periodic safety sync every 30s
+        # ---------- Periodic safety sync ----------
         self._periodic = QTimer(self)
-        self._periodic.setInterval(30_000)
+        self._periodic.setInterval(30_000)  # 30s
         self._periodic.timeout.connect(self._sync_forms_to_editor)
         self._periodic.start()
-
+        
+        # end of __init__
+        self.current_path = None
+        self.current_type = "other"
+        self._update_view_bar_for_path(None)
 
     # ---------- Public API ----------
     def load_html_file(self, path: Path):
         self.current_path = Path(path)
+        self._update_view_bar_for_path(path)
         try:
             html_text = self.current_path.read_text(encoding="utf-8") if self.current_path.exists() else ""
         except Exception:
@@ -804,82 +836,30 @@ class MainTabs(QWidget):
         # Metadata (sub-tabs)
         self.meta_tab = QTabWidget(self)
 
-        # Basics
+        # -------------------- Basics --------------------
         basics = QWidget()
         vbx = QVBoxLayout(basics)
+
         form = QFormLayout()
         vbx.addLayout(form)
+
         self.in_pn = QLineEdit()
         self.in_title = QLineEdit()
         self.in_board_size = QLineEdit()
         self.in_pieces = QLineEdit()
         self.in_panel_size = QLineEdit()
+
         form.addRow("PN:", self.in_pn)
         form.addRow("Title:", self.in_title)
         form.addRow("Board Size:", self.in_board_size)
         form.addRow("Pieces per Panel:", self.in_pieces)
-        form.addRow("Panel Size:", self.in_panel_size)
-        form.addRow("Panel Size:", self.in_panel_size)
+        form.addRow("Panel Size:", self.in_panel_size)  # only once
 
-        # --- Optional Tabs panel (inside Basics) ---
-        opts_box = QGroupBox("Optional Tabs")
-        opts_lay = QGridLayout(opts_box)
-
-        self.opt_description = QCheckBox("Description")
-        self.opt_layout      = QCheckBox("Layout")
-        self.opt_downloads   = QCheckBox("Downloads")
-        self.opt_resources   = QCheckBox("Additional Resources")
-        self.opt_videos      = QCheckBox("Videos")
-        self.opt_fmea        = QCheckBox("FMEA")
-        self.opt_testing     = QCheckBox("Testing")
-
-        # Default states (UI only; will be overwritten by file on load)
-        self.opt_description.setChecked(True)
-        self.opt_layout.setChecked(True)
-        self.opt_downloads.setChecked(True)
-        self.opt_resources.setChecked(True)
-        self.opt_videos.setChecked(False)
-        self.opt_fmea.setChecked(False)
-        self.opt_testing.setChecked(False)
-
-        # lay them out
-        opts_lay.addWidget(self.opt_description, 0, 0)
-        opts_lay.addWidget(self.opt_layout,      0, 1)
-        opts_lay.addWidget(self.opt_downloads,   0, 2)
-        opts_lay.addWidget(self.opt_resources,   1, 0)
-        opts_lay.addWidget(self.opt_videos,      1, 1)
-        opts_lay.addWidget(self.opt_fmea,        1, 2)
-        opts_lay.addWidget(self.opt_testing,     2, 0)
-
-        vbx.addWidget(opts_box)
+        # (Removed: Optional Tabs (Status) group)
 
         self.meta_tab.addTab(basics, "Basics")
 
-        # --- Optional Tabs controls ---
-        opt_box = QGroupBox("Optional Tabs", basics)
-        opt_layout = QVBoxLayout(opt_box)
-
-        self.opt_description = QCheckBox("Description");           self.opt_description.setObjectName("opt_description")
-        self.opt_videos      = QCheckBox("Videos");                self.opt_videos.setObjectName("opt_videos")
-        self.opt_layout      = QCheckBox("Layout");                self.opt_layout.setObjectName("opt_layout")
-        self.opt_downloads   = QCheckBox("Downloads");             self.opt_downloads.setObjectName("opt_downloads")
-        self.opt_resources   = QCheckBox("Additional Resources");  self.opt_resources.setObjectName("opt_resources")
-        self.opt_fmea        = QCheckBox("FMEA");                  self.opt_fmea.setObjectName("opt_fmea")
-        self.opt_testing     = QCheckBox("Testing");               self.opt_testing.setObjectName("opt_testing")
-
-        # Default checked (we’ll sync actual state when file loads)
-        for cb in (self.opt_description, self.opt_videos, self.opt_layout,
-                self.opt_downloads, self.opt_resources, self.opt_fmea, self.opt_testing):
-            opt_layout.addWidget(cb)
-            cb.setChecked(True)
-
-        vbx.addWidget(opt_box)
-
-        # Wire toggles -> debounce sync
-        self._wire_optional_checkboxes()
-        self.meta_tab.addTab(basics, "Basics")
-
-        # SEO
+        # -------------------- SEO --------------------
         seo = QWidget()
         sform = QFormLayout(seo)
         self.in_slogan = QLineEdit()
@@ -890,7 +870,7 @@ class MainTabs(QWidget):
         sform.addRow("Description:", self.in_description)
         self.meta_tab.addTab(seo, "SEO")
 
-        # Navigation
+        # -------------------- Navigation --------------------
         navw = QWidget()
         vbox = QVBoxLayout(navw)
         self.nav_list = QListWidget()
@@ -909,7 +889,7 @@ class MainTabs(QWidget):
         self.btn_nav_del.clicked.connect(lambda: (self._nav_del(), self._schedule_sync()))
         self.nav_list.model().dataChanged.connect(lambda *_: self._schedule_sync())
 
-        # Revisions
+        # -------------------- Revisions --------------------
         revw = QWidget()
         rv = QVBoxLayout(revw)
         self.rev_table = QTableWidget(0, 4, self)
@@ -931,7 +911,7 @@ class MainTabs(QWidget):
         self.btn_rev_del.clicked.connect(lambda: (self._rev_delete(), self._schedule_sync()))
         self.rev_table.cellChanged.connect(lambda _r, _c: self._schedule_sync())
 
-        # EAGLE Exports
+        # -------------------- EAGLE Exports --------------------
         eaw = QWidget()
         ev = QVBoxLayout(eaw)
         self.lbl_exports = QLabel("Netlist / Partlist / Pin Interface (from ../md/PN-REV_sch.md):")
@@ -944,9 +924,10 @@ class MainTabs(QWidget):
         ev.addWidget(self.btn_reload_exports)
         self.meta_tab.addTab(eaw, "EAGLE Exports")
 
+        # Attach Metadata to main forms
         self.forms.addTab(self.meta_tab, "Metadata")
 
-        # Description
+        # -------------------- Description --------------------
         w = QWidget()
         v = QVBoxLayout(w)
         hb = QHBoxLayout()
@@ -963,19 +944,18 @@ class MainTabs(QWidget):
         v.addWidget(self.txt_description)
         self.forms.addTab(w, "Description")
 
-        for w in (
-            self.in_pn, self.in_title, self.in_board_size, self.in_pieces, self.in_panel_size,
-            self.in_slogan, self.in_keywords, self.in_description
-        ):
+        for w in (self.in_pn, self.in_title, self.in_board_size, self.in_pieces, self.in_panel_size,
+                self.in_slogan, self.in_keywords, self.in_description):
             w.textChanged.connect(self._schedule_sync)
 
-        # Videos
+        # -------------------- Videos --------------------
         w = QWidget()
         v = QVBoxLayout(w)
         self.videos_list = ReorderableList()
         self.videos_list.itemsReordered.connect(self._schedule_sync)
         hb = QHBoxLayout()
         self.btn_vid_add = QPushButton("Add URL")
+        # Example default embed placeholder:
         self.btn_vid_del = QPushButton("Delete")
         hb.addWidget(self.btn_vid_add)
         hb.addWidget(self.btn_vid_del)
@@ -983,60 +963,43 @@ class MainTabs(QWidget):
         v.addWidget(self.videos_list)
         v.addLayout(hb)
         self.forms.addTab(w, "Videos")
-
         self.btn_vid_add.clicked.connect(lambda: (self.videos_list.addItem("https://www.youtube.com/embed/..."), self._schedule_sync()))
         self.btn_vid_del.clicked.connect(lambda: (self._list_delete(self.videos_list), self._schedule_sync()))
         self.videos_list.model().dataChanged.connect(lambda *_: self._schedule_sync())
-        # Videos list context menu
         self.videos_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.videos_list.customContextMenuRequested.connect(
             lambda pos: self._on_url_list_context(self.videos_list, "Videos", pos)
         )
-        
-        # Schematic
+
+        # -------------------- Schematic --------------------
         w = QWidget()
-        page_layout = QVBoxLayout(w)
-        page_layout.setContentsMargins(0, 0, 0, 0)
-        page_layout.setSpacing(0)
-
-        self.schematic_container = QVBoxLayout()
-        self.schematic_container.setContentsMargins(0, 0, 0, 0)
-        self.schematic_container.setSpacing(0)
+        page_layout = QVBoxLayout(w); page_layout.setContentsMargins(0, 0, 0, 0); page_layout.setSpacing(0)
+        self.schematic_container = QVBoxLayout(); self.schematic_container.setContentsMargins(0, 0, 0, 0); self.schematic_container.setSpacing(0)
         page_layout.addLayout(self.schematic_container)
-
         self.forms.addTab(w, "Schematic")
 
-        # Layout
+        # -------------------- Layout --------------------
         w = QWidget()
-        page_layout = QVBoxLayout(w)
-        page_layout.setContentsMargins(0, 0, 0, 0)
-        page_layout.setSpacing(0)
-
-        self.layout_container = QVBoxLayout()
-        self.layout_container.setContentsMargins(0, 0, 0, 0)
-        self.layout_container.setSpacing(0)
+        page_layout = QVBoxLayout(w); page_layout.setContentsMargins(0, 0, 0, 0); page_layout.setSpacing(0)
+        self.layout_container = QVBoxLayout(); self.layout_container.setContentsMargins(0, 0, 0, 0); self.layout_container.setSpacing(0)
         page_layout.addLayout(self.layout_container)
-
         self.forms.addTab(w, "Layout")
 
-        # Downloads (read-only preview + Configure…)
+        # -------------------- Downloads --------------------
         w = QWidget()
         v = QVBoxLayout(w)
         self.downloads_list = QListWidget()
         self.downloads_list.setDisabled(True)
         hb = QHBoxLayout()
         self.btn_dl_config = QPushButton("Configure…")
-        hb.addWidget(self.btn_dl_config)
-        hb.addStretch(1)
-        v.addWidget(self.downloads_list)
-        v.addLayout(hb)
+        hb.addWidget(self.btn_dl_config); hb.addStretch(1)
+        v.addWidget(self.downloads_list); v.addLayout(hb)
         self.forms.addTab(w, "Downloads")
 
-        # internal downloads state
         self._downloads_state = {"datasheet": True, "ltspice": True, "gerbers": False, "cad": False, "rev": ""}
         self.btn_dl_config.clicked.connect(self._open_downloads_dialog)
 
-        # Datasheets
+        # -------------------- Datasheets --------------------
         w = QWidget()
         v = QVBoxLayout(w)
         if QWebEngineView:
@@ -1047,7 +1010,7 @@ class MainTabs(QWidget):
             v.addWidget(QLabel("QtWebEngine not available."))
         self.forms.addTab(w, "Datasheets")
 
-        # Resources
+        # -------------------- Resources --------------------
         w = QWidget()
         v = QVBoxLayout(w)
         self.resources_list = ReorderableList()
@@ -1055,48 +1018,21 @@ class MainTabs(QWidget):
         hb = QHBoxLayout()
         self.btn_res_add = QPushButton("Add URL")
         self.btn_res_del = QPushButton("Delete")
-        hb.addWidget(self.btn_res_add)
-        hb.addWidget(self.btn_res_del)
-        hb.addStretch(1)
-        v.addWidget(self.resources_list)
-        v.addLayout(hb)
+        hb.addWidget(self.btn_res_add); hb.addWidget(self.btn_res_del); hb.addStretch(1)
+        v.addWidget(self.resources_list); v.addLayout(hb)
         self.forms.addTab(w, "Resources")
-
         self.btn_res_add.clicked.connect(lambda: (self.resources_list.addItem("https://www.youtube.com/embed/..."), self._schedule_sync()))
         self.btn_res_del.clicked.connect(lambda: (self._list_delete(self.resources_list), self._schedule_sync()))
         self.resources_list.model().dataChanged.connect(lambda *_: self._schedule_sync())
-        # Resources list context menu
         self.resources_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.resources_list.customContextMenuRequested.connect(
             lambda pos: self._on_url_list_context(self.resources_list, "Resources", pos)
         )
-        # FMEA
-        w = QWidget()
-        v = QVBoxLayout(w)
-        self.fmea_table = QTableWidget(0, 17, self)
-        self.fmea_table.setHorizontalHeaderLabels([
-            "Item", "Potential Failure Mode", "Potential Effect of Failure", "Severity",
-            "Potential Causes/Mechanisms", "Occurrence", "Current Process Controls", "Detection",
-            "RPN", "Recommended Actions", "Responsibility", "Target Completion Date",
-            "Actions Taken", "Resulting Severity", "Resulting Occurrence", "Resulting Detection", "New RPN"
-        ])
-        v.addWidget(self.fmea_table)
-        hb = QHBoxLayout()
-        self.btn_fmea_add_above = QPushButton("Add Above")
-        self.btn_fmea_add_below = QPushButton("Add Below")
-        self.btn_fmea_del = QPushButton("Delete")
-        hb.addWidget(self.btn_fmea_add_above)
-        hb.addWidget(self.btn_fmea_add_below)
-        hb.addWidget(self.btn_fmea_del)
-        v.addLayout(hb)
-        self.forms.addTab(w, "FMEA")
 
-        self.btn_fmea_add_above.clicked.connect(lambda: (self._table_insert(self.fmea_table, -1), self._schedule_sync()))
-        self.btn_fmea_add_below.clicked.connect(lambda: (self._table_insert(self.fmea_table, +1), self._schedule_sync()))
-        self.btn_fmea_del.clicked.connect(lambda: (self._table_delete(self.fmea_table), self._schedule_sync()))
-        self.fmea_table.cellChanged.connect(lambda _r, _c: self._schedule_sync())
+        # -------------------- FMEA --------------------
+        self._init_fmea_tab()  # lives in a method; keeps class scope clean
 
-        # Testing
+        # -------------------- Testing --------------------
         w = QWidget()
         v = QVBoxLayout(w)
         self.testing_table = QTableWidget(0, 7, self)
@@ -1108,19 +1044,31 @@ class MainTabs(QWidget):
         self.btn_test_add_above = QPushButton("Add Above")
         self.btn_test_add_below = QPushButton("Add Below")
         self.btn_test_del = QPushButton("Delete")
-        hb.addWidget(self.btn_test_add_above)
-        hb.addWidget(self.btn_test_add_below)
-        hb.addWidget(self.btn_test_del)
+        hb.addWidget(self.btn_test_add_above); hb.addWidget(self.btn_test_add_below); hb.addWidget(self.btn_test_del)
         v.addLayout(hb)
         self.forms.addTab(w, "Testing")
-
         self.btn_test_add_above.clicked.connect(lambda: (self._table_insert(self.testing_table, -1), self._schedule_sync()))
         self.btn_test_add_below.clicked.connect(lambda: (self._table_insert(self.testing_table, +1), self._schedule_sync()))
         self.btn_test_del.clicked.connect(lambda: (self._table_delete(self.testing_table), self._schedule_sync()))
         self.testing_table.cellChanged.connect(lambda _r, _c: self._schedule_sync())
-        
-        # Wire checkbox changes -> schedule write-back
-        self._wire_optional_checkboxes()
+
+        # --- DIAG START: form builder ---
+        try:
+            def _has(name): return hasattr(self, name)
+            print("[DIAG form] built:",
+                "meta_title:", _has("meta_title"),
+                "in_title:", _has("in_title"),
+                "board_pn:", _has("board_pn"),
+                "in_pn:", _has("in_pn"),
+                "panel_pieces:", _has("panel_pieces"),
+                "in_pieces:", _has("in_pieces"))
+            import sys; sys.stdout.flush()
+        except Exception as _e:
+            print("[DIAG form] print failed:", _e)
+        # --- DIAG END: form builder ---
+
+        # IMPORTANT: Do NOT call _wire_optional_checkboxes() here
+        # if you've already wired the top bar in __init__.
 
 
     def _populate_board_forms(self, html_text: str):
@@ -3123,59 +3071,63 @@ class MainTabs(QWidget):
                     del blocker
 
     def _on_toggle_optional(self, name: str, checked: bool):
-        """Show/hide the named optional tab."""
-        self._opt_visibility[name] = bool(checked)
-        self._apply_optional_visibility()
-
-    def _apply_optional_visibility(self):
-        """
-        Apply checkbox visibility to optional *forms* tabs (Qt) AND
-        rewrite the <div class="tab-container"><div class="tabs">...</div></div>
-        in the HTML to reflect which optional sections are visible.
-        """
-        # ---- Qt tab visibility ----
-        tabs = getattr(self, "_opt_tabs", {})
-        for name, info in tabs.items():
-            w = info["widget"]
-            title = info["title"]
-            want = bool(self._opt_visibility.get(name, True))
-            idx = self.forms.indexOf(w)
-            if hasattr(self.forms, "setTabVisible"):
-                if idx != -1:
-                    self.forms.setTabVisible(idx, want)
-                elif want:
-                    self.forms.addTab(w, title)
-            else:
-                if want and idx == -1:
-                    self.forms.addTab(w, title)
-                elif (not want) and idx != -1:
-                    self.forms.removeTab(idx)
-
-        # ---- HTML tab buttons rewrite ----
-        getter = self.get_editor_text if callable(self.get_editor_text) else None
-        html = getter() if getter else ""
-        if not html:
+        if getattr(self, "_is_updating_optionals", False):
             return
+        self._opt_visibility[name] = checked
+        updated = self._apply_optional_visibility(None)  # uses self._current_html
+        self._set_html_to_view(updated)
+        self._refresh_optionals_summary()
 
-        vis = {
-            # Required tabs are always True (kept in UI)
-            "details": True,
-            "schematic": True,
-            "revisions": True,
-            # Optional reflect checkboxes
-            "description": bool(self._opt_visibility.get("Description", True)),
-            "videos":      bool(self._opt_visibility.get("Videos", True)),
-            "layout":      bool(self._opt_visibility.get("Layout", True)),
-            "downloads":   bool(self._opt_visibility.get("Downloads", True)),
-            "resources":   bool(self._opt_visibility.get("Resources", True)),
-            "fmea":        bool(self._opt_visibility.get("FMEA", True)),
-            "testing":     bool(self._opt_visibility.get("Testing", True)),
-        }
+    # --- keep exactly one of these ---
+    def load_html_into_form(self, html_text: str):
+        """Load the current file's HTML into the form (board or collection)."""
+        # --- DIAG START: load_html_into_form ---
+        try:
+            import os, sys, re
+            print("\n[DIAG load] called:",
+                "len(html)=", len(html_text) if html_text else 0,
+                "path=", getattr(self, "current_path", None))
+            # if you set current_type earlier, show it; otherwise compute a guess
+            print("[DIAG load] current_type(before) =", getattr(self, "current_type", None))
+            print("[DIAG load] details?=", bool(re.search(r'id="details"', html_text or "", re.I)),
+                "description?=", bool(re.search(r'id="description"', html_text or "", re.I)))
+            sys.stdout.flush()
+        except Exception as _e:
+            print("[DIAG load] print failed:", _e)
+        # --- DIAG END: load_html_into_form ---
 
-        new_html = self._rewrite_tab_buttons_in_html(html, vis)
-        if new_html and new_html != html:
-            # Write the updated HTML back to the editor (debounce will take care of further sync)
-            self._set_editor_text(new_html)
+        self._current_html = html_text
+        self._update_view_bar_for_path(getattr(self, "current_path", None))
+
+        if getattr(self, "current_type", "other") == "board":
+            with self._suppress_updates():
+                # --- DIAG START: load -> populate call ---
+                try:
+                    has_board_tab = hasattr(self, "board_tab")
+                    has_layout = bool(hasattr(getattr(self, "board_tab", None), "layout") and self.board_tab.layout() is not None)
+                    print("[DIAG load] about to populate:",
+                        "has board_tab:", has_board_tab,
+                        "has layout:", has_layout)
+                    # Ensure the form exists without changing behavior
+                    if hasattr(self, "_ensure_board_form"):
+                        self._ensure_board_form()
+                        print("[DIAG load] _ensure_board_form() done.")
+                    import sys; sys.stdout.flush()
+                except Exception as _e:
+                    print("[DIAG load] pre-populate failed:", _e)
+                # --- DIAG END: load -> populate call ---
+                self._populate_board_from_html(html_text)
+                self._set_optional_checkboxes_from_html(html_text)  # reflect once
+            applied = self._apply_optional_visibility(html_text)     # rebuild sections/buttons
+            self._set_html_to_view(applied)
+        else:
+            self._set_html_to_view(html_text)
+
+    def _refresh_optionals_summary(self):
+        # Uses the top-bar state: self._opt_visibility and/or self._opt_checks
+        for name, lbl in getattr(self, "_opt_status_labels", {}).items():
+            visible = self._opt_visibility.get(name, True)
+            lbl.setText(f"{name}: {'Visible' if visible else 'Hidden'}")
 
     def _on_forms_current_changed(self, idx: int):
         """Remember the main tab index; also remember Metadata sub-tab if applicable."""
@@ -3201,31 +3153,133 @@ class MainTabs(QWidget):
                 finally:
                     del blocker
 
+    # --- unify toggle handler ---
     def _on_toggle_optional(self, name: str, checked: bool):
+        """Show/hide the named optional tab and rewrite HTML once."""
+        if getattr(self, "_is_updating_optionals", False):
+            return
+        # ensure containers exist
+        if not hasattr(self, "_opt_visibility"):
+            self._opt_visibility = {}
         self._opt_visibility[name] = bool(checked)
-        self._apply_optional_visibility()
 
-    def _apply_optional_visibility(self):
+        updated = self._apply_optional_visibility(None)  # uses self._current_html
+        self._set_html_to_view(updated)
+        if hasattr(self, "_refresh_optionals_summary"):
+            self._refresh_optionals_summary()
+
+    # --- the only _apply_optional_visibility you keep ---
+    def _apply_optional_visibility(self, html: str | None = None) -> str:
         """
-        Apply checkbox visibility to optional tabs.
-        Requires self._opt_tabs mapping to be set in _build_board_forms.
+        Rebuild the <div class="tabs"> buttons and add/remove matching section <div id="...">
+        blocks according to the Optional Tabs checkboxes.
+
+        Details, Schematic, and Revisions are always present.
+        Safe to call with no argument: will use self._current_html.
+        Does nothing on collection pages.
         """
-        tabs = getattr(self, "_opt_tabs", {})
-        for name, info in tabs.items():
-            w = info["widget"]
-            title = info["title"]
-            want = bool(self._opt_visibility.get(name, True))
-            idx = self.forms.indexOf(w)
-            if hasattr(self.forms, "setTabVisible"):
-                if idx != -1:
-                    self.forms.setTabVisible(idx, want)
-                elif want:
-                    self.forms.addTab(w, title)
+        import re
+
+        # Use current buffer if not provided
+        if html is None:
+            html = self._current_html or ""
+        if not html:
+            return html
+
+        # Skip optional processing on non-board pages
+        if getattr(self, "current_type", "other") != "board":
+            return html
+
+        flags = self._optional_flags()
+
+        LABELS = {
+            "details":     "Details",
+            "schematic":   "Schematic",
+            "description": "Description",
+            "layout":      "Layout",
+            "downloads":   "Downloads",
+            "resources":   "Additional Resources",
+            "videos":      "Videos",
+            "fmea":        "FMEA",
+            "testing":     "Testing",
+            "revisions":   "Revision History",
+        }
+        mandatory_ids = ["details", "schematic", "revisions"]
+        optional_ids  = ["description", "layout", "downloads", "resources", "videos", "fmea", "testing"]
+
+        enabled_optional = [tid for tid in optional_ids if flags.get(tid, False)]
+        target_ids = [mandatory_ids[0], mandatory_ids[1], *enabled_optional, mandatory_ids[2]]
+
+        # ---- 1) Ensure/create the <div class="tabs"> ... </div> ----
+        m_tabs = re.search(r'(?is)(<div\b[^>]*class="[^"]*\btabs\b[^"]*"[^>]*>)(.*?)(</div>)', html)
+        if not m_tabs:
+            tab_block = (
+                '<div class="tab-container">\n'
+                '  <div class="tabs" aria-label="Sections" role="tablist">\n'
+                '  </div>\n'
+                '</div>\n'
+            )
+            if re.search(r'(?is)</main>', html):
+                html = re.sub(r'(?is)</main>', tab_block + r'</main>', html, count=1)
             else:
-                if want and idx == -1:
-                    self.forms.addTab(w, title)
-                elif (not want) and idx != -1:
-                    self.forms.removeTab(idx)
+                html = re.sub(r'(?is)</body>', tab_block + r'</body>', html, count=1)
+            m_tabs = re.search(r'(?is)(<div\b[^>]*class="[^"]*\btabs\b[^"]*"[^>]*>)(.*?)(</div>)', html)
+            if not m_tabs:
+                return html
+
+        open_tabs, inner_tabs, close_tabs = m_tabs.group(1), m_tabs.group(2), m_tabs.group(3)
+
+        # Determine current active tab
+        m_active = re.search(
+            r'(?is)<button[^>]*\bclass="[^"]*\btab\b[^"]*\bactive\b[^"]*"[^>]*\baria-controls="([^"]+)"',
+            inner_tabs
+        )
+        active_id = m_active.group(1).strip() if m_active else None
+        if active_id not in target_ids:
+            active_id = target_ids[0]
+
+        # Rebuild pretty one-button-per-line block
+        btn_lines = ["\n"]
+        for tid in target_ids:
+            is_active = (tid == active_id)
+            active_cls = " active" if is_active else ""
+            btn_lines.append(f'  <button class="tab{active_cls}" role="tab" aria-controls="{tid}">{LABELS[tid]}</button>\n')
+
+        pretty_tabs = f"{open_tabs}{''.join(btn_lines)}{close_tabs}"
+        html = html[:m_tabs.start(1)] + pretty_tabs + html[m_tabs.end(3):]
+
+        # ---- 2) Ensure presence/absence of matching section <div id="..."> blocks ----
+        def ensure_section(h: str, sec_id: str) -> str:
+            if not re.search(rf'(?is)<div\b[^>]*id="{re.escape(sec_id)}"[^>]*>', h):
+                # append a minimal section near </main>
+                sec_html = (
+                    f'<div id="{sec_id}" class="tab-content">\n'
+                    f'  <h2>{LABELS[sec_id]}</h2>\n'
+                    f'</div>\n'
+                )
+                if re.search(r'(?is)</main>', h):
+                    return re.sub(r'(?is)</main>', sec_html + r'</main>', h, count=1)
+                return re.sub(r'(?is)</body>', sec_html + r'</body>', h, count=1)
+            return h
+
+        def remove_section(h: str, sec_id: str) -> str:
+            pat = re.compile(rf'(?is)<div\b[^>]*id="{re.escape(sec_id)}"[^>]*>.*?</div>\s*')
+            return re.sub(pat, "", h)
+
+        for must in mandatory_ids:
+            if not re.search(rf'(?is)<div\b[^>]*id="{re.escape(must)}"[^>]*>', html):
+                html = ensure_section(html, must)
+
+        for tid in optional_ids:
+            if tid in enabled_optional:
+                html = ensure_section(html, tid)
+            else:
+                if re.search(rf'(?is)<div\b[^>]*id="{re.escape(tid)}"[^>]*>', html):
+                    html = remove_section(html, tid)
+
+        # persist and return
+        self._current_html = html
+        return html
 
     def _rewrite_tab_buttons_in_html(self, html: str, visibility: dict[str, bool]) -> str:
         """
@@ -3353,27 +3407,57 @@ class MainTabs(QWidget):
         return html[:m.start(1)] + pretty_block + html[m.end(3):]
 
     def _optional_flags(self) -> dict:
-        """Current desired visibility (checkboxes) for optional tabs."""
-        def safe_is_checked(attr):
-            w = getattr(self, attr, None)
-            return bool(w.isChecked()) if w is not None else True  # default True
-        return {
-            "description": safe_is_checked("opt_description"),
-            "videos":      safe_is_checked("opt_videos"),
-            "layout":      safe_is_checked("opt_layout"),
-            "downloads":   safe_is_checked("opt_downloads"),
-            "resources":   safe_is_checked("opt_resources"),
-            "fmea":        safe_is_checked("opt_fmea"),
-            "testing":     safe_is_checked("opt_testing"),
-        }
+        """
+        Returns the enabled/disabled state for optional tabs.
+        Reads from the TOP-BAR checkboxes (self._opt_checks / _opt_visibility).
+        Keys must be the canonical IDs used in _apply_optional_visibility().
+        """
+        # canonical ids in the system
+        ids = ["description", "layout", "downloads", "resources", "videos", "fmea", "testing"]
 
-    def _apply_optional_visibility(self, html: str) -> str:
+        flags = {}
+        # Prefer live widgets if present
+        for tid in ids:
+            cb = None
+            # self._opt_checks may be keyed by id ("description") or label ("Description").
+            # Try id first; then try Title Case.
+            if hasattr(self, "_opt_checks"):
+                cb = self._opt_checks.get(tid) or self._opt_checks.get(tid.title())
+            if cb is not None:
+                flags[tid] = bool(cb.isChecked())
+                continue
+
+            # fallback to cached visibility map (set by toggle / load)
+            if hasattr(self, "_opt_visibility"):
+                if tid in self._opt_visibility:
+                    flags[tid] = bool(self._opt_visibility[tid])
+                    continue
+
+            # default (safe) if nothing available
+            flags[tid] = False
+
+        return flags
+
+    def _apply_optional_visibility(self, html: str | None = None) -> str:
         """
         Rebuild the <div class="tabs"> buttons and add/remove matching section <div id="...">
         blocks according to the Optional Tabs checkboxes.
         Details, Schematic, and Revisions are always present.
+
+        Safe to call with no argument: will use self._current_html.
+        Does nothing on collection pages.
         """
         import re
+
+        # Use current buffer if not provided
+        if html is None:
+            html = self._current_html or ""
+        if not html:
+            return html
+
+        # Skip optional processing on non-board pages
+        if getattr(self, "current_type", "other") != "board":
+            return html
 
         flags = self._optional_flags()
 
@@ -3414,18 +3498,20 @@ class MainTabs(QWidget):
             else:
                 html = re.sub(r'(?is)</body>', tab_block + r'</body>', html, count=1)
             m_tabs = re.search(r'(?is)(<div\b[^>]*class="[^"]*\btabs\b[^"]*"[^>]*>)(.*?)(</div>)', html)
+            if not m_tabs:
+                # If we still couldn't find it, bail safely
+                return html
 
         # ---- 2) Determine current active tab (to preserve if still present) ----
         active_id = "schematic"
-        if m_tabs:
-            tabs_inner = m_tabs.group(2)
-            m_active = re.search(r'(?is)<button\b[^>]*\bclass="[^"]*\bactive\b[^"]*"[^>]*\bdata-tab="([^"]+)"', tabs_inner)
-            if not m_active:
-                m_active = re.search(r'(?is)<button\b[^>]*\baria-selected="true"[^>]*\bdata-tab="([^"]+)"', tabs_inner)
-            if m_active:
-                cand = m_active.group(1).strip()
-                if cand in target_ids:
-                    active_id = cand
+        tabs_inner = m_tabs.group(2)
+        m_active = re.search(r'(?is)<button\b[^>]*\bclass="[^"]*\bactive\b[^"]*"[^>]*\bdata-tab="([^"]+)"', tabs_inner)
+        if not m_active:
+            m_active = re.search(r'(?is)<button\b[^>]*\baria-selected="true"[^>]*\bdata-tab="([^"]+)"', tabs_inner)
+        if m_active:
+            cand = m_active.group(1).strip()
+            if cand in target_ids:
+                active_id = cand
 
         # ---- 3) Build pretty buttons HTML (preserve indentation) ----
         tabs_open_abs_start = m_tabs.start(1)
@@ -3448,10 +3534,9 @@ class MainTabs(QWidget):
 
         buttons_html = indent0 + "\n" + "".join(mk_btn(tid) for tid in target_ids) + indent0
 
-        # Splice new buttons into the tabs div (replace m_tabs.group(2) only)
-        if m_tabs:
-            new_tabs_block = m_tabs.group(1) + buttons_html + m_tabs.group(3)
-            html = html[:m_tabs.start()] + new_tabs_block + html[m_tabs.end():]
+        # Splice new buttons into the tabs div (replace only the inner content)
+        new_tabs_block = m_tabs.group(1) + buttons_html + m_tabs.group(3)
+        html = html[:m_tabs.start()] + new_tabs_block + html[m_tabs.end():]
 
         # ---- 4) Ensure enabled sections exist; remove disabled ones ----
         def ensure_section(h: str, sec_id: str) -> str:
@@ -3485,6 +3570,8 @@ class MainTabs(QWidget):
                 if re.search(rf'(?is)<div\b[^>]*id="{re.escape(tid)}"[^>]*>', html):
                     html = remove_section(html, tid)
 
+        # persist and return
+        self._current_html = html
         return html
 
     def _wire_optional_checkboxes(self):
@@ -3500,32 +3587,446 @@ class MainTabs(QWidget):
         ):
             cb.stateChanged.connect(self._schedule_sync)
 
+    # --- canonical optional flags from the live checkboxes/top bar ---
     def _optional_flags(self) -> dict:
-        """Return the desired visibility for optional sections based on checkboxes."""
-        return {
-            "description": self.opt_description.isChecked(),
-            "layout":      self.opt_layout.isChecked(),
-            "downloads":   self.opt_downloads.isChecked(),
-            "resources":   self.opt_resources.isChecked(),
-            "videos":      self.opt_videos.isChecked(),
-            "fmea":        self.opt_fmea.isChecked(),
-            "testing":     self.opt_testing.isChecked(),
-        }
+        """
+        Return the desired visibility for optional sections based on checkboxes,
+        falling back to cached _opt_visibility when necessary.
+        """
+        flags = {}
 
+        # Prefer the live top-bar checkboxes if you maintain them there
+        for tid, cb in getattr(self, "_opt_checks", {}).items():
+            flags[tid.lower()] = bool(cb.isChecked())
+
+        # Fallback to cached map for anything missing
+        if hasattr(self, "_opt_visibility"):
+            for k, v in self._opt_visibility.items():
+                lk = k.lower()
+                if lk not in flags:
+                    flags[lk] = bool(v)
+
+        # Default safe values for known optionals (off unless present)
+        for k in ("description", "videos", "layout", "downloads", "resources", "fmea", "testing"):
+            flags.setdefault(k, False)
+
+        return flags
+
+    # --- single source of truth for reflecting checkboxes from HTML ---
     def _set_optional_checkboxes_from_html(self, html_text: str) -> None:
         """
-        Inspect the current file and tick/untick checkboxes to match what sections actually exist.
-        Always-on tabs are not changed here.
+        Reflect existing visibility from HTML into the already-built checkboxes.
+        (No rebuilding here, so no duplicates.)
         """
         import re
-        def has(sec_id: str) -> bool:
-            return re.search(rf'(?is)<div\b[^>]*id="{re.escape(sec_id)}"[^>]*>', html_text) is not None
+        self._is_updating_optionals = True
+        try:
+            for name, cb in getattr(self, "_opt_checks", {}).items():
+                # presence/absence check — tailor this to your actual markers/sections
+                has_section = re.search(rf'(?is)<div\b[^>]*id="{re.escape(name.lower())}"[^>]*>', html_text) is not None
+                want_checked = bool(has_section)
+                if cb.isChecked() != want_checked:
+                    cb.blockSignals(True)
+                    cb.setChecked(want_checked)
+                    cb.blockSignals(False)
+                if not hasattr(self, "_opt_visibility"):
+                    self._opt_visibility = {}
+                self._opt_visibility[name] = want_checked
+        finally:
+            self._is_updating_optionals = False
 
-        # reflect file -> checkboxes
-        self.opt_description.setChecked(has("description"))
-        self.opt_layout.setChecked(has("layout"))
-        self.opt_downloads.setChecked(has("downloads"))
-        self.opt_resources.setChecked(has("resources"))
-        self.opt_videos.setChecked(has("videos"))
-        self.opt_fmea.setChecked(has("fmea"))
-        self.opt_testing.setChecked(has("testing"))
+    def _rebuild_view_bar_from_names(self, names: list[str]):
+        """
+        Only call this if the actual set/order of optional sections changes.
+        Clears the row and reconnects each checkbox exactly once.
+        """
+        from functools import partial
+        self._clear_layout_items(self._view_bar_layout)   # ← your helper
+        self._opt_checks.clear()
+
+        for name in names:
+            cb = QCheckBox(name, self._view_bar)
+            cb.setChecked(self._opt_visibility.get(name, True))
+
+            try:
+                cb.toggled.disconnect()
+            except Exception:
+                pass
+            cb.toggled.connect(partial(self._on_toggle_optional, name))
+
+            self._view_bar_layout.addWidget(cb)
+            self._opt_checks[name] = cb
+
+        self._view_bar_layout.addStretch(1)
+
+    def _set_optional_checkboxes_from_html(self, html_text: str):
+        """
+        Reflect existing visibility from HTML into the already-built checkboxes.
+        (No rebuilding here, so no duplicates.)
+        """
+        import re
+        self._is_updating_optionals = True
+        try:
+            for name, cb in self._opt_checks.items():
+                hidden = re.search(
+                    rf'OPTIONAL:start\s+name="{re.escape(name)}"[^>]*-->.*?<div[^>]*data-optional-wrap="{re.escape(name)}"',
+                    html_text, re.DOTALL
+                ) is not None
+                want_checked = not hidden
+                if cb.isChecked() != want_checked:
+                    cb.blockSignals(True)
+                    cb.setChecked(want_checked)
+                    cb.blockSignals(False)
+                self._opt_visibility[name] = want_checked
+        finally:
+            self._is_updating_optionals = False
+
+    def _is_collection_filename(self, path: Path) -> bool:
+        """
+        Your rule: files named XX.html or XXX.html are collection pages.
+        """
+        if not path or not str(path).lower().endswith(".html"):
+            return False
+        stem = Path(path).stem
+        return len(stem) in (2, 3)
+
+    def _update_view_bar_for_path(self, path: Path | None):
+        is_board = bool(path) and not self._is_collection_filename(path)
+        self.current_type = "board" if is_board else "collection"
+        # show/hide the top bar
+        self._view_bar.setVisible(is_board)
+        # (optional) also disable so it can't get keyboard focus when hidden
+        self._view_bar.setEnabled(is_board)
+
+    def _show_no_file_placeholder(self):
+        self._clear_forms()
+        placeholder = QWidget()
+        v = QVBoxLayout(placeholder)
+        lbl = QLabel("No file loaded. Select a collection or board HTML page.")
+        lbl.setAlignment(Qt.AlignCenter)
+        v.addWidget(lbl)
+        self.forms.addTab(placeholder, "Forms")
+
+        # hide the top checkbox bar in no-file state
+        self.current_path = None
+        self.current_type = "other"
+        self._update_view_bar_for_path(None)
+
+    def on_tree_selection(self, index):
+        path = self._path_from_index(index)
+        if not path or not path.exists() or not str(path).lower().endswith(".html"):
+            with self._suppress_updates():
+                self.current_path = None
+                self.current_type = "other"
+                self._update_view_bar_for_path(None)
+                self._show_no_file_placeholder()  # whatever you use
+            return
+
+        self.current_path = path
+        self._update_view_bar_for_path(path)
+
+        html = Path(path).read_text(encoding="utf-8", errors="ignore")
+        self.load_html_into_form(html)
+
+    def _set_html_to_view(self, html: str, *, update_editor: bool = True, update_preview: bool = True) -> None:
+        """
+        Central place to push the latest HTML into the UI.
+        - Saves to self._current_html
+        - Updates a text editor widget if present
+        - Updates a preview (QWebEngineView) if present
+        """
+        self._current_html = html
+
+        # 1) Update the raw editor (best-effort: uses whatever you have)
+        if update_editor:
+            editor = None
+            for attr in ("html_editor", "editor", "editor_text", "txt_editor"):
+                if hasattr(self, attr):
+                    editor = getattr(self, attr)
+                    break
+
+            if callable(getattr(self, "set_editor_text", None)):
+                # If you have an explicit setter, use it
+                try:
+                    self.set_editor_text(html)
+                except Exception:
+                    pass
+            elif editor is not None:
+                try:
+                    # Prefer plain text for HTML source editors
+                    if hasattr(editor, "blockSignals"):
+                        editor.blockSignals(True)
+                    if hasattr(editor, "setPlainText"):
+                        editor.setPlainText(html)
+                    elif hasattr(editor, "setHtml"):
+                        editor.setHtml(html)
+                finally:
+                    if hasattr(editor, "blockSignals"):
+                        editor.blockSignals(False)
+
+        # 2) Update a live preview if you keep one around
+        if update_preview:
+            preview = None
+            for attr in ("webview", "preview", "html_preview", "pdf_view"):  # pdf_view ignored
+                if hasattr(self, attr):
+                    preview = getattr(self, attr)
+                    break
+            # Only update QWebEngineView-like objects
+            if preview is not None and hasattr(preview, "setHtml"):
+                try:
+                    preview.setHtml(html)
+                except Exception:
+                    pass
+
+    def _populate_board_from_html(self, html: str) -> None:
+        """
+        Parse board fields from HTML and populate the form widgets.
+        Looks in this order:
+        1) <meta name="..."> tags
+        2) <dl><dt>Label</dt><dd>Value</dd>...</dl> blocks
+        3) 2-column tables with header-like first cell (PN, Title, etc.)
+        4) Details/Description sections for title/description fallback
+        Also includes fallbacks for <title> and top-level <h1>.
+        NOTE: Call this inside `with self._suppress_updates():` from load_html_into_form().
+
+        Diagnostics are written to a file (self._diag_log_path) so they’re visible in a PyQt app.
+        """
+
+        # --- tiny file logger so diagnostics show up in a PyQt app ---
+        import os, datetime
+        if not hasattr(self, "_diag_log_path"):
+            # put it next to the running script or repo root if you track it elsewhere
+            base = os.getcwd()
+            self._diag_log_path = os.path.join(base, "studio_diag.log")
+
+        def _log(*parts):
+            try:
+                ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                line = " ".join(str(p) for p in parts)
+                with open(self._diag_log_path, "a", encoding="utf-8") as f:
+                    f.write(f"[{ts}] {line}\n")
+            except Exception:
+                # last-ditch: swallow logging errors (never break UI)
+                pass
+
+        # --- DIAG: entry ---
+        _log("[DIAG] populate called:", bool(html), "len(html)=", len(html) if html else 0)
+        if not html:
+            _log("[DIAG] empty HTML; abort populate.")
+            return
+
+        # Ensure form exists (no-op if already built)
+        if hasattr(self, "_ensure_board_form"):
+            try:
+                self._ensure_board_form()
+                _log("[DIAG] _ensure_board_form done.")
+            except Exception as _e:
+                _log("[DIAG] _ensure_board_form error:", repr(_e))
+
+        from bs4 import BeautifulSoup
+        import re
+
+        soup = BeautifulSoup(html or "", "html.parser")
+
+        def norm(s: str | None) -> str:
+            return re.sub(r"\s+", " ", (s or "").strip())
+
+        # --- 1) Meta tags ---
+        def meta(*names):
+            for name in names:
+                tag = soup.find("meta", attrs={"name": re.compile(rf"^{re.escape(name)}$", re.I)})
+                if tag and tag.has_attr("content"):
+                    v = norm(tag.get("content"))
+                    if v:
+                        return v
+            return ""
+
+        pn_val          = meta("pn", "part-number", "partnumber")
+        title_val       = meta("board-title", "title", "name")
+        board_size_val  = meta("board-size", "board_dimensions", "board-dimensions")
+        pieces_val      = meta("pieces-per-panel", "pieces", "per-panel")
+        panel_size_val  = meta("panel-size", "panel_dimensions", "panel-dimensions")
+        slogan_val      = meta("slogan", "tagline")
+        keywords_val    = meta("keywords")
+        descr_meta_val  = meta("description")  # SEO/summary
+
+        # --- 2) <dl> spec blocks ---
+        def dl_lookup(label):
+            dt = soup.find("dt", string=re.compile(rf"^\s*{re.escape(label)}\s*$", re.I))
+            if dt:
+                dd = dt.find_next_sibling("dd")
+                if dd:
+                    return norm(dd.get_text())
+            return ""
+
+        pn_val         = pn_val         or dl_lookup("PN")
+        title_val      = title_val      or dl_lookup("Title")
+        board_size_val = board_size_val or dl_lookup("Board Size")
+        pieces_val     = pieces_val     or dl_lookup("Pieces per Panel")
+        panel_size_val = panel_size_val or dl_lookup("Panel Size")
+        slogan_val     = slogan_val     or dl_lookup("Slogan")
+        keywords_val   = keywords_val   or dl_lookup("Keywords")
+        # (SEO description stays as descr_meta_val)
+
+        # --- 3) 2-column tables (label/value rows) ---
+        def table_lookup(*labels):
+            for tbl in soup.find_all("table"):
+                for tr in tbl.find_all("tr"):
+                    cells = tr.find_all(["th", "td"])
+                    if len(cells) >= 2:
+                        key = norm(cells[0].get_text())
+                        val = norm(cells[1].get_text())
+                        for L in labels:
+                            if re.fullmatch(rf"{re.escape(L)}", key, re.I) and val:
+                                return val
+            return ""
+
+        pn_val         = pn_val         or table_lookup("PN", "Part Number")
+        title_val      = title_val      or table_lookup("Title", "Board Title", "Name")
+        board_size_val = board_size_val or table_lookup("Board Size", "Board Dimensions")
+        pieces_val     = pieces_val     or table_lookup("Pieces per Panel", "Pieces/Panel", "Per Panel")
+        panel_size_val = panel_size_val or table_lookup("Panel Size", "Panel Dimensions")
+        slogan_val     = slogan_val     or table_lookup("Slogan", "Tagline")
+        keywords_val   = keywords_val   or table_lookup("Keywords")
+
+        # --- 4) Section / general fallbacks ---
+        if not title_val:
+            ttag = soup.find("title")
+            if ttag:
+                title_val = norm(ttag.get_text())
+
+        if not pn_val and title_val:
+            m = re.match(r'\s*([A-Za-z0-9][A-Za-z0-9\-\._]*)\s*\|', title_val)
+            if m:
+                pn_val = m.group(1)
+
+        if not title_val:
+            h1 = soup.find("h1")
+            if h1:
+                title_val = norm(h1.get_text())
+
+        desc_body_val = ""
+        desc_div = soup.find(id="description") or soup.find("section", id="description")
+        if desc_div:
+            desc_body_val = norm(desc_div.get_text())
+        if not desc_body_val:
+            any_desc = soup.find(class_=re.compile(r"\bdescription\b", re.I))
+            if any_desc:
+                desc_body_val = norm(any_desc.get_text())
+        if not desc_body_val:
+            desc_body_val = descr_meta_val
+
+        # --- DIAG parsed ---
+        _log("[DIAG] parsed:",
+            "title=", repr(title_val),
+            "desc_meta.len=", len(descr_meta_val) if descr_meta_val is not None else None,
+            "desc_body.len=", len(desc_body_val) if desc_body_val is not None else None,
+            "PN=", repr(pn_val),
+            "BoardSize=", repr(board_size_val),
+            "Pieces=", repr(pieces_val),
+            "PanelSize=", repr(panel_size_val),
+            "Keywords.len=", len(keywords_val or ""))
+
+        # --- alias map to tolerate widget name differences ---
+        aliases = {
+            "in_title":        ("in_title", "meta_title", "title_edit"),
+            "in_description":  ("in_description", "meta_description", "description_edit"),
+            "in_keywords":     ("in_keywords", "meta_keywords", "keywords_edit"),
+            "in_pn":           ("in_pn", "board_pn", "pn_edit"),
+            "in_board_size":   ("in_board_size", "board_size_edit"),
+            "in_pieces":       ("in_pieces", "panel_pieces", "pieces_edit"),
+            "in_panel_size":   ("in_panel_size", "panel_size_edit"),
+            "in_slogan":       ("in_slogan", "slogan_edit"),
+            "txt_description": ("txt_description", "description_body", "description_text"),
+        }
+
+        # --- DIAG alias picks ---
+        def _pick(*names):
+            for n in names:
+                if hasattr(self, n):
+                    return n
+            return None
+        _log("[DIAG] alias picks:",
+            "title->", _pick(*aliases["in_title"]),
+            "shortdesc->", _pick(*aliases["in_description"]),
+            "keywords->", _pick(*aliases["in_keywords"]),
+            "pn->", _pick(*aliases["in_pn"]),
+            "boardsize->", _pick(*aliases["in_board_size"]),
+            "pieces->", _pick(*aliases["in_pieces"]),
+            "panelsize->", _pick(*aliases["in_panel_size"]),
+            "slogan->", _pick(*aliases["in_slogan"]),
+            "body->", _pick(*aliases["txt_description"]))
+
+        def _get_widget(*names):
+            for n in names:
+                if hasattr(self, n):
+                    return getattr(self, n)
+            return None
+
+        # --- Write into widgets (caller has signals suppressed) ---
+        def _set_line(widget, txt):
+            if widget is None:
+                return
+            try:
+                widget.blockSignals(True)
+            except Exception:
+                pass
+            try:
+                if hasattr(widget, "setText"):
+                    widget.setText(txt or "")
+                elif hasattr(widget, "setPlainText"):
+                    widget.setPlainText(txt or "")
+            finally:
+                try:
+                    widget.blockSignals(False)
+                except Exception:
+                    pass
+
+        _set_line(_get_widget(*aliases["in_title"]),       title_val)
+        _set_line(_get_widget(*aliases["in_description"]), descr_meta_val)   # short/SEO
+        _set_line(_get_widget(*aliases["in_keywords"]),    keywords_val)
+        _set_line(_get_widget(*aliases["in_pn"]),          pn_val)
+        _set_line(_get_widget(*aliases["in_board_size"]),  board_size_val)
+        _set_line(_get_widget(*aliases["in_pieces"]),      pieces_val)
+        _set_line(_get_widget(*aliases["in_panel_size"]),  panel_size_val)
+        _set_line(_get_widget(*aliases["in_slogan"]),      slogan_val)
+
+        # Long description body (rich text area)
+        body_widget = _get_widget(*aliases["txt_description"])
+        if body_widget is not None:
+            try:
+                body_widget.blockSignals(True)
+            except Exception:
+                pass
+            try:
+                if hasattr(body_widget, "setPlainText"):
+                    body_widget.setPlainText(desc_body_val or "")
+                elif hasattr(body_widget, "setText"):
+                    body_widget.setText(desc_body_val or "")
+            finally:
+                try:
+                    body_widget.blockSignals(False)
+                except Exception:
+                    pass
+
+        _log("[DIAG] Populated board form. Log ->", self._diag_log_path)
+
+    @contextmanager
+    def _suppress_updates(self):
+        prev = getattr(self, "_suppress_form_signals", False)
+        self._suppress_form_signals = True
+        try:
+            yield
+        finally:
+            self._suppress_form_signals = prev
+
+    def _schedule_sync(self):
+        # don't sync while we're populating from HTML
+        if getattr(self, "_suppress_form_signals", False):
+            return
+        self._debounce.start()
+
+    def _sync_forms_to_editor(self):
+        if getattr(self, "_suppress_form_signals", False):
+            return
+        # ... your existing sync-to-HTML code ...
