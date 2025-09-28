@@ -1,3 +1,4 @@
+from pydoc import html
 import re
 import json
 
@@ -7,7 +8,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QAbstractItemView,
     QPlainTextEdit, QComboBox, QDialog, QDialogButtonBox, QCheckBox, QGridLayout, QFileDialog,
     QMenu, QAction, QDialog, QDialogButtonBox, QFileDialog, QMenu, QAction, QSizePolicy, QLabel, QScrollArea,
-    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QMessageBox
+    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QMessageBox, QGroupBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSignalBlocker, QPointF
 from PyQt5.QtGui import QPixmap, QTransform, QKeySequence
@@ -23,10 +24,6 @@ try:
 except Exception:
     QWebEngineView = None
     QUrl = None
-
-from .ai_seeds_dialog import AISeedsDialog
-from .ai_seed_helpers import parse_ai_seeds_from_html, write_ai_seeds_into_html
-
 
 import os
 
@@ -407,13 +404,16 @@ class ZoomPanImageView(QGraphicsView):
 
 class AiSeedsDialog(QDialog):
     """
-    Simple editor for the JSON stored in:
+    Editor for JSON stored in:
       <div id="ai-seeds"><script id="ai-seeds-json" type="application/json">{...}</script></div>
-    Fields:
+
+    Fields (flattened):
       - description_seed
+      - testing_seed
       - fmea_seed
-      - testing.dtp_seed
-      - testing.atp_seed
+
+    Backward compatible: if only testing.dtp_seed / testing.atp_seed exist,
+    they are concatenated into testing_seed on load.
     """
     def __init__(self, parent=None, seeds=None):
         super().__init__(parent)
@@ -421,29 +421,32 @@ class AiSeedsDialog(QDialog):
         self.resize(720, 540)
 
         seeds = seeds or {}
-        testing = seeds.get("testing", {})
+        description_seed = seeds.get("description_seed", "")
+        # prefer flattened key; else merge legacy dtp/atp if present
+        testing_seed = seeds.get("testing_seed", "")
+        if not testing_seed:
+            t = seeds.get("testing", {}) if isinstance(seeds.get("testing"), dict) else {}
+            parts = [(t.get("dtp_seed") or "").strip(), (t.get("atp_seed") or "").strip()]
+            testing_seed = "\n".join([p for p in parts if p])
+
+        fmea_seed = seeds.get("fmea_seed", "")
 
         self.txt_description = QPlainTextEdit(self)
         self.txt_description.setPlaceholderText("description_seed …")
-        self.txt_description.setPlainText(seeds.get("description_seed", ""))
+        self.txt_description.setPlainText(description_seed)
+
+        self.txt_testing = QPlainTextEdit(self)
+        self.txt_testing.setPlaceholderText("testing_seed …")
+        self.txt_testing.setPlainText(testing_seed)
 
         self.txt_fmea = QPlainTextEdit(self)
         self.txt_fmea.setPlaceholderText("fmea_seed …")
-        self.txt_fmea.setPlainText(seeds.get("fmea_seed", ""))
-
-        self.txt_dtp = QPlainTextEdit(self)
-        self.txt_dtp.setPlaceholderText("testing.dtp_seed …")
-        self.txt_dtp.setPlainText(testing.get("dtp_seed", ""))
-
-        self.txt_atp = QPlainTextEdit(self)
-        self.txt_atp.setPlaceholderText("testing.atp_seed …")
-        self.txt_atp.setPlainText(testing.get("atp_seed", ""))
+        self.txt_fmea.setPlainText(fmea_seed)
 
         form = QFormLayout(self)
         form.addRow("Description Seed:", self.txt_description)
+        form.addRow("Testing Seed:", self.txt_testing)
         form.addRow("FMEA Seed:", self.txt_fmea)
-        form.addRow("Dev Test Plan (dtp_seed):", self.txt_dtp)
-        form.addRow("Acceptance Test Plan (atp_seed):", self.txt_atp)
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self)
         btns.accepted.connect(self.accept)
@@ -451,14 +454,13 @@ class AiSeedsDialog(QDialog):
         form.addRow(btns)
 
     def result_seeds(self):
+        # Always return flattened shape
         return {
             "description_seed": self.txt_description.toPlainText().strip(),
+            "testing_seed": self.txt_testing.toPlainText().strip(),
             "fmea_seed": self.txt_fmea.toPlainText().strip(),
-            "testing": {
-                "dtp_seed": self.txt_dtp.toPlainText().strip(),
-                "atp_seed": self.txt_atp.toPlainText().strip(),
-            }
         }
+
 
 class MainTabs(QWidget):
     typeChanged = pyqtSignal(str)  # 'collection'|'board'|'other'
@@ -476,9 +478,27 @@ class MainTabs(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        # Forms tabs live inside this widget
+        # ---- View bar (checkboxes for optional tabs) ----
+        self._view_bar = QWidget(self)
+        self._view_bar_layout = QHBoxLayout(self._view_bar)
+        self._view_bar_layout.setContentsMargins(6, 2, 6, 2)
+        self._view_bar_layout.setSpacing(10)
+        self._opt_checks = {}
+        self._opt_visibility = {}
+        for name in ["Description", "Videos", "Layout", "Downloads", "Resources", "FMEA", "Testing"]:
+            cb = QCheckBox(name, self._view_bar)
+            cb.setChecked(True)  # default visible
+            cb.toggled.connect(lambda checked, n=name: self._on_toggle_optional(n, checked))
+            self._view_bar_layout.addWidget(cb)
+            self._opt_checks[name] = cb
+            self._opt_visibility[name] = True
+        self._view_bar_layout.addStretch(1)
+        outer.addWidget(self._view_bar)
+
+        # ---- Forms tabs ----
         self.forms = QTabWidget(self)
         self.forms.setMinimumHeight(320)
+        self.forms.currentChanged.connect(self._on_forms_current_changed)  # remember focus
         outer.addWidget(self.forms)
 
         # Default visible content so the area isn't blank
@@ -490,17 +510,22 @@ class MainTabs(QWidget):
         v.addWidget(lbl)
         self.forms.addTab(placeholder, "Forms")
 
+        # Remember last selected indices
+        self._last_main_tab_index = 0
+        self._last_meta_sub_index = 0  # used when Metadata sub-tabs exist
+
         # Debounce timer: sync forms -> editor ~700ms after last change
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
         self._debounce.setInterval(700)
         self._debounce.timeout.connect(self._sync_forms_to_editor)
 
-        # Periodic safety sync every 30s (keeps Raw Text updated so autosave saves to disk)
+        # Periodic safety sync every 30s
         self._periodic = QTimer(self)
         self._periodic.setInterval(30_000)
         self._periodic.timeout.connect(self._sync_forms_to_editor)
         self._periodic.start()
+
 
     # ---------- Public API ----------
     def load_html_file(self, path: Path):
@@ -541,6 +566,9 @@ class MainTabs(QWidget):
             v = QVBoxLayout(w)
             v.addWidget(QLabel("Unsupported file type. Use XX.html / XXX.html (collection) or XXX-XX.html / XXX-XXX.html (board)."))
             self.forms.addTab(w, "Info")
+
+        self._restore_focus_after_build()
+        self._apply_optional_visibility()
 
     # ---------- Type detection ----------
     def _is_collection_file(self, path: Path) -> bool:
@@ -791,6 +819,64 @@ class MainTabs(QWidget):
         form.addRow("Board Size:", self.in_board_size)
         form.addRow("Pieces per Panel:", self.in_pieces)
         form.addRow("Panel Size:", self.in_panel_size)
+        form.addRow("Panel Size:", self.in_panel_size)
+
+        # --- Optional Tabs panel (inside Basics) ---
+        opts_box = QGroupBox("Optional Tabs")
+        opts_lay = QGridLayout(opts_box)
+
+        self.opt_description = QCheckBox("Description")
+        self.opt_layout      = QCheckBox("Layout")
+        self.opt_downloads   = QCheckBox("Downloads")
+        self.opt_resources   = QCheckBox("Additional Resources")
+        self.opt_videos      = QCheckBox("Videos")
+        self.opt_fmea        = QCheckBox("FMEA")
+        self.opt_testing     = QCheckBox("Testing")
+
+        # Default states (UI only; will be overwritten by file on load)
+        self.opt_description.setChecked(True)
+        self.opt_layout.setChecked(True)
+        self.opt_downloads.setChecked(True)
+        self.opt_resources.setChecked(True)
+        self.opt_videos.setChecked(False)
+        self.opt_fmea.setChecked(False)
+        self.opt_testing.setChecked(False)
+
+        # lay them out
+        opts_lay.addWidget(self.opt_description, 0, 0)
+        opts_lay.addWidget(self.opt_layout,      0, 1)
+        opts_lay.addWidget(self.opt_downloads,   0, 2)
+        opts_lay.addWidget(self.opt_resources,   1, 0)
+        opts_lay.addWidget(self.opt_videos,      1, 1)
+        opts_lay.addWidget(self.opt_fmea,        1, 2)
+        opts_lay.addWidget(self.opt_testing,     2, 0)
+
+        vbx.addWidget(opts_box)
+
+        self.meta_tab.addTab(basics, "Basics")
+
+        # --- Optional Tabs controls ---
+        opt_box = QGroupBox("Optional Tabs", basics)
+        opt_layout = QVBoxLayout(opt_box)
+
+        self.opt_description = QCheckBox("Description");           self.opt_description.setObjectName("opt_description")
+        self.opt_videos      = QCheckBox("Videos");                self.opt_videos.setObjectName("opt_videos")
+        self.opt_layout      = QCheckBox("Layout");                self.opt_layout.setObjectName("opt_layout")
+        self.opt_downloads   = QCheckBox("Downloads");             self.opt_downloads.setObjectName("opt_downloads")
+        self.opt_resources   = QCheckBox("Additional Resources");  self.opt_resources.setObjectName("opt_resources")
+        self.opt_fmea        = QCheckBox("FMEA");                  self.opt_fmea.setObjectName("opt_fmea")
+        self.opt_testing     = QCheckBox("Testing");               self.opt_testing.setObjectName("opt_testing")
+
+        # Default checked (we’ll sync actual state when file loads)
+        for cb in (self.opt_description, self.opt_videos, self.opt_layout,
+                self.opt_downloads, self.opt_resources, self.opt_fmea, self.opt_testing):
+            opt_layout.addWidget(cb)
+            cb.setChecked(True)
+
+        vbx.addWidget(opt_box)
+
+        # Wire toggles -> debounce sync
+        self._wire_optional_checkboxes()
         self.meta_tab.addTab(basics, "Basics")
 
         # SEO
@@ -1032,6 +1118,10 @@ class MainTabs(QWidget):
         self.btn_test_add_below.clicked.connect(lambda: (self._table_insert(self.testing_table, +1), self._schedule_sync()))
         self.btn_test_del.clicked.connect(lambda: (self._table_delete(self.testing_table), self._schedule_sync()))
         self.testing_table.cellChanged.connect(lambda _r, _c: self._schedule_sync())
+        
+        # Wire checkbox changes -> schedule write-back
+        self._wire_optional_checkboxes()
+
 
     def _populate_board_forms(self, html_text: str):
         with self._block_form_signals():
@@ -1074,6 +1164,9 @@ class MainTabs(QWidget):
                 stem = self.current_path.stem
                 if "-" in stem:
                     pn = stem.split("-")[0].strip()
+
+            # Reflect file's current sections into the optional-tab checkboxes
+            self._set_optional_checkboxes_from_html(html_text)
 
             # SEO
             if soup:
@@ -1854,9 +1947,8 @@ class MainTabs(QWidget):
         # >>> Pretty-print the Description block last
         html = self._prettify_description_div(html)
 
+        html = self._apply_optional_visibility(html)
         return html
-
-
 
     # ---------- Common helpers ----------
     def _clear_forms(self):
@@ -2790,67 +2882,60 @@ class MainTabs(QWidget):
             self._set_editor_text(new_html)
             self.status.showMessage("AI seeds updated.", 3000)
 
-
-
     def _read_ai_seeds_from_html(self, html: str) -> dict:
-        """Return dict of seeds from <script id='ai-seeds-json'>, or defaults."""
-        default = {"description_seed": "", "fmea_seed": "", "testing": {"dtp_seed": "", "atp_seed": ""}}
-        # Prefer BeautifulSoup
+        """
+        Read seeds from <script id='ai-seeds-json' type='application/json'>.
+        Returns FLATTENED keys: description_seed, testing_seed, fmea_seed.
+        Backward compatible with legacy {"testing":{"dtp_seed","atp_seed"}}.
+        """
+        default = {"description_seed": "", "testing_seed": "", "fmea_seed": ""}
+
+        def _parse_payload(s: str) -> dict:
+            try:
+                data = json.loads(s)
+            except Exception:
+                return default.copy()
+
+            out = default.copy()
+            out["description_seed"] = (data.get("description_seed") or "").strip()
+            out["fmea_seed"] = (data.get("fmea_seed") or "").strip()
+            # Prefer flattened testing_seed; else merge legacy dtp/atp
+            ts = (data.get("testing_seed") or "").strip()
+            if not ts:
+                t = data.get("testing", {}) if isinstance(data.get("testing"), dict) else {}
+                parts = [(t.get("dtp_seed") or "").strip(), (t.get("atp_seed") or "").strip()]
+                ts = "\n".join([p for p in parts if p])
+            out["testing_seed"] = ts
+            return out
+
+        # BeautifulSoup path
         if BeautifulSoup:
             try:
                 soup = BeautifulSoup(html, "html.parser")
                 node = soup.select_one('script#ai-seeds-json[type="application/json"]')
                 if node and node.string:
-                    try:
-                        data = json.loads(node.string)
-                        # Merge with defaults to ensure keys exist
-                        out = default.copy()
-                        out.update({k: v for k, v in data.items() if k in ("description_seed", "fmea_seed", "testing")})
-                        if "testing" not in out or not isinstance(out["testing"], dict):
-                            out["testing"] = {"dtp_seed": "", "atp_seed": ""}
-                        else:
-                            out["testing"] = {
-                                "dtp_seed": out["testing"].get("dtp_seed", ""),
-                                "atp_seed": out["testing"].get("atp_seed", ""),
-                            }
-                        return out
-                    except Exception:
-                        pass
+                    return _parse_payload(node.string)
             except Exception:
                 pass
 
         # Regex fallback
         m = re.search(r'(?is)<script[^>]+id=["\']ai-seeds-json["\'][^>]*>(.*?)</script>', html)
         if m:
-            try:
-                data = json.loads(m.group(1))
-                out = default.copy()
-                out.update({k: v for k, v in data.items() if k in ("description_seed", "fmea_seed", "testing")})
-                if "testing" not in out or not isinstance(out["testing"], dict):
-                    out["testing"] = {"dtp_seed": "", "atp_seed": ""}
-                else:
-                    out["testing"] = {
-                        "dtp_seed": out["testing"].get("dtp_seed", ""),
-                        "atp_seed": out["testing"].get("atp_seed", ""),
-                    }
-                return out
-            except Exception:
-                return default
-        return default
+            return _parse_payload(m.group(1))
 
+        return default.copy()
 
     def _write_ai_seeds_to_html(self, html: str, seeds: dict) -> str:
         """
-        Upsert:
-        <div id="ai-seeds" class="tab-content" data-hidden="true" aria-hidden="true">
-            <script id="ai-seeds-json" type="application/json">{...}</script>
-        </div>
-        Prefer placing inside <main>; pretty indent the <script> inner.
+        Upsert the seeds block with FLATTENED keys only:
+        { "description_seed": "...", "testing_seed": "...", "fmea_seed": "..." }
         """
-        # Compact but stable JSON (no extra spaces to avoid noisy diffs)
-        payload = json.dumps(seeds, ensure_ascii=False)
+        payload = json.dumps({
+            "description_seed": (seeds.get("description_seed") or "").strip(),
+            "testing_seed": (seeds.get("testing_seed") or "").strip(),
+            "fmea_seed": (seeds.get("fmea_seed") or "").strip(),
+        }, ensure_ascii=False)
 
-        # If BeautifulSoup: ensure container; then replace or create script
         if BeautifulSoup:
             try:
                 soup = BeautifulSoup(html, "html.parser")
@@ -2872,19 +2957,16 @@ class MainTabs(QWidget):
                     script = soup.new_tag("script", id="ai-seeds-json", type="application/json")
                     seeds_div.append(script)
 
-                # Pretty-ish: put payload as text without extra whitespace
                 script.string = payload
                 return str(soup)
             except Exception:
                 pass
 
-        # Regex fallback paths
-        # 1) replace existing script
-        pattern = r'(?is)(<script[^>]+id=["\']ai-seeds-json["\'][^>]*>)(.*?)(</script>)'
-        if re.search(pattern, html):
-            return re.sub(pattern, rf'\1{payload}\3', html, count=1)
+        # Regex fallback: replace or insert
+        pat = r'(?is)(<script[^>]+id=["\']ai-seeds-json["\'][^>]*>)(.*?)(</script>)'
+        if re.search(pat, html):
+            return re.sub(pat, rf'\1{payload}\3', html, count=1)
 
-        # 2) insert new block before </main> if possible
         block = (
             '\n<div id="ai-seeds" class="tab-content" data-hidden="true" aria-hidden="true">\n'
             f'  <script id="ai-seeds-json" type="application/json">{payload}</script>\n'
@@ -2892,8 +2974,6 @@ class MainTabs(QWidget):
         )
         if re.search(r'(?is)</main>', html):
             return re.sub(r'(?is)</main>', block + r'</main>', html, count=1)
-
-        # 3) last resort: append before </body>
         return re.sub(r'(?is)</body>', block + r'</body>', html, count=1)
 
     def _replace_description_html(self, html: str, body_text: str) -> str:
@@ -2995,3 +3075,457 @@ class MainTabs(QWidget):
         lines.append(indent_div)
         pretty_inner = "".join(lines)
         return html[:m.start(1)] + open_div + pretty_inner + close_div + html[m.end(3):]
+
+    def _on_edit_ai_seeds(self):
+        """Open the AI Seeds dialog, load current seeds from HTML, write back if accepted."""
+        getter = self.get_editor_text if callable(self.get_editor_text) else None
+        html = getter() if getter else ""
+        if not html.strip():
+            QMessageBox.information(self, "Edit AI Seeds", "Open an HTML file first.")
+            return
+
+        seeds = self._read_ai_seeds_from_html(html)
+        dlg = AiSeedsDialog(self, seeds)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        new_seeds = dlg.result_seeds()  # flattened keys
+        new_html = self._write_ai_seeds_to_html(html, new_seeds)
+        if new_html and new_html != html:
+            self._set_editor_text(new_html)
+
+    def _on_forms_current_changed(self, idx: int):
+        # Persist main tab focus
+        if idx >= 0:
+            self._last_main_tab_index = idx
+        # Also capture sub-tab if current is the Metadata tab
+        w = self.forms.widget(idx)
+        if hasattr(self, "meta_tab") and w is self.meta_tab:
+            self._last_meta_sub_index = self.meta_tab.currentIndex() if self.meta_tab.count() else 0
+
+    def _on_meta_current_changed(self, idx: int):
+        # Persist sub-tab focus
+        if idx >= 0:
+            self._last_meta_sub_index = idx
+
+    def _restore_focus_after_build(self):
+        # Restore main tab
+        if 0 <= self._last_main_tab_index < self.forms.count():
+            self.forms.setCurrentIndex(self._last_main_tab_index)
+        # Restore sub-tab (if current main is metadata)
+        if hasattr(self, "meta_tab") and self.forms.currentWidget() is self.meta_tab:
+            if 0 <= self._last_meta_sub_index < self.meta_tab.count():
+                # avoid signal feedback loops
+                blocker = QSignalBlocker(self.meta_tab)
+                try:
+                    self.meta_tab.setCurrentIndex(self._last_meta_sub_index)
+                finally:
+                    del blocker
+
+    def _on_toggle_optional(self, name: str, checked: bool):
+        """Show/hide the named optional tab."""
+        self._opt_visibility[name] = bool(checked)
+        self._apply_optional_visibility()
+
+    def _apply_optional_visibility(self):
+        """
+        Apply checkbox visibility to optional *forms* tabs (Qt) AND
+        rewrite the <div class="tab-container"><div class="tabs">...</div></div>
+        in the HTML to reflect which optional sections are visible.
+        """
+        # ---- Qt tab visibility ----
+        tabs = getattr(self, "_opt_tabs", {})
+        for name, info in tabs.items():
+            w = info["widget"]
+            title = info["title"]
+            want = bool(self._opt_visibility.get(name, True))
+            idx = self.forms.indexOf(w)
+            if hasattr(self.forms, "setTabVisible"):
+                if idx != -1:
+                    self.forms.setTabVisible(idx, want)
+                elif want:
+                    self.forms.addTab(w, title)
+            else:
+                if want and idx == -1:
+                    self.forms.addTab(w, title)
+                elif (not want) and idx != -1:
+                    self.forms.removeTab(idx)
+
+        # ---- HTML tab buttons rewrite ----
+        getter = self.get_editor_text if callable(self.get_editor_text) else None
+        html = getter() if getter else ""
+        if not html:
+            return
+
+        vis = {
+            # Required tabs are always True (kept in UI)
+            "details": True,
+            "schematic": True,
+            "revisions": True,
+            # Optional reflect checkboxes
+            "description": bool(self._opt_visibility.get("Description", True)),
+            "videos":      bool(self._opt_visibility.get("Videos", True)),
+            "layout":      bool(self._opt_visibility.get("Layout", True)),
+            "downloads":   bool(self._opt_visibility.get("Downloads", True)),
+            "resources":   bool(self._opt_visibility.get("Resources", True)),
+            "fmea":        bool(self._opt_visibility.get("FMEA", True)),
+            "testing":     bool(self._opt_visibility.get("Testing", True)),
+        }
+
+        new_html = self._rewrite_tab_buttons_in_html(html, vis)
+        if new_html and new_html != html:
+            # Write the updated HTML back to the editor (debounce will take care of further sync)
+            self._set_editor_text(new_html)
+
+    def _on_forms_current_changed(self, idx: int):
+        """Remember the main tab index; also remember Metadata sub-tab if applicable."""
+        if idx >= 0:
+            self._last_main_tab_index = idx
+        if hasattr(self, "meta_tab") and self.forms.widget(idx) is self.meta_tab:
+            self._last_meta_sub_index = self.meta_tab.currentIndex() if self.meta_tab.count() else 0
+
+    def _on_meta_current_changed(self, idx: int):
+        """Call this from _build_board_forms after creating self.meta_tab."""
+        if idx >= 0:
+            self._last_meta_sub_index = idx
+
+    def _restore_focus_after_build(self):
+        """Call at end of load_html_file after building/populating forms."""
+        if 0 <= self._last_main_tab_index < self.forms.count():
+            self.forms.setCurrentIndex(self._last_main_tab_index)
+        if hasattr(self, "meta_tab") and self.forms.currentWidget() is self.meta_tab:
+            if 0 <= self._last_meta_sub_index < self.meta_tab.count():
+                blocker = QSignalBlocker(self.meta_tab)
+                try:
+                    self.meta_tab.setCurrentIndex(self._last_meta_sub_index)
+                finally:
+                    del blocker
+
+    def _on_toggle_optional(self, name: str, checked: bool):
+        self._opt_visibility[name] = bool(checked)
+        self._apply_optional_visibility()
+
+    def _apply_optional_visibility(self):
+        """
+        Apply checkbox visibility to optional tabs.
+        Requires self._opt_tabs mapping to be set in _build_board_forms.
+        """
+        tabs = getattr(self, "_opt_tabs", {})
+        for name, info in tabs.items():
+            w = info["widget"]
+            title = info["title"]
+            want = bool(self._opt_visibility.get(name, True))
+            idx = self.forms.indexOf(w)
+            if hasattr(self.forms, "setTabVisible"):
+                if idx != -1:
+                    self.forms.setTabVisible(idx, want)
+                elif want:
+                    self.forms.addTab(w, title)
+            else:
+                if want and idx == -1:
+                    self.forms.addTab(w, title)
+                elif (not want) and idx != -1:
+                    self.forms.removeTab(idx)
+
+    def _rewrite_tab_buttons_in_html(self, html: str, visibility: dict[str, bool]) -> str:
+        """
+        Rebuilds the inner of: <div class="tab-container"><div class="tabs" role="tablist"> ... </div></div>
+        according to 'visibility' dict keyed by section ids:
+        details, schematic, description, videos, layout, downloads, resources, fmea, testing, revisions.
+
+        Preserves <div class="tab-container"> and <div class="tabs ..."> opening tags.
+        Ensures one 'active' button remains (prefers first visible in the canonical order).
+        Produces pretty, one-button-per-line markup.
+        """
+        import re
+        # Canonical order + labels
+        ORDER = [
+            "details", "schematic",
+            "description", "videos", "layout", "downloads", "resources",
+            "fmea", "testing",
+            "revisions",
+        ]
+        LABELS = {
+            "details": "Details",
+            "schematic": "Schematic",
+            "description": "Description",
+            "videos": "Videos",
+            "layout": "Layout",
+            "downloads": "Downloads",
+            "resources": "Additional Resources",
+            "fmea": "FMEA",
+            "testing": "Testing",
+            "revisions": "Revision History",
+        }
+
+        # Which are visible now?
+        visible_ids = [sec for sec in ORDER if visibility.get(sec, False)]
+
+        if not visible_ids:
+            # Safety: never wipe tablist completely—fall back to essential
+            visible_ids = ["details", "schematic", "revisions"]
+
+        # Determine currently active (so we can try to preserve it)
+        active_id = None
+        m_active = re.search(
+            r'(?is)<button[^>]*\bclass="[^"]*\btab\b[^"]*\bactive\b[^"]*"[^>]*\baria-controls="([^"]+)"',
+            html
+        )
+        if m_active:
+            active_id = m_active.group(1).strip()
+
+        # If current active is not visible anymore, pick first visible
+        if active_id not in visible_ids:
+            active_id = visible_ids[0]
+
+        # Build pretty buttons markup (two-space indent under <div class="tabs">)
+        def build_buttons(active: str) -> str:
+            lines = []
+            for sec_id in visible_ids:
+                label = LABELS.get(sec_id, sec_id.title())
+                is_active = (sec_id == active)
+                cls = 'class="tab active"' if is_active else 'class="tab"'
+                aria_sel = ' aria-selected="true"' if is_active else ""
+                lines.append(f'  <button aria-controls="{sec_id}"{aria_sel} {cls} data-tab="{sec_id}" role="tab" type="button">{label}</button>')
+            # Join with newlines and trailing newline for cleanliness
+            return "\n" + "\n".join(lines) + "\n"
+
+        # Soup path first (cleaner + safer)
+        try:
+            if BeautifulSoup:
+                soup = BeautifulSoup(html, "html.parser")
+                tc = soup.select_one('div.tab-container')
+                tabs = tc.select_one('div.tabs') if tc else None
+                if not tabs:
+                    # Try a global .tabs as a fallback
+                    tabs = soup.select_one('div.tabs')
+                if not tabs:
+                    return html  # no tablist; don't change
+
+                # Remember indentation at <div class="tabs">
+                tabs_str = str(tabs)
+                # Replace its children with our buttons (as HTML)
+                # We rebuild the tabs element entirely to avoid stray text nodes
+                new_tabs = BeautifulSoup(str(tabs), "html.parser")
+                new_tabs_div = new_tabs.select_one('div.tabs')
+                if not new_tabs_div:
+                    return html
+                # clear children
+                for ch in list(new_tabs_div.children):
+                    ch.extract()
+                # inject our buttons as raw HTML
+                buttons_html = build_buttons(active_id)
+                inject = BeautifulSoup(buttons_html, "html.parser")
+                new_tabs_div.append(inject)
+
+                # Replace old tabs with new tabs
+                tabs.replace_with(new_tabs_div)
+
+                # Pretty print buttons block: indent under tabs line
+                out = str(soup)
+
+                # Optional tidy: ensure each <button> sits on its own line in the final text
+                out = re.sub(
+                    r'(?is)(<div[^>]*\bclass="[^"]*\btabs\b[^"]*"[^>]*>)\s*.*?(</div>)',
+                    lambda m: m.group(1) + buttons_html + m.group(2),
+                    out,
+                    count=1
+                )
+                return out
+        except Exception:
+            pass
+
+        # Regex fallback: replace the inner of the first <div class="tabs" ...> ... </div>
+        m = re.search(r'(?is)(<div\b[^>]*class="[^"]*\btabs\b[^"]*"[^>]*>)(.*?)(</div>)', html)
+        if not m:
+            return html
+
+        open_tag, inner, close_tag = m.group(1), m.group(2), m.group(3)
+
+        # Find indentation before the buttons block for pretty alignment
+        tabs_abs = m.start(1)
+        line_start = html.rfind("\n", 0, tabs_abs) + 1
+        base_indent = html[line_start:tabs_abs]
+        indent = base_indent if not base_indent.strip() else "  "
+        # Build with extra indent (we already add 2 spaces per button in build_buttons)
+        new_inner = build_buttons(active_id)
+        pretty_block = f"{open_tag}{new_inner}{close_tag}"
+        return html[:m.start(1)] + pretty_block + html[m.end(3):]
+
+    def _optional_flags(self) -> dict:
+        """Current desired visibility (checkboxes) for optional tabs."""
+        def safe_is_checked(attr):
+            w = getattr(self, attr, None)
+            return bool(w.isChecked()) if w is not None else True  # default True
+        return {
+            "description": safe_is_checked("opt_description"),
+            "videos":      safe_is_checked("opt_videos"),
+            "layout":      safe_is_checked("opt_layout"),
+            "downloads":   safe_is_checked("opt_downloads"),
+            "resources":   safe_is_checked("opt_resources"),
+            "fmea":        safe_is_checked("opt_fmea"),
+            "testing":     safe_is_checked("opt_testing"),
+        }
+
+    def _apply_optional_visibility(self, html: str) -> str:
+        """
+        Rebuild the <div class="tabs"> buttons and add/remove matching section <div id="...">
+        blocks according to the Optional Tabs checkboxes.
+        Details, Schematic, and Revisions are always present.
+        """
+        import re
+
+        flags = self._optional_flags()
+
+        # Canonical labels and order
+        LABELS = {
+            "details":     "Details",
+            "schematic":   "Schematic",
+            "description": "Description",
+            "layout":      "Layout",
+            "downloads":   "Downloads",
+            "resources":   "Additional Resources",
+            "videos":      "Videos",
+            "fmea":        "FMEA",
+            "testing":     "Testing",
+            "revisions":   "Revision History",
+        }
+        mandatory_ids = ["details", "schematic", "revisions"]
+        optional_ids  = ["description", "layout", "downloads", "resources", "videos", "fmea", "testing"]
+
+        # Which optional tabs should be present
+        enabled_optional = [tid for tid in optional_ids if flags.get(tid, False)]
+
+        # Final button order
+        target_ids = [mandatory_ids[0], mandatory_ids[1], *enabled_optional, mandatory_ids[2]]
+
+        # ---- 1) Find/create the <div class="tabs"> ... </div> ----
+        m_tabs = re.search(r'(?is)(<div\b[^>]*class="[^"]*\btabs\b[^"]*"[^>]*>)(.*?)(</div>)', html)
+        if not m_tabs:
+            # Create a minimal tab-container + tabs under <main>, else before </body>
+            tab_block = (
+                '<div class="tab-container">\n'
+                '  <div class="tabs" aria-label="Sections" role="tablist">\n'
+                '  </div>\n'
+                '</div>\n'
+            )
+            if re.search(r'(?is)</main>', html):
+                html = re.sub(r'(?is)</main>', tab_block + r'</main>', html, count=1)
+            else:
+                html = re.sub(r'(?is)</body>', tab_block + r'</body>', html, count=1)
+            m_tabs = re.search(r'(?is)(<div\b[^>]*class="[^"]*\btabs\b[^"]*"[^>]*>)(.*?)(</div>)', html)
+
+        # ---- 2) Determine current active tab (to preserve if still present) ----
+        active_id = "schematic"
+        if m_tabs:
+            tabs_inner = m_tabs.group(2)
+            m_active = re.search(r'(?is)<button\b[^>]*\bclass="[^"]*\bactive\b[^"]*"[^>]*\bdata-tab="([^"]+)"', tabs_inner)
+            if not m_active:
+                m_active = re.search(r'(?is)<button\b[^>]*\baria-selected="true"[^>]*\bdata-tab="([^"]+)"', tabs_inner)
+            if m_active:
+                cand = m_active.group(1).strip()
+                if cand in target_ids:
+                    active_id = cand
+
+        # ---- 3) Build pretty buttons HTML (preserve indentation) ----
+        tabs_open_abs_start = m_tabs.start(1)
+        line_start = html.rfind("\n", 0, tabs_open_abs_start) + 1
+        base_indent = html[line_start:tabs_open_abs_start]
+        indent0 = base_indent if not base_indent.strip() else "  "
+        indent1 = indent0 + "  "
+
+        def mk_btn(tab_id: str) -> str:
+            label = LABELS.get(tab_id, tab_id.title())
+            selected = (tab_id == active_id)
+            attrs = (
+                f'aria-controls="{tab_id}" '
+                f'class="tab{" active" if selected else ""}" '
+                f'data-tab="{tab_id}" role="tab" type="button"'
+            )
+            if selected:
+                attrs = attrs.replace('class="tab', 'aria-selected="true" class="tab', 1)
+            return f'{indent1}<button {attrs}>{label}</button>\n'
+
+        buttons_html = indent0 + "\n" + "".join(mk_btn(tid) for tid in target_ids) + indent0
+
+        # Splice new buttons into the tabs div (replace m_tabs.group(2) only)
+        if m_tabs:
+            new_tabs_block = m_tabs.group(1) + buttons_html + m_tabs.group(3)
+            html = html[:m_tabs.start()] + new_tabs_block + html[m_tabs.end():]
+
+        # ---- 4) Ensure enabled sections exist; remove disabled ones ----
+        def ensure_section(h: str, sec_id: str) -> str:
+            if re.search(rf'(?is)<div\b[^>]*id="{re.escape(sec_id)}"[^>]*>', h):
+                return h  # already exists
+            label = LABELS.get(sec_id, sec_id.title())
+            block = (
+                f'<div class="tab-content" id="{sec_id}">\n'
+                f'  <h2>{label}</h2>\n'
+                f'</div>\n'
+            )
+            if re.search(r'(?is)</main>', h):
+                return re.sub(r'(?is)</main>', block + r'</main>', h, count=1)
+            return re.sub(r'(?is)</body>', block + r'</body>', h, count=1)
+
+        def remove_section(h: str, sec_id: str) -> str:
+            pat = re.compile(rf'(?is)<div\b[^>]*id="{re.escape(sec_id)}"[^>]*>.*?</div>\s*')
+            return re.sub(pat, "", h)
+
+        # Always-on sections must exist
+        for must in mandatory_ids:
+            if not re.search(rf'(?is)<div\b[^>]*id="{re.escape(must)}"[^>]*>', html):
+                html = ensure_section(html, must)
+
+        # Optional sections on/off
+        for tid in optional_ids:
+            if tid in enabled_optional:
+                if not re.search(rf'(?is)<div\b[^>]*id="{re.escape(tid)}"[^>]*>', html):
+                    html = ensure_section(html, tid)
+            else:
+                if re.search(rf'(?is)<div\b[^>]*id="{re.escape(tid)}"[^>]*>', html):
+                    html = remove_section(html, tid)
+
+        return html
+
+    def _wire_optional_checkboxes(self):
+        """Connect optional-tab checkboxes to schedule an HTML rebuild."""
+        for cb in (
+            self.opt_description,
+            self.opt_layout,
+            self.opt_downloads,
+            self.opt_resources,
+            self.opt_videos,
+            self.opt_fmea,
+            self.opt_testing,
+        ):
+            cb.stateChanged.connect(self._schedule_sync)
+
+    def _optional_flags(self) -> dict:
+        """Return the desired visibility for optional sections based on checkboxes."""
+        return {
+            "description": self.opt_description.isChecked(),
+            "layout":      self.opt_layout.isChecked(),
+            "downloads":   self.opt_downloads.isChecked(),
+            "resources":   self.opt_resources.isChecked(),
+            "videos":      self.opt_videos.isChecked(),
+            "fmea":        self.opt_fmea.isChecked(),
+            "testing":     self.opt_testing.isChecked(),
+        }
+
+    def _set_optional_checkboxes_from_html(self, html_text: str) -> None:
+        """
+        Inspect the current file and tick/untick checkboxes to match what sections actually exist.
+        Always-on tabs are not changed here.
+        """
+        import re
+        def has(sec_id: str) -> bool:
+            return re.search(rf'(?is)<div\b[^>]*id="{re.escape(sec_id)}"[^>]*>', html_text) is not None
+
+        # reflect file -> checkboxes
+        self.opt_description.setChecked(has("description"))
+        self.opt_layout.setChecked(has("layout"))
+        self.opt_downloads.setChecked(has("downloads"))
+        self.opt_resources.setChecked(has("resources"))
+        self.opt_videos.setChecked(has("videos"))
+        self.opt_fmea.setChecked(has("fmea"))
+        self.opt_testing.setChecked(has("testing"))
