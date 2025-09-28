@@ -157,11 +157,33 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(self)
         splitter.addWidget(self.tree)
 
-        # Right side has two major tabs: Forms and Raw Text
+        # Right side has three major tabs now: Forms, Raw Text, Debug  <<< CHANGED
         self.right_tabs = QTabWidget(self)
+
+        # Pass a callable so Forms can read the current editor HTML
         self.tabs_view = MainTabs(self.ctx, get_editor_text_callable=lambda: self.editor.edit.toPlainText())
         self.right_tabs.addTab(self.tabs_view, "Forms")
         self.right_tabs.addTab(self.editor, "Raw Text")
+
+        # --- NEW: Debug tab + simple logging sink
+        self.debug = QPlainTextEdit(self)
+        self.debug.setReadOnly(True)
+        self.debug.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.right_tabs.addTab(self.debug, "Debug")
+
+        # expose a logger MainTabs (and others) can call via self.window().log_debug(...)
+        def log_debug(msg: str):
+            try:
+                ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                # simple rolling buffer
+                if self.debug.blockCount() > 4000:
+                    self.debug.clear()
+                    self.debug.appendPlainText("[debug] cleared (rolling)")
+                self.debug.appendPlainText(f"[{ts}] {msg}")
+            except Exception:
+                pass
+        self.log_debug = log_debug  # attribute on MainWindow
+
         splitter.addWidget(self.right_tabs)
         splitter.setStretchFactor(1, 1)
         self.setCentralWidget(splitter)
@@ -171,7 +193,10 @@ class MainWindow(QMainWindow):
         self.autosave_label = QLabel("Autosave ready", self)
         self.status.addPermanentWidget(self.autosave_label)
 
-        # remember last active major tab (Forms/Raw Text) per file type
+        # Let Forms post status messages safely (some Form code calls self.status)
+        self.tabs_view.status = self.status  # <<< NEW: handy bridge
+
+        # remember last active major tab (Forms/Raw Text/Debug) per file type  <<< CHANGED default index size
         self._last_tab_for_type = {'board': 0, 'collection': 0, 'other': 0}
 
         # wires
@@ -191,7 +216,7 @@ class MainWindow(QMainWindow):
 
         # menus
         self._build_menus()
-        install_hotkeys(self)  # keep other hotkeys; Ctrl+S is handled below
+        install_hotkeys(self)
 
         # restore last opened folder/file
         self._restore_last_opened()

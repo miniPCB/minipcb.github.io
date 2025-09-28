@@ -3,6 +3,7 @@ import re
 import json
 from contextlib import contextmanager
 from pathlib import Path
+from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QTabWidget, QVBoxLayout, QFormLayout, QLineEdit, QTextEdit, QListWidget,
     QPushButton, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QAbstractItemView,
@@ -10,7 +11,7 @@ from PyQt5.QtWidgets import (
     QMenu, QAction, QDialog, QDialogButtonBox, QFileDialog, QMenu, QAction, QSizePolicy, QLabel, QScrollArea,
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QMessageBox, QGroupBox
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSignalBlocker, QPointF
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QSignalBlocker, QPointF, QDateTime
 from PyQt5.QtGui import QPixmap, QTransform, QKeySequence
 
 try:
@@ -527,6 +528,8 @@ class MainTabs(QWidget):
         self.forms.setMinimumHeight(320)
         self.forms.currentChanged.connect(self._on_forms_current_changed)  # remember focus
         outer.addWidget(self.forms)
+        
+        self._init_debug_window()
 
         # Default visible content so the area isn't blank
         self._clear_forms()
@@ -3781,57 +3784,33 @@ class MainTabs(QWidget):
     def _populate_board_from_html(self, html: str) -> None:
         """
         Parse board fields from HTML and populate the form widgets.
-        Looks in this order:
-        1) <meta name="..."> tags
-        2) <dl><dt>Label</dt><dd>Value</dd>...</dl> blocks
-        3) 2-column tables with header-like first cell (PN, Title, etc.)
-        4) Details/Description sections for title/description fallback
-        Also includes fallbacks for <title> and top-level <h1>.
-        NOTE: Call this inside `with self._suppress_updates():` from load_html_into_form().
-
-        Diagnostics are written to a file (self._diag_log_path) so they’re visible in a PyQt app.
         """
-
-        # --- tiny file logger so diagnostics show up in a PyQt app ---
-        import os, datetime
-        if not hasattr(self, "_diag_log_path"):
-            # put it next to the running script or repo root if you track it elsewhere
-            base = os.getcwd()
-            self._diag_log_path = os.path.join(base, "studio_diag.log")
-
-        def _log(*parts):
-            try:
-                ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                line = " ".join(str(p) for p in parts)
-                with open(self._diag_log_path, "a", encoding="utf-8") as f:
-                    f.write(f"[{ts}] {line}\n")
-            except Exception:
-                # last-ditch: swallow logging errors (never break UI)
-                pass
-
-        # --- DIAG: entry ---
-        _log("[DIAG] populate called:", bool(html), "len(html)=", len(html) if html else 0)
+        self._d("[DIAG] populate called:", bool(html), "len(html)=", len(html) if html else 0)
         if not html:
-            _log("[DIAG] empty HTML; abort populate.")
+            self._d("[DIAG] empty HTML; abort populate.")
             return
 
         # Ensure form exists (no-op if already built)
         if hasattr(self, "_ensure_board_form"):
             try:
                 self._ensure_board_form()
-                _log("[DIAG] _ensure_board_form done.")
+                self._d("[DIAG] _ensure_board_form done.")
             except Exception as _e:
-                _log("[DIAG] _ensure_board_form error:", repr(_e))
+                self._d("[DIAG] _ensure_board_form error:", repr(_e))
 
-        from bs4 import BeautifulSoup
+        # --- parse ---
         import re
+        try:
+            from bs4 import BeautifulSoup
+        except Exception as _e:
+            self._d("[DIAG] BeautifulSoup import failed:", repr(_e))
+            return
 
         soup = BeautifulSoup(html or "", "html.parser")
 
         def norm(s: str | None) -> str:
             return re.sub(r"\s+", " ", (s or "").strip())
 
-        # --- 1) Meta tags ---
         def meta(*names):
             for name in names:
                 tag = soup.find("meta", attrs={"name": re.compile(rf"^{re.escape(name)}$", re.I)})
@@ -3850,7 +3829,6 @@ class MainTabs(QWidget):
         keywords_val    = meta("keywords")
         descr_meta_val  = meta("description")  # SEO/summary
 
-        # --- 2) <dl> spec blocks ---
         def dl_lookup(label):
             dt = soup.find("dt", string=re.compile(rf"^\s*{re.escape(label)}\s*$", re.I))
             if dt:
@@ -3866,9 +3844,7 @@ class MainTabs(QWidget):
         panel_size_val = panel_size_val or dl_lookup("Panel Size")
         slogan_val     = slogan_val     or dl_lookup("Slogan")
         keywords_val   = keywords_val   or dl_lookup("Keywords")
-        # (SEO description stays as descr_meta_val)
 
-        # --- 3) 2-column tables (label/value rows) ---
         def table_lookup(*labels):
             for tbl in soup.find_all("table"):
                 for tr in tbl.find_all("tr"):
@@ -3889,17 +3865,15 @@ class MainTabs(QWidget):
         slogan_val     = slogan_val     or table_lookup("Slogan", "Tagline")
         keywords_val   = keywords_val   or table_lookup("Keywords")
 
-        # --- 4) Section / general fallbacks ---
+        # fallbacks
         if not title_val:
             ttag = soup.find("title")
             if ttag:
                 title_val = norm(ttag.get_text())
-
         if not pn_val and title_val:
             m = re.match(r'\s*([A-Za-z0-9][A-Za-z0-9\-\._]*)\s*\|', title_val)
             if m:
                 pn_val = m.group(1)
-
         if not title_val:
             h1 = soup.find("h1")
             if h1:
@@ -3916,18 +3890,17 @@ class MainTabs(QWidget):
         if not desc_body_val:
             desc_body_val = descr_meta_val
 
-        # --- DIAG parsed ---
-        _log("[DIAG] parsed:",
-            "title=", repr(title_val),
-            "desc_meta.len=", len(descr_meta_val) if descr_meta_val is not None else None,
-            "desc_body.len=", len(desc_body_val) if desc_body_val is not None else None,
-            "PN=", repr(pn_val),
-            "BoardSize=", repr(board_size_val),
-            "Pieces=", repr(pieces_val),
-            "PanelSize=", repr(panel_size_val),
-            "Keywords.len=", len(keywords_val or ""))
+        self._d("[DIAG] parsed",
+                "PN=", repr(pn_val),
+                "Title=", repr(title_val),
+                "SEOdesc.len=", len(descr_meta_val or ""),
+                "Bodydesc.len=", len(desc_body_val or ""),
+                "BoardSize=", repr(board_size_val),
+                "Pieces=", repr(pieces_val),
+                "PanelSize=", repr(panel_size_val),
+                "Keywords.len=", len(keywords_val or ""))
 
-        # --- alias map to tolerate widget name differences ---
+        # --- write to widgets ---
         aliases = {
             "in_title":        ("in_title", "meta_title", "title_edit"),
             "in_description":  ("in_description", "meta_description", "description_edit"),
@@ -3940,30 +3913,12 @@ class MainTabs(QWidget):
             "txt_description": ("txt_description", "description_body", "description_text"),
         }
 
-        # --- DIAG alias picks ---
-        def _pick(*names):
-            for n in names:
-                if hasattr(self, n):
-                    return n
-            return None
-        _log("[DIAG] alias picks:",
-            "title->", _pick(*aliases["in_title"]),
-            "shortdesc->", _pick(*aliases["in_description"]),
-            "keywords->", _pick(*aliases["in_keywords"]),
-            "pn->", _pick(*aliases["in_pn"]),
-            "boardsize->", _pick(*aliases["in_board_size"]),
-            "pieces->", _pick(*aliases["in_pieces"]),
-            "panelsize->", _pick(*aliases["in_panel_size"]),
-            "slogan->", _pick(*aliases["in_slogan"]),
-            "body->", _pick(*aliases["txt_description"]))
-
         def _get_widget(*names):
             for n in names:
                 if hasattr(self, n):
                     return getattr(self, n)
             return None
 
-        # --- Write into widgets (caller has signals suppressed) ---
         def _set_line(widget, txt):
             if widget is None:
                 return
@@ -3983,7 +3938,7 @@ class MainTabs(QWidget):
                     pass
 
         _set_line(_get_widget(*aliases["in_title"]),       title_val)
-        _set_line(_get_widget(*aliases["in_description"]), descr_meta_val)   # short/SEO
+        _set_line(_get_widget(*aliases["in_description"]), descr_meta_val)   # SEO/short
         _set_line(_get_widget(*aliases["in_keywords"]),    keywords_val)
         _set_line(_get_widget(*aliases["in_pn"]),          pn_val)
         _set_line(_get_widget(*aliases["in_board_size"]),  board_size_val)
@@ -3991,7 +3946,6 @@ class MainTabs(QWidget):
         _set_line(_get_widget(*aliases["in_panel_size"]),  panel_size_val)
         _set_line(_get_widget(*aliases["in_slogan"]),      slogan_val)
 
-        # Long description body (rich text area)
         body_widget = _get_widget(*aliases["txt_description"])
         if body_widget is not None:
             try:
@@ -4009,7 +3963,7 @@ class MainTabs(QWidget):
                 except Exception:
                     pass
 
-        _log("[DIAG] Populated board form. Log ->", self._diag_log_path)
+        self._d("[DIAG] board form populated")
 
     @contextmanager
     def _suppress_updates(self):
@@ -4030,3 +3984,182 @@ class MainTabs(QWidget):
         if getattr(self, "_suppress_form_signals", False):
             return
         # ... your existing sync-to-HTML code ...
+
+    def init_debug_window(self) -> None:
+        """
+        Create (or find) a major 'Debug Window' tab and wire a lightweight logger.
+        Call once after your UI/tabwidget is built (e.g., at the end of __init__).
+        """
+        # Find a tab widget to host the major tab (first QTabWidget under this widget)
+        tabw = None
+        if hasattr(self, "tabs") and isinstance(getattr(self, "tabs"), QTabWidget):
+            tabw = self.tabs
+        else:
+            tabw = self.findChild(QTabWidget)
+        if tabw is None:
+            # Fallback: create a tab widget at root if none exists
+            tabw = QTabWidget(self)
+            lay = self.layout()
+            if lay is None:
+                lay = QVBoxLayout(self)
+                self.setLayout(lay)
+            lay.addWidget(tabw)
+
+        # If already created, return
+        if getattr(self, "_debug_tab_idx", None) is not None and hasattr(self, "debug_text"):
+            return
+
+        # Build the Debug tab
+        dbg_page = QWidget()
+        dbg_layout = QVBoxLayout(dbg_page)
+        dbg_text = QTextEdit(dbg_page)
+        dbg_text.setReadOnly(True)
+        # Monospace, gentle word wrap off for logs
+        dbg_text.setLineWrapMode(QTextEdit.NoWrap)
+        dbg_text.setPlaceholderText("Debug output will appear here…")
+        dbg_layout.addWidget(dbg_text)
+
+        idx = tabw.addTab(dbg_page, "Debug Window")
+        self._debug_tab_idx = idx
+        self.debug_text = dbg_text
+        self._debug_tabw = tabw
+
+        # optional: jump cursor to end on text changes
+        def _auto_scroll():
+            cursor = self.debug_text.textCursor()
+            cursor.movePosition(cursor.End)
+            self.debug_text.setTextCursor(cursor)
+        self.debug_text.textChanged.connect(_auto_scroll)
+
+    def clear_debug_window(self) -> None:
+        if hasattr(self, "debug_text"):
+            self.debug_text.clear()
+
+    def _d(self, *parts) -> None:
+        """
+        Append a timestamped log line to the Debug Window (if available),
+        else print to stdout. Safe to call from anywhere.
+        """
+        msg = " ".join(str(p) for p in parts)
+        ts = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz")
+        line = f"[{ts}] {msg}"
+
+        # If we have a debug window, append there (ensure on GUI thread)
+        if hasattr(self, "debug_text") and self.debug_text is not None:
+            def _append():
+                # Keep logs lightweight: limit to last ~5000 lines
+                self.debug_text.append(line)
+                # optional soft cap
+                max_blocks = 5000
+                doc = self.debug_text.document()
+                if doc.blockCount() > max_blocks:
+                    # remove oldest excess blocks
+                    cur = doc.findBlockByNumber(0).position()
+                    end = doc.findBlockByNumber(doc.blockCount() - max_blocks).position()
+                    cursor = self.debug_text.textCursor()
+                    cursor.setPosition(cur)
+                    cursor.setPosition(end, cursor.KeepAnchor)
+                    cursor.removeSelectedText()
+                    cursor.deletePreviousChar()
+            QTimer.singleShot(0, _append)
+        else:
+            print(line)
+
+    # ===================== DEBUG WINDOW (major tab) =====================
+    def _init_debug_window(self) -> None:
+        """
+        Ensure a 'Debug Window' major tab exists on self.forms.
+        Safe to call any time; buffers lines until ready.
+        The tab will appear alongside 'Forms' and 'Raw Text'.
+        """
+        # prepare buffer
+        if not hasattr(self, "_dbg_buffer"):
+            self._dbg_buffer = []
+
+        # forms not ready yet? try again on next tick
+        if not hasattr(self, "forms") or not isinstance(self.forms, QTabWidget):
+            QTimer.singleShot(0, self._init_debug_window)
+            return
+
+        # already installed?
+        if getattr(self, "_dbg_tab_ready", False) and getattr(self, "debug_text", None):
+            return
+
+        # If a tab titled "Debug Window" already exists, reuse it
+        for i in range(self.forms.count()):
+            if self.forms.tabText(i).strip().lower() == "debug window":
+                page = self.forms.widget(i)
+                self.debug_text = page.findChild(QTextEdit) or QTextEdit(page)
+                self._debug_tab_idx = i
+                self._dbg_tab_ready = True
+                self._flush_debug_buffer()
+                return
+
+        # Build the page
+        page = QWidget(self.forms)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(6, 6, 6, 6)
+        self.debug_text = QTextEdit(page)
+        self.debug_text.setReadOnly(True)
+        self.debug_text.setLineWrapMode(QTextEdit.NoWrap)
+        self.debug_text.setPlaceholderText("Debug output will appear here…")
+        layout.addWidget(self.debug_text)
+
+        # Add as a new major tab
+        self._debug_tab_idx = self.forms.addTab(page, "Debug Window")
+        self._dbg_tab_ready = True
+
+        # Auto-scroll to bottom on new text
+        def _auto_scroll():
+            cur = self.debug_text.textCursor()
+            cur.movePosition(cur.End)
+            self.debug_text.setTextCursor(cur)
+        self.debug_text.textChanged.connect(_auto_scroll)
+
+        # Flush anything logged before the tab existed
+        self._flush_debug_buffer()
+
+    def _flush_debug_buffer(self) -> None:
+        """Push any buffered lines into the Debug Window if it's ready."""
+        if not getattr(self, "_dbg_tab_ready", False) or not getattr(self, "debug_text", None):
+            return
+        for line in getattr(self, "_dbg_buffer", []):
+            try:
+                self.debug_text.append(line)
+            except Exception:
+                pass
+        self._dbg_buffer.clear()
+
+    def debug(self, msg: str) -> None:
+        """Append a timestamped line to the Debug Window (buffers until ready)."""
+        try:
+            ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+            line = f"[{ts}] {msg}"
+        except Exception:
+            line = str(msg)
+
+        if getattr(self, "_dbg_tab_ready", False) and getattr(self, "debug_text", None):
+            try:
+                self.debug_text.append(line)
+            except Exception:
+                # if append fails, fall back to buffer
+                self._dbg_buffer.append(line)
+        else:
+            if not hasattr(self, "_dbg_buffer"):
+                self._dbg_buffer = []
+            self._dbg_buffer.append(line)
+
+    # Optional: tiny timer context
+    from contextlib import contextmanager
+    from time import perf_counter
+
+    @contextmanager
+    def _dbg_time(self, label: str):
+        t0 = perf_counter()
+        self.debug(f"{label}: start")
+        try:
+            yield
+        finally:
+            self.debug(f"{label}: {(perf_counter() - t0) * 1000:.1f} ms")
+
+    # =================== /DEBUG WINDOW (major tab) =====================
