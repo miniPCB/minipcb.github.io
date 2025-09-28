@@ -2,7 +2,8 @@
 import sys, subprocess, importlib
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.resolve()
+# ⬇️ Force the project root to your fixed Windows path
+PROJECT_ROOT = Path(r"C:\Repos\minipcb.github.io").resolve()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -23,22 +24,14 @@ def ensure_deps():
 
 def main():
     ensure_deps()
-
-    # Create the QApplication FIRST
     from PyQt5.QtCore import Qt
     from PyQt5.QtWidgets import QApplication
-
-    # Optional: HiDPI
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
 
     app = QApplication(sys.argv)
     app.setApplicationName("miniPCB Studio")
 
-    # Now it's safe to import modules that might create widgets during import
     from app.context import AppContext
-    # If you use QtWebEngine, import/initialize AFTER QApplication exists:
-    # from PyQt5.QtWebEngine import QtWebEngine
-    # QtWebEngine.initialize()
     from ui.main_window import MainWindow
 
     ctx = AppContext(PROJECT_ROOT)

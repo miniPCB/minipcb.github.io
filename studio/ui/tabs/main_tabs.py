@@ -564,6 +564,7 @@ class MainTabs(QWidget):
     # ---------- Public API ----------
     def load_html_file(self, path: Path):
         self.current_path = Path(path)
+        self.debug(f"load_html_file: path={path}")
         self._update_view_bar_for_path(path)
         try:
             html_text = self.current_path.read_text(encoding="utf-8") if self.current_path.exists() else ""
@@ -586,6 +587,7 @@ class MainTabs(QWidget):
         else:
             ftype = 'other'
         self.current_type = ftype
+        self.debug(f"detected type={ftype}, html_bytes={len(html_text)}")
         self.typeChanged.emit(ftype)
 
         # Build appropriate forms
@@ -604,6 +606,7 @@ class MainTabs(QWidget):
 
         self._restore_focus_after_build()
         self._apply_optional_visibility()
+        self.debug(f"forms built+populated for {ftype}")
 
     # ---------- Type detection ----------
     def _is_collection_file(self, path: Path) -> bool:
@@ -1075,6 +1078,7 @@ class MainTabs(QWidget):
 
 
     def _populate_board_forms(self, html_text: str):
+        self.debug(f"populate_board_forms: len(html)={len(html_text)}")
         with self._block_form_signals():
             # Parse with BeautifulSoup, fallback to regex
             pn, title = "", ""
@@ -1312,18 +1316,20 @@ class MainTabs(QWidget):
 
     def _sync_forms_to_editor(self):
         # Get current editor html
+        self.debug(f"sync_forms_to_editor: type={self.current_type}")
         getter = self.get_editor_text if callable(self.get_editor_text) else None
         html = getter() if getter else ""
         if not html:
             return
 
         # Render from forms
-        if self.current_type == "collection":
-            new_html = self._render_collection_html(html)
-        elif self.current_type == "board":
-            new_html = self._render_board_html(html)
-        else:
-            return
+        with self._dbg_time("render_html"):
+            if self.current_type == "collection":
+                new_html = self._render_collection_html(html)
+            elif self.current_type == "board":
+                new_html = self._render_board_html(html)
+            else:
+                return
 
         # Only set text if there is a *real* change
         if new_html and new_html != html:
@@ -3074,6 +3080,7 @@ class MainTabs(QWidget):
                     del blocker
 
     def _on_toggle_optional(self, name: str, checked: bool):
+        self.debug(f"toggle_optional: {name} -> {checked}")
         if getattr(self, "_is_updating_optionals", False):
             return
         self._opt_visibility[name] = checked
@@ -3182,6 +3189,9 @@ class MainTabs(QWidget):
         Does nothing on collection pages.
         """
         import re
+        self.debug("apply_optional_visibility: begin")
+        flags = self._optional_flags()
+        self.debug(f"apply_optional_visibility: flags={flags}")
 
         # Use current buffer if not provided
         if html is None:
@@ -3485,6 +3495,7 @@ class MainTabs(QWidget):
 
         # Final button order
         target_ids = [mandatory_ids[0], mandatory_ids[1], *enabled_optional, mandatory_ids[2]]
+        self.debug(f"apply_optional_visibility: target_ids={target_ids}")
 
         # ---- 1) Find/create the <div class="tabs"> ... </div> ----
         m_tabs = re.search(r'(?is)(<div\b[^>]*class="[^"]*\btabs\b[^"]*"[^>]*>)(.*?)(</div>)', html)
