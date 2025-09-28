@@ -1,9 +1,8 @@
 from pathlib import Path
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QToolBar, QAction, QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QMessageBox
 from PyQt5.QtCore import pyqtSignal
 
 class EditorPanel(QWidget):
-    openPdfRequested = pyqtSignal(Path)
     dirtyChanged = pyqtSignal(bool)
     pathLoaded = pyqtSignal(Path)
 
@@ -14,12 +13,6 @@ class EditorPanel(QWidget):
         self._dirty = False
 
         lay = QVBoxLayout(self); lay.setContentsMargins(0,0,0,0)
-        self.toolbar = QToolBar(self)
-        self.act_open_pdf = QAction("Open PDF…", self)
-        self.act_open_pdf.triggered.connect(self._pick_pdf)
-        self.toolbar.addAction(self.act_open_pdf)
-        lay.addWidget(self.toolbar)
-
         self.edit = QPlainTextEdit(self)
         self.edit.textChanged.connect(self._on_text_changed)
         lay.addWidget(self.edit)
@@ -67,8 +60,3 @@ class EditorPanel(QWidget):
         if self._dirty != val:
             self._dirty = val
             self.dirtyChanged.emit(val)
-
-    def _pick_pdf(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Open PDF", str(self.ctx.project_root), "PDF Files (*.pdf)")
-        if path:
-            self.openPdfRequested.emit(Path(path))
