@@ -18,7 +18,7 @@ TAB_TEMPLATE = """
     </div>
 
     <div id="details" class="tab-content active">
-      <h2>PCB Details</h2>
+      <h2>Details</h2>
       <p><strong>Part No:</strong> {part_no}</p>
       <p><strong>Title:</strong> {title}</p>
       <p><strong>Board Size:</strong> {board_size}</p>

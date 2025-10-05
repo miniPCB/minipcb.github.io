@@ -2117,7 +2117,7 @@ class CatalogWindow(QMainWindow):
 
     def _save_detail_into_soup(self, soup: "BeautifulSoup", force_active: Optional[str] = None):
         # ----- Details -----
-        det_div = self._ensure_section(soup, "details", "PCB Details")
+        det_div = self._ensure_section(soup, "details", "Details")
         for node in list(det_div.find_all(recursive=False))[1:]: node.decompose()
 
         def mk_detail(label: str, value: str):
@@ -3147,7 +3147,7 @@ class CatalogWindow(QMainWindow):
   <main>
     <div class="tab-container">
       <div class="tabs"></div>
-      <div class="tab-content" id="details"><h2>PCB Details</h2></div>
+      <div class="tab-content" id="details"><h2>Details</h2></div>
       <div class="tab-content" id="description"><h2>Description</h2></div>
       <div class="tab-content" id="simulation"><h2>Videos</h2></div>
       <div class="tab-content" id="schematic"><h2>Schematic</h2></div>

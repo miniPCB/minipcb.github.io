@@ -34,7 +34,7 @@ You are writing an AI-generated educational overview for a PCB used in electroni
 
 Slogan: "{slogan}"
 
-PCB Details:
+Details:
 {details}
 
 Write a <div id='ai-overview' class='tab-content'> HTML block that includes:
