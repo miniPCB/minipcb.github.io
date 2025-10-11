@@ -4,29 +4,6 @@
   {{> partial_head.html}}
   <meta name="description" content="miniPCB Purchasing: boards, components, POs, receipts, costing, and vendors.">
   <title>Purchasing · miniPCB</title>
-  <style>
-    /* Page-scoped tweaks (kept tiny to respect your global CSS) */
-    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;margin:1rem 0}
-    .kpi{background:#262626;border:1px solid #333;border-radius:12px;padding:0.9rem}
-    .kpi .label{opacity:.8;font-size:.85rem}
-    .kpi .value{font-size:1.4rem;font-weight:600;margin-top:.25rem}
-    .toolbar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:1rem 0}
-    .toolbar input[type="search"], .toolbar select{background:#1c1c1c;border:1px solid #333;border-radius:8px;padding:.5rem .6rem}
-    .money{white-space:nowrap}
-    .status{border-radius:999px;padding:.15rem .55rem;font-size:.8rem;border:1px solid #444}
-    .status.open{background:#2a2530}
-    .status.ordered{background:#263036}
-    .status.received{background:#213126}
-    .status.partial{background:#312d21}
-    .table-note{opacity:.75;font-size:.85rem;margin-top:.5rem}
-    .vendor-card{background:#262626;border:1px solid #333;border-radius:12px;padding:1rem}
-    .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
-    .receipts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem}
-    .receipts-grid a{display:block;background:#222;border:1px solid #333;border-radius:10px;overflow:hidden}
-    .receipts-grid img{display:block;width:100%;height:auto}
-    .muted{opacity:.7}
-    .tab-container{margin-top:1rem}
-  </style>
 </head>
 <body>
   <header>
@@ -38,7 +15,8 @@
     {{> partial_nav.html}}
   </nav>
 
-  <main>
+  <!-- NOTE: styles are in styles.css; scope via class="purch" -->
+  <main class="purch">
     <!-- ====== DASHBOARD KPIs ====== -->
     <section aria-labelledby="purch-kpis">
       <h2 id="purch-kpis" class="visually-hidden">Summary</h2>
@@ -243,14 +221,14 @@
     {{> partial_footer.html}}
   </footer>
 
-  <!-- Your lightbox container (already used sitewide) -->
+  <!-- Global lightbox used sitewide -->
   <div aria-hidden="true" aria-label="Image viewer" id="lightbox" role="dialog">
     <img alt="Expanded image" id="lightbox-img"/>
   </div>
-  <script src="/js/minipcb.js"></script>
 
+  <script src="/js/minipcb.js"></script>
   <script>
-    // ----- Lightweight, page-scoped helpers (no globals touched) -----
+    // ----- Purchasing page helpers (scoped to this page) -----
     (function(){
       const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
       const $ = (s, el=document) => el.querySelector(s);
@@ -261,6 +239,7 @@
         let total = 0, openPOs = new Set(), outstanding = 0, leadDays = [];
         const year = new Date().getFullYear();
         const rows = $$('#ledger-table tbody tr').filter(r => r.offsetParent !== null); // only visible after filters
+
         rows.forEach(r=>{
           const qty = parseFloat(r.querySelector('[data-qty]')?.textContent || '0') || 0;
           const unit = parseFloat(r.querySelector('[data-unit]')?.textContent || '0') || 0;
@@ -274,12 +253,14 @@
           if (po && status !== 'received') { openPOs.add(po); }
           if (status === 'open' || status === 'partial' || status === 'ordered') { outstanding += qty; }
 
-          // crude lead estimate from text: add your own if you store real lead times
+          // simple placeholder lead estimate; replace with real data when available
           if (status === 'received') { leadDays.push(7); }
         });
+
         $('#ledger-total').textContent = money(total);
         $('#kpi-open-pos').textContent = openPOs.size;
         $('#kpi-outstanding').textContent = outstanding;
+
         const ytd = $$('#ledger-table tbody tr').reduce((acc, r)=>{
           return (r.dataset.year == year ? acc + (parseFloat(r.querySelector('[data-qty]')?.textContent||0)*parseFloat(r.querySelector('[data-unit]')?.textContent||0)) : acc);
         },0);
@@ -314,21 +295,17 @@
         el.addEventListener(evt, applyFilters);
       });
 
-      // Initial compute
-      recompute();
-
-      // Optional: respect your existing tab system (buttons already have data-tab)
+      // Tabs (play nice if your global script doesn’t manage these)
       $$('.tabs .tab').forEach(btn=>{
         btn.addEventListener('click', ()=>{
           const tab = btn.getAttribute('data-tab');
           $$('.tabs .tab').forEach(b=>b.classList.toggle('active', b===btn));
           $$('.tab-panel').forEach(p=>p.classList.toggle('active', p.id===tab));
-          // Recompute if returning to ledger after filters changed
           if (tab === 'ledger') recompute();
         });
       });
 
-      // Lightbox hook (plays nice with your global lightbox)
+      // Lightbox hook
       $$('#ledger a[data-lightbox], #receipts a[data-lightbox]').forEach(a=>{
         a.addEventListener('click', (e)=>{
           const target = document.getElementById('lightbox-img');
@@ -338,6 +315,9 @@
           document.getElementById('lightbox')?.setAttribute('aria-hidden','false');
         });
       });
+
+      // Initial compute
+      recompute();
     })();
   </script>
 </body>
