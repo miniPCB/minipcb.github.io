@@ -1,146 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  {{> partial_head.html}}
-  <meta name="description" content="miniPCB Purchasing: boards, components, POs, receipts, costing, and vendors.">
-  <title>Purchasing · miniPCB</title>
-</head>
-<body>
-  <header>
-    <h1>Purchasing</h1>
-    <p class="slogan">Boards · Components · POs · Receipts · Costing</p>
-  </header>
-
-  <nav>
-    {{> partial_nav.html}}
-  </nav>
-
-  <!-- NOTE: styles are in styles.css; scope via class="purch" -->
-  <main class="purch">
-    <!-- ====== DASHBOARD KPIs ====== -->
-    <section aria-labelledby="purch-kpis">
-      <h2 id="purch-kpis" class="visually-hidden">Summary</h2>
-      <div class="kpi-grid">
-        <div class="kpi"><div class="label">Open POs</div><div class="value" id="kpi-open-pos">0</div></div>
-        <div class="kpi"><div class="label">Year-to-Date Spend</div><div class="value money" id="kpi-ytd">$0.00</div></div>
-        <div class="kpi"><div class="label">Outstanding Items</div><div class="value" id="kpi-outstanding">0</div></div>
-        <div class="kpi"><div class="label">Avg Lead Time</div><div class="value" id="kpi-lead">—</div></div>
+  <head>
+    <!-- Google tag (gtag.js) -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchasing | miniPCB</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <meta name="keywords" content="Purchasing, Boards, Components, miniPCB, PO, Receipts, Vendors, Costing">
+    <meta name="description" content="Boards and components purchasing ledger for miniPCB, with vendors, receipts, and costing rollups.">
+  </head>
+  <body>
+    <nav>
+      <div class="nav-container">
+        <ul class="nav-links">
+          <li><a href="/index.html">Home</a></li>
+          <li><a href="/purchasing.html">Purchasing</a></li>
+        </ul>
       </div>
-    </section>
+    </nav>
 
-    <!-- ====== TABS ====== -->
-    <div class="tab-container">
-      <div class="tabs" role="tablist" aria-label="Purchasing Sections">
-        <button class="tab active" role="tab" aria-selected="true" aria-controls="ledger" data-tab="ledger" type="button">Ledger</button>
-        <button class="tab" role="tab" aria-controls="bom" data-tab="bom" type="button">BOM Costing</button>
-        <button class="tab" role="tab" aria-controls="vendors" data-tab="vendors" type="button">Vendors</button>
-        <button class="tab" role="tab" aria-controls="receipts" data-tab="receipts" type="button">Receipts</button>
-        <button class="tab" role="tab" aria-controls="notes" data-tab="notes" type="button">Notes</button>
-      </div>
+    <header>
+      <h1>Purchasing</h1>
+      <p class="slogan">Boards · Components · POs · Receipts · Costing</p>
+    </header>
 
-      <!-- ====== LEDGER TAB ====== -->
-      <section id="ledger" class="tab-panel active" role="tabpanel" aria-labelledby="Ledger">
-        <div class="toolbar" aria-label="Ledger Filters">
-          <input id="filter-text" type="search" placeholder="Search PN, description, vendor, PO…" aria-label="Search ledger">
-          <select id="filter-status" aria-label="Status">
-            <option value="">All Statuses</option>
-            <option value="open">Open</option>
-            <option value="ordered">Ordered</option>
-            <option value="partial">Partial</option>
-            <option value="received">Received</option>
-          </select>
-          <select id="filter-type" aria-label="Type">
-            <option value="">All Types</option>
-            <option value="board">Board</option>
-            <option value="component">Component</option>
-          </select>
-          <select id="filter-vendor" aria-label="Vendor">
-            <option value="">All Vendors</option>
-            <option>JLCPCB</option>
-            <option>Digi-Key</option>
-            <option>Mouser</option>
-            <option>Amazon</option>
-            <option>eBay</option>
-          </select>
-          <span class="muted" id="match-count" aria-live="polite"></span>
-        </div>
-
-        <div class="table-wrap">
-          <table id="ledger-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>PN / Ref</th>
-                <th>Description</th>
-                <th>Vendor</th>
-                <th class="num">Qty</th>
-                <th class="num">Unit</th>
-                <th class="num">Ext.</th>
-                <th>PO#</th>
-                <th>Status</th>
-                <th>Receipt</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Sample rows; replace/append via your scripts -->
-              <tr data-type="board" data-status="ordered" data-vendor="JLCPCB" data-year="2025">
-                <td>2025-09-14</td>
-                <td>Board</td>
-                <td><a href="/04B-005.html">04B-005 A1-02</a></td>
-                <td>Two-Stage Amplifier panel (x4 per panel)</td>
-                <td>JLCPCB</td>
-                <td class="num" data-qty>10</td>
-                <td class="num money" data-unit>2.90</td>
-                <td class="num money" data-ext></td>
-                <td>PO-2025-001</td>
-                <td><span class="status ordered">Ordered</span></td>
-                <td><a href="/images/receipts/PO-2025-001.jpg" data-lightbox>jpg</a></td>
-              </tr>
-
-              <tr data-type="component" data-status="received" data-vendor="Digi-Key" data-year="2025">
-                <td>2025-09-20</td>
-                <td>Component</td>
-                <td>OPA2134PA</td>
-                <td>Op-Amp, DIP-8, Audio/Precision</td>
-                <td>Digi-Key</td>
-                <td class="num" data-qty>25</td>
-                <td class="num money" data-unit>3.42</td>
-                <td class="num money" data-ext></td>
-                <td>PO-2025-003</td>
-                <td><span class="status received">Received</span></td>
-                <td><a href="/images/receipts/PO-2025-003.pdf" data-lightbox>pdf</a></td>
-              </tr>
-
-              <tr data-type="component" data-status="open" data-vendor="Mouser" data-year="2025">
-                <td>2025-10-02</td>
-                <td>Component</td>
-                <td>RC0603FR-074K7L</td>
-                <td>Resistor 4.7k 0603 1%</td>
-                <td>Mouser</td>
-                <td class="num" data-qty>1000</td>
-                <td class="num money" data-unit>0.011</td>
-                <td class="num money" data-ext></td>
-                <td>PO-2025-007</td>
-                <td><span class="status open">Open</span></td>
-                <td><a href="/images/receipts/PO-2025-007.png" data-lightbox>png</a></td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <th colspan="7" class="num">Total</th>
-                <th class="num money" id="ledger-total">$0.00</th>
-                <th colspan="3"></th>
-              </tr>
-            </tfoot>
-          </table>
-          <p class="table-note">Tip: use the filters above to slice by vendor, status, or item type. Totals update live.</p>
-        </div>
+    <main class="purch">
+      <!-- ===== Summary (optional manual values) ===== -->
+      <section>
+        <table class="kpi-grid">
+          <thead>
+            <tr>
+              <th>Open POs</th>
+              <th>YTD Spend</th>
+              <th>Outstanding Items</th>
+              <th>Avg Lead Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td class="money">$0.00</td>
+              <td>0</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
-      <!-- ====== BOM COSTING TAB ====== -->
-      <section id="bom" class="tab-panel" role="tabpanel" aria-labelledby="BOM">
-        <p class="muted">Roll-ups by board (example data shown):</p>
+      <!-- ===== Ledger ===== -->
+      <section>
+        <h2>Ledger</h2>
+        <table id="ledger-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>PN / Ref</th>
+              <th>Description</th>
+              <th>Vendor</th>
+              <th class="num">Qty</th>
+              <th class="num">Unit</th>
+              <th class="num">Ext.</th>
+              <th>PO#</th>
+              <th>Status</th>
+              <th>Receipt</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Sample rows (replace with real data) -->
+            <tr>
+              <td>2025-09-14</td>
+              <td>Board</td>
+              <td><a href="/04B/04B-005.html">04B-005 A1-02</a></td>
+              <td>Two-Stage Amplifier panel (x4 per panel)</td>
+              <td>JLCPCB</td>
+              <td class="num">10</td>
+              <td class="num money">$2.90</td>
+              <td class="num money">$29.00</td>
+              <td>PO-2025-001</td>
+              <td><span class="status ordered">Ordered</span></td>
+              <td><a href="/images/receipts/PO-2025-001.jpg">jpg</a></td>
+            </tr>
+            <tr>
+              <td>2025-09-20</td>
+              <td>Component</td>
+              <td>OPA2134PA</td>
+              <td>Op-Amp, DIP-8, Audio/Precision</td>
+              <td>Digi-Key</td>
+              <td class="num">25</td>
+              <td class="num money">$3.42</td>
+              <td class="num money">$85.50</td>
+              <td>PO-2025-003</td>
+              <td><span class="status received">Received</span></td>
+              <td><a href="/images/receipts/PO-2025-003.pdf">pdf</a></td>
+            </tr>
+            <tr>
+              <td>2025-10-02</td>
+              <td>Component</td>
+              <td>RC0603FR-074K7L</td>
+              <td>Resistor 4.7k 0603 1%</td>
+              <td>Mouser</td>
+              <td class="num">1000</td>
+              <td class="num money">$0.011</td>
+              <td class="num money">$11.00</td>
+              <td>PO-2025-007</td>
+              <td><span class="status open">Open</span></td>
+              <td><a href="/images/receipts/PO-2025-007.png">png</a></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="7" class="num">Total</th>
+              <th class="num money">$125.50</th>
+              <th colspan="3"></th>
+            </tr>
+          </tfoot>
+        </table>
+        <p class="table-note">Tip: copy this table structure for monthly ledgers (e.g., purchasing-2025-10.html).</p>
+      </section>
+
+      <!-- ===== BOM Costing ===== -->
+      <section>
+        <h2>BOM Costing (Rollups)</h2>
         <table id="bom-table">
           <thead>
             <tr>
@@ -154,7 +136,7 @@
           </thead>
           <tbody>
             <tr>
-              <td><a href="/04B-005.html">04B-005</a></td>
+              <td><a href="/04B/04B-005.html">04B-005</a></td>
               <td>A1-02</td>
               <td class="num">10</td>
               <td class="num money">$29.00</td>
@@ -165,160 +147,63 @@
         </table>
       </section>
 
-      <!-- ====== VENDORS TAB ====== -->
-      <section id="vendors" class="tab-panel" role="tabpanel" aria-labelledby="Vendors">
-        <div class="card-grid">
-          <article class="vendor-card">
-            <h3>JLCPCB</h3>
-            <p class="muted">Boards · Panels · Stencils</p>
-            <ul>
-              <li>Typical lead time: 7–10 days (std)</li>
-              <li>Notes: Panels of 4 most common; ship via DHL</li>
-              <li>Account Email: purchasing@minipcb.com</li>
-            </ul>
-          </article>
-          <article class="vendor-card">
-            <h3>Digi-Key</h3>
-            <p class="muted">Components</p>
-            <ul>
-              <li>Same-day ship cutoff: 8pm CT</li>
-              <li>Preferred shipping: UPS 2nd Day</li>
-              <li>Tax-exempt: Yes (on file)</li>
-            </ul>
-          </article>
-          <article class="vendor-card">
-            <h3>Mouser</h3>
-            <p class="muted">Components</p>
-            <ul>
-              <li>Backorder policy: split shipments allowed</li>
-              <li>Note: substitute approvals required</li>
-            </ul>
-          </article>
-        </div>
+      <!-- ===== Vendors ===== -->
+      <section>
+        <h2>Vendors</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th>Type</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>JLCPCB</td>
+              <td>Boards · Panels · Stencils</td>
+              <td>Typical lead 7–10 days (std). DHL preferred.</td>
+            </tr>
+            <tr>
+              <td>Digi-Key</td>
+              <td>Components</td>
+              <td>Same-day cutoff 8pm CT. UPS 2nd Day preferred.</td>
+            </tr>
+            <tr>
+              <td>Mouser</td>
+              <td>Components</td>
+              <td>Split shipments OK. Substitutions need approval.</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
-      <!-- ====== RECEIPTS TAB ====== -->
-      <section id="receipts" class="tab-panel" role="tabpanel" aria-labelledby="Receipts">
+      <!-- ===== Receipts ===== -->
+      <section>
+        <h2>Receipts</h2>
         <div class="receipts-grid">
-          <a href="/images/receipts/PO-2025-001.jpg" data-lightbox><img src="/images/receipts/thumbs/PO-2025-001.jpg" alt="PO-2025-001"></a>
-          <a href="/images/receipts/PO-2025-003.pdf" data-lightbox><img src="/images/receipts/thumbs/PO-2025-003.png" alt="PO-2025-003"></a>
+          <a href="/images/receipts/PO-2025-001.jpg">
+            <img src="/images/receipts/thumbs/PO-2025-001.jpg" alt="PO-2025-001">
+          </a>
+          <a href="/images/receipts/PO-2025-003.pdf">
+            <img src="/images/receipts/thumbs/PO-2025-003.png" alt="PO-2025-003">
+          </a>
         </div>
       </section>
 
-      <!-- ====== NOTES TAB ====== -->
-      <section id="notes" class="tab-panel" role="tabpanel" aria-labelledby="Notes">
-        <h3>Process Notes</h3>
+      <!-- ===== Notes ===== -->
+      <section>
+        <h2>Notes</h2>
         <ul>
-          <li>Boards ordered in panels; use panel price for costing, divide by boards per panel.</li>
-          <li>Record PO#, date, vendor, qty, unit, and attach receipt for auditability.</li>
-          <li>For components, prefer reels/tape to reduce per-unit price; note alternates.</li>
+          <li>Boards ordered in panels; divide panel cost by boards/panel for per-unit.</li>
+          <li>Record PO#, date, vendor, qty, unit, and attach receipt.</li>
+          <li>Prefer reels/tape where possible; maintain alternates list.</li>
         </ul>
       </section>
-    </div>
-  </main>
+    </main>
 
-  <footer>
-    {{> partial_footer.html}}
-  </footer>
-
-  <!-- Global lightbox used sitewide -->
-  <div aria-hidden="true" aria-label="Image viewer" id="lightbox" role="dialog">
-    <img alt="Expanded image" id="lightbox-img"/>
-  </div>
-
-  <script src="/js/minipcb.js"></script>
-  <script>
-    // ----- Purchasing page helpers (scoped to this page) -----
-    (function(){
-      const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
-      const $ = (s, el=document) => el.querySelector(s);
-
-      // Compute line totals and roll-ups
-      function money(n){ return n.toLocaleString(undefined,{style:'currency',currency:'USD'}); }
-      function recompute(){
-        let total = 0, openPOs = new Set(), outstanding = 0, leadDays = [];
-        const year = new Date().getFullYear();
-        const rows = $$('#ledger-table tbody tr').filter(r => r.offsetParent !== null); // only visible after filters
-
-        rows.forEach(r=>{
-          const qty = parseFloat(r.querySelector('[data-qty]')?.textContent || '0') || 0;
-          const unit = parseFloat(r.querySelector('[data-unit]')?.textContent || '0') || 0;
-          const extCell = r.querySelector('[data-ext]');
-          const ext = qty * unit;
-          if (extCell) extCell.textContent = money(ext);
-          total += ext;
-
-          const status = (r.dataset.status||'').toLowerCase();
-          const po = r.cells[8]?.textContent.trim();
-          if (po && status !== 'received') { openPOs.add(po); }
-          if (status === 'open' || status === 'partial' || status === 'ordered') { outstanding += qty; }
-
-          // simple placeholder lead estimate; replace with real data when available
-          if (status === 'received') { leadDays.push(7); }
-        });
-
-        $('#ledger-total').textContent = money(total);
-        $('#kpi-open-pos').textContent = openPOs.size;
-        $('#kpi-outstanding').textContent = outstanding;
-
-        const ytd = $$('#ledger-table tbody tr').reduce((acc, r)=>{
-          return (r.dataset.year == year ? acc + (parseFloat(r.querySelector('[data-qty]')?.textContent||0)*parseFloat(r.querySelector('[data-unit]')?.textContent||0)) : acc);
-        },0);
-        $('#kpi-ytd').textContent = money(ytd);
-        $('#kpi-lead').textContent = leadDays.length ? Math.round(leadDays.reduce((a,b)=>a+b,0)/leadDays.length)+' days' : '—';
-        $('#match-count').textContent = rows.length + ' match' + (rows.length===1?'':'es');
-      }
-
-      // Filters
-      function applyFilters(){
-        const q = ($('#filter-text').value||'').toLowerCase();
-        const st = $('#filter-status').value;
-        const ty = $('#filter-type').value;
-        const vn = $('#filter-vendor').value;
-        const rows = $$('#ledger-table tbody tr');
-        rows.forEach(r=>{
-          const hay = r.textContent.toLowerCase();
-          const okQ = !q || hay.includes(q);
-          const okS = !st || (r.dataset.status === st);
-          const okT = !ty || (r.dataset.type === ty);
-          const okV = !vn || (r.dataset.vendor === vn);
-          r.style.display = (okQ && okS && okT && okV) ? '' : 'none';
-        });
-        recompute();
-      }
-
-      // Wire filters
-      ['filter-text','filter-status','filter-type','filter-vendor'].forEach(id=>{
-        const el = document.getElementById(id);
-        if (!el) return;
-        const evt = (id === 'filter-text') ? 'input' : 'change';
-        el.addEventListener(evt, applyFilters);
-      });
-
-      // Tabs (play nice if your global script doesn’t manage these)
-      $$('.tabs .tab').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const tab = btn.getAttribute('data-tab');
-          $$('.tabs .tab').forEach(b=>b.classList.toggle('active', b===btn));
-          $$('.tab-panel').forEach(p=>p.classList.toggle('active', p.id===tab));
-          if (tab === 'ledger') recompute();
-        });
-      });
-
-      // Lightbox hook
-      $$('#ledger a[data-lightbox], #receipts a[data-lightbox]').forEach(a=>{
-        a.addEventListener('click', (e)=>{
-          const target = document.getElementById('lightbox-img');
-          if (!target) return;
-          e.preventDefault();
-          target.src = a.getAttribute('href');
-          document.getElementById('lightbox')?.setAttribute('aria-hidden','false');
-        });
-      });
-
-      // Initial compute
-      recompute();
-    })();
-  </script>
-</body>
+    <footer>
+      © 2025 miniPCB. All rights reserved.
+    </footer>
+  </body>
 </html>
