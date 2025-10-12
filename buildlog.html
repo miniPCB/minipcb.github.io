@@ -35,12 +35,6 @@
 <main class="container">
 <h1>Engineering Build Log</h1>
 <p>This log documents engineering builds of miniPCB™ circuit boards.</p>
-<div class="toolbar">
-  <label for="statusFilter">Filter by status:</label>
-  <select id="statusFilter">
-    <!-- options will be populated dynamically -->
-  </select>
-</div>
 <table class="changelog-table" id="ebl-table">
 <thead>
     <tr>
@@ -63,111 +57,83 @@
    ↑
   </button>
 <script>
-  document.addEventListener("DOMContentLoaded", initEBL);
+  document.addEventListener("DOMContentLoaded", initEBL_NoFilter);
 
-  async function initEBL() {
-    const tbody = document.querySelector("#ebl-table tbody");
-    const statusSelect = document.getElementById("statusFilter");
-    if (!tbody || !statusSelect) return;
+  async function initEBL_NoFilter() {
+    const table = document.getElementById("ebl-table");
+    const tbody = table?.querySelector("tbody");
+    if (!tbody) return;
+
+    const theadTh = Array.from(table.querySelectorAll("thead th"));
+    const hasStatusCol = theadTh.some(th => th.textContent.trim().toLowerCase() === "status");
+    const colCount = theadTh.length || (hasStatusCol ? 5 : 4);
 
     try {
       const res = await fetch("EBL.json", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.json();
 
-      // Normalize fields
-      let items = Array.isArray(raw) ? raw.map(e => ({
+      // Normalize
+      let items = (Array.isArray(raw) ? raw : []).map(e => ({
         date: (e.build_date ?? e.date ?? "").trim(),
         board: (e.board ?? "").trim(),
         rev: (e.rev ?? "").trim(),
         title: (e.title ?? e.change ?? "").trim(),
         link: (e.link ?? "").trim(),
         status: (e.status ?? "").trim()
-      })) : [];
+      }));
 
-      // Sort newest-first by date
+      // Newest-first sort
       items.sort((a, b) => {
         const ad = Date.parse(a.date || "");
         const bd = Date.parse(b.date || "");
         return (isNaN(bd) ? 0 : bd) - (isNaN(ad) ? 0 : ad);
       });
 
-      // --- Skip "not planned" everywhere ---
-      const SKIP = "not planned";
-      const filteredForView = items.filter(x => (x.status || "").toLowerCase() !== SKIP);
+      // Skip "not planned"
+      items = items.filter(x => (x.status || "").toLowerCase() !== "not planned");
 
-      if (filteredForView.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5">No builds to display.</td></tr>`;
-        // Still populate the dropdown from the remaining statuses
-      }
-
-      // Build status filter options (omit "not planned")
-      const ordering = ["planned", "in-progress", "complete"]; // display order
-      const unique = Array.from(
-        new Set(filteredForView.map(x => x.status.toLowerCase()).filter(Boolean))
-      ).sort((a, b) => (idx(a, ordering) - idx(b, ordering)) || a.localeCompare(b));
-
-      statusSelect.innerHTML =
-        `<option value="">All statuses</option>` +
-        unique.map(s => `<option value="${s}">${toTitle(s)}</option>`).join("");
-
-      // Initial render and live filtering
-      renderRows(tbody, filteredForView, getSelected(statusSelect));
-      statusSelect.addEventListener("change", () => {
-        renderRows(tbody, filteredForView, getSelected(statusSelect));
-      });
+      renderRows(tbody, items, { hasStatusCol, colCount });
     } catch (err) {
       console.error("Failed to load EBL.json:", err);
-      tbody.innerHTML = `<tr><td colspan="5">Failed to load build log.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colCount}">Failed to load build log.</td></tr>`;
     }
   }
 
-  function renderRows(tbody, items, statusFilter) {
+  function renderRows(tbody, items, opts) {
+    const { hasStatusCol, colCount } = opts;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="${colCount}">No builds to display.</td></tr>`;
+      return;
+    }
+
     const frag = document.createDocumentFragment();
-    let shown = 0;
-
     items.forEach(entry => {
-      const s = (entry.status || "").toLowerCase();
-
-      // (Redundant guard) never render "not planned"
-      if (s === "not planned") return;
-
-      // Apply dropdown filter if set
-      if (statusFilter && s !== statusFilter) return;
-
       const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${escapeHTML(entry.date)}</td>
-        <td>${escapeHTML(entry.board)}</td>
-        <td>${escapeHTML(entry.rev)}</td>
-        <td>${entry.link ? `<a href="${encodeURI(entry.link)}">${escapeHTML(entry.title)}</a>` : escapeHTML(entry.title)}</td>
-        <td>${escapeHTML(entry.status)}</td>
-      `;
+      const titleCell = entry.link
+        ? `<a href="${encodeURI(entry.link)}">${escapeHTML(entry.title)}</a>`
+        : escapeHTML(entry.title);
+
+      tr.innerHTML = hasStatusCol
+        ? `
+          <td>${escapeHTML(entry.date)}</td>
+          <td>${escapeHTML(entry.board)}</td>
+          <td>${escapeHTML(entry.rev)}</td>
+          <td>${titleCell}</td>
+          <td>${escapeHTML(entry.status)}</td>
+        `
+        : `
+          <td>${escapeHTML(entry.date)}</td>
+          <td>${escapeHTML(entry.board)}</td>
+          <td>${escapeHTML(entry.rev)}</td>
+          <td>${titleCell}</td>
+        `;
+
       frag.appendChild(tr);
-      shown++;
     });
 
     tbody.innerHTML = "";
-    tbody.appendChild(shown ? frag : emptyRow(5, "No builds match this filter."));
-  }
-
-  function getSelected(sel) {
-    return (sel?.value || "").toLowerCase();
-  }
-
-  function idx(s, ordering) {
-    const i = ordering.indexOf(s);
-    return i === -1 ? 999 : i;
-  }
-
-  function toTitle(s) {
-    return s.replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  function emptyRow(cols, msg) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="${cols}">${escapeHTML(msg)}</td>`;
-    return tr;
+    tbody.appendChild(frag);
   }
 
   function escapeHTML(s) {
