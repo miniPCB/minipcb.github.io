@@ -35,14 +35,21 @@
 <main class="container">
 <h1>Engineering Build Log</h1>
 <p>This log documents engineering builds of miniPCB™ circuit boards.</p>
+<div class="toolbar">
+  <label for="statusFilter">Filter by status:</label>
+  <select id="statusFilter">
+    <!-- options will be populated dynamically -->
+  </select>
+</div>
 <table class="changelog-table" id="ebl-table">
 <thead>
-<tr>
-<th>Date</th>
-<th>Board</th>
-<th>Rev</th>
-<th>Title</th>
-</tr>
+    <tr>
+      <th>Date</th>
+      <th>Board</th>
+      <th>Rev</th>
+      <th>Title</th>
+      <th>Status</th>
+    </tr>
 </thead>
 <tbody>
 <!-- rows will be inserted here dynamically -->
@@ -56,56 +63,97 @@
    ↑
   </button>
 <script>
-  document.addEventListener("DOMContentLoaded", renderEBL);
+  document.addEventListener("DOMContentLoaded", initEBL);
 
-  async function renderEBL() {
+  async function initEBL() {
     const tbody = document.querySelector("#ebl-table tbody");
-    if (!tbody) return;
+    const statusSelect = document.getElementById("statusFilter");
+    if (!tbody || !statusSelect) return;
 
     try {
       const res = await fetch("EBL.json", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      if (!Array.isArray(data) || data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4">No builds logged yet.</td></tr>`;
+      const raw = await res.json();
+      if (!Array.isArray(raw) || raw.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5">No builds logged yet.</td></tr>`;
         return;
       }
 
-      // Newest first (supports EBL.build_date and legacy ECL.date)
-      const items = data.slice().sort((a, b) => {
-        const ad = Date.parse(a.build_date || a.date || "");
-        const bd = Date.parse(b.build_date || b.date || "");
+      // Normalize fields and sort newest first
+      const items = raw.map(e => ({
+        date: (e.build_date ?? e.date ?? "").trim(),
+        board: (e.board ?? "").trim(),
+        rev: (e.rev ?? "").trim(),
+        title: (e.title ?? e.change ?? "").trim(),
+        link: (e.link ?? "").trim(),
+        status: (e.status ?? "").trim()
+      })).sort((a, b) => {
+        const ad = Date.parse(a.date || "");
+        const bd = Date.parse(b.date || "");
         return (isNaN(bd) ? 0 : bd) - (isNaN(ad) ? 0 : ad);
       });
 
-      const frag = document.createDocumentFragment();
-      items.forEach(entry => {
-        const date  = entry.build_date ?? entry.date ?? "";
-        const board = entry.board ?? "";
-        const rev   = entry.rev ?? "";
-        const title = entry.title ?? entry.change ?? "";
-        const link  = entry.link ?? "";
+      // Build status filter options from data (ordered logically)
+      const ordering = ["not planned", "planned", "in-progress", "complete"];
+      const unique = Array.from(
+        new Set(items.map(x => x.status.toLowerCase()).filter(Boolean))
+      ).sort((a, b) => (idx(a, ordering) - idx(b, ordering)) || a.localeCompare(b));
+      statusSelect.innerHTML =
+        `<option value="">All statuses</option>` +
+        unique.map(s => `<option value="${s}">${toTitle(s)}</option>`).join("");
 
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${escapeHTML(date)}</td>
-          <td>${escapeHTML(board)}</td>
-          <td>${escapeHTML(rev)}</td>
-          <td>${link ? `<a href="${encodeURI(link)}">${escapeHTML(title)}</a>` : escapeHTML(title)}</td>
-        `;
-        frag.appendChild(tr);
+      // Initial render and live filtering
+      renderRows(tbody, items, getSelected(statusSelect));
+      statusSelect.addEventListener("change", () => {
+        renderRows(tbody, items, getSelected(statusSelect));
       });
-
-      tbody.innerHTML = "";
-      tbody.appendChild(frag);
     } catch (err) {
       console.error("Failed to load EBL.json:", err);
-      const msg = document.createElement("tr");
-      msg.innerHTML = `<td colspan="4">Failed to load build log.</td>`;
-      tbody.innerHTML = "";
-      tbody.appendChild(msg);
+      tbody.innerHTML = `<tr><td colspan="5">Failed to load build log.</td></tr>`;
     }
+  }
+
+  function renderRows(tbody, items, statusFilter) {
+    const frag = document.createDocumentFragment();
+    let shown = 0;
+
+    items.forEach(entry => {
+      const s = (entry.status || "").toLowerCase();
+      if (statusFilter && s !== statusFilter) return;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHTML(entry.date)}</td>
+        <td>${escapeHTML(entry.board)}</td>
+        <td>${escapeHTML(entry.rev)}</td>
+        <td>${entry.link ? `<a href="${encodeURI(entry.link)}">${escapeHTML(entry.title)}</a>` : escapeHTML(entry.title)}</td>
+        <td>${escapeHTML(entry.status)}</td>
+      `;
+      frag.appendChild(tr);
+      shown++;
+    });
+
+    tbody.innerHTML = "";
+    tbody.appendChild(shown ? frag : emptyRow(5, "No builds match this filter."));
+  }
+
+  function getSelected(sel) {
+    return (sel?.value || "").toLowerCase();
+  }
+
+  function idx(s, ordering) {
+    const i = ordering.indexOf(s);
+    return i === -1 ? 999 : i;
+  }
+
+  function toTitle(s) {
+    return s.replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function emptyRow(cols, msg) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="${cols}">${escapeHTML(msg)}</td>`;
+    return tr;
   }
 
   function escapeHTML(s) {
