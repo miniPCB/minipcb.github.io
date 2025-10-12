@@ -56,31 +56,65 @@
    ↑
   </button>
 <script>
-   document.addEventListener("DOMContentLoaded", function () {
-      fetch("EBL.json")
-        .then(response => response.json())
-        .then(data => {
-          const tbody = document.querySelector("#ebl-table tbody");
-          data.forEach(entry => {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>${entry.date}</td>
-              <td>${entry.board}</td>
-              <td>${entry.rev}</td>
-              <td>${entry.link ? `<a href="${entry.link}">${entry.change}</a>` : entry.change}</td>
-            `;
-            tbody.appendChild(row);
-          });
-        })
-        .catch(error => {
-          console.error("Failed to load EBL.json:", error);
-          const tbody = document.querySelector("#ebl-table tbody");
-          const row = document.createElement("tr");
-          row.innerHTML = `<td colspan="4">Failed to load change log.</td>`;
-          tbody.appendChild(row);
-        });
-    });
-  </script>
+  document.addEventListener("DOMContentLoaded", renderEBL);
+
+  async function renderEBL() {
+    const tbody = document.querySelector("#ebl-table tbody");
+    if (!tbody) return;
+
+    try {
+      const res = await fetch("EBL.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4">No builds logged yet.</td></tr>`;
+        return;
+      }
+
+      // Newest first (supports EBL.build_date and legacy ECL.date)
+      const items = data.slice().sort((a, b) => {
+        const ad = Date.parse(a.build_date || a.date || "");
+        const bd = Date.parse(b.build_date || b.date || "");
+        return (isNaN(bd) ? 0 : bd) - (isNaN(ad) ? 0 : ad);
+      });
+
+      const frag = document.createDocumentFragment();
+      items.forEach(entry => {
+        const date  = entry.build_date ?? entry.date ?? "";
+        const board = entry.board ?? "";
+        const rev   = entry.rev ?? "";
+        const title = entry.title ?? entry.change ?? "";
+        const link  = entry.link ?? "";
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${escapeHTML(date)}</td>
+          <td>${escapeHTML(board)}</td>
+          <td>${escapeHTML(rev)}</td>
+          <td>${link ? `<a href="${encodeURI(link)}">${escapeHTML(title)}</a>` : escapeHTML(title)}</td>
+        `;
+        frag.appendChild(tr);
+      });
+
+      tbody.innerHTML = "";
+      tbody.appendChild(frag);
+    } catch (err) {
+      console.error("Failed to load EBL.json:", err);
+      const msg = document.createElement("tr");
+      msg.innerHTML = `<td colspan="4">Failed to load build log.</td>`;
+      tbody.innerHTML = "";
+      tbody.appendChild(msg);
+    }
+  }
+
+  function escapeHTML(s) {
+    return String(s ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+    }[c]));
+  }
+</script>
+
 <script>
    function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
