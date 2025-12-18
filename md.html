@@ -59,41 +59,32 @@
     async function loadMarkdownIndex() {
       const tbody = document.querySelector("#md-table tbody");
     
+      const candidates = ["md/index.json", "md_index.json", "index.json"];
+    
       try {
-        // ✅ Use the actual location of the JSON you showed (site root)
-        const res = await fetch("/index.json", { cache: "no-store" });
-        if (!res.ok) throw new Error(res.status);
+        const { url, data } = await fetchFirstJson(candidates);
     
-        const data = await res.json();
-    
-        // ✅ Your JSON shape: { ..., entries: [ { path, filename, mtime, ... }, ... ] }
         const entries = Array.isArray(data) ? data : (data.entries || []);
-    
         if (!entries.length) {
-          tbody.innerHTML = `<tr><td colspan="2">No markdown files found.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="2">No markdown files found. (Loaded: ${escapeHTML(url)})</td></tr>`;
           return;
         }
     
         const frag = document.createDocumentFragment();
     
         entries
-          .filter(e => (e.path || "").toLowerCase().endsWith(".md"))
-          .sort((a, b) => (a.path || "").localeCompare(b.path || ""))
+          .filter(e => ((e.path || e) + "").toLowerCase().endsWith(".md"))
+          .sort((a, b) => String(a.path || a).localeCompare(String(b.path || b)))
           .forEach(e => {
+            const path = String(e.path || e);      // supports either {path: "..."} or "filename.md"
+            const label = e.filename || path.split("/").pop() || path;
+            const mtime = e.mtime ? new Date(e.mtime).toLocaleString() : "—";
+    
             const tr = document.createElement("tr");
-    
-            const href = "/" + (e.path || "");         // e.path already includes "md/..."
-            const label = e.filename || href.split("/").pop() || href;
-    
-            const mtime = e.mtime
-              ? new Date(e.mtime).toLocaleString()
-              : "—";
-    
             tr.innerHTML = `
-              <td><a href="${encodeURI(href)}">${escapeHTML(label)}</a></td>
+              <td><a href="${encodeURI(path)}">${escapeHTML(label)}</a></td>
               <td>${escapeHTML(mtime)}</td>
             `;
-    
             frag.appendChild(tr);
           });
     
@@ -101,10 +92,32 @@
         tbody.appendChild(frag);
     
       } catch (err) {
-        console.error("Failed to load markdown index", err);
-        tbody.innerHTML =
-          `<tr><td colspan="2">Failed to load markdown index.</td></tr>`;
+        console.error(err);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="2">
+              Failed to load markdown index.<br>
+              ${escapeHTML(String(err))}
+            </td>
+          </tr>`;
       }
+    }
+    
+    async function fetchFirstJson(urls) {
+      const errors = [];
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) {
+            errors.push(`${url} -> HTTP ${res.status}`);
+            continue;
+          }
+          return { url, data: await res.json() };
+        } catch (e) {
+          errors.push(`${url} -> ${e}`);
+        }
+      }
+      throw new Error("All index candidates failed:\n" + errors.join("\n"));
     }
     
     function escapeHTML(s) {
@@ -116,7 +129,8 @@
         "'":"&#39;"
       }[c]));
     }
-    </script>  
+    </script>
+    
 
 </body>
 </html>
