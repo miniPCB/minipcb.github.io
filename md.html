@@ -54,73 +54,69 @@
 <button id="backToTop" onclick="scrollToTop()" title="Back to Top">↑</button>
 
 <script>
-document.addEventListener("DOMContentLoaded", loadMarkdownIndex);
-
-async function loadMarkdownIndex() {
-  const tbody = document.querySelector("#md-table tbody");
-
-  try {
-    const res = await fetch("/md/index.json", { cache: "no-store" });
-    if (!res.ok) throw new Error(res.status);
-
-    const files = await res.json();
-
-    if (!files.length) {
-      tbody.innerHTML = `<tr><td colspan="2">No markdown files found.</td></tr>`;
-      return;
+    document.addEventListener("DOMContentLoaded", loadMarkdownIndex);
+    
+    async function loadMarkdownIndex() {
+      const tbody = document.querySelector("#md-table tbody");
+    
+      try {
+        // ✅ Use the actual location of the JSON you showed (site root)
+        const res = await fetch("/index.json", { cache: "no-store" });
+        if (!res.ok) throw new Error(res.status);
+    
+        const data = await res.json();
+    
+        // ✅ Your JSON shape: { ..., entries: [ { path, filename, mtime, ... }, ... ] }
+        const entries = Array.isArray(data) ? data : (data.entries || []);
+    
+        if (!entries.length) {
+          tbody.innerHTML = `<tr><td colspan="2">No markdown files found.</td></tr>`;
+          return;
+        }
+    
+        const frag = document.createDocumentFragment();
+    
+        entries
+          .filter(e => (e.path || "").toLowerCase().endsWith(".md"))
+          .sort((a, b) => (a.path || "").localeCompare(b.path || ""))
+          .forEach(e => {
+            const tr = document.createElement("tr");
+    
+            const href = "/" + (e.path || "");         // e.path already includes "md/..."
+            const label = e.filename || href.split("/").pop() || href;
+    
+            const mtime = e.mtime
+              ? new Date(e.mtime).toLocaleString()
+              : "—";
+    
+            tr.innerHTML = `
+              <td><a href="${encodeURI(href)}">${escapeHTML(label)}</a></td>
+              <td>${escapeHTML(mtime)}</td>
+            `;
+    
+            frag.appendChild(tr);
+          });
+    
+        tbody.innerHTML = "";
+        tbody.appendChild(frag);
+    
+      } catch (err) {
+        console.error("Failed to load markdown index", err);
+        tbody.innerHTML =
+          `<tr><td colspan="2">Failed to load markdown index.</td></tr>`;
+      }
     }
-
-    const frag = document.createDocumentFragment();
-
-    files
-      .filter(f => f.toLowerCase().endsWith(".md"))
-      .sort()
-      .forEach(file => {
-        const tr = document.createElement("tr");
-
-        tr.innerHTML = `
-          <td>
-            <a href="/md/${encodeURIComponent(file)}">
-              ${escapeHTML(file)}
-            </a>
-          </td>
-          <td>—</td>
-        `;
-
-        frag.appendChild(tr);
-      });
-
-    tbody.appendChild(frag);
-
-  } catch (err) {
-    console.error("Failed to load /md/index.json", err);
-    tbody.innerHTML =
-      `<tr><td colspan="2">Failed to load markdown index.</td></tr>`;
-  }
-}
-
-function escapeHTML(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    "&":"&amp;",
-    "<":"&lt;",
-    ">":"&gt;",
-    "\"":"&quot;",
-    "'":"&#39;"
-  }[c]));
-}
-</script>
-
-<script>
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-window.onscroll = function () {
-  const btn = document.getElementById("backToTop");
-  btn.style.display =
-    (document.documentElement.scrollTop > 400) ? "block" : "none";
-};
-</script>
+    
+    function escapeHTML(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        "\"":"&quot;",
+        "'":"&#39;"
+      }[c]));
+    }
+    </script>  
 
 </body>
 </html>
