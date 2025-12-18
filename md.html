@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-9ZM2D6XGT2');
+  </script>
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Markdown Documents – miniPCB™</title>
+
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+
+  <meta name="keywords"
+        content="miniPCB, markdown, documentation, engineering notes, build logs, pcb docs" />
+</head>
+
+<body>
+<nav>
+  <div class="nav-container">
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="container">
+  <h1>Markdown Documents</h1>
+  <p>Engineering notes and build documentation in Markdown format.</p>
+
+  <table class="changelog-table" id="md-table">
+    <thead>
+      <tr>
+        <th>File</th>
+        <th>Last Modified</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- rows injected dynamically -->
+    </tbody>
+  </table>
+</main>
+
+<footer>
+  © 2025 miniPCB. All rights reserved.
+</footer>
+
+<button id="backToTop" onclick="scrollToTop()" title="Back to Top">↑</button>
+
+<script>
+document.addEventListener("DOMContentLoaded", loadMarkdownIndex);
+
+async function loadMarkdownIndex() {
+  const tbody = document.querySelector("#md-table tbody");
+
+  try {
+    const res = await fetch("/md/index.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+
+    const files = await res.json();
+
+    if (!files.length) {
+      tbody.innerHTML = `<tr><td colspan="2">No markdown files found.</td></tr>`;
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+
+    files
+      .filter(f => f.toLowerCase().endsWith(".md"))
+      .sort()
+      .forEach(file => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>
+            <a href="/md/${encodeURIComponent(file)}">
+              ${escapeHTML(file)}
+            </a>
+          </td>
+          <td>—</td>
+        `;
+
+        frag.appendChild(tr);
+      });
+
+    tbody.appendChild(frag);
+
+  } catch (err) {
+    console.error("Failed to load /md/index.json", err);
+    tbody.innerHTML =
+      `<tr><td colspan="2">Failed to load markdown index.</td></tr>`;
+  }
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;",
+    "<":"&lt;",
+    ">":"&gt;",
+    "\"":"&quot;",
+    "'":"&#39;"
+  }[c]));
+}
+</script>
+
+<script>
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+window.onscroll = function () {
+  const btn = document.getElementById("backToTop");
+  btn.style.display =
+    (document.documentElement.scrollTop > 400) ? "block" : "none";
+};
+</script>
+
+</body>
+</html>
