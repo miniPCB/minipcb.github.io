@@ -1,0 +1,3181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Test Base 2026 — Test Plan Management (Skeleton)</title>
+  <style>
+    :root{
+      --bg:#0f1218;
+      --panel:#141a24;
+      --panel2:#101622;
+      --text:#e7edf7;
+      --muted:#a7b3c8;
+      --border:#2a3447;
+      --accent:#7cc4ff;
+      --accent2:#98ffa7;
+      --warn:#ffd37c;
+      --bad:#ff7c7c;
+      --good:#7cffb0;
+      --shadow: 0 12px 30px rgba(0,0,0,.35);
+      --radius:14px;
+      --radius2:18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: var(--sans);
+      background: radial-gradient(1200px 600px at 20% 0%, rgba(124,196,255,.10), transparent 60%),
+                  radial-gradient(1000px 500px at 80% 0%, rgba(152,255,167,.08), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+      overflow:hidden;
+    }
+
+    /* Shell */
+    .app{ height:100%; display:flex; flex-direction:column; }
+    .topbar{
+      height:54px;
+      display:flex; align-items:center; gap:12px;
+      padding:0 14px;
+      border-bottom:1px solid var(--border);
+      background: linear-gradient(180deg, rgba(20,26,36,.92), rgba(16,22,34,.92));
+      backdrop-filter: blur(8px);
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px;
+      padding-right:10px;
+      border-right:1px solid var(--border);
+      user-select:none;
+    }
+    .dot{
+      width:12px;height:12px;border-radius:999px;
+      background: radial-gradient(circle at 30% 30%, #fff, rgba(255,255,255,.2));
+      box-shadow: 0 0 0 2px rgba(124,196,255,.25), 0 0 18px rgba(124,196,255,.25);
+    }
+    .brand h1{ margin:0; font-size:14px; font-weight:650; letter-spacing:.2px; }
+    .menu{ display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+    .pill{
+      display:flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.02);
+      border-radius:999px;
+      cursor:pointer;
+      user-select:none;
+      transition: transform .06s ease, background .15s ease, border-color .15s ease;
+      color: var(--text);
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .pill:hover{ background: rgba(124,196,255,.06); border-color: rgba(124,196,255,.25); }
+    .pill:active{ transform: translateY(1px); }
+    .sep{ width:1px;height:26px;background:var(--border); margin:0 2px; }
+
+    .planBadge{
+      display:flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border:1px dashed rgba(124,196,255,.35);
+      background: rgba(124,196,255,.06);
+      border-radius: 999px;
+      min-width: 0;
+      max-width: 42%;
+    }
+    .planBadge .name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:650; }
+    .planBadge .sub{ font-size:11px; color:var(--muted); white-space:nowrap; }
+
+    .status{ display:flex; gap:10px; align-items:center; justify-content:flex-end; min-width: 270px; }
+    .chip{
+      display:flex; align-items:center; gap:8px;
+      padding:7px 10px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.02);
+      border-radius: 999px;
+      font-size:12px;
+      color: var(--muted);
+      user-select:none;
+      white-space:nowrap;
+    }
+    .chip.clickable{ cursor:pointer; }
+    .chip.clickable:hover{ border-color: rgba(124,196,255,.35); background: rgba(124,196,255,.06); }
+    .chip strong{ color:var(--text); font-weight:650; }
+    .led{
+      width:10px;height:10px;border-radius:999px;
+      background: rgba(255,255,255,.12);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+    }
+    .led.ok{ background: rgba(124,255,176,.85); box-shadow: 0 0 14px rgba(124,255,176,.35); }
+    .led.warn{ background: rgba(255,211,124,.95); box-shadow: 0 0 14px rgba(255,211,124,.35); }
+    .led.bad{ background: rgba(255,124,124,.95); box-shadow: 0 0 14px rgba(255,124,124,.35); }
+
+    /* Main */
+    .main{ flex:1; display:flex; min-height:0; }
+    .view{ flex:1; display:none; min-height:0; }
+    .view.active{ display:flex; }
+
+    /* Cards / Panels */
+    .card, .panel{
+      background: linear-gradient(180deg, rgba(20,26,36,.90), rgba(16,22,34,.90));
+      border:1px solid var(--border);
+      border-radius: var(--radius2);
+      box-shadow: var(--shadow);
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+    }
+    .cardHeader, .panelHeader{
+      padding:12px 14px;
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .cardHeader h2, .panelHeader h3{
+      margin:0;
+      font-size:13px;
+      font-weight:750;
+      letter-spacing:.2px;
+    }
+    .muted{ color:var(--muted); font-size:12px; }
+    .cardBody, .panelBody{ padding:14px; min-height:0; overflow:auto; }
+    .panelBody{ flex:1; }
+
+    .btn{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.02);
+      color:var(--text);
+      padding:9px 12px;
+      border-radius: 12px;
+      cursor:pointer;
+      transition: transform .06s ease, background .15s ease, border-color .15s ease;
+      font-size:12px;
+      user-select:none;
+      white-space:nowrap;
+    }
+    .btn:hover{ background: rgba(124,196,255,.06); border-color: rgba(124,196,255,.25); }
+    .btn:active{ transform: translateY(1px); }
+    .btn.primary{ background: rgba(124,196,255,.14); border-color: rgba(124,196,255,.35); }
+    .btn.danger:hover{ background: rgba(255,124,124,.10); border-color: rgba(255,124,124,.35); }
+    .btn:disabled{ opacity:.55; cursor:not-allowed; transform:none !important; }
+    .mini{ padding:7px 9px; border-radius: 10px; font-size:11px; }
+
+    .input, .select, textarea{
+      width:100%;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.02);
+      color:var(--text);
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:12px;
+      outline:none;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .select option{
+      background: var(--panel2);
+      color: var(--text);
+    }
+    .input:focus, .select:focus, textarea:focus{
+      border-color: rgba(124,196,255,.45);
+      background: rgba(124,196,255,.04);
+    }
+    textarea{ min-height:88px; resize: vertical; font-family: var(--sans); line-height:1.35; }
+    .ai-pending{
+      background: rgba(255,124,124,.10);
+      border-color: rgba(255,124,124,.35);
+    }
+    .ai-working{
+      background: rgba(255,211,124,.12);
+      border-color: rgba(255,211,124,.45);
+    }
+    .ai-accepted{
+      background: rgba(124,255,176,.12);
+      border-color: rgba(124,255,176,.45);
+    }
+
+    .hr{ height:1px; background: rgba(42,52,71,.7); margin: 12px 0; }
+    .row{ display:flex; gap:10px; align-items:center; }
+    .row > *{ flex:1; }
+    .label{ font-size:11px; color:var(--muted); margin:0 0 6px 2px; }
+    .toolbarRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+    .tag{
+      display:inline-flex; align-items:center; gap:6px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:4px 8px;
+      font-size:10px;
+      color:var(--muted);
+      background: rgba(255,255,255,.02);
+    }
+    .tag.dirty{ border-color: rgba(255,124,124,.35); color: rgba(255,124,124,.95); }
+
+    /* Library */
+    .library{ padding:14px; gap:14px; }
+    .grid2{ display:grid; grid-template-columns: 1.15fr .85fr; gap:14px; min-height:0; }
+    .list{ border:1px solid var(--border); border-radius: 14px; overflow:hidden; background: rgba(255,255,255,.02); }
+    .listHeader{
+      padding:10px 12px;
+      border-bottom:1px solid var(--border);
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+    }
+    .listHeader .title{ font-size:12px; font-weight:700; }
+    .listBody{ max-height: 420px; overflow:auto; }
+    .item{
+      padding:10px 12px;
+      display:flex; justify-content:space-between; align-items:flex-start;
+      gap:10px;
+      border-bottom:1px solid rgba(42,52,71,.7);
+    }
+    .item:last-child{ border-bottom:none; }
+    .item .left{ min-width:0; flex:1; }
+    .item .name{ font-weight:750; font-size:12px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .item .meta{ margin-top:4px; font-size:11px; color:var(--muted); display:flex; flex-wrap:wrap; gap:10px; }
+    .item .actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+
+    /* Editor */
+    .editor{ padding:14px; gap:14px; display:flex; flex-direction:column; min-height:0; flex:1; }
+    .gridEditor{
+      flex:1;
+      display:grid;
+      grid-template-columns: 320px 1.1fr 520px;
+      gap:14px;
+      min-height:0;
+      height:100%;
+    }
+    .testRow{
+      padding:10px 10px;
+      border:1px solid rgba(42,52,71,.65);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+      cursor:pointer;
+      transition: border-color .15s ease, background .15s ease;
+      margin-bottom:10px;
+    }
+    .testRow:hover{ border-color: rgba(124,196,255,.28); background: rgba(124,196,255,.05); }
+    .testRow.active{ border-color: rgba(124,196,255,.55); background: rgba(124,196,255,.10); }
+    .testRow.review-pending{ border-color: rgba(255,124,124,.35); background: rgba(255,124,124,.08); }
+    .testRow.review-working{ border-color: rgba(255,211,124,.55); background: rgba(255,211,124,.12); }
+    .testRow.review-done{ border-color: rgba(124,255,176,.40); background: rgba(124,255,176,.10); }
+    .testRow .top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+    .testRow .tno{ font-family: var(--mono); font-size:12px; font-weight:800; letter-spacing:.2px; }
+    .testRow .tname{ margin-top:4px; font-size:12px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .testRow .sub{ margin-top:4px; font-size:11px; color: var(--muted); display:flex; gap:8px; flex-wrap:wrap; }
+
+    .formGrid{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .formGrid .full{ grid-column: 1 / -1; }
+    .fieldHead{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .req{ display:inline-flex; align-items:center; gap:6px; font-size:10px; color: rgba(255,211,124,.95); }
+    .req::before{ content:"●"; font-size:10px; }
+    .hint{ font-size:11px; color: var(--muted); margin-top:6px; line-height:1.35; }
+
+    .tabs{ display:flex; gap:8px; align-items:center; }
+    .tab{
+      padding:8px 10px;
+      border-radius: 12px;
+      font-size:12px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.02);
+      cursor:pointer;
+      user-select:none;
+    }
+    .tab.active{ border-color: rgba(124,196,255,.45); background: rgba(124,196,255,.10); }
+    .tabContent{ display:none; }
+    .tabContent.active{ display:block; }
+
+    .flowWrap, .mdWrap{
+      border:1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+      overflow:hidden;
+    }
+    .flowTop, .mdTop{
+      padding:10px 12px;
+      border-bottom:1px solid var(--border);
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+    }
+    svg{ display:block; width:100%; height:520px; background: transparent; }
+    .flowWrap svg{ cursor: grab; }
+    .flowWrap svg.dragging{ cursor: grabbing; }
+    .svgNote{ padding:10px 12px; border-top:1px solid var(--border); color: var(--muted); font-size:11px; line-height:1.35; }
+
+    .mdArea{
+      width:100%;
+      min-height: 240px;
+      font-family: var(--mono);
+      font-size:11px;
+      line-height:1.4;
+      border:none;
+      outline:none;
+      padding:12px;
+      background: transparent;
+      color: var(--text);
+      resize: vertical;
+    }
+    .mdPreview{
+      padding:12px;
+      font-family: var(--mono);
+      font-size:11px;
+      line-height:1.4;
+      white-space: pre-wrap;
+      color: var(--text);
+      border-top: 1px solid rgba(42,52,71,.7);
+      max-height: 260px;
+      overflow:auto;
+    }
+
+    /* Log */
+    .logbar{
+      height: 150px;
+      border-top:1px solid var(--border);
+      background: rgba(10,14,20,.55);
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+    .logHead{
+      padding:10px 12px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      border-bottom:1px solid rgba(42,52,71,.7);
+    }
+    .logHead .title{ font-size:12px; font-weight:750; }
+    .log{
+      flex:1;
+      padding:10px 12px;
+      overflow:auto;
+      font-family: var(--mono);
+      font-size:11px;
+      color: rgba(231,237,247,.92);
+      line-height:1.35;
+    }
+    .log .line{ margin-bottom:6px; }
+    .log .time{ color: rgba(167,179,200,.85); }
+    .log .ok{ color: rgba(124,255,176,.95); }
+    .log .warn{ color: rgba(255,211,124,.95); }
+    .log .bad{ color: rgba(255,124,124,.95); }
+
+    /* Toast */
+    .toast{
+      position: fixed;
+      right: 16px;
+      top: 64px;
+      max-width: 520px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border:1px solid var(--border);
+      background: rgba(20,26,36,.92);
+      box-shadow: var(--shadow);
+      display:none;
+      z-index: 50;
+      font-size:12px;
+      color: var(--text);
+    }
+    .toast.show{ display:block; }
+    .toast .t{ font-weight:750; }
+    .toast .m{ margin-top:4px; color: var(--muted); }
+
+    /* Modal */
+    .modalOverlay{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index: 100;
+      padding: 18px;
+    }
+    .modalOverlay.show{ display:flex; }
+    .modal{
+      width: min(980px, 100%);
+      max-height: 86vh;
+      overflow:hidden;
+      border-radius: 18px;
+      border:1px solid var(--border);
+      background: linear-gradient(180deg, rgba(20,26,36,.96), rgba(16,22,34,.96));
+      box-shadow: var(--shadow);
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+    .modal.wide{ width: min(1200px, 100%); }
+    .modalHeader{
+      padding:12px 14px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .modalHeader h3{ margin:0; font-size:13px; font-weight:800; }
+    .modalBody{ padding:14px; overflow:auto; min-height:0; }
+    .modalFooter{
+      padding:12px 14px;
+      border-top:1px solid var(--border);
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar{ width: 12px; height: 12px; }
+    ::-webkit-scrollbar-thumb{
+      background: rgba(167,179,200,.18);
+      border-radius: 999px;
+      border: 3px solid rgba(0,0,0,0);
+      background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-thumb:hover{ background: rgba(167,179,200,.28); }
+    ::-webkit-scrollbar-corner{ background: transparent; }
+
+    @media (max-width: 1280px){
+      .gridEditor{ grid-template-columns: 300px 1fr; }
+      .gridEditor > .panel:nth-child(3){ grid-column: 1 / -1; }
+      svg{ height: 420px; }
+    }
+    @media (max-width: 980px){
+      .grid2{ grid-template-columns: 1fr; }
+      .status{ min-width: 0; }
+      .planBadge{ max-width: 55%; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="app">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="brand" title="Single-file HTML prototype">
+      <div class="dot"></div>
+      <h1>Test Base 2026</h1>
+    </div>
+
+    <div class="menu">
+
+      <div class="planBadge" id="planBadge" style="display:none;">
+        <div class="name" id="planBadgeName">—</div>
+        <div class="sub" id="planBadgeSub">0 tests</div>
+      </div>
+
+      <div style="flex:1; min-width:0;"></div>
+
+      <div class="pill" id="switchPlanBtn" title="Return to Plan Library" style="display:none;">Switch Plan</div>
+      <div class="pill" id="saveAllBtn" style="display:none;">Save All</div>
+    </div>
+
+    <div class="status">
+      <div class="chip clickable" id="aiChip" title="AI is optional. Saving never depends on AI.">
+        <span class="led bad" id="aiLed"></span>
+        <span><strong>AI</strong> <span id="aiText">Click to set key</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <!-- LIBRARY VIEW -->
+    <div class="view library active" id="viewLibrary">
+      <div class="grid2" style="min-height:0; flex:1;">
+            <div class="card" style="min-height:0;">
+              <div class="cardHeader">
+                <div>
+                  <h2>Plans</h2>
+                  <div class="muted" id="plansSub">Using in-browser Plan Store (localStorage).</div>
+                </div>
+                <div class="toolbarRow">
+                  <div style="width: 260px;">
+                    <input class="input" id="planSearch" placeholder="Search plans by name…" />
+                  </div>
+                  <button class="btn primary" id="btnNewPlan">Create New Plan</button>
+                </div>
+              </div>
+
+              <div class="cardBody" style="padding:0; min-height:0;">
+                <div class="list" style="border:none; border-radius:0;">
+                  <div class="listHeader">
+                    <div class="title">All Plans</div>
+                    <div class="muted" id="plansCount">0</div>
+                  </div>
+                  <div class="listBody" id="plansList"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="min-height:0;">
+              <div class="cardHeader">
+                <div>
+                  <h2>Workspace</h2>
+                  <div class="muted">Workspace stats, storage, and maintenance tools.</div>
+                </div>
+                <button class="btn" id="btnPrefs">Preferences</button>
+              </div>
+
+              <div class="cardBody" style="min-height:0;">
+                <div class="row">
+                  <div>
+                    <div class="label">Total Plans</div>
+                    <div class="input" style="display:flex;align-items:center;" id="wsPlanCount">0</div>
+                  </div>
+                  <div>
+                    <div class="label">Total Tests</div>
+                    <div class="input" style="display:flex;align-items:center;" id="wsTestCount">0</div>
+                  </div>
+                </div>
+
+                <div class="hr"></div>
+
+                <div class="row">
+                  <div>
+                    <div class="label">Storage</div>
+                    <div class="input" style="display:flex;align-items:center;" id="wsStorageMode">Browser Store</div>
+                  </div>
+                  <div>
+                    <div class="label">Plan Folder</div>
+                    <div class="input" style="display:flex;align-items:center;" id="planRootText">Not set</div>
+                  </div>
+                </div>
+
+                <div class="hr"></div>
+
+                <div class="toolbarRow">
+                  <button class="btn" id="btnSetPlanRoot">Set Plan Folder</button>
+                  <button class="btn danger" id="btnClearBrowser">Clear Browser Cache</button>
+                  <button class="btn" id="btnSeedDemo">Seed Demo Plan</button>
+                </div>
+              </div>
+            </div>
+
+      </div>
+    </div>
+
+    <!-- EDITOR VIEW -->
+      <div class="view editor" id="viewEditor" style="display:none;">
+      <div class="gridEditor">
+        <!-- Left -->
+        <div class="panel">
+          <div class="panelHeader">
+            <h3>Tests</h3>
+            <div class="toolbarRow">
+              <button class="btn mini primary" id="btnNewTest">New Test</button>
+              <button class="btn mini danger" id="btnDeleteTest" disabled>Delete</button>
+            </div>
+          </div>
+          <div class="panelBody">
+            <div class="row" style="margin-bottom:10px;">
+              <input class="input" id="testSearch" placeholder="Search tests…" />
+            </div>
+            <div id="testsList"></div>
+          </div>
+        </div>
+
+        <!-- Center -->
+        <div class="panel">
+          <div class="panelHeader">
+            <div style="min-width:0;">
+              <h3 style="margin:0;">Editor</h3>
+              <div class="muted" id="editorSub">No test selected</div>
+            </div>
+            <div class="toolbarRow">
+              <button class="btn mini primary" id="btnSaveTest" disabled>Save Test</button>
+              <button class="btn mini" id="btnAiSuggest" title="Suggest text for the focused field">AI Suggest</button>
+            </div>
+          </div>
+
+          <div class="panelBody">
+            <div class="muted" style="margin-bottom:10px; line-height:1.45;">
+              Required fields are marked. Validation never requires AI.
+              If AI is unavailable and required fields are empty at save time, the tool inserts deterministic placeholders and proceeds.
+            </div>
+
+            <div class="formGrid" id="formGrid"></div>
+
+            <div class="hr"></div>
+
+            <div class="row">
+              <button class="btn" id="btnNormalize">Normalize Schema</button>
+              <button class="btn" id="btnShowJson">View Current JSON</button>
+            </div>
+
+            <div class="hint" id="dirtyHint" style="display:none;">
+              <span style="color: rgba(255,124,124,.95); font-weight:700;">● Modified</span>
+              — changes not saved yet.
+            </div>
+          </div>
+        </div>
+
+        <!-- Right -->
+        <div class="panel">
+          <div class="panelHeader">
+            <h3>Plan</h3>
+            <div class="tabs">
+              <button class="btn mini" id="btnAiReviewPlan">AI Review</button>
+              <div class="tab active" data-tab="flow">Flowchart</div>
+              <div class="tab" data-tab="md">Markdown</div>
+            </div>
+          </div>
+
+          <div class="panelBody">
+            <div class="tabContent active" id="tab-flow">
+              <div class="flowWrap">
+                <div class="flowTop">
+                  <div class="toolbarRow">
+                    <button class="btn mini" id="btnFitFlow">Fit</button>
+                  </div>
+                </div>
+                <svg id="flowSvg" viewBox="0 0 900 520" preserveAspectRatio="none"></svg>
+                <div class="svgNote"></div>
+              </div>
+            </div>
+
+            <div class="tabContent" id="tab-md">
+              <div class="mdWrap">
+                <div class="mdTop">
+                  <div>
+                    <div style="font-size:12px;font-weight:750;">Plan Notes (Preserved)</div>
+                    <div class="muted">Edits inside markers are preserved on regeneration.</div>
+                  </div>
+                  <div class="toolbarRow">
+                    <button class="btn mini" id="btnDownloadMd">Download .md</button>
+                    <button class="btn mini primary" id="btnApplyNotes">Apply Notes</button>
+                    <button class="btn mini" id="btnRegenerateMd">Regenerate</button>
+                  </div>
+                </div>
+                <textarea class="mdArea" id="notesArea" spellcheck="false"></textarea>
+                <div class="mdPreview" id="mdPreview"></div>
+              </div>
+
+              <div class="hint" style="margin-top:10px;">
+                Skeleton generator includes: Title, Metadata, Test List, Notes block.
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="logbar">
+    <div class="logHead">
+      <div class="title">Log</div>
+      <div class="toolbarRow">
+        <button class="btn mini" id="btnCopyLog">Copy</button>
+        <button class="btn mini" id="btnClearLog">Clear</button>
+      </div>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <div class="t" id="toastTitle">—</div>
+  <div class="m" id="toastMsg">—</div>
+</div>
+
+<!-- MODAL -->
+<div class="modalOverlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modalHeader">
+      <h3 id="modalTitle">Modal</h3>
+      <button class="btn mini" id="modalClose">Close</button>
+    </div>
+    <div class="modalBody" id="modalBody"></div>
+    <div class="modalFooter" id="modalFooter"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  /* =========================================================
+     Test Base 2026 — Skeleton
+      - File System plan folders when enabled (fallback to Browser Store)
+     - Plan Library + Plan Editor
+     - Schema-driven form editor
+     - Non-blocking save fallback
+     - Markdown + Flowchart tabs
+     ========================================================= */
+
+  /* ---------- Schema (edit freely) ---------- */
+  const TEST_SCHEMA_DEFAULT = Object.freeze({
+    test_name: "",
+    test_no: "",
+    uut_pn: "",
+    last_test_no: "",
+    test_type: "",
+    purpose: "",
+    scope: "",
+    setup: "",
+    procedure: "",
+    measurement: "",
+    parameter: "",
+    ll: "N/A",
+    tv: "N/A",
+    ul: "N/A",
+    units: "N/A",
+    // dependency-ish fields (wire these into flowchart later)
+    in_tol_conclusion: "",
+    in_tol_next_step: "",
+    oot_low_conclusion: "",
+    oot_low_next_step: "",
+    oot_high_conclusion: "",
+    oot_high_next_step: ""
+  });
+
+  const REQUIRED_FIELDS = Object.freeze([
+    "test_name","test_no","uut_pn","test_type",
+    "purpose","setup","procedure","measurement",
+    "in_tol_conclusion","in_tol_next_step",
+    "oot_low_conclusion","oot_low_next_step",
+    "oot_high_conclusion","oot_high_next_step"
+  ]);
+
+  const MARKERS = Object.freeze({
+    start: "<!-- USER_NOTES_START -->",
+    end: "<!-- USER_NOTES_END -->"
+  });
+
+  /* ---------- DOM helpers ---------- */
+  const $ = (id) => document.getElementById(id);
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;"
+    }[c]));
+  }
+
+  function nowIsoDate(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const da = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${da}`;
+  }
+
+  function uid(){
+    return crypto.randomUUID ? crypto.randomUUID() : `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+  }
+
+  function slugifyPlanName(name){
+    return (name || "")
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "") || "untitled_plan";
+  }
+
+  function safeStringify(val){
+    if (val === null || val === undefined) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "number" || typeof val === "boolean" || typeof val === "bigint") return String(val);
+    try { return JSON.stringify(val); } catch { return String(val); }
+  }
+
+  function ensureAiMeta(ai){
+    const out = {
+      maturity: {},
+      last_ai_reviewed: "",
+      last_ai_review_model: "",
+      last_human_reviewed: "",
+      notes: ""
+    };
+    if(ai && typeof ai === "object"){
+      if(ai.maturity && typeof ai.maturity === "object"){
+        for(const [k,v] of Object.entries(ai.maturity)){
+          const n = Number(v);
+          out.maturity[k] = Number.isFinite(n) ? n : 0;
+        }
+      }
+      out.last_ai_reviewed = safeStringify(ai.last_ai_reviewed);
+      out.last_ai_review_model = safeStringify(ai.last_ai_review_model);
+      out.last_human_reviewed = safeStringify(ai.last_human_reviewed);
+      out.notes = safeStringify(ai.notes);
+    }
+    return out;
+  }
+
+  function normalizeTestData(obj){
+    const out = {};
+    const src = obj && typeof obj === "object" ? obj : {};
+    for(const k of Object.keys(TEST_SCHEMA_DEFAULT)){
+      out[k] = safeStringify(src[k]);
+      if(["ll","tv","ul","units"].includes(k) && out[k].trim() === "") out[k] = "N/A";
+    }
+    out._ai = ensureAiMeta(src._ai);
+    return out;
+  }
+
+  function requiredMissing(data){
+    const missing = [];
+    for(const k of REQUIRED_FIELDS){
+      if(((data[k] ?? "") + "").trim() === "") missing.push(k);
+    }
+    return missing;
+  }
+
+  /* ---------- Preferences (minimal) ---------- */
+  const DEFAULT_PREFS = Object.freeze({
+    ai_enabled: false,                // skeleton toggle (legacy)
+    ai_model: "gpt-4.1-mini",
+    ai_suggest_maturity_max: 2,       // suggest for fields with maturity <= this
+    fallback_on_save: "auto_fill",    // auto_fill | prompt
+    fallback_format: "generic"        // generic | dated
+  });
+
+  function loadPrefs(){
+    try{
+      const raw = JSON.parse(localStorage.getItem("tb26_prefs") || "{}");
+      const prefs = { ...DEFAULT_PREFS, ...(raw || {}) };
+      if(typeof prefs.ai_model !== "string" || !/^gpt-/i.test(prefs.ai_model)){
+        prefs.ai_model = DEFAULT_PREFS.ai_model;
+      }
+      return prefs;
+    }catch{
+      return { ...DEFAULT_PREFS };
+    }
+  }
+
+  function savePrefs(){
+    localStorage.setItem("tb26_prefs", JSON.stringify(state.prefs));
+  }
+
+  function loadModelCache(){
+    try{
+      const raw = JSON.parse(localStorage.getItem("tb26_models") || "[]");
+      return Array.isArray(raw) ? raw : [];
+    }catch{
+      return [];
+    }
+  }
+
+  function saveModelCache(list){
+    localStorage.setItem("tb26_models", JSON.stringify(list || []));
+  }
+
+  /* ---------- File System Root (optional) ---------- */
+  const FS_DB = "tb26_fs";
+  const FS_STORE = "handles";
+
+  function idbOpen(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(FS_DB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if(!db.objectStoreNames.contains(FS_STORE)) db.createObjectStore(FS_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbGet(key){
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(FS_STORE, "readonly");
+      const store = tx.objectStore(FS_STORE);
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbSet(key, value){
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(FS_STORE, "readwrite");
+      const store = tx.objectStore(FS_STORE);
+      const req = store.put(value, key);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function loadPlanRoot(){
+    try{
+      const handle = await idbGet("planRoot");
+      if(handle) state.planRootHandle = handle;
+    }catch{}
+  }
+
+  async function setPlanRoot(){
+    if(!window.showDirectoryPicker){
+      toast("Not supported", "This browser does not support folder access.", "warn");
+      return;
+    }
+    try{
+      const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+      state.planRootHandle = handle;
+      await idbSet("planRoot", handle);
+      updatePlanRootUI();
+      runAsync(renderLibrary());
+      toast("Plan folder set", "Library root selected.", "ok");
+    }catch(e){
+      toast("Canceled", "Plan folder not set.", "warn");
+    }
+  }
+
+  function updatePlanRootUI(){
+    const text = $("planRootText");
+    if(text){
+      text.textContent = state.planRootHandle ? (state.planRootHandle.name || "Selected folder") : "Not set";
+    }
+    $("plansSub").textContent = state.planRootHandle
+      ? "Using plan folder storage."
+      : "Using in-browser Plan Store (localStorage).";
+    const storageText = $("storageModeText");
+    if(storageText){
+      storageText.textContent = state.planRootHandle ? "File System" : "Browser Store";
+    }
+    const wsStorage = $("wsStorageMode");
+    if(wsStorage){
+      wsStorage.textContent = state.planRootHandle ? "File System" : "Browser Store";
+    }
+    const libSub = $("planLibrarySub");
+    if(libSub){
+      libSub.textContent = state.planRootHandle
+        ? "Create, browse, and open test plans (saved to folders + JSON + markdown)."
+        : "Create, browse, and open test plans (Browser Store skeleton).";
+    }
+  }
+
+  function promptPlanRootIfNeeded(){
+    if(state.planRootHandle) return;
+    showModal("Select Plan Library Root", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          Select the folder that will contain plan folders (ideally the folder next to this HTML file).
+          Each plan will create its own folder containing test JSON files and a plan markdown file.
+        </div>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="skipRoot">Not now</button>
+        <button class="btn primary" id="setRootNow">Select Folder</button>
+      `;
+      $("skipRoot").onclick = hideModal;
+      $("setRootNow").onclick = async () => { hideModal(); await setPlanRoot(); };
+    });
+  }
+
+  /* ---------- Store (Browser + File System) ---------- */
+  function useFileSystemStore(){
+    return !!state.planRootHandle && !!window.showDirectoryPicker;
+  }
+
+  async function ensurePlanRootHandle(){
+    if(!state.planRootHandle) return null;
+    try{
+      const perm = await state.planRootHandle.queryPermission({ mode: "readwrite" });
+      if(perm === "granted") return state.planRootHandle;
+      const req = await state.planRootHandle.requestPermission({ mode: "readwrite" });
+      return req === "granted" ? state.planRootHandle : null;
+    }catch{
+      return null;
+    }
+  }
+
+  function safeFilePart(value, fallback){
+    const base = (value || fallback || "item").toString().trim();
+    const cleaned = base.replace(/[<>:"/\\|?*]+/g, " ").replace(/\s+/g, " ").trim();
+    return cleaned || (fallback || "item");
+  }
+
+  function makePlanFolderName(plan){
+    const slug = plan.slug || slugifyPlanName(plan.name || "plan");
+    const shortId = (plan.id || uid()).replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || "plan";
+    return safeFilePart(`${slug}_${shortId}`, "plan");
+  }
+
+  function makeTestFileName(test, used){
+    const order = String(test.order ?? 0).padStart(3, "0");
+    const tno = safeFilePart(test.data?.test_no || "", "test");
+    let name = `test_${order}_${tno}.json`;
+    if(used.has(name)){
+      let i = 2;
+      while(used.has(`test_${order}_${tno}_${i}.json`)) i++;
+      name = `test_${order}_${tno}_${i}.json`;
+    }
+    used.add(name);
+    return name;
+  }
+
+  async function fsWriteText(dirHandle, filename, text, type){
+    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(new Blob([text], { type: type || "text/plain" }));
+    await writable.close();
+  }
+
+  async function fsReadText(dirHandle, filename){
+    try{
+      const fileHandle = await dirHandle.getFileHandle(filename);
+      const file = await fileHandle.getFile();
+      return await file.text();
+    }catch{
+      return null;
+    }
+  }
+
+  async function fsReadJson(dirHandle, filename){
+    const text = await fsReadText(dirHandle, filename);
+    if(!text) return null;
+    try{ return JSON.parse(text); }catch{ return null; }
+  }
+
+  async function fsLoadPlanFromDir(dirHandle, folderName){
+    const meta = await fsReadJson(dirHandle, "plan.json");
+    if(!meta) return null;
+    const md = await fsReadText(dirHandle, "plan.md");
+    let tests = [];
+    let testsDir = null;
+    try{ testsDir = await dirHandle.getDirectoryHandle("tests"); }catch{}
+    if(Array.isArray(meta.tests) && testsDir){
+      for(const t of meta.tests){
+        if(!t || !t.file) continue;
+        const tjson = await fsReadJson(testsDir, t.file);
+        if(!tjson) continue;
+        tests.push({
+          id: t.id || tjson.id || uid(),
+          order: t.order ?? tjson.order ?? 0,
+          modified: false,
+          data: normalizeTestData(tjson.data || tjson)
+        });
+      }
+    }else if(testsDir){
+      for await (const [name, handle] of testsDir.entries()){
+        if(handle.kind !== "file" || !name.toLowerCase().endsWith(".json")) continue;
+        const tjson = await fsReadJson(testsDir, name);
+        if(!tjson) continue;
+        tests.push({
+          id: tjson.id || uid(),
+          order: tjson.order ?? 0,
+          modified: false,
+          data: normalizeTestData(tjson.data || tjson)
+        });
+      }
+    }
+    const plan = {
+      id: meta.id || uid(),
+      name: meta.name || folderName || "Plan",
+      slug: meta.slug || slugifyPlanName(meta.name || folderName || "plan"),
+      folder: meta.folder || folderName,
+      created: meta.created || nowIsoDate(),
+      updated: meta.updated || nowIsoDate(),
+      tests,
+      markdown: md || meta.markdown || "",
+      userNotes: meta.userNotes ?? extractUserNotes(md || meta.markdown || "")
+    };
+    if(!plan.markdown) generatePlanMarkdown(plan);
+    return plan;
+  }
+
+  async function fsListPlans(){
+    const root = await ensurePlanRootHandle();
+    if(!root) return [];
+    const plans = [];
+    for await (const [name, handle] of root.entries()){
+      if(handle.kind !== "directory") continue;
+      const p = await fsLoadPlanFromDir(handle, name);
+      if(p) plans.push(p);
+    }
+    return plans.sort((a,b) => (b.updated||"").localeCompare(a.updated||""));
+  }
+
+  async function fsFindPlanDirById(id){
+    const root = await ensurePlanRootHandle();
+    if(!root) return null;
+    for await (const [name, handle] of root.entries()){
+      if(handle.kind !== "directory") continue;
+      const meta = await fsReadJson(handle, "plan.json");
+      if(meta && meta.id === id){
+        return { dir: handle, meta, name };
+      }
+    }
+    return null;
+  }
+
+  async function fsLoadPlan(id){
+    const entry = await fsFindPlanDirById(id);
+    if(!entry) throw new Error("Plan not found");
+    const plan = await fsLoadPlanFromDir(entry.dir, entry.name);
+    if(!plan) throw new Error("Plan not found");
+    return plan;
+  }
+
+  async function fsSavePlan(plan){
+    const root = await ensurePlanRootHandle();
+    if(!root) throw new Error("Plan folder not set");
+    plan.slug = plan.slug || slugifyPlanName(plan.name || "plan");
+    if(!plan.folder) plan.folder = makePlanFolderName(plan);
+    const planDir = await root.getDirectoryHandle(plan.folder, { create: true });
+    const testsDir = await planDir.getDirectoryHandle("tests", { create: true });
+    const used = new Set();
+    const existing = new Set();
+    for await (const [name, handle] of testsDir.entries()){
+      if(handle.kind === "file" && name.toLowerCase().endsWith(".json")){
+        existing.add(name);
+      }
+    }
+    const testsMeta = [];
+    for(const t of (plan.tests || [])){
+      const file = makeTestFileName(t, used);
+      const payload = {
+        id: t.id || uid(),
+        order: t.order ?? 0,
+        data: normalizeTestData(t.data || {})
+      };
+      await fsWriteText(testsDir, file, JSON.stringify(payload, null, 2), "application/json");
+      testsMeta.push({
+        id: payload.id,
+        order: payload.order,
+        file,
+        test_no: payload.data.test_no || "",
+        test_name: payload.data.test_name || ""
+      });
+    }
+    for(const name of existing){
+      if(!used.has(name)){
+        try{ await testsDir.removeEntry(name); }catch{}
+      }
+    }
+    if(!plan.markdown) generatePlanMarkdown(plan);
+    await fsWriteText(planDir, "plan.md", plan.markdown || "", "text/markdown");
+    const meta = {
+      id: plan.id,
+      name: plan.name,
+      slug: plan.slug,
+      folder: plan.folder,
+      created: plan.created || nowIsoDate(),
+      updated: plan.updated || nowIsoDate(),
+      userNotes: plan.userNotes || extractUserNotes(plan.markdown || ""),
+      markdownFile: "plan.md",
+      tests: testsMeta
+    };
+    await fsWriteText(planDir, "plan.json", JSON.stringify(meta, null, 2), "application/json");
+    return plan;
+  }
+
+  async function fsDeletePlan(id){
+    const root = await ensurePlanRootHandle();
+    if(!root) throw new Error("Plan folder not set");
+    const entry = await fsFindPlanDirById(id);
+    if(!entry) return;
+    await root.removeEntry(entry.name, { recursive: true });
+  }
+
+  const Store = {
+    key: "tb26_plans",
+    async listPlans(){
+      if(useFileSystemStore()) return await fsListPlans();
+      return loadPlans().sort((a,b) => (b.updated||"").localeCompare(a.updated||""));
+    },
+    async loadPlan(id){
+      if(useFileSystemStore()) return await fsLoadPlan(id);
+      const all = loadPlans();
+      const p = all.find(x => x.id === id);
+      if(!p) throw new Error("Plan not found");
+      return structuredClone(p);
+    },
+    async savePlan(plan){
+      if(useFileSystemStore()){
+        try{
+          await fsSavePlan(plan);
+          return;
+        }catch(e){
+          logLine(`Save failed (FS). Falling back to browser store. ${e.message || e}`, "warn");
+        }
+      }
+      const all = loadPlans();
+      const idx = all.findIndex(x => x.id === plan.id);
+      if(idx >= 0) all[idx] = structuredClone(plan);
+      else all.push(structuredClone(plan));
+      localStorage.setItem(this.key, JSON.stringify(all));
+    },
+    async deletePlan(id){
+      if(useFileSystemStore()){
+        try{
+          await fsDeletePlan(id);
+          return;
+        }catch(e){
+          logLine(`Delete failed (FS). ${e.message || e}`, "warn");
+        }
+      }
+      const all = loadPlans().filter(x => x.id !== id);
+      localStorage.setItem(this.key, JSON.stringify(all));
+    }
+  };
+
+  function loadPlans(){
+    try{ return JSON.parse(localStorage.getItem(Store.key) || "[]") || []; }
+    catch{ return []; }
+  }
+
+  /* ---------- Fallback placeholders ---------- */
+  function placeholderFor(fieldName){
+    const fmt = state.prefs.fallback_format;
+    const dated = fmt === "dated";
+    const date = nowIsoDate();
+
+    const map = {
+      purpose: "TODO: Describe the objective of this test.",
+      procedure: "TODO: Write step-by-step procedure.",
+      measurement: "TODO: Describe what is measured and how.",
+      setup: "TODO: Describe equipment, connections, and initial conditions.",
+      test_name: "TODO: Name this test.",
+      test_no: "TODO: Assign a test number (e.g., T1).",
+      uut_pn: "TODO: Specify UUT part number.",
+      in_tol_next_step: "TODO: Specify next test_no or END PASS.",
+      oot_low_next_step: "TODO: Specify next test_no or END FAIL.",
+      oot_high_next_step: "TODO: Specify next test_no or END FAIL."
+    };
+
+    const base = map[fieldName] || `TODO: Fill in ${fieldName}.`;
+    return dated ? `${base} (Auto-filled: AI unavailable on ${date})` : base;
+  }
+
+  function applyFallback(data, missing){
+    const changed = [];
+    for(const k of missing){
+      if(((data[k] ?? "") + "").trim() === ""){
+        data[k] = placeholderFor(k);
+        changed.push(k);
+      }
+    }
+    return changed;
+  }
+
+  /* ---------- Markdown generation (skeleton) ---------- */
+  function extractUserNotes(md){
+    const s = md || "";
+    const i = s.indexOf(MARKERS.start);
+    const j = s.indexOf(MARKERS.end);
+    if(i >= 0 && j > i){
+      return s
+        .slice(i + MARKERS.start.length, j)
+        .replace(/^\s*\r?\n/, "")
+        .replace(/\r?\n\s*$/, "");
+    }
+    const m = s.match(/## Notes\s*[\r\n]+([\s\S]*?)(?:\r?\n## |\s*$)/i);
+    if(m && m[1] != null){
+      return m[1].replace(/^\s*\r?\n/, "").replace(/\r?\n\s*$/, "");
+    }
+    return "Add plan-level notes here (equipment, safety, lab setup, etc.).";
+  }
+
+  function generatePlanMarkdown(plan){
+    const tests = (plan.tests || []).slice().sort((a,b) => (a.order||0) - (b.order||0));
+    const created = plan.created || nowIsoDate();
+    const updated = nowIsoDate();
+
+    const md =
+`# Test Plan: ${plan.name}
+
+## Plan Metadata
+- **Plan Name:** ${plan.name}
+- **Created:** ${created}
+- **Last Updated:** ${updated}
+- **Total Tests:** ${tests.length}
+
+## Test List
+| Order | test_no | test_name | test_type |
+|------:|--------:|-----------|-----------|
+${tests.map((t, idx) => {
+  const d = t.data || {};
+  const esc = (x) => String(x ?? "").replace(/\|/g, "\\|");
+  return `| ${idx+1} | ${esc(d.test_no)} | ${esc(d.test_name)} | ${esc(d.test_type)} |`;
+}).join("\n")}
+
+## Notes
+${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, etc.)."}
+`;
+    plan.created = created;
+    plan.updated = updated;
+    plan.markdown = md;
+    plan.userNotes = extractUserNotes(md);
+    return md;
+  }
+
+  /* ---------- State ---------- */
+  const state = {
+    prefs: loadPrefs(),
+    plansCache: [],
+    currentPlan: null,
+    currentTestId: null,
+    focusField: null,
+    aiSuggestStatus: {},
+    planRootHandle: null,
+    flow: { x: 0, y: 0, scale: 1 },
+    modelList: []
+  };
+
+  /* ---------- UI primitives ---------- */
+  function toast(title, msg, kind=""){
+    $("toastTitle").textContent = title;
+    $("toastMsg").textContent = msg;
+    const t = $("toast");
+    t.classList.add("show");
+    if(kind){
+      t.style.borderColor = kind === "bad" ? "rgba(255,124,124,.35)" :
+                           kind === "warn" ? "rgba(255,211,124,.35)" :
+                           kind === "ok" ? "rgba(124,255,176,.30)" : "var(--border)";
+    } else {
+      t.style.borderColor = "var(--border)";
+    }
+    clearTimeout(state._toastTimer);
+    state._toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
+  }
+
+  function logLine(msg, level="info"){
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const div = document.createElement("div");
+    div.className = "line";
+    const cls = level === "ok" ? "ok" : level === "warn" ? "warn" : level === "bad" ? "bad" : "";
+    div.innerHTML = `<span class="time">[${time}]</span> <span class="${cls}">${escapeHtml(msg)}</span>`;
+    $("log").appendChild(div);
+    $("log").scrollTop = $("log").scrollHeight;
+  }
+
+  function runAsync(promise){
+    Promise.resolve(promise).catch(err => {
+      logLine(`Error: ${err.message || err}`, "bad");
+      toast("Error", err.message || String(err), "bad");
+    });
+  }
+
+  function showModal(title, renderFn){
+    $("modalTitle").textContent = title;
+    $("modalBody").innerHTML = "";
+    $("modalFooter").innerHTML = "";
+    $("modalOverlay").classList.add("show");
+    renderFn($("modalBody"), $("modalFooter"));
+  }
+  function hideModal(){
+    $("modalOverlay").classList.remove("show");
+    $("modal").classList.remove("wide");
+  }
+
+  function showModalWide(title, renderFn){
+    $("modal").classList.add("wide");
+    showModal(title, renderFn);
+  }
+
+  function getReviewStatus(testId){
+    return state.aiReviewStatus?.[testId] || "";
+  }
+
+  function setReviewStatus(testId, status){
+    if(!state.aiReviewStatus) state.aiReviewStatus = {};
+    if(status) state.aiReviewStatus[testId] = status;
+    else delete state.aiReviewStatus[testId];
+  }
+
+  function fieldsForAiReview(test, anchors){
+    const keys = Object.keys(TEST_SCHEMA_DEFAULT);
+    const out = [];
+    for(const k of keys){
+      if(k === "_ai") continue;
+      const m = getFieldMaturity(test, k);
+      if(m >= 3){
+        if(anchors && anchors[k] && anchors[k].maturity === 3){
+          const cur = String(test.data[k] ?? "").trim();
+          const anchorVal = String(anchors[k].value ?? "").trim();
+          if(anchorVal && cur !== anchorVal) out.push(k);
+        }
+        continue;
+      }
+      const v = (test.data[k] ?? "");
+      if(["ll","tv","ul","units"].includes(k) && String(v).trim().toUpperCase() === "N/A") continue;
+      out.push(k);
+    }
+    return out;
+  }
+
+  async function aiReviewPlan(planId){
+    const key = getAiKey();
+    if(!key){
+      toast("AI Review", "Set an API key first.", "warn");
+      logLine("AI Review: no API key available.", "warn");
+      openAiKeyDialog();
+      return;
+    }
+    let plan = null;
+    try{
+      plan = await Store.loadPlan(planId);
+    }catch(e){
+      toast("AI Review", e.message || "Plan not found.", "bad");
+      return;
+    }
+
+    const tests = (plan.tests || []).slice().sort((a,b) => (a.order||0)-(b.order||0));
+    if(!tests.length){
+      toast("AI Review", "No tests to review.", "warn");
+      return;
+    }
+
+    // Open plan in editor and visualize progress inline
+    state.currentPlan = plan;
+    state.currentTestId = tests[0]?.id || null;
+    showEditor();
+
+    const model = state.prefs.ai_model || "gpt-4.1-mini";
+    logLine(`AI Review: using model "${model}".`, "ok");
+
+    const anchors = {};
+    function considerAnchor(field, value, maturity, testNo){
+      if(!value) return;
+      const val = String(value).trim();
+      if(!val) return;
+      const cur = anchors[field];
+      if(maturity === 3){
+        anchors[field] = { value: val, maturity: 3, test_no: testNo };
+        return;
+      }
+      if(!cur){
+        anchors[field] = { value: val, maturity: maturity, test_no: testNo };
+        return;
+      }
+      if(cur.maturity === 3) return;
+      // if only M4 values exist, take latest
+      if(maturity >= cur.maturity){
+        anchors[field] = { value: val, maturity: maturity, test_no: testNo };
+      }
+    }
+
+    function buildAnchorsFromTest(test){
+      const keys = Object.keys(TEST_SCHEMA_DEFAULT);
+      for(const k of keys){
+        if(k === "_ai") continue;
+        const m = getFieldMaturity(test, k);
+        if(m >= 3){
+          considerAnchor(k, test.data[k], m, test.data.test_no || "");
+        }
+      }
+    }
+
+    // Deterministic UUT P/N: lock to first test's value for all later tests
+    const firstUutPn = String(tests[0]?.data?.uut_pn ?? "").trim();
+    if(firstUutPn) anchors.uut_pn = { value: firstUutPn, maturity: 3, test_no: tests[0]?.data?.test_no || "" };
+
+    // Pre-mark tests with pending review status
+    for(const t of tests){
+      setReviewStatus(t.id, "pending");
+    }
+    renderTestsList();
+
+    for(const t of tests){
+      state.currentTestId = t.id;
+      setReviewStatus(t.id, "working");
+      const fields = fieldsForAiReview(t, anchors);
+      for(const f of fields) setSuggestStatus(t.id, f, "pending");
+      renderEditor();
+
+      // Force UUT P/N to match first test (no AI suggestion)
+      if(anchors.uut_pn && t !== tests[0]){
+        const curVal = String(t.data.uut_pn ?? "").trim();
+        const anchorVal = String(anchors.uut_pn.value ?? "").trim();
+        if(anchorVal && curVal !== anchorVal){
+          t.data.uut_pn = anchorVal;
+          setFieldMaturity(t, "uut_pn", 3);
+          t.modified = true;
+          logLine(`AI Review: enforced UUT P/N from first test on ${t.data.test_no || t.id.slice(0,6)}.`, "warn");
+        }
+      }
+
+      // Enforce: M3 earlier replaces M4 later (order matters)
+      for(const k of Object.keys(anchors)){
+        const a = anchors[k];
+        if(!a || a.maturity !== 3) continue;
+        const curM = getFieldMaturity(t, k);
+        const curVal = String(t.data[k] ?? "").trim();
+        if(curM === 4 && a.value && curVal !== a.value){
+          t.data[k] = a.value;
+          setFieldMaturity(t, k, 3);
+          t.modified = true;
+          logLine(`AI Review: enforced M3 "${k}" from ${a.test_no || "prior test"} on ${t.data.test_no || t.id.slice(0,6)}.`, "warn");
+        }
+      }
+      if(!fields.length){
+        for(const f of fields) setSuggestStatus(t.id, f, "accepted");
+        setReviewStatus(t.id, "done");
+        renderForm();
+        renderTestsList();
+        buildAnchorsFromTest(t);
+        continue;
+      }
+
+      const payload = {
+        plan: { name: plan.name, created: plan.created, updated: plan.updated },
+        all_tests: tests.map(tt => ({
+          test_no: tt.data.test_no || "",
+          test_name: tt.data.test_name || "",
+          test_type: tt.data.test_type || "",
+          uut_pn: tt.data.uut_pn || "",
+          last_test_no: tt.data.last_test_no || "",
+          in_tol_next_step: tt.data.in_tol_next_step || "",
+          oot_low_next_step: tt.data.oot_low_next_step || "",
+          oot_high_next_step: tt.data.oot_high_next_step || "",
+          data: tt.data
+        })),
+        test_no: t.data.test_no || "",
+        test_name: t.data.test_name || "",
+        fields: fields.filter(f => f !== "uut_pn"),
+        current_values: fields.reduce((acc, k) => (acc[k] = t.data[k] ?? "", acc), {}),
+        maturity: fields.reduce((acc, k) => (acc[k] = getFieldMaturity(t, k), acc), {}),
+        authoritative_values: Object.keys(anchors).reduce((acc, k) => (acc[k] = anchors[k].value, acc), {}),
+        context: t.data
+      };
+
+      logLine(`AI Review: reviewing ${t.data.test_no || t.id.slice(0,6)} (${fields.length} fields)...`, "ok");
+
+      try{
+        for(const f of fields) setSuggestStatus(t.id, f, "working");
+        renderForm();
+        const resp = await fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${key}`
+          },
+          body: JSON.stringify({
+            model,
+            input: [
+              { role:"system", content:"Return STRICT JSON object mapping field -> improved_value. Only include fields provided. Values must be plain strings, not critiques. Use authoritative_values to keep consistency across tests." },
+              { role:"user", content: JSON.stringify(payload, null, 2) }
+            ],
+            max_output_tokens: 800
+          })
+        });
+        if(!resp.ok){
+          const ttxt = await resp.text().catch(()=> "");
+          throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
+        }
+        const data = await resp.json();
+        const raw = extractResponseText(data);
+        if(!raw) throw new Error("No text returned");
+        let parsed = {};
+        try{ parsed = JSON.parse(raw); }catch{ parsed = {}; }
+        for(const f of fields){
+          const val = parsed?.[f];
+          if(typeof val === "string" && val.trim() && val.trim() !== String(t.data[f] ?? "").trim()){
+            t.data[f] = val.trim();
+            setFieldMaturity(t, f, 2);
+            t.modified = true;
+          }
+        }
+        for(const f of fields) setSuggestStatus(t.id, f, "accepted");
+        setReviewStatus(t.id, "done");
+        renderForm();
+        renderTestsList();
+        logLine(`AI Review: updated ${t.data.test_no || t.id.slice(0,6)}.`, "ok");
+      }catch(err){
+        for(const f of fields) setSuggestStatus(t.id, f, "");
+        setReviewStatus(t.id, "done");
+        renderForm();
+        renderTestsList();
+        logLine(`AI Review: failed ${t.data.test_no || t.id.slice(0,6)} (${err.message || err}).`, "warn");
+      }
+      buildAnchorsFromTest(t);
+    }
+
+    plan.updated = nowIsoDate();
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    logLine("AI Review: plan saved with improvements.", "ok");
+    toast("AI Review", "Plan updated.", "ok");
+    if(state.currentPlan && state.currentPlan.id === plan.id){
+      state.currentPlan = plan;
+      renderEditor();
+    }
+  }
+
+  function openMaturityDialog(test, field){
+    if(!test) return;
+    const current = getFieldMaturity(test, field);
+    showModal("AI Maturity", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted">Set maturity for <span class="tag">${escapeHtml(field)}</span></div>
+        <div class="hr"></div>
+        <div class="row">
+          <div>
+            <div class="label">Maturity Level</div>
+            <select class="select" id="maturitySelect">
+              <option value="0">M0 — Unknown</option>
+              <option value="1">M1 — Placeholder</option>
+              <option value="2">M2 — AI-Assisted</option>
+              <option value="3">M3 — Human-Reviewed</option>
+              <option value="4">M4 — Locked</option>
+            </select>
+          </div>
+        </div>
+      `;
+      $("maturitySelect").value = String(current);
+      footer.innerHTML = `
+        <button class="btn" id="cancelMaturity">Cancel</button>
+        <button class="btn primary" id="saveMaturity">Save</button>
+      `;
+      $("cancelMaturity").onclick = hideModal;
+      $("saveMaturity").onclick = () => {
+        const val = Number($("maturitySelect").value);
+        if(!test.data._ai) test.data._ai = { maturity:{} };
+        if(!test.data._ai.maturity) test.data._ai.maturity = {};
+        test.data._ai.maturity[field] = Number.isFinite(val) ? val : 0;
+        test.modified = true;
+        $("dirtyHint").style.display = "";
+        hideModal();
+        renderForm();
+      };
+    });
+  }
+
+  function downloadText(filename, text, mime="text/plain"){
+    const blob = new Blob([text], {type: mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 800);
+  }
+
+  /* ---------- View switching ---------- */
+  function showLibrary(){
+    $("viewLibrary").classList.add("active");
+    $("viewEditor").classList.remove("active");
+    $("viewLibrary").style.display = "flex";
+    $("viewEditor").style.display = "none";
+    $("switchPlanBtn").style.display = "none";
+    $("saveAllBtn").style.display = "none";
+    $("planBadge").style.display = "none";
+    state.currentPlan = null;
+    state.currentTestId = null;
+    runAsync(renderLibrary());
+  }
+
+  function showEditor(){
+    $("viewLibrary").classList.remove("active");
+    $("viewEditor").classList.add("active");
+    $("viewLibrary").style.display = "none";
+    $("viewEditor").style.display = "flex";
+    $("switchPlanBtn").style.display = "";
+    $("saveAllBtn").style.display = "";
+    $("planBadge").style.display = "";
+    renderEditor();
+  }
+
+  /* ---------- Library rendering ---------- */
+  async function renderLibrary(){
+    // status chips
+    updateAiBadge();
+    updateAiUI();
+    updatePlanRootUI();
+
+    const q = ($("planSearch").value || "").toLowerCase().trim();
+    const plans = await Store.listPlans();
+    state.plansCache = plans;
+
+    const totalTests = plans.reduce((sum, p) => sum + (p.tests?.length || 0), 0);
+    const planCount = $("wsPlanCount");
+    const testCount = $("wsTestCount");
+    if(planCount) planCount.textContent = String(plans.length);
+    if(testCount) testCount.textContent = String(totalTests);
+
+    const filtered = plans.filter(p => !q || (p.name||"").toLowerCase().includes(q));
+    $("plansCount").textContent = `${filtered.length} shown`;
+
+    const list = $("plansList");
+    list.innerHTML = "";
+    for(const p of filtered){
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `
+        <div class="left">
+          <div class="name">${escapeHtml(p.name || "(Unnamed Plan)")}</div>
+          <div class="meta">
+            <span class="tag">${escapeHtml(p.slug || "plan")}</span>
+            <span class="tag">Tests: ${escapeHtml(String((p.tests||[]).length))}</span>
+            <span class="tag">Updated: ${escapeHtml(p.updated || "(unknown)")}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn mini primary" data-act="open" data-id="${escapeHtml(p.id)}">Open</button>
+          <button class="btn mini" data-act="review" data-id="${escapeHtml(p.id)}">AI Review</button>
+          <button class="btn mini" data-act="rename" data-id="${escapeHtml(p.id)}">Rename</button>
+          <button class="btn mini danger" data-act="delete" data-id="${escapeHtml(p.id)}">Delete</button>
+        </div>
+      `;
+      list.appendChild(el);
+    }
+
+    list.querySelectorAll("button[data-act]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const act = btn.getAttribute("data-act");
+        const id = btn.getAttribute("data-id");
+        if(act === "open") runAsync(openPlanById(id));
+        if(act === "review") runAsync(aiReviewPlan(id));
+        if(act === "rename") runAsync(renamePlanFlow(id));
+        if(act === "delete") runAsync(deletePlanFlow(id));
+      });
+    });
+  }
+
+  /* ---------- Editor rendering ---------- */
+  function currentTest(){
+    if(!state.currentPlan || !state.currentTestId) return null;
+    return state.currentPlan.tests.find(t => t.id === state.currentTestId) || null;
+  }
+
+  function renderEditor(){
+    const plan = state.currentPlan;
+    if(!plan){ showLibrary(); return; }
+
+    $("planBadgeName").textContent = plan.name || "(Unnamed Plan)";
+    $("planBadgeSub").textContent = `${plan.tests.length} tests`;
+
+      updateAiUI();
+    $("btnSaveTest").disabled = !state.currentTestId;
+    $("btnDeleteTest").disabled = !state.currentTestId;
+
+    renderTestsList();
+    renderForm();
+    refreshMarkdownUI();
+    drawFlowchart();
+  }
+
+  function renderTestsList(){
+    const plan = state.currentPlan;
+    const q = ($("testSearch").value || "").toLowerCase().trim();
+    const wrap = $("testsList");
+    wrap.innerHTML = "";
+
+    const tests = (plan.tests || []).slice().sort((a,b) => (a.order||0) - (b.order||0));
+    for(const t of tests){
+      const d = t.data || {};
+      const tno = (d.test_no || "").trim() || "(no test_no)";
+      const name = (d.test_name || "").trim() || "(no test_name)";
+      const type = (d.test_type || "").trim() || "(no test_type)";
+      if(q && !(tno.toLowerCase().includes(q) || name.toLowerCase().includes(q))) continue;
+
+      const row = document.createElement("div");
+      const review = getReviewStatus(t.id);
+      row.className = "testRow"
+        + (t.id === state.currentTestId ? " active" : "")
+        + (review ? ` review-${review}` : "");
+      row.innerHTML = `
+        <div class="top">
+          <div class="tno">${escapeHtml(tno)}</div>
+          <div class="tag ${t.modified ? "dirty" : ""}">${t.modified ? "Modified" : "Saved"}</div>
+        </div>
+        <div class="tname">${escapeHtml(name)}</div>
+        <div class="sub">
+          <span class="tag">${escapeHtml(type)}</span>
+          <span class="tag">Order: ${escapeHtml(String(t.order ?? 0))}</span>
+        </div>
+      `;
+      row.addEventListener("click", () => {
+        state.currentTestId = t.id;
+        renderEditor();
+      });
+      wrap.appendChild(row);
+    }
+  }
+
+  function fieldOrder(){
+    return [
+      "test_name","test_no","uut_pn","last_test_no","test_type",
+      "purpose","scope","setup","procedure","measurement",
+      "parameter","ll","tv","ul","units",
+      "in_tol_conclusion","in_tol_next_step",
+      "oot_low_conclusion","oot_low_next_step",
+      "oot_high_conclusion","oot_high_next_step"
+    ];
+  }
+
+  function renderForm(){
+    const test = currentTest();
+    const grid = $("formGrid");
+    grid.innerHTML = "";
+
+    if(!test){
+      $("editorSub").textContent = "No test selected";
+      $("dirtyHint").style.display = "none";
+      return;
+    }
+
+    $("editorSub").textContent = `Plan: ${state.currentPlan.name} • Test ID: ${test.id.slice(0,8)}…`;
+    $("dirtyHint").style.display = test.modified ? "" : "none";
+
+    const fields = fieldOrder();
+    for(const k of fields){
+      const isReq = REQUIRED_FIELDS.includes(k);
+      const isTextArea = ["purpose","scope","setup","procedure","measurement","in_tol_conclusion","oot_low_conclusion","oot_high_conclusion"].includes(k);
+      const full = isTextArea;
+
+      const cell = document.createElement("div");
+      cell.className = full ? "full" : "";
+
+      const head = document.createElement("div");
+      head.className = "fieldHead";
+      const LABEL_OVERRIDES = {
+        test_no: "Test No",
+        test_name: "Test Name",
+        uut_pn: "UUT P/N",
+        last_test_no: "Last Test No",
+        test_type: "Test Type",
+        purpose: "Purpose",
+        scope: "Scope",
+        setup: "Setup",
+        procedure: "Procedure",
+        measurement: "Measurement",
+        parameter: "Parameter",
+        ll: "Lower Limit (ll)",
+        tv: "Target Value (tv)",
+        ul: "Upper Limit (ul)",
+        units: "Units",
+        in_tol_conclusion: "In-Tol Conclusion",
+        in_tol_next_step: "In-Tol Next Step",
+        oot_low_conclusion: "OOT Low Conclusion",
+        oot_low_next_step: "OOT Low Next Step",
+        oot_high_conclusion: "OOT High Conclusion",
+        oot_high_next_step: "OOT High Next Step"
+      };
+      const labelText = LABEL_OVERRIDES[k] || k;
+        const maturity = getFieldMaturity(test, k);
+      head.innerHTML = `
+          <div class="label">${escapeHtml(labelText)} ${isReq ? `<span class="req">required</span>` : ``}</div>
+          <span class="tag" data-maturity="${k}" title="Click to set maturity">M${maturity}</span>
+        `;
+      const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
+
+      const input = document.createElement(isTextArea ? "textarea" : "input");
+      input.className = "input";
+      if(!isTextArea) input.type = "text";
+      input.value = (test.data[k] ?? "");
+      input.setAttribute("data-field", k);
+
+        const s = getSuggestStatus(test.id, k);
+        if(s) input.classList.add(`ai-${s}`);
+
+        input.addEventListener("input", () => {
+          test.data[k] = input.value;
+          test.modified = true;
+          $("dirtyHint").style.display = "";
+          setSuggestStatus(test.id, k, "");
+          setFieldMaturity(test, k, 3);
+          if(maturityTag) maturityTag.textContent = "M3";
+          renderTestsList();
+        });
+      input.addEventListener("focus", () => {
+        state.focusField = k;
+      });
+
+        cell.appendChild(head);
+        cell.appendChild(input);
+      grid.appendChild(cell);
+      }
+
+      grid.querySelectorAll("[data-maturity]").forEach(el => {
+        el.addEventListener("click", () => {
+          const field = el.getAttribute("data-maturity");
+          openMaturityDialog(test, field);
+        });
+      });
+    }
+
+  /* ---------- Flowchart (placeholder skeleton) ---------- */
+  function applyFlowTransform(){
+    const svg = $("flowSvg");
+    const g = svg?.querySelector("#flowViewport");
+    if(!g) return;
+    g.setAttribute("transform", `translate(${state.flow.x} ${state.flow.y}) scale(${state.flow.scale})`);
+  }
+
+  function fitFlowToView(){
+    const svg = $("flowSvg");
+    const g = svg?.querySelector("#flowViewport");
+    if(!svg || !g) return;
+    const vb = svg.viewBox.baseVal;
+    const viewW = vb && vb.width ? vb.width : 900;
+    const viewH = vb && vb.height ? vb.height : 520;
+    const bbox = g.getBBox();
+    if(!bbox || !bbox.width || !bbox.height) return;
+    const pad = 0.92;
+    const scale = Math.min(viewW / bbox.width, viewH / bbox.height) * pad;
+    state.flow.scale = Math.max(0.2, Math.min(3, scale));
+    state.flow.x = -bbox.x + (viewW / state.flow.scale - bbox.width) / 2;
+    state.flow.y = -bbox.y + (viewH / state.flow.scale - bbox.height) / 2;
+    applyFlowTransform();
+  }
+
+  function drawFlowchart(){
+    const svg = $("flowSvg");
+    svg.innerHTML = "";
+    const plan = state.currentPlan;
+    if(!plan) return;
+
+    let W = 900;
+    const NS = "http://www.w3.org/2000/svg";
+    const make = (tag, attrs={}) => {
+      const el = document.createElementNS(NS, tag);
+      for(const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+      return el;
+    };
+    const normKey = (val) => String(val || "").trim().toUpperCase();
+    const isEndPass = (val) => /END\s*PASS/i.test(String(val || ""));
+    const isEndFail = (val) => /END\s*FAIL/i.test(String(val || ""));
+
+    const g = make("g", { id:"flowViewport" });
+    svg.appendChild(g);
+
+    // Title removed
+
+    // Vertical nodes + right-side routing to avoid crossing blocks
+    const boxW = 260, boxH = 54, gap = 14, x = 22;
+    const gutterX = x + boxW + 80;
+    const grid = 16;
+    let y = 58;
+
+    const tests = (plan.tests||[]).slice().sort((a,b) => (a.order||0)-(b.order||0));
+    const nodes = [];
+    for(const t of tests.slice(0,12)){ // show first N in skeleton
+      const d = t.data || {};
+      const label1 = (d.test_no || "(no test_no)").trim();
+      const label2 = (d.test_name || "(no test_name)").trim();
+      const node = { id: t.id, testNo: label1, data: d, x, y, w: boxW, h: boxH };
+      nodes.push(node);
+      y += boxH + gap;
+    }
+
+    const H = Math.max(520, y + 80);
+
+    const byTestNo = {};
+    for(const n of nodes){
+      const key = normKey(n.testNo);
+      if(key && key !== "(NO TEST_NO)") byTestNo[key] = n;
+    }
+
+    const endW = 200;
+    const endX = x;
+    const endY = y + 24;
+    const endPass = { x: endX, y: endY, w: endW, h: 44, label: "END PASS" };
+    W = Math.max(W, endX + endW + 40);
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+    // Subtle grid for alignment
+    const gridGroup = make("g", { opacity: "0.14" });
+    for(let gx = 0; gx <= W; gx += grid){
+      gridGroup.appendChild(make("line", {
+        x1:String(gx), y1:"0", x2:String(gx), y2:String(H),
+        stroke:"rgba(167,179,200,.15)", "stroke-width":"1"
+      }));
+    }
+    for(let gy = 0; gy <= H; gy += grid){
+      gridGroup.appendChild(make("line", {
+        x1:"0", y1:String(gy), x2:String(W), y2:String(gy),
+        stroke:"rgba(167,179,200,.15)", "stroke-width":"1"
+      }));
+    }
+    g.appendChild(gridGroup);
+
+    const snap = (v) => Math.round(v / grid) * grid;
+
+    // Note: arrows removed per request.
+
+    const endNodes = [endPass];
+    for(const en of endNodes){
+      const r = make("rect", {
+        x:String(en.x), y:String(en.y),
+        rx:"10", ry:"10",
+        width:String(en.w), height:String(en.h),
+        fill:"rgba(152,255,167,.08)",
+        stroke:"rgba(152,255,167,.30)",
+        "stroke-width":"1.5"
+      });
+      const t = make("text", {
+        x:String(en.x + 12), y:String(en.y + 26),
+        fill:"rgba(231,237,247,.95)",
+        "font-size":"12",
+        "font-family":"var(--mono)"
+      });
+      t.textContent = en.label;
+      g.appendChild(r);
+      g.appendChild(t);
+    }
+
+    for(const n of nodes){
+      const r = make("rect", {
+        x:String(n.x), y:String(n.y),
+        rx:"12", ry:"12",
+        width:String(n.w), height:String(n.h),
+        fill:"rgba(124,196,255,.08)",
+        stroke:"rgba(124,196,255,.30)",
+        "stroke-width":"1.5"
+      });
+      g.appendChild(r);
+
+      const txt = make("text", {
+        x:String(n.x+12), y:String(n.y+20),
+        fill:"rgba(231,237,247,.95)",
+        "font-size":"12",
+        "font-family":"var(--mono)"
+      });
+
+      const t1 = make("tspan", {x:String(n.x+12), dy:"0"});
+      t1.textContent = n.testNo;
+      txt.appendChild(t1);
+
+      const name = (n.data?.test_name || "(no test_name)").trim();
+      const t2 = make("tspan", {x:String(n.x+12), dy:"14", fill:"rgba(167,179,200,.95)"});
+      t2.textContent = name.length > 32 ? name.slice(0,32) + "…" : name;
+      txt.appendChild(t2);
+
+      g.appendChild(txt);
+    }
+    fitFlowToView();
+  }
+
+  /* ---------- Plan ops ---------- */
+  async function openPlanById(id){
+    try{
+      const plan = await Store.loadPlan(id);
+      // normalize plan + tests
+      plan.slug = plan.slug || slugifyPlanName(plan.name || "plan");
+      plan.tests = (plan.tests || []).map((t, idx) => ({
+        id: t.id || uid(),
+        order: (t.order ?? idx+1),
+        modified: !!t.modified,
+        data: normalizeTestData(t.data)
+      }));
+      plan.userNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
+      if(!plan.markdown) generatePlanMarkdown(plan);
+
+      state.currentPlan = plan;
+      state.currentTestId = plan.tests[0]?.id || null;
+
+      logLine(`Opened plan: ${plan.name}`, "ok");
+      toast("Plan opened", plan.name, "ok");
+      showEditor();
+    }catch(e){
+      logLine(`Open failed: ${e.message || e}`, "bad");
+      toast("Open failed", e.message || String(e), "bad");
+    }
+  }
+
+  function createNewPlanFlow(){
+    showModal("Create New Plan", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          Creates a new plan. If a Plan Folder is set, a folder is created with test JSON files and plan markdown.
+        </div>
+        <div class="hr"></div>
+        <div class="label">Plan Name</div>
+        <input class="input" id="newPlanName" placeholder="e.g., Capacitor Thermal Stress Validation" />
+        <div class="hint">Slug rules: lowercase, spaces→underscores, remove non [a-z0-9_], collapse underscores.</div>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelNewPlan">Cancel</button>
+        <button class="btn primary" id="confirmNewPlan">Create</button>
+      `;
+      $("cancelNewPlan").onclick = hideModal;
+      $("confirmNewPlan").onclick = async () => {
+        const name = $("newPlanName").value.trim();
+        if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+
+        const plan = {
+          id: uid(),
+          name,
+          slug: slugifyPlanName(name),
+          created: nowIsoDate(),
+          updated: nowIsoDate(),
+          tests: [],
+          markdown: "",
+          userNotes: "Add plan-level notes here (equipment, safety, lab setup, etc.)."
+        };
+        generatePlanMarkdown(plan);
+        await Store.savePlan(plan);
+
+        hideModal();
+        logLine(`Created plan: ${plan.name}`, "ok");
+        toast("Plan created", plan.name, "ok");
+        runAsync(renderLibrary());
+      };
+
+      setTimeout(() => $("newPlanName").focus(), 20);
+    });
+  }
+
+  async function renamePlanFlow(planId){
+    const base = state.plansCache.find(p => p.id === planId);
+    if(!base) return;
+
+    showModal("Rename Plan", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          Updates the plan name and regenerates markdown while preserving the notes block.
+        </div>
+        <div class="hr"></div>
+        <div class="label">New Plan Name</div>
+        <input class="input" id="renamePlanName" value="${escapeHtml(base.name)}" />
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelRename">Cancel</button>
+        <button class="btn primary" id="confirmRename">Rename</button>
+      `;
+      $("cancelRename").onclick = hideModal;
+      $("confirmRename").onclick = async () => {
+        const newName = $("renamePlanName").value.trim();
+        if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+
+        const plan = await Store.loadPlan(planId);
+        const oldNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
+        plan.name = newName;
+        plan.slug = slugifyPlanName(newName);
+        plan.userNotes = oldNotes;
+        generatePlanMarkdown(plan);
+        await Store.savePlan(plan);
+
+        hideModal();
+        logLine(`Renamed plan: ${newName}`, "ok");
+        toast("Plan renamed", newName, "ok");
+        runAsync(renderLibrary());
+      };
+      setTimeout(() => $("renamePlanName").focus(), 20);
+    });
+  }
+
+  async function deletePlanFlow(planId){
+    const base = state.plansCache.find(p => p.id === planId);
+    if(!base) return;
+
+    showModal("Delete Plan", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          <strong>Warning:</strong> This permanently deletes the plan (folder + files if File System is enabled).
+        </div>
+        <div class="hr"></div>
+        <div class="row">
+          <div>
+            <div class="label">Type DELETE to confirm</div>
+            <input class="input" id="delConfirm" placeholder="DELETE" />
+          </div>
+        </div>
+        <div class="hint">Plan: <span class="tag">${escapeHtml(base.name)}</span></div>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelDel">Cancel</button>
+        <button class="btn danger" id="confirmDel" disabled>Delete</button>
+      `;
+      $("cancelDel").onclick = hideModal;
+
+      $("delConfirm").addEventListener("input", () => {
+        $("confirmDel").disabled = $("delConfirm").value.trim().toUpperCase() !== "DELETE";
+      });
+
+      $("confirmDel").onclick = async () => {
+        await Store.deletePlan(planId);
+        hideModal();
+        logLine(`Deleted plan: ${base.name}`, "warn");
+        toast("Plan deleted", base.name, "warn");
+        runAsync(renderLibrary());
+      };
+    });
+  }
+
+  /* ---------- Test ops ---------- */
+  function newTest(){
+    const plan = state.currentPlan;
+    if(!plan) return;
+
+    const nextOrder = (plan.tests?.reduce((m,t)=>Math.max(m, t.order||0), 0) || 0) + 1;
+    const t = {
+      id: uid(),
+      order: nextOrder,
+      modified: true,
+      data: normalizeTestData({})
+    };
+    plan.tests.push(t);
+    state.currentTestId = t.id;
+
+    logLine("Created new test (unsaved).", "ok");
+    toast("New test", "Test created (unsaved).", "ok");
+    renderEditor();
+  }
+
+  function deleteCurrentTest(){
+    const plan = state.currentPlan;
+    const test = currentTest();
+    if(!plan || !test) return;
+
+    showModal("Delete Test", (body, footer) => {
+      const d = test.data || {};
+      body.innerHTML = `
+        <div class="muted">Deletes the selected test from this plan.</div>
+        <div class="hr"></div>
+        <div class="muted">Test: <span class="tag">${escapeHtml(d.test_no || "(no test_no)")}</span> ${escapeHtml(d.test_name || "(no test_name)")}</div>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelDelTest">Cancel</button>
+        <button class="btn danger" id="confirmDelTest">Delete</button>
+      `;
+      $("cancelDelTest").onclick = hideModal;
+      $("confirmDelTest").onclick = () => {
+        plan.tests = plan.tests.filter(x => x.id !== test.id);
+        state.currentTestId = plan.tests[0]?.id || null;
+        hideModal();
+        logLine("Deleted test.", "warn");
+        toast("Test deleted", "Removed from plan.", "warn");
+        renderEditor();
+      };
+    });
+  }
+
+  function normalizeCurrentTest(){
+    const test = currentTest();
+    if(!test) return;
+    test.data = normalizeTestData(test.data);
+    test.modified = true;
+    $("dirtyHint").style.display = "";
+    renderForm();
+    renderTestsList();
+    logLine("Normalized test schema.", "ok");
+    toast("Normalized", "Schema keys ensured + values coerced.", "ok");
+  }
+
+  function showCurrentJsonModal(){
+    const test = currentTest();
+    if(!test) return;
+    showModal("Current Test JSON", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted">Normalized schema view:</div>
+        <pre style="margin:10px 0 0; padding:12px; border:1px solid rgba(42,52,71,.7); border-radius:14px; background:rgba(255,255,255,.02); overflow:auto; font-family:var(--mono); font-size:11px; line-height:1.35;">${escapeHtml(JSON.stringify(normalizeTestData(test.data), null, 2))}</pre>
+      `;
+      footer.innerHTML = `<button class="btn" id="closeJson">Close</button>`;
+      $("closeJson").onclick = hideModal;
+    });
+  }
+
+  async function saveCurrentTest(){
+    const plan = state.currentPlan;
+    const test = currentTest();
+    if(!plan || !test) return;
+
+    // normalize
+    test.data = normalizeTestData(test.data);
+
+    // required enforcement (never blocks)
+    const missing = requiredMissing(test.data);
+    if(missing.length){
+      if(state.prefs.fallback_on_save === "prompt"){
+        const ok = confirm(
+          `Missing required fields:\n- ${missing.join("\n- ")}\n\nAI is unavailable (skeleton). Auto-fill placeholders and save?`
+        );
+        if(!ok){
+          logLine("Save canceled by user (prompt).", "warn");
+          toast("Canceled", "Save canceled.", "warn");
+          return;
+        }
+      }
+      const changed = applyFallback(test.data, missing);
+      if(changed.length){
+        logLine(`Filled placeholders: ${changed.join(", ")}`, "warn");
+        toast("Filled placeholders", `Auto-filled: ${changed.join(", ")}`, "warn");
+      }
+    }
+
+    test.modified = false;
+    plan.updated = nowIsoDate();
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+
+    logLine("Saved test + plan.", "ok");
+    toast("Saved", "Test saved (and plan markdown regenerated).", "ok");
+    if(state.aiReviewStatus) delete state.aiReviewStatus[test.id];
+    if(state.aiSuggestStatus && state.aiSuggestStatus[test.id]) delete state.aiSuggestStatus[test.id];
+    renderTestsList();
+    renderEditor();
+  }
+
+  async function saveAll(){
+    const plan = state.currentPlan;
+    if(!plan) return;
+
+    // normalize + fallback across all tests
+    let totalFilled = 0;
+    for(const t of plan.tests){
+      t.data = normalizeTestData(t.data);
+      const missing = requiredMissing(t.data);
+      if(missing.length){
+        const changed = applyFallback(t.data, missing);
+        totalFilled += changed.length;
+      }
+      t.modified = false;
+    }
+
+    plan.updated = nowIsoDate();
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+
+    logLine(`Saved all tests. Placeholders inserted: ${totalFilled}`, totalFilled ? "warn" : "ok");
+    toast("Save All", totalFilled ? `Saved. Placeholders inserted: ${totalFilled}` : "Saved. No placeholders needed.", totalFilled ? "warn" : "ok");
+    state.aiReviewStatus = {};
+    state.aiSuggestStatus = {};
+    renderTestsList();
+    renderEditor();
+  }
+
+  function downloadCurrentTestJson(){
+    const test = currentTest();
+    if(!test) return;
+    const fn = `${(test.data.test_no || "test").replace(/[^a-zA-Z0-9_-]/g,"_")}.json`;
+    downloadText(fn, JSON.stringify(normalizeTestData(test.data), null, 2), "application/json");
+    logLine(`Downloaded test JSON: ${fn}`, "ok");
+  }
+
+  function refreshMarkdownUI(){
+    const plan = state.currentPlan;
+    if(!plan) return;
+    if(!plan.markdown) generatePlanMarkdown(plan);
+    $("notesArea").value = plan.userNotes ?? extractUserNotes(plan.markdown);
+    $("mdPreview").textContent = plan.markdown || "";
+  }
+
+  async function applyNotes(){
+    const plan = state.currentPlan;
+    if(!plan) return;
+    plan.userNotes = $("notesArea").value || "";
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    refreshMarkdownUI();
+    logLine("Applied plan notes and regenerated markdown.", "ok");
+    toast("Notes applied", "Notes preserved and markdown regenerated.", "ok");
+  }
+
+  async function regenerateMd(){
+    const plan = state.currentPlan;
+    if(!plan) return;
+    // preserve notes explicitly
+    plan.userNotes = $("notesArea").value || plan.userNotes || "";
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    refreshMarkdownUI();
+    logLine("Regenerated plan markdown.", "ok");
+    toast("Markdown regenerated", "Generated sections refreshed. Notes preserved.", "ok");
+  }
+
+  function downloadMd(){
+    const plan = state.currentPlan;
+    if(!plan) return;
+    generatePlanMarkdown(plan);
+    downloadText(`test_plan_${plan.slug || slugifyPlanName(plan.name)}.md`, plan.markdown || "", "text/markdown");
+    logLine("Downloaded plan markdown.", "ok");
+  }
+
+  /* ---------- Preferences ---------- */
+  function openPreferences(){
+    showModal("Preferences", (body, footer) => {
+      const hasKey = !!getAiKey();
+      const cachedModels = state.modelList.length ? state.modelList : loadModelCache();
+      body.innerHTML = `
+        <div class="row">
+          <div>
+            <div class="label">AI Status</div>
+            <div class="input" style="display:flex;align-items:center;">${hasKey ? "Key set" : "Not set"}</div>
+          </div>
+          <div>
+            <div class="label">Plan Storage</div>
+            <div class="input" style="display:flex;align-items:center;">${state.planRootHandle ? "File System" : "Browser Store"}</div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="row">
+          <div>
+            <div class="label">AI Enabled</div>
+            <select class="select" id="prefAiEnabled">
+              <option value="false">Off</option>
+              <option value="true">On</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">AI Model</div>
+            <select class="select" id="prefAiModel"></select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="label">AI Suggest Maturity Max</div>
+            <select class="select" id="prefSuggestMax">
+              <option value="0">M0</option>
+              <option value="1">M1</option>
+              <option value="2">M2</option>
+              <option value="3">M3</option>
+              <option value="4">M4</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Fallback on Save</div>
+            <select class="select" id="prefFallbackOnSave">
+              <option value="auto_fill">Auto-fill and save</option>
+              <option value="prompt">Prompt before auto-fill</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="label">Fallback Format</div>
+            <select class="select" id="prefFallbackFormat">
+              <option value="generic">Generic TODO</option>
+              <option value="dated">Dated TODO</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Notes Storage</div>
+            <select class="select" id="prefNotesStorage" disabled>
+              <option value="file_system">File System</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+        <div class="toolbarRow">
+          <button class="btn" id="prefSetKey">Set API Key</button>
+          <button class="btn" id="prefClearKey">Clear API Key</button>
+          <button class="btn" id="prefRefreshModels">Refresh Models</button>
+        </div>
+      `;
+
+      $("prefAiEnabled").value = String(state.prefs.ai_enabled);
+      const modelSelect = $("prefAiModel");
+      const defaultModels = [
+        "gpt-5.2","gpt-5.2-pro","gpt-5-mini","gpt-5-nano",
+        "gpt-4.1","gpt-4.1-mini","gpt-4.1-nano"
+      ];
+      const modelList = (cachedModels && cachedModels.length) ? cachedModels : defaultModels;
+      modelSelect.innerHTML = modelList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+      let currentModel = state.prefs.ai_model || "gpt-4.1-mini";
+      if(!/^gpt-/i.test(currentModel)) currentModel = "gpt-4.1-mini";
+      if(modelSelect && !Array.from(modelSelect.options).some(o => o.value === currentModel)){
+        const opt = document.createElement("option");
+        opt.value = currentModel;
+        opt.textContent = `${currentModel} (current)`;
+        modelSelect.appendChild(opt);
+      }
+      if(modelSelect) modelSelect.value = currentModel;
+      $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
+      $("prefFallbackOnSave").value = state.prefs.fallback_on_save;
+      $("prefFallbackFormat").value = state.prefs.fallback_format;
+
+      footer.innerHTML = `
+        <button class="btn" id="cancelPrefs">Cancel</button>
+        <button class="btn primary" id="savePrefsBtn">Save</button>
+      `;
+      $("cancelPrefs").onclick = hideModal;
+      $("prefSetKey").onclick = () => { hideModal(); openAiKeyDialog(); };
+      $("prefClearKey").onclick = () => { setAiKey("", false); toast("AI Key", "Cleared.", "warn"); };
+      $("prefRefreshModels").onclick = () => {
+        if(!getAiKey()){
+          toast("Models", "Set an API key first.", "warn");
+          return;
+        }
+        runAsync(refreshAvailableModels().then(list => {
+          const selected = $("prefAiModel").value;
+          $("prefAiModel").innerHTML = list.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
+          const still = list.includes(selected) ? selected : (state.prefs.ai_model || "");
+          if(still && !list.includes(still)){
+            const opt = document.createElement("option");
+            opt.value = still;
+            opt.textContent = `${still} (current)`;
+            $("prefAiModel").appendChild(opt);
+          }
+          if(still) $("prefAiModel").value = still;
+          toast("Models", `Loaded ${list.length} model(s).`, "ok");
+        }));
+      };
+      $("prefAiModel").addEventListener("change", () => {
+        const val = $("prefAiModel").value.trim() || "gpt-4.1-mini";
+        state.prefs.ai_model = val;
+        savePrefs();
+        localStorage.setItem("tb26_prefs", JSON.stringify(state.prefs));
+        logLine(`Preferences: ai_model set to ${val}.`, "ok");
+        toast("AI Model", `Set to ${val}.`, "ok");
+      });
+      $("savePrefsBtn").onclick = () => {
+        state.prefs.ai_enabled = $("prefAiEnabled").value === "true";
+        state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
+        state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
+        state.prefs.fallback_on_save = $("prefFallbackOnSave").value;
+        state.prefs.fallback_format = $("prefFallbackFormat").value;
+        savePrefs();
+
+        hideModal();
+        logLine("Preferences saved.", "ok");
+        toast("Preferences", "Saved.", "ok");
+        runAsync(renderLibrary());
+        if(state.currentPlan) renderEditor();
+      };
+    });
+  }
+
+  /* ---------- AI Key Dialog ---------- */
+  const AI_SESSION_KEY = "tb26_ai_key_session";
+  const AI_LOCAL_KEY = "tb26_ai_key_local";
+
+  function getAiKey(){
+    return sessionStorage.getItem(AI_SESSION_KEY) || localStorage.getItem(AI_LOCAL_KEY) || "";
+  }
+
+  function setAiKey(key, remember){
+    const val = String(key || "").trim();
+    if(val){
+      sessionStorage.setItem(AI_SESSION_KEY, val);
+      if(remember) localStorage.setItem(AI_LOCAL_KEY, val);
+      else localStorage.removeItem(AI_LOCAL_KEY);
+    }else{
+      sessionStorage.removeItem(AI_SESSION_KEY);
+      localStorage.removeItem(AI_LOCAL_KEY);
+    }
+    updateAiBadge();
+    const keyText = $("aiKeyText");
+    if(keyText) keyText.textContent = val ? "Set" : "Not set";
+  }
+
+  async function refreshAvailableModels(){
+    const key = getAiKey();
+    if(!key) throw new Error("No API key set");
+    const resp = await fetch("https://api.openai.com/v1/models", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${key}`
+      }
+    });
+    if(!resp.ok){
+      const t = await resp.text().catch(()=> "");
+      throw new Error(`HTTP ${resp.status}: ${t.slice(0,160)}`);
+    }
+    const data = await resp.json();
+    const ids = (data?.data || []).map(m => m?.id).filter(Boolean);
+    const unique = Array.from(new Set(ids)).sort();
+    state.modelList = unique;
+    saveModelCache(unique);
+    return unique;
+  }
+
+    function updateAiBadge(){
+      const hasKey = !!getAiKey();
+      $("aiLed").className = "led " + (hasKey ? "ok" : "bad");
+      $("aiText").textContent = hasKey ? "Ready" : "Click to set key";
+      updateAiUI();
+    }
+
+    function updateAiUI(){
+      const hasKey = !!getAiKey();
+      const btn = $("btnAiSuggest");
+      if(btn){
+        btn.disabled = !hasKey;
+        btn.title = hasKey ? "Suggest text for the focused field" : "Set AI key to enable";
+      }
+      const keyText = $("aiKeyText");
+      if(keyText) keyText.textContent = hasKey ? "Set" : "Not set";
+    }
+
+    function extractResponseText(data){
+      if(!data) return "";
+      if(typeof data.output_text === "string") return data.output_text.trim();
+      if(Array.isArray(data.output)){
+        let out = "";
+        for(const item of data.output){
+          const content = item.content || [];
+          for(const c of content){
+            if(c.type === "output_text" && typeof c.text === "string") out += c.text;
+            if(c.type === "text" && typeof c.text === "string") out += c.text;
+          }
+        }
+        return out.trim();
+      }
+      return "";
+    }
+
+    function getFieldMaturity(test, field){
+      return Number(test?.data?._ai?.maturity?.[field] ?? 0);
+    }
+
+    function setFieldMaturity(test, field, val){
+      if(!test?.data) return;
+      if(!test.data._ai) test.data._ai = { maturity:{} };
+      if(!test.data._ai.maturity) test.data._ai.maturity = {};
+      test.data._ai.maturity[field] = Number.isFinite(val) ? val : 0;
+    }
+
+    function isTodoValue(val){
+      return /to\s*do/i.test(String(val || "")) || /^todo:/i.test(String(val || ""));
+    }
+
+    function getSuggestStatus(testId, field){
+      return state.aiSuggestStatus?.[testId]?.[field] || "";
+    }
+
+    function setSuggestStatus(testId, field, status){
+      if(!state.aiSuggestStatus[testId]) state.aiSuggestStatus[testId] = {};
+      if(status) state.aiSuggestStatus[testId][field] = status;
+      else delete state.aiSuggestStatus[testId][field];
+    }
+
+    function fieldsNeedingSuggestion(test){
+      const maxMaturity = Number(state.prefs.ai_suggest_maturity_max ?? 2);
+      const keys = Object.keys(TEST_SCHEMA_DEFAULT);
+      const out = [];
+      for(const k of keys){
+        const v = (test.data[k] ?? "");
+        const m = getFieldMaturity(test, k);
+        if(m >= 3) continue; // do not touch M3/M4
+        const todo = isTodoValue(v);
+        if(todo || m <= maxMaturity){
+          if(["ll","tv","ul","units"].includes(k) && String(v).trim().toUpperCase() === "N/A") continue;
+          out.push(k);
+        }
+      }
+      return out;
+    }
+
+    async function suggestForField(test, field){
+      const key = getAiKey();
+      if(!key) throw new Error("No API key set");
+      if(["ll","tv","ul","units"].includes(field)){
+        const cur = String(test.data[field] ?? "").trim().toUpperCase();
+        if(cur === "N/A") return { noChange: true, rationale: "Left as N/A." };
+      }
+      const payload = {
+        test_no: test.data.test_no || "",
+        test_name: test.data.test_name || "",
+        field,
+        current_value: test.data[field] || "",
+        context: test.data
+      };
+      const model = state.prefs.ai_model || "gpt-4.1-mini";
+      const current = String(test.data[field] ?? "").trim();
+
+      async function callSuggestion(forceDifferent){
+        const isLimitField = ["ll","tv","ul","units"].includes(field);
+        const system = forceDifferent
+          ? "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays)."
+          : "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays).";
+        const limitsNote = isLimitField
+          ? "For ll/tv/ul/units, return measurement values only (e.g., numeric limits or a unit token). Do NOT return explanations or JSON fragments."
+          : "";
+        const resp = await fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${key}`
+          },
+          body: JSON.stringify({
+            model,
+            input: [
+              { role:"system", content: system },
+              { role:"user", content: JSON.stringify(payload, null, 2) },
+              ...(limitsNote ? [{ role:"system", content: limitsNote }] : [])
+            ],
+            max_output_tokens: 500
+          })
+        });
+        if(!resp.ok){
+          const t = await resp.text().catch(()=> "");
+          throw new Error(`HTTP ${resp.status}: ${t.slice(0,160)}`);
+        }
+        const data = await resp.json();
+        const raw = extractResponseText(data);
+        if(!raw) throw new Error("No text returned");
+        let parsed = null;
+        try{
+          parsed = JSON.parse(raw);
+        }catch{
+          // fallback: treat as value, attach generic rationale
+          parsed = { value: raw, rationale: "Suggested improvement from AI." };
+        }
+        let value = parsed.value;
+        if(value && typeof value === "object"){
+          // force a retry with stricter prompt rather than leaking [object Object]
+          if(!forceDifferent) return await callSuggestion(true);
+          throw new Error("AI returned non-string value.");
+        }
+        value = String(value ?? "").trim();
+        const rationale = String(parsed.rationale ?? "").trim() || "Suggested improvement from AI.";
+        return { value, rationale };
+      }
+
+      let result = await callSuggestion(false);
+      if(!result.value) throw new Error("No value returned");
+      if(result.value.trim() === current){
+        result = await callSuggestion(true);
+      }
+      if(result.value.trim() === current) return { noChange: true, rationale: result.rationale || "No meaningful change returned." };
+      return result;
+    }
+
+    async function aiSuggestFocusedField(){
+      const test = currentTest();
+      if(!test){
+        toast("AI Suggest", "Select a test first.", "warn");
+        logLine("AI Suggest: no test selected.", "warn");
+        return;
+      }
+      state.prefs = loadPrefs();
+      const key = getAiKey();
+      if(!key){
+        toast("AI Suggest", "Set an API key first.", "warn");
+        logLine("AI Suggest: no API key available.", "warn");
+        openAiKeyDialog();
+        return;
+      }
+      const model = state.prefs.ai_model || "gpt-4.1-mini";
+      logLine(`AI Suggest: using model "${model}".`, "ok");
+      const targets = fieldsNeedingSuggestion(test);
+      if(!targets.length){
+        const focused = state.focusField || document.activeElement?.getAttribute?.("data-field");
+        if(!focused){
+          toast("AI Suggest", "No low-maturity fields found.", "warn");
+          logLine("AI Suggest: no low-maturity fields.", "warn");
+          return;
+        }
+        targets.push(focused);
+      }
+      logLine(`AI Suggest: ${targets.length} field(s) queued (maturity <= ${state.prefs.ai_suggest_maturity_max}).`, "ok");
+      for(const f of targets) setSuggestStatus(test.id, f, "pending");
+      renderForm();
+      try{
+        const suggestions = [];
+        for(const field of targets){
+          setSuggestStatus(test.id, field, "working");
+          renderForm();
+          logLine(`AI Suggest: requesting "${field}"...`, "ok");
+          try{
+            const res = await suggestForField(test, field);
+            setSuggestStatus(test.id, field, "pending");
+            if(res && res.noChange){
+              suggestions.push({ field, current: test.data[field] || "", proposed: "", noChange: true, rationale: res.rationale || "" });
+            }else if(res){
+              suggestions.push({ field, current: test.data[field] || "", proposed: res.value, rationale: res.rationale || "" });
+            }else{
+              suggestions.push({ field, current: test.data[field] || "", proposed: "", noChange: true, rationale: "" });
+            }
+            renderForm();
+            logLine(`AI Suggest: received "${field}".`, "ok");
+          }catch(err){
+            setSuggestStatus(test.id, field, "");
+            renderForm();
+            logLine(`AI Suggest: failed "${field}" (${err.message || err}).`, "warn");
+            suggestions.push({ field, error: err.message || String(err) });
+          }
+        }
+        showModal("AI Suggestions", (body, footer) => {
+          body.innerHTML = suggestions.map((s, idx) => {
+            if(s.error){
+              return `
+                <div class="item" style="margin-bottom:8px;">
+                  <div class="left">
+                    <div class="name">${escapeHtml(s.field)}</div>
+                    <div class="meta"><span class="tag">Error</span> ${escapeHtml(s.error)}</div>
+                  </div>
+                </div>
+              `;
+            }
+            if(s.noChange){
+              return `
+                <div class="item" style="margin-bottom:8px;">
+                  <div class="left">
+                    <div class="name">${escapeHtml(s.field)}</div>
+                    <div class="meta"><span class="tag">No change</span> AI returned identical text.</div>
+                    ${s.rationale ? `<div class="meta"><span class="tag">Rationale</span> ${escapeHtml(s.rationale)}</div>` : ``}
+                  </div>
+                </div>
+              `;
+            }
+            return `
+              <div class="item" style="margin-bottom:8px; align-items:stretch;">
+                <div class="left" style="min-width:0;">
+                  <div class="name">${escapeHtml(s.field)}</div>
+                  <div class="meta">Current</div>
+                  <pre style="white-space:pre-wrap; font-family:var(--mono); font-size:11px; margin:6px 0 0;">${escapeHtml(s.current)}</pre>
+                  <div class="meta" style="margin-top:8px;">Improvement</div>
+                  <pre style="white-space:pre-wrap; font-family:var(--mono); font-size:11px; margin:6px 0 0;">${escapeHtml(s.proposed)}</pre>
+                  <div class="meta" style="margin-top:8px;">Rationale</div>
+                  <div class="small">${escapeHtml(s.rationale || "—")}</div>
+                </div>
+                <div class="actions" style="align-items:flex-start;">
+                  <label class="tag"><input type="checkbox" class="ai-accept" data-idx="${idx}" checked /> Accept</label>
+                </div>
+              </div>
+            `;
+          }).join("");
+
+          footer.innerHTML = `
+            <button class="btn" id="aiRejectAll">Reject All</button>
+            <button class="btn primary" id="aiApplySelected">Apply Selected</button>
+          `;
+          $("aiRejectAll").onclick = () => {
+            for(const s of suggestions){
+              if(!s.error) setSuggestStatus(test.id, s.field, "");
+            }
+            renderForm();
+            hideModal();
+            toast("AI Suggest", "No changes applied.", "warn");
+          };
+          $("aiApplySelected").onclick = () => {
+            const checks = Array.from(body.querySelectorAll(".ai-accept"));
+            let applied = 0;
+            for(const c of checks){
+              if(!c.checked) continue;
+              const idx = Number(c.getAttribute("data-idx"));
+              const s = suggestions[idx];
+              if(!s || s.error) continue;
+              test.data[s.field] = s.proposed;
+              if(!test.data._ai) test.data._ai = { maturity:{} };
+              if(!test.data._ai.maturity) test.data._ai.maturity = {};
+              test.data._ai.maturity[s.field] = 2;
+              setSuggestStatus(test.id, s.field, "accepted");
+              applied++;
+            }
+            test.modified = applied > 0 || test.modified;
+            if(applied) $("dirtyHint").style.display = "";
+            renderForm();
+            renderTestsList();
+            hideModal();
+            toast("AI Suggest", applied ? `Applied ${applied} suggestion(s).` : "No changes applied.", applied ? "ok" : "warn");
+            logLine(`AI Suggest: applied ${applied} suggestion(s).`, applied ? "ok" : "warn");
+          };
+        });
+      }catch(e){
+        toast("AI Suggest failed", e.message || String(e), "bad");
+        logLine(`AI Suggest failed: ${e.message || e}`, "bad");
+      }
+    }
+
+  function openAiKeyDialog(){
+    showModal("AI Key", (body, footer) => {
+      const remembered = !!localStorage.getItem(AI_LOCAL_KEY);
+      body.innerHTML = `
+        <div class="muted">Paste an API key. Default storage is session-only (cleared when the tab closes).</div>
+        <div class="hr"></div>
+        <div class="label">API Key</div>
+        <input class="input" id="aiKeyInput" type="password" placeholder="sk-..." />
+        <label class="small" style="display:block; margin-top:8px;">
+          <input type="checkbox" id="aiRemember" ${remembered ? "checked" : ""}/> Remember on this device (localStorage)
+        </label>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="aiCancel">Cancel</button>
+        <button class="btn" id="aiClear">Forget</button>
+        <button class="btn primary" id="aiSave">Save</button>
+      `;
+      $("aiCancel").onclick = hideModal;
+      $("aiClear").onclick = () => { setAiKey("", false); hideModal(); };
+      $("aiSave").onclick = () => {
+        const key = $("aiKeyInput").value.trim();
+        const remember = $("aiRemember").checked;
+        setAiKey(key, remember);
+        hideModal();
+      };
+    });
+  }
+
+  /* ---------- Import / Export ---------- */
+  async function exportAllPlans(){
+    const all = await Store.listPlans();
+    downloadText(`test_base_2026_export_${nowIsoDate()}.json`, JSON.stringify(all, null, 2), "application/json");
+    logLine("Exported all plans.", "ok");
+    toast("Export", "All plans exported as JSON.", "ok");
+  }
+
+  function importPlanJson(){
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "application/json";
+    inp.onchange = async () => {
+      const file = inp.files?.[0];
+      if(!file) return;
+      try{
+        const txt = await file.text();
+        const obj = JSON.parse(txt);
+
+        // Accept either a single plan object or an array of plans
+        const plans = Array.isArray(obj) ? obj : [obj];
+        for(const p of plans){
+          const plan = {
+            id: p.id || uid(),
+            name: p.name || "Imported Plan",
+            slug: p.slug || slugifyPlanName(p.name || "imported_plan"),
+            created: p.created || nowIsoDate(),
+            updated: nowIsoDate(),
+            tests: (p.tests || []).map((t, idx) => ({
+              id: t.id || uid(),
+              order: (t.order ?? idx+1),
+              modified: false,
+              data: normalizeTestData(t.data || t)
+            })),
+            markdown: p.markdown || "",
+            userNotes: p.userNotes ?? extractUserNotes(p.markdown || "")
+          };
+          if(!plan.markdown) generatePlanMarkdown(plan);
+          await Store.savePlan(plan);
+        }
+        logLine(`Imported ${plans.length} plan(s).`, "ok");
+        toast("Import", `Imported ${plans.length} plan(s).`, "ok");
+        runAsync(renderLibrary());
+      }catch(e){
+        logLine(`Import failed: ${e.message || e}`, "bad");
+        toast("Import failed", e.message || String(e), "bad");
+      }
+    };
+    inp.click();
+  }
+
+  async function seedDemo(){
+    const plan = {
+      id: uid(),
+      name: "Demo Plan — Test Base 2026",
+      slug: slugifyPlanName("Demo Plan — Test Base 2026"),
+      created: nowIsoDate(),
+      updated: nowIsoDate(),
+      tests: [
+        { id: uid(), order: 1, modified:false, data: normalizeTestData({ test_no:"T1", test_name:"Safe To Turn On (STTO)", uut_pn:"21A-00", test_type:"STATIC" }) },
+        { id: uid(), order: 2, modified:false, data: normalizeTestData({ test_no:"T2", test_name:"Power Rail Bring-up", uut_pn:"21A-00", test_type:"DYNAMIC" }) }
+      ],
+      markdown: "",
+      userNotes: "Demo notes: add equipment list, safety notes, and lab setup here."
+    };
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    logLine("Seeded demo plan.", "ok");
+    toast("Demo", "Demo plan created.", "ok");
+    runAsync(renderLibrary());
+  }
+
+  function clearBrowserCacheOnly(){
+    showModal("Clear Browser Cache", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          This clears only browser-stored plans (localStorage). It will NOT touch your plan folders.
+        </div>
+        <div class="hr"></div>
+        <div class="label">Type CLEAR to confirm</div>
+        <input class="input" id="clearConfirm" placeholder="CLEAR" />
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelClear">Cancel</button>
+        <button class="btn danger" id="confirmClear" disabled>Clear</button>
+      `;
+      $("cancelClear").onclick = hideModal;
+      $("clearConfirm").addEventListener("input", () => {
+        $("confirmClear").disabled = $("clearConfirm").value.trim().toUpperCase() !== "CLEAR";
+      });
+      $("confirmClear").onclick = () => {
+        localStorage.removeItem(Store.key);
+        hideModal();
+        logLine("Cleared browser cache (localStorage).", "warn");
+        toast("Cleared", "Browser cache removed. File system plans untouched.", "warn");
+        runAsync(renderLibrary());
+      };
+    });
+  }
+
+  /* ---------- Tabs ---------- */
+  function setupTabs(){
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const id = tab.getAttribute("data-tab");
+        document.querySelectorAll(".tabContent").forEach(c => c.classList.remove("active"));
+        $(`tab-${id}`).classList.add("active");
+      });
+    });
+  }
+
+  /* ---------- Menu (simple) ---------- */
+  function openMenu(title, items){
+    showModal(title, (body, footer) => {
+      body.innerHTML = items.map(it => `
+        <div class="item" style="cursor:pointer;" data-id="${escapeHtml(it.id)}">
+          <div class="left">
+            <div class="name">${escapeHtml(it.title)}</div>
+            <div class="meta"><span class="tag">${escapeHtml(it.desc || "")}</span></div>
+          </div>
+          <div class="actions"><span class="tag">Click</span></div>
+        </div>
+      `).join("");
+
+      body.querySelectorAll(".item[data-id]").forEach(row => {
+        row.addEventListener("click", () => {
+          const id = row.getAttribute("data-id");
+          hideModal();
+          const it = items.find(x => x.id === id);
+          if(it && typeof it.onClick === "function") it.onClick();
+        });
+      });
+
+      footer.innerHTML = `<button class="btn" id="closeMenu">Close</button>`;
+      $("closeMenu").onclick = hideModal;
+    });
+  }
+
+  /* ---------- Flow pan/zoom ---------- */
+  function setupFlowPanZoom(){
+    const svg = $("flowSvg");
+    if(!svg) return;
+    let panning = false;
+    let startX = 0;
+    let startY = 0;
+    let originX = 0;
+    let originY = 0;
+
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const getSvgPoint = (evt) => {
+      const pt = svg.createSVGPoint();
+      pt.x = evt.clientX;
+      pt.y = evt.clientY;
+      const ctm = svg.getScreenCTM();
+      return ctm ? pt.matrixTransform(ctm.inverse()) : { x: evt.clientX, y: evt.clientY };
+    };
+
+    svg.addEventListener("pointerdown", (e) => {
+      if(e.button !== 0) return;
+      panning = true;
+      svg.classList.add("dragging");
+      startX = e.clientX;
+      startY = e.clientY;
+      originX = state.flow.x;
+      originY = state.flow.y;
+      svg.setPointerCapture(e.pointerId);
+    });
+
+    svg.addEventListener("pointermove", (e) => {
+      if(!panning) return;
+      const dx = (e.clientX - startX) / state.flow.scale;
+      const dy = (e.clientY - startY) / state.flow.scale;
+      state.flow.x = originX + dx;
+      state.flow.y = originY + dy;
+      applyFlowTransform();
+    });
+
+    svg.addEventListener("pointerup", (e) => {
+      if(!panning) return;
+      panning = false;
+      svg.classList.remove("dragging");
+      svg.releasePointerCapture(e.pointerId);
+    });
+
+    svg.addEventListener("pointerleave", () => {
+      if(!panning) return;
+      panning = false;
+      svg.classList.remove("dragging");
+    });
+
+    svg.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 1.12 : 0.9;
+      const current = state.flow.scale;
+      const next = clamp(current * delta, 0.4, 2.5);
+      if(next === current) return;
+      const p = getSvgPoint(e);
+      state.flow.x = p.x - (p.x - state.flow.x) * (next / current);
+      state.flow.y = p.y - (p.y - state.flow.y) * (next / current);
+      state.flow.scale = next;
+      applyFlowTransform();
+    }, { passive: false });
+
+    svg.addEventListener("dblclick", () => {
+      state.flow.x = 0;
+      state.flow.y = 0;
+      state.flow.scale = 1;
+      applyFlowTransform();
+    });
+  }
+
+  /* ---------- Wiring ---------- */
+  function wire(){
+    setupTabs();
+    setupFlowPanZoom();
+
+    $("btnNewPlan").addEventListener("click", createNewPlanFlow);
+    $("btnPrefs").addEventListener("click", openPreferences);
+    $("planSearch").addEventListener("input", () => runAsync(renderLibrary()));
+
+    // Import/Export removed
+    // Wipe removed
+    $("btnSeedDemo").addEventListener("click", () => runAsync(seedDemo()));
+    $("btnClearBrowser").addEventListener("click", clearBrowserCacheOnly);
+    $("btnSetPlanRoot").addEventListener("click", () => runAsync(setPlanRoot()));
+    // Library details toggle removed
+
+    $("switchPlanBtn").addEventListener("click", () => {
+      const dirty = state.currentPlan?.tests?.some(t => t.modified);
+      if(dirty && !confirm("You have unsaved changes. Switch plans anyway?")) return;
+      showLibrary();
+    });
+
+    $("saveAllBtn").addEventListener("click", () => runAsync(saveAll()));
+
+    $("testSearch").addEventListener("input", renderTestsList);
+    $("btnNewTest").addEventListener("click", newTest);
+    $("btnDeleteTest").addEventListener("click", deleteCurrentTest);
+    $("btnSaveTest").addEventListener("click", () => runAsync(saveCurrentTest()));
+    $("btnAiSuggest").addEventListener("click", aiSuggestFocusedField);
+
+    $("btnNormalize").addEventListener("click", normalizeCurrentTest);
+    $("btnShowJson").addEventListener("click", showCurrentJsonModal);
+
+    $("btnAiReviewPlan").addEventListener("click", () => {
+      if(!state.currentPlan) return;
+      runAsync(aiReviewPlan(state.currentPlan.id));
+    });
+    $("btnFitFlow").addEventListener("click", fitFlowToView);
+    $("btnApplyNotes").addEventListener("click", () => runAsync(applyNotes()));
+    $("btnRegenerateMd").addEventListener("click", () => runAsync(regenerateMd()));
+    $("btnDownloadMd").addEventListener("click", downloadMd);
+
+    $("btnCopyLog").addEventListener("click", async () => {
+      const lines = [...$("log").querySelectorAll(".line")].map(x => x.textContent);
+      try{
+        await navigator.clipboard.writeText(lines.join("\n"));
+        toast("Log copied", "Copied to clipboard.", "ok");
+      }catch{
+        toast("Copy failed", "Clipboard permission denied.", "warn");
+      }
+    });
+    $("btnClearLog").addEventListener("click", () => $("log").innerHTML = "");
+
+    $("modalClose").addEventListener("click", hideModal);
+    $("modalOverlay").addEventListener("click", (e) => {
+      if(e.target === $("modalOverlay")) hideModal();
+    });
+    $("aiChip").addEventListener("click", openAiKeyDialog);
+
+    // Top menus removed (small UI)
+  }
+
+  /* ---------- Init ---------- */
+  function init(){
+    wire();
+    showLibrary();
+    updateAiBadge();
+    loadPlanRoot().then(() => {
+      updatePlanRootUI();
+      runAsync(renderLibrary());
+      promptPlanRootIfNeeded();
+    });
+    logLine("Test Base 2026 skeleton loaded.", "ok");
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
