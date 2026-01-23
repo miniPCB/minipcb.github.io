@@ -207,6 +207,7 @@
     .row > *{ flex:1; }
     .label{ font-size:11px; color:var(--muted); margin:0 0 6px 2px; }
     .toolbarRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .fieldActions{ display:flex; gap:6px; align-items:center; }
 
     .tag{
       display:inline-flex; align-items:center; gap:6px;
@@ -611,6 +612,7 @@
               <div class="muted" id="editorSub">No test selected</div>
             </div>
             <div class="toolbarRow">
+              <button class="btn mini" id="btnAddField" disabled>Add Field</button>
               <button class="btn mini primary" id="btnSaveTest" disabled>Save Test</button>
               <button class="btn mini" id="btnAiSuggest" title="Suggest text for the focused field">AI Suggest</button>
             </div>
@@ -797,13 +799,14 @@
     try { return JSON.stringify(val); } catch { return String(val); }
   }
 
-  function ensureAiMeta(ai){
+  function ensureAiMeta(ai, dataKeys){
     const out = {
       maturity: {},
       last_ai_reviewed: "",
       last_ai_review_model: "",
       last_human_reviewed: "",
-      notes: ""
+      notes: "",
+      field_types: {}
     };
     if(ai && typeof ai === "object"){
       if(ai.maturity && typeof ai.maturity === "object"){
@@ -816,8 +819,14 @@
       out.last_ai_review_model = safeStringify(ai.last_ai_review_model);
       out.last_human_reviewed = safeStringify(ai.last_human_reviewed);
       out.notes = safeStringify(ai.notes);
+      if(ai.field_types && typeof ai.field_types === "object"){
+        for(const [k,v] of Object.entries(ai.field_types)){
+          out.field_types[k] = safeStringify(v);
+        }
+      }
     }
-    for(const k of Object.keys(TEST_SCHEMA_DEFAULT)){
+    const keys = Array.isArray(dataKeys) ? dataKeys : Object.keys(TEST_SCHEMA_DEFAULT);
+    for(const k of keys){
       if(!(k in out.maturity)) out.maturity[k] = 0;
     }
     return out;
@@ -826,17 +835,20 @@
   function normalizeTestData(obj){
     const out = {};
     const src = obj && typeof obj === "object" ? obj : {};
-    for(const k of Object.keys(TEST_SCHEMA_DEFAULT)){
+    const dataKeys = Object.keys(src).filter(k => k !== "_ai");
+    const keys = dataKeys.length ? dataKeys : Object.keys(TEST_SCHEMA_DEFAULT);
+    for(const k of keys){
       out[k] = safeStringify(src[k]);
       if(["ll","tv","ul","units"].includes(k) && out[k].trim() === "") out[k] = "N/A";
     }
-    out._ai = ensureAiMeta(src._ai);
+    out._ai = ensureAiMeta(src._ai, keys);
     return out;
   }
 
   function requiredMissing(data){
     const missing = [];
     for(const k of REQUIRED_FIELDS){
+      if(!(k in data)) continue;
       if(((data[k] ?? "") + "").trim() === "") missing.push(k);
     }
     return missing;
@@ -1548,8 +1560,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     else delete state.aiReviewStatus[testId];
   }
 
+  function getFieldKeys(test){
+    const keys = Object.keys(test?.data || {}).filter(k => k !== "_ai");
+    return keys.length ? keys : Object.keys(TEST_SCHEMA_DEFAULT);
+  }
+
   function fieldsForAiReview(test, anchors){
-    const keys = Object.keys(TEST_SCHEMA_DEFAULT);
+    const keys = getFieldKeys(test);
     const out = [];
     for(const k of keys){
       if(k === "_ai") continue;
@@ -1621,7 +1638,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
 
     function buildAnchorsFromTest(test){
-      const keys = Object.keys(TEST_SCHEMA_DEFAULT);
+      const keys = getFieldKeys(test);
       for(const k of keys){
         if(k === "_ai") continue;
         const m = getFieldMaturity(test, k);
@@ -1985,6 +2002,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       updateAiUI();
     $("btnSaveTest").disabled = !state.currentTestId;
     $("btnDeleteTest").disabled = !state.currentTestId;
+    $("btnAddField").disabled = !state.currentTestId;
 
     renderTestsList();
     renderForm();
@@ -2031,17 +2049,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
   }
 
-  function fieldOrder(){
-    return [
-      "test_name","test_no","uut_pn","last_test_no","test_type",
-      "purpose","scope","setup","procedure","measurement",
-      "parameter","ll","tv","ul","units",
-      "in_tol_conclusion","in_tol_next_step",
-      "oot_low_conclusion","oot_low_unable_adjust","oot_low_next_step",
-      "oot_high_conclusion","oot_high_unable_adjust","oot_high_next_step"
-    ];
-  }
-
   function renderForm(){
     const test = currentTest();
     const grid = $("formGrid");
@@ -2056,10 +2063,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("editorSub").textContent = "";
     $("dirtyHint").style.display = test.modified ? "" : "none";
 
-    const fields = fieldOrder();
+    const fields = getFieldKeys(test);
     for(const k of fields){
       const isReq = REQUIRED_FIELDS.includes(k);
-      const isTextArea = ["purpose","scope","setup","procedure","measurement","in_tol_conclusion","oot_low_conclusion","oot_low_unable_adjust","oot_high_conclusion","oot_high_unable_adjust"].includes(k);
+      const type = test.data?._ai?.field_types?.[k] || "";
+      const isTextArea = type === "textarea"
+        || /[\r\n]/.test(String(test.data?.[k] ?? ""))
+        || ["purpose","scope","setup","procedure","measurement","in_tol_conclusion","oot_low_conclusion","oot_low_unable_adjust","oot_high_conclusion","oot_high_unable_adjust"].includes(k);
       const full = isTextArea;
 
       const cell = document.createElement("div");
@@ -2096,7 +2106,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const maturity = getFieldMaturity(test, k);
       head.innerHTML = `
           <div class="label">${escapeHtml(labelText)} ${isReq ? `<span class="req">required</span>` : ``}</div>
-          <span class="tag" data-maturity="${k}" title="Click to set maturity">M${maturity}</span>
+          <div class="fieldActions">
+            <button class="btn mini" data-rename="${escapeHtml(k)}">Rename</button>
+            <span class="tag" data-maturity="${k}" title="Click to set maturity">M${maturity}</span>
+          </div>
         `;
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
 
@@ -2126,8 +2139,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.focusField = k;
       });
 
-        cell.appendChild(head);
-        cell.appendChild(input);
+      const renameBtn = head.querySelector(`[data-rename]`);
+      if(renameBtn){
+        renameBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          runAsync(renameFieldFlow(k));
+        });
+      }
+
+      cell.appendChild(head);
+      cell.appendChild(input);
       grid.appendChild(cell);
       }
 
@@ -2145,6 +2166,128 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const g = svg?.querySelector("#flowViewport");
     if(!g) return;
     g.setAttribute("transform", `translate(${state.flow.x} ${state.flow.y}) scale(${state.flow.scale})`);
+  }
+
+  function insertFieldAfter(test, afterKey, newKey, value){
+    const data = test.data || {};
+    const keys = Object.keys(data).filter(k => k !== "_ai");
+    const out = {};
+    let inserted = false;
+    if(keys.length){
+      for(const k of keys){
+        out[k] = data[k];
+        if(afterKey && k === afterKey){
+          out[newKey] = value;
+          inserted = true;
+        }
+      }
+    }
+    if(!inserted) out[newKey] = value;
+    out._ai = data._ai || ensureAiMeta(null, Object.keys(out).filter(k => k !== "_ai"));
+    return out;
+  }
+
+  async function addFieldFlow(){
+    const test = currentTest();
+    if(!test) return;
+
+    showModal("Add Field", (body, footer) => {
+      body.innerHTML = `
+        <div class="label">Field Name</div>
+        <input class="input" id="newFieldName" placeholder="field_name" />
+        <div class="hr"></div>
+        <div class="label">Field Type</div>
+        <select class="select" id="newFieldType">
+          <option value="text">Text (single line)</option>
+          <option value="textarea">Text (multi-line)</option>
+        </select>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelAddField">Cancel</button>
+        <button class="btn primary" id="confirmAddField">Add Field</button>
+      `;
+      $("cancelAddField").onclick = hideModal;
+      $("confirmAddField").onclick = () => {
+        const name = $("newFieldName").value.trim();
+        if(!name){ toast("Missing name", "Enter a field name.", "warn"); return; }
+        if(test.data[name] !== undefined){
+          toast("Duplicate field", "That field already exists.", "warn");
+          return;
+        }
+        const afterKey = state.focusField || "";
+        const type = $("newFieldType").value || "text";
+        test.data = insertFieldAfter(test, afterKey, name, "");
+        if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
+        if(!test.data._ai.maturity) test.data._ai.maturity = {};
+        test.data._ai.maturity[name] = 0;
+        if(!test.data._ai.field_types) test.data._ai.field_types = {};
+        test.data._ai.field_types[name] = type;
+        test.modified = true;
+        if(!test._dirtyFields) test._dirtyFields = {};
+        test._dirtyFields[name] = true;
+        state.focusField = name;
+        hideModal();
+        renderForm();
+        renderTestsList();
+      };
+      setTimeout(() => $("newFieldName").focus(), 20);
+    });
+  }
+
+  async function renameFieldFlow(fieldKey){
+    const test = currentTest();
+    if(!test || !fieldKey) return;
+
+    showModal("Rename Field", (body, footer) => {
+      body.innerHTML = `
+        <div class="label">New Field Name</div>
+        <input class="input" id="renameFieldName" value="${escapeHtml(fieldKey)}" />
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelRenameField">Cancel</button>
+        <button class="btn primary" id="confirmRenameField">Rename</button>
+      `;
+      $("cancelRenameField").onclick = hideModal;
+      $("confirmRenameField").onclick = () => {
+        const newName = $("renameFieldName").value.trim();
+        if(!newName){ toast("Missing name", "Enter a field name.", "warn"); return; }
+        if(newName === fieldKey){ hideModal(); return; }
+        if(test.data[newName] !== undefined){
+          toast("Duplicate field", "That field already exists.", "warn");
+          return;
+        }
+        const data = test.data || {};
+        const keys = Object.keys(data).filter(k => k !== "_ai");
+        const out = {};
+        for(const k of keys){
+          if(k === fieldKey) out[newName] = data[k];
+          else out[k] = data[k];
+        }
+        out._ai = data._ai || ensureAiMeta(null, Object.keys(out).filter(k => k !== "_ai"));
+        if(out._ai?.maturity && out._ai.maturity[fieldKey] != null){
+          out._ai.maturity[newName] = out._ai.maturity[fieldKey];
+          delete out._ai.maturity[fieldKey];
+        }else{
+          if(!out._ai.maturity) out._ai.maturity = {};
+          out._ai.maturity[newName] = 0;
+        }
+        if(out._ai?.field_types && out._ai.field_types[fieldKey] != null){
+          out._ai.field_types[newName] = out._ai.field_types[fieldKey];
+          delete out._ai.field_types[fieldKey];
+        }
+        test.data = out;
+        if(test._dirtyFields && test._dirtyFields[fieldKey]){
+          test._dirtyFields[newName] = true;
+          delete test._dirtyFields[fieldKey];
+        }
+        test.modified = true;
+        state.focusField = newName;
+        hideModal();
+        renderForm();
+        renderTestsList();
+      };
+      setTimeout(() => $("renameFieldName").focus(), 20);
+    });
   }
 
   function fitFlowToView(){
@@ -3101,7 +3244,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     function fieldsNeedingSuggestion(test){
       const maxMaturity = Number(state.prefs.ai_suggest_maturity_max ?? 2);
-      const keys = Object.keys(TEST_SCHEMA_DEFAULT);
+      const keys = getFieldKeys(test);
       const out = [];
       for(const k of keys){
         const v = (test.data[k] ?? "");
@@ -3600,6 +3743,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("btnNewTest").addEventListener("click", newTest);
     $("btnDeleteTest").addEventListener("click", deleteCurrentTest);
     $("btnSaveTest").addEventListener("click", () => runAsync(saveCurrentTest()));
+    $("btnAddField").addEventListener("click", () => runAsync(addFieldFlow()));
     $("btnAiSuggest").addEventListener("click", aiSuggestFocusedField);
 
     const btnNormalize = $("btnNormalize");
