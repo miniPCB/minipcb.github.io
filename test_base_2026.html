@@ -1026,6 +1026,51 @@
     try{ return JSON.parse(text); }catch{ return null; }
   }
 
+  async function fsCopyDir(srcHandle, destHandle){
+    for await (const [name, handle] of srcHandle.entries()){
+      if(handle.kind === "file"){
+        const file = await handle.getFile();
+        const buf = await file.arrayBuffer();
+        const fileHandle = await destHandle.getFileHandle(name, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(buf);
+        await writable.close();
+      }else if(handle.kind === "directory"){
+        const sub = await destHandle.getDirectoryHandle(name, { create: true });
+        await fsCopyDir(handle, sub);
+      }
+    }
+  }
+
+  async function fsEnsureUniquePlanFolder(root, baseName, planId){
+    let name = baseName;
+    let i = 2;
+    while(true){
+      try{
+        const dir = await root.getDirectoryHandle(name);
+        const meta = await fsReadJson(dir, "plan.json");
+        if(meta && meta.id === planId) return name;
+        name = `${baseName}_${i++}`;
+      }catch{
+        return name;
+      }
+    }
+  }
+
+  async function fsRenamePlanFolder(plan, desiredFolder){
+    const root = await ensurePlanRootHandle();
+    if(!root) throw new Error("Plan folder not set");
+    const entry = await fsFindPlanDirById(plan.id);
+    if(!entry) return null;
+    const currentName = entry.name;
+    const target = await fsEnsureUniquePlanFolder(root, desiredFolder, plan.id);
+    if(currentName === target) return currentName;
+    const targetDir = await root.getDirectoryHandle(target, { create: true });
+    await fsCopyDir(entry.dir, targetDir);
+    await root.removeEntry(currentName, { recursive: true });
+    return target;
+  }
+
   async function fsLoadPlanFromDir(dirHandle, folderName){
     const meta = await fsReadJson(dirHandle, "plan.json");
     if(!meta) return null;
@@ -2138,6 +2183,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         plan.name = newName;
         plan.slug = slugifyPlanName(newName);
         plan.userNotes = oldNotes;
+        if(useFileSystemStore()){
+          try{
+            const desiredFolder = makePlanFolderName(plan);
+            const newFolder = await fsRenamePlanFolder(plan, desiredFolder);
+            if(newFolder) plan.folder = newFolder;
+          }catch(e){
+            logLine(`Rename folder failed (FS). ${e.message || e}`, "warn");
+          }
+        }
         generatePlanMarkdown(plan);
         await Store.savePlan(plan);
 
