@@ -207,7 +207,6 @@
     .row > *{ flex:1; }
     .label{ font-size:11px; color:var(--muted); margin:0 0 6px 2px; }
     .toolbarRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .fieldActions{ display:flex; gap:6px; align-items:center; }
 
     .tag{
       display:inline-flex; align-items:center; gap:6px;
@@ -806,6 +805,7 @@
       last_ai_review_model: "",
       last_human_reviewed: "",
       notes: "",
+      field_labels: {},
       field_types: {}
     };
     if(ai && typeof ai === "object"){
@@ -819,6 +819,11 @@
       out.last_ai_review_model = safeStringify(ai.last_ai_review_model);
       out.last_human_reviewed = safeStringify(ai.last_human_reviewed);
       out.notes = safeStringify(ai.notes);
+      if(ai.field_labels && typeof ai.field_labels === "object"){
+        for(const [k,v] of Object.entries(ai.field_labels)){
+          out.field_labels[k] = safeStringify(v);
+        }
+      }
       if(ai.field_types && typeof ai.field_types === "object"){
         for(const [k,v] of Object.entries(ai.field_types)){
           out.field_types[k] = safeStringify(v);
@@ -2102,14 +2107,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         oot_high_unable_adjust: "OOT High Unable to Adjust Conclusion",
         oot_high_next_step: "OOT High Next Step"
       };
-      const labelText = LABEL_OVERRIDES[k] || k;
+      const labelText = (test.data?._ai?.field_labels?.[k] || LABEL_OVERRIDES[k] || k);
         const maturity = getFieldMaturity(test, k);
       head.innerHTML = `
-          <div class="label">${escapeHtml(labelText)} ${isReq ? `<span class="req">required</span>` : ``}</div>
-          <div class="fieldActions">
-            <button class="btn mini" data-rename="${escapeHtml(k)}">Rename</button>
-            <span class="tag" data-maturity="${k}" title="Click to set maturity">M${maturity}</span>
-          </div>
+          <div class="label" data-field="${escapeHtml(k)}">${escapeHtml(labelText)} ${isReq ? `<span class="req">required</span>` : ``}</div>
+          <span class="tag" data-maturity="${k}" title="Click to set maturity">M${maturity}</span>
         `;
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
 
@@ -2139,11 +2141,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.focusField = k;
       });
 
-      const renameBtn = head.querySelector(`[data-rename]`);
-      if(renameBtn){
-        renameBtn.addEventListener("click", (e) => {
+      const labelEl = head.querySelector(`[data-field]`);
+      if(labelEl){
+        labelEl.addEventListener("dblclick", (e) => {
           e.preventDefault();
-          runAsync(renameFieldFlow(k));
+          runAsync(editFieldMetaFlow(k));
         });
       }
 
@@ -2220,6 +2222,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
         if(!test.data._ai.maturity) test.data._ai.maturity = {};
         test.data._ai.maturity[name] = 0;
+        if(!test.data._ai.field_labels) test.data._ai.field_labels = {};
+        test.data._ai.field_labels[name] = name;
         if(!test.data._ai.field_types) test.data._ai.field_types = {};
         test.data._ai.field_types[name] = type;
         test.modified = true;
@@ -2234,59 +2238,85 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     });
   }
 
-  async function renameFieldFlow(fieldKey){
+  async function editFieldMetaFlow(fieldKey){
     const test = currentTest();
     if(!test || !fieldKey) return;
 
-    showModal("Rename Field", (body, footer) => {
+    showModal("Edit Field", (body, footer) => {
+      const currentLabel = test.data?._ai?.field_labels?.[fieldKey] || fieldKey;
+      const currentType = test.data?._ai?.field_types?.[fieldKey] || "text";
       body.innerHTML = `
-        <div class="label">New Field Name</div>
-        <input class="input" id="renameFieldName" value="${escapeHtml(fieldKey)}" />
+        <div class="label">Form Label</div>
+        <input class="input" id="editFieldLabel" value="${escapeHtml(currentLabel)}" />
+        <div class="hr"></div>
+        <div class="label">Data Label (JSON key)</div>
+        <input class="input" id="editFieldKey" value="${escapeHtml(fieldKey)}" />
+        <div class="hr"></div>
+        <div class="label">Field Type</div>
+        <select class="select" id="editFieldType">
+          <option value="text">Text (single line)</option>
+          <option value="textarea">Text (multi-line)</option>
+        </select>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelRenameField">Cancel</button>
-        <button class="btn primary" id="confirmRenameField">Rename</button>
+        <button class="btn primary" id="confirmRenameField">Save</button>
       `;
       $("cancelRenameField").onclick = hideModal;
       $("confirmRenameField").onclick = () => {
-        const newName = $("renameFieldName").value.trim();
-        if(!newName){ toast("Missing name", "Enter a field name.", "warn"); return; }
-        if(newName === fieldKey){ hideModal(); return; }
-        if(test.data[newName] !== undefined){
+        const newLabel = $("editFieldLabel").value.trim();
+        const newKey = $("editFieldKey").value.trim();
+        const newType = $("editFieldType").value || "text";
+        if(!newKey){ toast("Missing name", "Enter a data label.", "warn"); return; }
+
+        const data = test.data || {};
+        if(newKey !== fieldKey && data[newKey] !== undefined){
           toast("Duplicate field", "That field already exists.", "warn");
           return;
         }
-        const data = test.data || {};
+
         const keys = Object.keys(data).filter(k => k !== "_ai");
         const out = {};
         for(const k of keys){
-          if(k === fieldKey) out[newName] = data[k];
+          if(k === fieldKey) out[newKey] = data[k];
           else out[k] = data[k];
         }
         out._ai = data._ai || ensureAiMeta(null, Object.keys(out).filter(k => k !== "_ai"));
+        if(!out._ai.field_labels) out._ai.field_labels = {};
+        if(newLabel) out._ai.field_labels[newKey] = newLabel;
+        else delete out._ai.field_labels[newKey];
+
         if(out._ai?.maturity && out._ai.maturity[fieldKey] != null){
-          out._ai.maturity[newName] = out._ai.maturity[fieldKey];
+          out._ai.maturity[newKey] = out._ai.maturity[fieldKey];
           delete out._ai.maturity[fieldKey];
         }else{
           if(!out._ai.maturity) out._ai.maturity = {};
-          out._ai.maturity[newName] = 0;
+          out._ai.maturity[newKey] = 0;
         }
         if(out._ai?.field_types && out._ai.field_types[fieldKey] != null){
-          out._ai.field_types[newName] = out._ai.field_types[fieldKey];
+          out._ai.field_types[newKey] = out._ai.field_types[fieldKey];
           delete out._ai.field_types[fieldKey];
+        }
+        if(!out._ai.field_types) out._ai.field_types = {};
+        out._ai.field_types[newKey] = newType;
+        if(out._ai?.field_labels && out._ai.field_labels[fieldKey] != null && newKey !== fieldKey){
+          out._ai.field_labels[newKey] = out._ai.field_labels[fieldKey];
+          delete out._ai.field_labels[fieldKey];
         }
         test.data = out;
         if(test._dirtyFields && test._dirtyFields[fieldKey]){
-          test._dirtyFields[newName] = true;
+          test._dirtyFields[newKey] = true;
           delete test._dirtyFields[fieldKey];
         }
         test.modified = true;
-        state.focusField = newName;
+        state.focusField = newKey;
         hideModal();
         renderForm();
         renderTestsList();
       };
-      setTimeout(() => $("renameFieldName").focus(), 20);
+      const typeSelect = $("editFieldType");
+      if(typeSelect) typeSelect.value = currentType;
+      setTimeout(() => $("editFieldLabel").focus(), 20);
     });
   }
 
