@@ -1496,6 +1496,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     plansCache: [],
     templatesCache: [],
     currentPlan: null,
+    currentTemplateId: null,
     currentTestId: null,
     focusField: null,
     aiSuggestStatus: {},
@@ -1873,6 +1874,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("saveAllBtn").style.display = "none";
     $("planBadge").style.display = "none";
     state.currentPlan = null;
+    state.currentTemplateId = null;
     state.currentTestId = null;
     runAsync(renderLibrary());
   }
@@ -1934,6 +1936,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         </div>
         <div class="actions">
           <button class="btn mini primary" data-act="create" data-id="${escapeHtml(t.id)}">Create New</button>
+          <button class="btn mini" data-act="edit-template" data-id="${escapeHtml(t.id)}">Edit</button>
           <button class="btn mini" data-act="rename-template" data-id="${escapeHtml(t.id)}">Rename</button>
           <button class="btn mini danger" data-act="delete-template" data-id="${escapeHtml(t.id)}">Delete</button>
         </div>
@@ -1972,6 +1975,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const act = btn.getAttribute("data-act");
         const id = btn.getAttribute("data-id");
         if(act === "create") runAsync(createFromTemplateFlow(id));
+        if(act === "edit-template") runAsync(openTemplateById(id));
         if(act === "rename-template") runAsync(renameTemplateFlow(id));
         if(act === "delete-template") runAsync(deleteTemplateFlow(id));
       });
@@ -2195,7 +2199,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     showModal("Add Field", (body, footer) => {
       body.innerHTML = `
-        <div class="label">Field Name</div>
+        <div class="label">Form Label</div>
+        <input class="input" id="newFieldLabel" placeholder="Field Label" />
+        <div class="hr"></div>
+        <div class="label">Data Label (JSON key)</div>
         <input class="input" id="newFieldName" placeholder="field_name" />
         <div class="hr"></div>
         <div class="label">Field Type</div>
@@ -2210,8 +2217,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       `;
       $("cancelAddField").onclick = hideModal;
       $("confirmAddField").onclick = () => {
+        const label = $("newFieldLabel").value.trim();
         const name = $("newFieldName").value.trim();
-        if(!name){ toast("Missing name", "Enter a field name.", "warn"); return; }
+        if(!name){ toast("Missing name", "Enter a data label.", "warn"); return; }
         if(test.data[name] !== undefined){
           toast("Duplicate field", "That field already exists.", "warn");
           return;
@@ -2223,7 +2231,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!test.data._ai.maturity) test.data._ai.maturity = {};
         test.data._ai.maturity[name] = 0;
         if(!test.data._ai.field_labels) test.data._ai.field_labels = {};
-        test.data._ai.field_labels[name] = name;
+        test.data._ai.field_labels[name] = label || name;
         if(!test.data._ai.field_types) test.data._ai.field_types = {};
         test.data._ai.field_types[name] = type;
         test.modified = true;
@@ -2234,7 +2242,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         renderForm();
         renderTestsList();
       };
-      setTimeout(() => $("newFieldName").focus(), 20);
+      setTimeout(() => $("newFieldLabel").focus(), 20);
     });
   }
 
@@ -2480,6 +2488,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(!plan.markdown) generatePlanMarkdown(plan);
 
       state.currentPlan = plan;
+      state.currentTemplateId = null;
       state.currentTestId = plan.tests[0]?.id || null;
 
       logLine(`Opened plan: ${plan.name}`, "ok");
@@ -2580,6 +2589,32 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
       setTimeout(() => $("renamePlanName").focus(), 20);
     });
+  }
+
+  async function openTemplateById(id){
+    try{
+      const tpl = await Templates.loadTemplate(id);
+      tpl.slug = tpl.slug || slugifyPlanName(tpl.name || "template");
+      tpl.tests = (tpl.tests || []).map((t, idx) => ({
+        id: t.id || uid(),
+        order: (t.order ?? idx+1),
+        modified: !!t.modified,
+        data: normalizeTestData(t.data)
+      }));
+      tpl.userNotes = tpl.userNotes ?? extractUserNotes(tpl.markdown || "");
+      if(!tpl.markdown) generatePlanMarkdown(tpl);
+
+      state.currentPlan = tpl;
+      state.currentTemplateId = id;
+      state.currentTestId = tpl.tests[0]?.id || null;
+
+      logLine(`Opened template: ${tpl.name}`, "ok");
+      toast("Template opened", tpl.name, "ok");
+      showEditor();
+    }catch(e){
+      logLine(`Open template failed: ${e.message || e}`, "bad");
+      toast("Open failed", e.message || String(e), "bad");
+    }
   }
 
   async function duplicatePlanFlow(planId){
@@ -2933,10 +2968,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     test._dirtyFields = {};
     plan.updated = nowIsoDate();
     generatePlanMarkdown(plan);
-    await Store.savePlan(plan);
+    if(state.currentTemplateId){
+      await Templates.saveTemplate(plan);
+      logLine("Saved template.", "ok");
+    toast("Saved", "Template saved.", "ok");
+    runAsync(renderLibrary());
+    }else{
+      await Store.savePlan(plan);
+      logLine("Saved test + plan.", "ok");
+      toast("Saved", "Test saved (and plan markdown regenerated).", "ok");
+    }
 
-    logLine("Saved test + plan.", "ok");
-    toast("Saved", "Test saved (and plan markdown regenerated).", "ok");
     if(state.aiReviewStatus) delete state.aiReviewStatus[test.id];
     if(state.aiSuggestStatus && state.aiSuggestStatus[test.id]) delete state.aiSuggestStatus[test.id];
     renderTestsList();
@@ -2962,10 +3004,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     plan.updated = nowIsoDate();
     generatePlanMarkdown(plan);
-    await Store.savePlan(plan);
+    if(state.currentTemplateId){
+      await Templates.saveTemplate(plan);
+    }else{
+      await Store.savePlan(plan);
+    }
 
+    const saveMsg = totalFilled ? `Saved. Placeholders inserted: ${totalFilled}` : "Saved. No placeholders needed.";
     logLine(`Saved all tests. Placeholders inserted: ${totalFilled}`, totalFilled ? "warn" : "ok");
-    toast("Save All", totalFilled ? `Saved. Placeholders inserted: ${totalFilled}` : "Saved. No placeholders needed.", totalFilled ? "warn" : "ok");
+    toast("Save All", saveMsg, totalFilled ? "warn" : "ok");
     state.aiReviewStatus = {};
     state.aiSuggestStatus = {};
     renderTestsList();
