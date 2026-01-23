@@ -511,6 +511,14 @@
               <div class="cardBody" style="padding:0; min-height:0;">
                 <div class="list" style="border:none; border-radius:0;">
                   <div class="listHeader">
+                    <div class="title">Templates</div>
+                    <div class="muted" id="templatesCount">0</div>
+                  </div>
+                  <div class="listBody" id="templatesList"></div>
+                </div>
+                <div class="hr"></div>
+                <div class="list" style="border:none; border-radius:0;">
+                  <div class="listHeader">
                     <div class="title">All Plans</div>
                     <div class="muted" id="plansCount">0</div>
                   </div>
@@ -970,6 +978,10 @@
     return !!state.planRootHandle && !!window.showDirectoryPicker;
   }
 
+  function templatesKey(){
+    return "tb26_templates";
+  }
+
   async function ensurePlanRootHandle(){
     if(!state.planRootHandle) return null;
     try{
@@ -1028,6 +1040,12 @@
     const text = await fsReadText(dirHandle, filename);
     if(!text) return null;
     try{ return JSON.parse(text); }catch{ return null; }
+  }
+
+  async function fsEnsureTemplatesRoot(){
+    const root = await ensurePlanRootHandle();
+    if(!root) return null;
+    return await root.getDirectoryHandle("templates", { create: true });
   }
 
   async function fsCopyDir(srcHandle, destHandle){
@@ -1155,8 +1173,7 @@
     return plan;
   }
 
-  async function fsSavePlan(plan){
-    const root = await ensurePlanRootHandle();
+  async function fsSavePlanToRoot(root, plan){
     if(!root) throw new Error("Plan folder not set");
     plan.slug = plan.slug || slugifyPlanName(plan.name || "plan");
     if(!plan.folder) plan.folder = makePlanFolderName(plan);
@@ -1206,6 +1223,55 @@
     };
     await fsWriteText(planDir, "plan.json", JSON.stringify(meta, null, 2), "application/json");
     return plan;
+  }
+
+  async function fsSavePlan(plan){
+    const root = await ensurePlanRootHandle();
+    return await fsSavePlanToRoot(root, plan);
+  }
+
+  async function fsListTemplates(){
+    const root = await fsEnsureTemplatesRoot();
+    if(!root) return [];
+    const templates = [];
+    for await (const [name, handle] of root.entries()){
+      if(handle.kind !== "directory") continue;
+      const p = await fsLoadPlanFromDir(handle, name);
+      if(p) templates.push(p);
+    }
+    return templates.sort((a,b) => (b.updated||"").localeCompare(a.updated||""));
+  }
+
+  async function fsFindTemplateDirById(id){
+    const root = await fsEnsureTemplatesRoot();
+    if(!root) return null;
+    for await (const [name, handle] of root.entries()){
+      if(handle.kind !== "directory") continue;
+      const meta = await fsReadJson(handle, "plan.json");
+      if(meta && meta.id === id){
+        return { dir: handle, meta, name, root };
+      }
+    }
+    return null;
+  }
+
+  async function fsLoadTemplate(id){
+    const entry = await fsFindTemplateDirById(id);
+    if(!entry) throw new Error("Template not found");
+    const plan = await fsLoadPlanFromDir(entry.dir, entry.name);
+    if(!plan) throw new Error("Template not found");
+    return plan;
+  }
+
+  async function fsSaveTemplate(plan){
+    const root = await fsEnsureTemplatesRoot();
+    return await fsSavePlanToRoot(root, plan);
+  }
+
+  async function fsDeleteTemplate(id){
+    const entry = await fsFindTemplateDirById(id);
+    if(!entry) return;
+    await entry.root.removeEntry(entry.name, { recursive: true });
   }
 
   async function fsDeletePlan(id){
@@ -1258,8 +1324,54 @@
     }
   };
 
+  const Templates = {
+    async listTemplates(){
+      if(useFileSystemStore()) return await fsListTemplates();
+      return loadTemplates().sort((a,b) => (b.updated||"").localeCompare(a.updated||""));
+    },
+    async loadTemplate(id){
+      if(useFileSystemStore()) return await fsLoadTemplate(id);
+      const all = loadTemplates();
+      const t = all.find(x => x.id === id);
+      if(!t) throw new Error("Template not found");
+      return structuredClone(t);
+    },
+    async saveTemplate(plan){
+      if(useFileSystemStore()){
+        try{
+          await fsSaveTemplate(plan);
+          return;
+        }catch(e){
+          logLine(`Save template failed (FS). Falling back to browser store. ${e.message || e}`, "warn");
+        }
+      }
+      const all = loadTemplates();
+      const idx = all.findIndex(x => x.id === plan.id);
+      if(idx >= 0) all[idx] = structuredClone(plan);
+      else all.push(structuredClone(plan));
+      localStorage.setItem(templatesKey(), JSON.stringify(all));
+    },
+    async deleteTemplate(id){
+      if(useFileSystemStore()){
+        try{
+          await fsDeleteTemplate(id);
+          return;
+        }catch(e){
+          logLine(`Delete template failed (FS). ${e.message || e}`, "warn");
+        }
+      }
+      const all = loadTemplates().filter(x => x.id !== id);
+      localStorage.setItem(templatesKey(), JSON.stringify(all));
+    }
+  };
+
   function loadPlans(){
     try{ return JSON.parse(localStorage.getItem(Store.key) || "[]") || []; }
+    catch{ return []; }
+  }
+
+  function loadTemplates(){
+    try{ return JSON.parse(localStorage.getItem(templatesKey()) || "[]") || []; }
     catch{ return []; }
   }
 
@@ -1352,6 +1464,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   const state = {
     prefs: loadPrefs(),
     plansCache: [],
+    templatesCache: [],
     currentPlan: null,
     currentTestId: null,
     focusField: null,
@@ -1749,7 +1862,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const q = ($("planSearch").value || "").toLowerCase().trim();
     const plans = await Store.listPlans();
+    const templates = await Templates.listTemplates();
     state.plansCache = plans;
+    state.templatesCache = templates;
 
     const totalTests = plans.reduce((sum, p) => sum + (p.tests?.length || 0), 0);
     const planCount = $("wsPlanCount");
@@ -1757,8 +1872,34 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(planCount) planCount.textContent = String(plans.length);
     if(testCount) testCount.textContent = String(totalTests);
 
+    const filteredTemplates = templates.filter(t => !q || (t.name||"").toLowerCase().includes(q));
     const filtered = plans.filter(p => !q || (p.name||"").toLowerCase().includes(q));
+    const templatesCount = $("templatesCount");
+    if(templatesCount) templatesCount.textContent = `${filteredTemplates.length} shown`;
     $("plansCount").textContent = `${filtered.length} shown`;
+
+    const tlist = $("templatesList");
+    tlist.innerHTML = "";
+    for(const t of filteredTemplates){
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `
+        <div class="left">
+          <div class="name">${escapeHtml(t.name || "(Unnamed Template)")}</div>
+          <div class="meta">
+            <span class="tag">${escapeHtml(t.slug || "template")}</span>
+            <span class="tag">Tests: ${escapeHtml(String((t.tests||[]).length))}</span>
+            <span class="tag">Updated: ${escapeHtml(t.updated || "(unknown)")}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn mini primary" data-act="create" data-id="${escapeHtml(t.id)}">Create New</button>
+          <button class="btn mini" data-act="rename-template" data-id="${escapeHtml(t.id)}">Rename</button>
+          <button class="btn mini danger" data-act="delete-template" data-id="${escapeHtml(t.id)}">Delete</button>
+        </div>
+      `;
+      tlist.appendChild(el);
+    }
 
     const list = $("plansList");
     list.innerHTML = "";
@@ -1778,12 +1919,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <button class="btn mini primary" data-act="open" data-id="${escapeHtml(p.id)}">Open</button>
           <button class="btn mini" data-act="review" data-id="${escapeHtml(p.id)}">AI Review</button>
           <button class="btn mini" data-act="rename" data-id="${escapeHtml(p.id)}">Rename</button>
+          <button class="btn mini" data-act="save-template" data-id="${escapeHtml(p.id)}">Save as Template</button>
           <button class="btn mini" data-act="duplicate" data-id="${escapeHtml(p.id)}">Duplicate</button>
           <button class="btn mini danger" data-act="delete" data-id="${escapeHtml(p.id)}">Delete</button>
         </div>
       `;
       list.appendChild(el);
     }
+
+    tlist.querySelectorAll("button[data-act]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const act = btn.getAttribute("data-act");
+        const id = btn.getAttribute("data-id");
+        if(act === "create") runAsync(createFromTemplateFlow(id));
+        if(act === "rename-template") runAsync(renameTemplateFlow(id));
+        if(act === "delete-template") runAsync(deleteTemplateFlow(id));
+      });
+    });
 
     list.querySelectorAll("button[data-act]").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -1792,6 +1944,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(act === "open") runAsync(openPlanById(id));
         if(act === "review") runAsync(aiReviewPlan(id));
         if(act === "rename") runAsync(renamePlanFlow(id));
+        if(act === "save-template") runAsync(saveTemplateFlow(id));
         if(act === "duplicate") runAsync(duplicatePlanFlow(id));
         if(act === "delete") runAsync(deletePlanFlow(id));
       });
@@ -2284,6 +2437,165 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         runAsync(renderLibrary());
       };
       setTimeout(() => $("duplicatePlanName").focus(), 20);
+    });
+  }
+
+  async function saveTemplateFlow(planId){
+    const base = state.plansCache.find(p => p.id === planId);
+    if(!base) return;
+
+    showModal("Save as Template", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          Saves a template copy to the templates folder and browser store.
+        </div>
+        <div class="hr"></div>
+        <div class="label">Template Name</div>
+        <input class="input" id="templateName" value="${escapeHtml(base.name || "Template")}" />
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelTemplate">Cancel</button>
+        <button class="btn primary" id="confirmTemplate">Save Template</button>
+      `;
+      $("cancelTemplate").onclick = hideModal;
+      $("confirmTemplate").onclick = async () => {
+        const newName = $("templateName").value.trim();
+        if(!newName){ toast("Missing name", "Enter a template name.", "warn"); return; }
+
+        const plan = await Store.loadPlan(planId);
+        const copy = structuredClone(plan);
+        copy.id = uid();
+        copy.name = newName;
+        copy.slug = slugifyPlanName(newName);
+        copy.folder = null;
+        copy.created = nowIsoDate();
+        copy.updated = nowIsoDate();
+        copy.userNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
+        copy.tests = (plan.tests || []).map((t, idx) => ({
+          id: uid(),
+          order: t.order ?? (idx + 1),
+          modified: false,
+          data: structuredClone(t.data || {})
+        }));
+        generatePlanMarkdown(copy);
+        await Templates.saveTemplate(copy);
+
+        hideModal();
+        logLine(`Saved template: ${newName}`, "ok");
+        toast("Template saved", newName, "ok");
+        runAsync(renderLibrary());
+      };
+      setTimeout(() => $("templateName").focus(), 20);
+    });
+  }
+
+  async function createFromTemplateFlow(templateId){
+    const base = state.templatesCache.find(t => t.id === templateId);
+    if(!base) return;
+
+    showModal("Create Plan from Template", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          Creates a new plan from the selected template.
+        </div>
+        <div class="hr"></div>
+        <div class="label">New Plan Name</div>
+        <input class="input" id="createFromTemplateName" value="${escapeHtml(base.name || "New Plan")}" />
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelCreateFromTemplate">Cancel</button>
+        <button class="btn primary" id="confirmCreateFromTemplate">Create</button>
+      `;
+      $("cancelCreateFromTemplate").onclick = hideModal;
+      $("confirmCreateFromTemplate").onclick = async () => {
+        const newName = $("createFromTemplateName").value.trim();
+        if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+
+        const tpl = await Templates.loadTemplate(templateId);
+        const copy = structuredClone(tpl);
+        copy.id = uid();
+        copy.name = newName;
+        copy.slug = slugifyPlanName(newName);
+        copy.folder = null;
+        copy.created = nowIsoDate();
+        copy.updated = nowIsoDate();
+        copy.userNotes = tpl.userNotes ?? extractUserNotes(tpl.markdown || "");
+        copy.tests = (tpl.tests || []).map((t, idx) => ({
+          id: uid(),
+          order: t.order ?? (idx + 1),
+          modified: false,
+          data: structuredClone(t.data || {})
+        }));
+        generatePlanMarkdown(copy);
+        await Store.savePlan(copy);
+
+        hideModal();
+        logLine(`Created plan from template: ${newName}`, "ok");
+        toast("Plan created", newName, "ok");
+        await openPlanById(copy.id);
+      };
+      setTimeout(() => $("createFromTemplateName").focus(), 20);
+    });
+  }
+
+  async function renameTemplateFlow(templateId){
+    const base = state.templatesCache.find(t => t.id === templateId);
+    if(!base) return;
+
+    showModal("Rename Template", (body, footer) => {
+      body.innerHTML = `
+        <div class="label">New Template Name</div>
+        <input class="input" id="renameTemplateName" value="${escapeHtml(base.name)}" />
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelRenameTemplate">Cancel</button>
+        <button class="btn primary" id="confirmRenameTemplate">Rename</button>
+      `;
+      $("cancelRenameTemplate").onclick = hideModal;
+      $("confirmRenameTemplate").onclick = async () => {
+        const newName = $("renameTemplateName").value.trim();
+        if(!newName){ toast("Missing name", "Enter a template name.", "warn"); return; }
+
+        const tpl = await Templates.loadTemplate(templateId);
+        tpl.name = newName;
+        tpl.slug = slugifyPlanName(newName);
+        tpl.userNotes = tpl.userNotes ?? extractUserNotes(tpl.markdown || "");
+        generatePlanMarkdown(tpl);
+        await Templates.saveTemplate(tpl);
+
+        hideModal();
+        logLine(`Renamed template: ${newName}`, "ok");
+        toast("Template renamed", newName, "ok");
+        runAsync(renderLibrary());
+      };
+      setTimeout(() => $("renameTemplateName").focus(), 20);
+    });
+  }
+
+  async function deleteTemplateFlow(templateId){
+    const base = state.templatesCache.find(t => t.id === templateId);
+    if(!base) return;
+
+    showModal("Delete Template", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          <strong>Warning:</strong> This permanently deletes the template.
+        </div>
+        <div class="hr"></div>
+        <div class="hint">Template: <span class="tag">${escapeHtml(base.name)}</span></div>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelDelTemplate">Cancel</button>
+        <button class="btn danger" id="confirmDelTemplate">Delete</button>
+      `;
+      $("cancelDelTemplate").onclick = hideModal;
+      $("confirmDelTemplate").onclick = async () => {
+        await Templates.deleteTemplate(templateId);
+        hideModal();
+        logLine(`Deleted template: ${base.name}`, "warn");
+        toast("Template deleted", base.name, "warn");
+        runAsync(renderLibrary());
+      };
     });
   }
 
