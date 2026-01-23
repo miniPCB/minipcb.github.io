@@ -1706,6 +1706,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <button class="btn mini primary" data-act="open" data-id="${escapeHtml(p.id)}">Open</button>
           <button class="btn mini" data-act="review" data-id="${escapeHtml(p.id)}">AI Review</button>
           <button class="btn mini" data-act="rename" data-id="${escapeHtml(p.id)}">Rename</button>
+          <button class="btn mini" data-act="duplicate" data-id="${escapeHtml(p.id)}">Duplicate</button>
           <button class="btn mini danger" data-act="delete" data-id="${escapeHtml(p.id)}">Delete</button>
         </div>
       `;
@@ -1719,6 +1720,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(act === "open") runAsync(openPlanById(id));
         if(act === "review") runAsync(aiReviewPlan(id));
         if(act === "rename") runAsync(renamePlanFlow(id));
+        if(act === "duplicate") runAsync(duplicatePlanFlow(id));
         if(act === "delete") runAsync(deletePlanFlow(id));
       });
     });
@@ -2145,6 +2147,55 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         runAsync(renderLibrary());
       };
       setTimeout(() => $("renamePlanName").focus(), 20);
+    });
+  }
+
+  async function duplicatePlanFlow(planId){
+    const base = state.plansCache.find(p => p.id === planId);
+    if(!base) return;
+
+    showModal("Duplicate Plan", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.45;">
+          Creates a new plan with a copy of all tests and notes. The duplicate gets a new ID and folder.
+        </div>
+        <div class="hr"></div>
+        <div class="label">New Plan Name</div>
+        <input class="input" id="duplicatePlanName" value="${escapeHtml(`Copy of ${base.name || "Plan"}`)}" />
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelDuplicate">Cancel</button>
+        <button class="btn primary" id="confirmDuplicate">Duplicate</button>
+      `;
+      $("cancelDuplicate").onclick = hideModal;
+      $("confirmDuplicate").onclick = async () => {
+        const newName = $("duplicatePlanName").value.trim();
+        if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+
+        const plan = await Store.loadPlan(planId);
+        const copy = structuredClone(plan);
+        copy.id = uid();
+        copy.name = newName;
+        copy.slug = slugifyPlanName(newName);
+        copy.folder = null;
+        copy.created = nowIsoDate();
+        copy.updated = nowIsoDate();
+        copy.userNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
+        copy.tests = (plan.tests || []).map((t, idx) => ({
+          id: uid(),
+          order: t.order ?? (idx + 1),
+          modified: false,
+          data: structuredClone(t.data || {})
+        }));
+        generatePlanMarkdown(copy);
+        await Store.savePlan(copy);
+
+        hideModal();
+        logLine(`Duplicated plan: ${newName}`, "ok");
+        toast("Plan duplicated", newName, "ok");
+        runAsync(renderLibrary());
+      };
+      setTimeout(() => $("duplicatePlanName").focus(), 20);
     });
   }
 
