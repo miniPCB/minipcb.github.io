@@ -868,10 +868,10 @@
     return out;
   }
 
-  function requiredMissing(data){
+  function emptyFields(data){
     const missing = [];
-    for(const k of REQUIRED_FIELDS){
-      if(!(k in data)) continue;
+    for(const k of Object.keys(data || {})){
+      if(k === "_ai") continue;
       if(((data[k] ?? "") + "").trim() === "") missing.push(k);
     }
     return missing;
@@ -2171,7 +2171,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const fields = getFieldKeys(test);
     for(const k of fields){
-      const isReq = REQUIRED_FIELDS.includes(k);
       const type = test.data?._ai?.field_types?.[k] || "";
       const isTextArea = type === "textarea"
         || /[\r\n]/.test(String(test.data?.[k] ?? ""))
@@ -2211,7 +2210,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const labelText = (test.data?._ai?.field_labels?.[k] || LABEL_OVERRIDES[k] || k);
         const maturity = getFieldMaturity(test, k);
       head.innerHTML = `
-          <div class="label" data-field="${escapeHtml(k)}">${escapeHtml(labelText)} ${isReq ? `<span class="req">required</span>` : ``}</div>
+          <div class="label" data-field="${escapeHtml(k)}">${escapeHtml(labelText)}</div>
           <span class="tag" data-maturity="${k}" title="Click to set maturity">M${maturity}</span>
         `;
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
@@ -3044,7 +3043,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     test.data._ai.last_human_reviewed = nowIsoTimestamp();
 
     // required enforcement (never blocks)
-    const missing = requiredMissing(test.data);
+    const missing = emptyFields(test.data);
     if(missing.length){
       if(state.prefs.fallback_on_save === "prompt"){
         const ok = confirm(
@@ -3094,7 +3093,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       t.data = normalizeTestData(t.data);
       if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
       t.data._ai.last_human_reviewed = nowIsoTimestamp();
-      const missing = requiredMissing(t.data);
+      const missing = emptyFields(t.data);
       if(missing.length){
         const changed = applyFallback(t.data, missing);
         totalFilled += changed.length;
