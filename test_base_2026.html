@@ -627,6 +627,11 @@
 
             <div class="hr"></div>
 
+            <div class="label">Review Notes</div>
+            <textarea class="input" id="reviewNotes" spellcheck="false"></textarea>
+
+            <div class="hr"></div>
+
             <div class="row">
               <button class="btn" id="btnShowJson">View Current JSON</button>
             </div>
@@ -778,6 +783,10 @@
     const m = String(d.getMonth()+1).padStart(2,'0');
     const da = String(d.getDate()).padStart(2,'0');
     return `${y}-${m}-${da}`;
+  }
+
+  function nowIsoTimestamp(){
+    return new Date().toISOString();
   }
 
   function uid(){
@@ -1770,6 +1779,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             t._dirtyFields[f] = true;
           }
         }
+        if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
+        t.data._ai.last_ai_reviewed = nowIsoTimestamp();
+        t.data._ai.last_ai_review_model = model;
         // If AI omits the new Unable-to-Adjust fields, derive a safe default.
         const unableAdjustPairs = [
           { field: "oot_low_unable_adjust", next: "oot_low_next_step", concl: "oot_low_conclusion" },
@@ -2017,8 +2029,31 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     renderTestsList();
     renderForm();
+    renderReviewNotes();
     refreshMarkdownUI();
     drawFlowchart();
+  }
+
+  function renderReviewNotes(){
+    const test = currentTest();
+    const notes = $("reviewNotes");
+    if(!notes) return;
+    if(!test){
+      notes.value = "";
+      notes.disabled = true;
+      return;
+    }
+    notes.disabled = false;
+    if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
+    notes.value = test.data._ai.notes || "";
+    notes.oninput = () => {
+      test.data._ai.notes = notes.value;
+      test.modified = true;
+      if(!test._dirtyFields) test._dirtyFields = {};
+      test._dirtyFields["_ai.notes"] = true;
+      $("dirtyHint").style.display = "";
+      renderTestsList();
+    };
   }
 
   function renderTestsList(){
@@ -2998,6 +3033,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     // normalize
     test.data = normalizeTestData(test.data);
+    if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
+    test.data._ai.last_human_reviewed = nowIsoTimestamp();
 
     // required enforcement (never blocks)
     const missing = requiredMissing(test.data);
@@ -3048,6 +3085,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     let totalFilled = 0;
     for(const t of plan.tests){
       t.data = normalizeTestData(t.data);
+      if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
+      t.data._ai.last_human_reviewed = nowIsoTimestamp();
       const missing = requiredMissing(t.data);
       if(missing.length){
         const changed = applyFallback(t.data, missing);
