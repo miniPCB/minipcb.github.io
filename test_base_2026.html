@@ -266,6 +266,8 @@
     .testRow.review-pending{ border-color: rgba(255,124,124,.35); background: rgba(255,124,124,.08); }
     .testRow.review-working{ border-color: rgba(255,211,124,.55); background: rgba(255,211,124,.12); }
     .testRow.review-done{ border-color: rgba(124,255,176,.40); background: rgba(124,255,176,.10); }
+    .testRow.dragging{ opacity:.55; }
+    .testRow.dragover{ outline:2px dashed rgba(124,196,255,.55); outline-offset:-4px; }
     .testRow .top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
     .testRow .tno{ font-family: var(--mono); font-size:12px; font-weight:800; letter-spacing:.2px; }
     .testRow .tname{ margin-top:4px; font-size:12px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -2038,6 +2040,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       row.className = "testRow"
         + (t.id === state.currentTestId ? " active" : "")
         + (review ? ` review-${review}` : "");
+      row.setAttribute("draggable", "true");
+      row.setAttribute("data-id", t.id);
       row.innerHTML = `
         <div class="top">
           <div class="tno">${escapeHtml(tno)}</div>
@@ -2054,8 +2058,59 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.currentTestId = t.id;
         renderEditor();
       });
+      row.addEventListener("dragstart", (e) => {
+        row.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", t.id);
+      });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        wrap.querySelectorAll(".testRow.dragover").forEach(el => el.classList.remove("dragover"));
+      });
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        row.classList.add("dragover");
+      });
+      row.addEventListener("dragleave", () => {
+        row.classList.remove("dragover");
+      });
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        row.classList.remove("dragover");
+        const dragId = e.dataTransfer.getData("text/plain");
+        if(!dragId || dragId === t.id) return;
+        reorderTests(dragId, t.id);
+      });
       wrap.appendChild(row);
     }
+  }
+
+  async function reorderTests(dragId, targetId){
+    const plan = state.currentPlan;
+    if(!plan) return;
+    const ordered = (plan.tests || []).slice().sort((a,b) => (a.order||0) - (b.order||0));
+    const ids = ordered.map(t => t.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if(from < 0 || to < 0 || from === to) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragId);
+    const byId = new Map((plan.tests || []).map(t => [t.id, t]));
+    ids.forEach((id, idx) => {
+      const t = byId.get(id);
+      if(t) t.order = idx + 1;
+    });
+    plan.updated = nowIsoDate();
+    generatePlanMarkdown(plan);
+    if(state.currentTemplateId){
+      await Templates.saveTemplate(plan);
+      logLine("Reordered tests (template).", "ok");
+    }else{
+      await Store.savePlan(plan);
+      logLine("Reordered tests.", "ok");
+    }
+    renderTestsList();
+    renderEditor();
   }
 
   function renderForm(){
