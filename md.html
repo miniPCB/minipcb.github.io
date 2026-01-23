@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-9ZM2D6XGT2');
+  </script>
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Markdown Documents – miniPCB™</title>
+
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+
+  <meta name="keywords"
+        content="miniPCB, markdown, documentation, engineering notes, build logs, pcb docs" />
+</head>
+
+<body>
+<nav>
+  <div class="nav-container">
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="container">
+  <h1>Markdown Documents</h1>
+  <p>Files exported from CAD and intended to train LLMs.</p>
+
+  <table class="changelog-table" id="md-table">
+    <thead>
+      <tr>
+        <th>File</th>
+        <th>Last Modified</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- rows injected dynamically -->
+    </tbody>
+  </table>
+</main>
+
+<footer>
+  © 2026 miniPCB. All rights reserved.
+</footer>
+
+<button id="backToTop" onclick="scrollToTop()" title="Back to Top">↑</button>
+
+<script>
+    document.addEventListener("DOMContentLoaded", loadMarkdownIndex);
+    
+    async function loadMarkdownIndex() {
+      const tbody = document.querySelector("#md-table tbody");
+    
+      const candidates = ["md/index.json", "md_index.json", "index.json"];
+    
+      try {
+        const { url, data } = await fetchFirstJson(candidates);
+    
+        const entries = Array.isArray(data) ? data : (data.entries || []);
+        if (!entries.length) {
+          tbody.innerHTML = `<tr><td colspan="2">No markdown files found. (Loaded: ${escapeHTML(url)})</td></tr>`;
+          return;
+        }
+    
+        const frag = document.createDocumentFragment();
+    
+        entries
+          .filter(e => ((e.path || e) + "").toLowerCase().endsWith(".md"))
+          .sort((a, b) => String(a.path || a).localeCompare(String(b.path || b)))
+          .forEach(e => {
+            const path = String(e.path || e);      // supports either {path: "..."} or "filename.md"
+            const label = e.filename || path.split("/").pop() || path;
+            const mtime = e.mtime ? new Date(e.mtime).toLocaleString() : "—";
+    
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td><a href="${encodeURI(path)}">${escapeHTML(label)}</a></td>
+              <td>${escapeHTML(mtime)}</td>
+            `;
+            frag.appendChild(tr);
+          });
+    
+        tbody.innerHTML = "";
+        tbody.appendChild(frag);
+    
+      } catch (err) {
+        console.error(err);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="2">
+              Failed to load markdown index.<br>
+              ${escapeHTML(String(err))}
+            </td>
+          </tr>`;
+      }
+    }
+    
+    async function fetchFirstJson(urls) {
+      const errors = [];
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) {
+            errors.push(`${url} -> HTTP ${res.status}`);
+            continue;
+          }
+          return { url, data: await res.json() };
+        } catch (e) {
+          errors.push(`${url} -> ${e}`);
+        }
+      }
+      throw new Error("All index candidates failed:\n" + errors.join("\n"));
+    }
+    
+    function escapeHTML(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        "\"":"&quot;",
+        "'":"&#39;"
+      }[c]));
+    }
+    </script>
+    
+
+</body>
+</html>
