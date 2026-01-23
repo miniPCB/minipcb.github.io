@@ -1603,6 +1603,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             t.modified = true;
           }
         }
+        // If AI omits the new Unable-to-Adjust fields, derive a safe default.
+        const unableAdjustPairs = [
+          { field: "oot_low_unable_adjust", next: "oot_low_next_step", concl: "oot_low_conclusion" },
+          { field: "oot_high_unable_adjust", next: "oot_high_next_step", concl: "oot_high_conclusion" }
+        ];
+        for(const u of unableAdjustPairs){
+          if(!fields.includes(u.field)) continue;
+          const cur = String(t.data[u.field] ?? "").trim();
+          if(cur) continue;
+          const nextStep = String(t.data[u.next] ?? "").trim();
+          const conclusion = String(t.data[u.concl] ?? "").trim();
+          if(!nextStep && !conclusion) continue;
+          const suffix = nextStep ? ` Next: ${nextStep}` : "";
+          t.data[u.field] = `Unable to adjust.${suffix}`.trim();
+          setFieldMaturity(t, u.field, 2);
+          t.modified = true;
+        }
         for(const f of fields) setSuggestStatus(t.id, f, "accepted");
         setReviewStatus(t.id, "done");
         renderForm();
