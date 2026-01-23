@@ -192,6 +192,10 @@
       background: rgba(124,255,176,.12);
       border-color: rgba(124,255,176,.45);
     }
+    .dirty-field{
+      background: rgba(124,255,176,.10);
+      border-color: rgba(124,255,176,.55);
+    }
 
     .hr{ height:1px; background: rgba(42,52,71,.7); margin: 12px 0; }
     .row{ display:flex; gap:10px; align-items:center; }
@@ -1601,6 +1605,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             t.data[f] = val.trim();
             setFieldMaturity(t, f, 2);
             t.modified = true;
+            if(!t._dirtyFields) t._dirtyFields = {};
+            t._dirtyFields[f] = true;
           }
         }
         // If AI omits the new Unable-to-Adjust fields, derive a safe default.
@@ -1619,6 +1625,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           t.data[u.field] = `Unable to adjust.${suffix}`.trim();
           setFieldMaturity(t, u.field, 2);
           t.modified = true;
+          if(!t._dirtyFields) t._dirtyFields = {};
+          t._dirtyFields[u.field] = true;
         }
         for(const f of fields) setSuggestStatus(t.id, f, "accepted");
         setReviewStatus(t.id, "done");
@@ -1918,10 +1926,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
         const s = getSuggestStatus(test.id, k);
         if(s) input.classList.add(`ai-${s}`);
+        if(test._dirtyFields?.[k]) input.classList.add("dirty-field");
 
         input.addEventListener("input", () => {
           test.data[k] = input.value;
           test.modified = true;
+          if(!test._dirtyFields) test._dirtyFields = {};
+          test._dirtyFields[k] = true;
+          input.classList.add("dirty-field");
           $("dirtyHint").style.display = "";
           setSuggestStatus(test.id, k, "");
           setFieldMaturity(test, k, 3);
@@ -2404,6 +2416,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
 
     test.modified = false;
+    test._dirtyFields = {};
     plan.updated = nowIsoDate();
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
@@ -2956,6 +2969,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               if(!test.data._ai) test.data._ai = { maturity:{} };
               if(!test.data._ai.maturity) test.data._ai.maturity = {};
               test.data._ai.maturity[s.field] = 2;
+              if(!test._dirtyFields) test._dirtyFields = {};
+              test._dirtyFields[s.field] = true;
               setSuggestStatus(test.id, s.field, "accepted");
               applied++;
             }
