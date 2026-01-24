@@ -1650,8 +1650,20 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(first >= 0 && last > first) text = text.slice(first, last + 1);
     try{ return JSON.parse(text); }
     catch(e){
-      logLine(`${label} parse failed: ${e.message || e}`, "warn");
-      return {};
+      try{
+        const fixed = text
+          .replace(/\\(?![\\\"\/bfnrt]|u[0-9a-fA-F]{4})/g, "\\\\")
+          .replace(/[\u0000-\u0019]/g, (c) => {
+            if(c === "\n") return "\\n";
+            if(c === "\r") return "\\r";
+            if(c === "\t") return "\\t";
+            return "";
+          });
+        return JSON.parse(fixed);
+      }catch(e2){
+        logLine(`${label} parse failed: ${e.message || e}`, "warn");
+        return {};
+      }
     }
   }
 
