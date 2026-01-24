@@ -947,6 +947,7 @@
     ai_enabled: false,                // skeleton toggle (legacy)
     ai_model: "gpt-4.1-mini",
     ai_suggest_maturity_max: 2,       // suggest for fields with maturity <= this
+    ai_review_debug: false,           // log one AI Review payload + response
     fallback_on_save: "auto_fill",    // auto_fill | prompt
     fallback_format: "generic"        // generic | dated
   });
@@ -1819,6 +1820,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       try{
         for(const f of fields) setSuggestStatus(t.id, f, "working");
         renderForm();
+        if(state.prefs.ai_review_debug){
+          logLine(`AI Review debug payload: ${JSON.stringify(payload).slice(0, 800)}...`, "warn");
+        }
         const resp = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
           headers: {
@@ -1840,6 +1844,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
         const data = await resp.json();
         const raw = extractResponseText(data);
+        if(state.prefs.ai_review_debug){
+          logLine(`AI Review debug response: ${String(raw).slice(0, 800)}...`, "warn");
+          state.prefs.ai_review_debug = false;
+          savePrefs();
+        }
         if(!raw) throw new Error("No text returned");
         let parsed = {};
         try{ parsed = JSON.parse(raw); }catch{ parsed = {}; }
@@ -3312,6 +3321,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <option value="dated">Dated TODO</option>
             </select>
           </div>
+          <div style="display:none;">
+            <div class="label">AI Review Debug</div>
+            <select class="select" id="prefAiReviewDebug">
+              <option value="false">Off</option>
+              <option value="true">On (next test only)</option>
+            </select>
+          </div>
         </div>
 
         <div class="hr"></div>
@@ -3342,6 +3358,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
       $("prefFallbackOnSave").value = state.prefs.fallback_on_save;
       $("prefFallbackFormat").value = state.prefs.fallback_format;
+      const dbgSel = $("prefAiReviewDebug");
+      if(dbgSel) dbgSel.value = state.prefs.ai_review_debug ? "true" : "false";
 
       footer.innerHTML = `
         <button class="btn" id="cancelPrefs">Cancel</button>
@@ -3383,6 +3401,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.fallback_on_save = $("prefFallbackOnSave").value;
         state.prefs.fallback_format = $("prefFallbackFormat").value;
+        const dbgSel = $("prefAiReviewDebug");
+        if(dbgSel) state.prefs.ai_review_debug = dbgSel.value === "true";
         savePrefs();
 
         hideModal();
