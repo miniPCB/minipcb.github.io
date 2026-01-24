@@ -1705,6 +1705,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     templatesCache: [],
     currentPlan: null,
     currentTemplateId: null,
+    currentTestTemplate: null,
     currentTestId: null,
     focusField: null,
     aiSuggestStatus: {},
@@ -2485,7 +2486,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       return;
     }
 
-    $("editorSub").textContent = "";
+    if(state.currentTestTemplate){
+      $("editorSub").textContent = `Editing test template: ${state.currentTestTemplate.name}`;
+    }else{
+      $("editorSub").textContent = "";
+    }
     $("dirtyHint").style.display = test.modified ? "" : "none";
 
     const fields = getFieldKeys(test);
@@ -3026,6 +3031,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       state.currentPlan = plan;
       state.currentTemplateId = null;
+      state.currentTestTemplate = null;
       state.currentTestId = plan.tests[0]?.id || null;
 
       logLine(`Opened plan: ${plan.name}`, "ok");
@@ -3143,6 +3149,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       state.currentPlan = tpl;
       state.currentTemplateId = id;
+      state.currentTestTemplate = null;
       state.currentTestId = tpl.tests[0]?.id || null;
 
       logLine(`Opened template: ${tpl.name}`, "ok");
@@ -3514,6 +3521,28 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
     }
 
+    if(state.currentTestTemplate){
+      const basePlan = await Store.loadPlan(state.currentTestTemplate.basePlanId).catch(() => null);
+      if(!basePlan){
+        toast("Templates", "Base plan not found.", "warn");
+        return;
+      }
+      const templatesDir = await fsEnsureTestTemplatesDir(basePlan, true);
+      if(!templatesDir){
+        toast("Templates", "Plan folder not set or unavailable.", "warn");
+        return;
+      }
+      const payload = { data: normalizeTestData(test.data) };
+      await fsWriteText(templatesDir, state.currentTestTemplate.file, JSON.stringify(payload, null, 2), "application/json");
+      test.modified = false;
+      test._dirtyFields = {};
+      $("dirtyHint").style.display = "none";
+      renderEditor();
+      logLine(`Saved test template: ${state.currentTestTemplate.file}`, "ok");
+      toast("Templates", "Template saved.", "ok");
+      return;
+    }
+
     test.modified = false;
     test._dirtyFields = {};
     plan.updated = nowIsoDate();
@@ -3521,8 +3550,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(state.currentTemplateId){
       await Templates.saveTemplate(plan);
       logLine("Saved template.", "ok");
-    toast("Saved", "Template saved.", "ok");
-    runAsync(renderLibrary());
+      toast("Saved", "Template saved.", "ok");
+      runAsync(renderLibrary());
     }else{
       await Store.savePlan(plan);
       logLine("Saved test + plan.", "ok");
@@ -3556,6 +3585,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     plan.updated = nowIsoDate();
     generatePlanMarkdown(plan);
+    if(state.currentTestTemplate){
+      const test = currentTest();
+      if(test) await saveCurrentTest();
+      return;
+    }
     if(state.currentTemplateId){
       await Templates.saveTemplate(plan);
     }else{
@@ -3930,6 +3964,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <div class="meta"><span class="tag">${escapeHtml(t.file)}</span></div>
           </div>
           <div class="actions">
+            <button class="btn mini" data-edit="${escapeHtml(t.file)}">Edit</button>
             <button class="btn mini danger" data-del="${escapeHtml(t.file)}">Delete</button>
           </div>
         </div>
@@ -3989,7 +4024,47 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         });
       });
+      body.querySelectorAll("[data-edit]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const file = btn.getAttribute("data-edit");
+          if(!file) return;
+          const chosen = list.find(t => t.file === file);
+          if(!chosen) return;
+          hideModal();
+          await openTestTemplateEditor(chosen, plan.id);
+        });
+      });
     });
+  }
+
+  async function openTestTemplateEditor(template, basePlanId){
+    const basePlan = basePlanId ? await Store.loadPlan(basePlanId).catch(() => null) : null;
+    if(!basePlan){
+      toast("Templates", "Base plan not found.", "warn");
+      return;
+    }
+    const testData = normalizeTestData(structuredClone(template.data || {}));
+    const tempPlan = {
+      id: `template_test_${uid()}`,
+      name: `Template: ${template.name}`,
+      slug: slugifyPlanName(`template_${template.name}`),
+      created: nowIsoDate(),
+      updated: nowIsoDate(),
+      tests: [{ id: uid(), order: 1, modified: true, data: testData }],
+      markdown: "",
+      userNotes: ""
+    };
+    state.currentPlan = tempPlan;
+    state.currentTemplateId = null;
+    state.currentTestId = tempPlan.tests[0].id;
+    state.currentTestTemplate = {
+      file: template.file,
+      name: template.name,
+      basePlanId: basePlan.id
+    };
+    showEditor();
+    renderEditor();
+    toast("Template edit", `Editing ${template.name}`, "ok");
   }
 
   /* ---------- AI Key Dialog ---------- */
