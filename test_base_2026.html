@@ -953,6 +953,7 @@
     ai_suggest_maturity_max: 2,       // suggest for fields with maturity <= this
     ai_review_debug: false,           // log one AI Review payload + response
     ai_review_pause_ms: 300,          // pause between AI review field calls
+    ai_review_concurrency: 1,         // concurrent AI review calls
     fallback_on_save: "auto_fill",    // auto_fill | prompt
     fallback_format: "generic"        // generic | dated
   });
@@ -1831,86 +1832,104 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       logLine(`AI Review: reviewing ${t.data.test_no || t.id.slice(0,6)} (${fields.length} fields)...`, "ok");
 
       let changedCount = 0;
-      for(const field of fields){
-        if(getFieldMaturity(t, field) >= 3) continue;
-        setSuggestStatus(t.id, field, "working");
-        renderForm();
+      const allTestsPayload = tests.map(tt => ({
+        test_no: tt.data.test_no || "",
+        test_name: tt.data.test_name || "",
+        test_type: tt.data.test_type || "",
+        uut_pn: tt.data.uut_pn || "",
+        last_test_no: tt.data.last_test_no || "",
+        in_tol_next_step: tt.data.in_tol_next_step || "",
+        oot_low_unable_adjust: tt.data.oot_low_unable_adjust || "",
+        oot_low_next_step: tt.data.oot_low_next_step || "",
+        oot_high_unable_adjust: tt.data.oot_high_unable_adjust || "",
+        oot_high_next_step: tt.data.oot_high_next_step || "",
+        data: tt.data
+      }));
 
-        const payload = {
-          plan: { name: plan.name, created: plan.created, updated: plan.updated },
-          all_tests: tests.map(tt => ({
-            test_no: tt.data.test_no || "",
-            test_name: tt.data.test_name || "",
-            test_type: tt.data.test_type || "",
-            uut_pn: tt.data.uut_pn || "",
-            last_test_no: tt.data.last_test_no || "",
-            in_tol_next_step: tt.data.in_tol_next_step || "",
-            oot_low_unable_adjust: tt.data.oot_low_unable_adjust || "",
-            oot_low_next_step: tt.data.oot_low_next_step || "",
-            oot_high_unable_adjust: tt.data.oot_high_unable_adjust || "",
-            oot_high_next_step: tt.data.oot_high_next_step || "",
-            data: tt.data
-          })),
-          test_no: t.data.test_no || "",
-          test_name: t.data.test_name || "",
-          field,
-          current_value: t.data[field] ?? "",
-          field_prompt: t.data?._ai?.field_prompts?.[field] || "",
-          field_label: t.data?._ai?.field_labels?.[field] || field,
-          maturity: getFieldMaturity(t, field),
-          authoritative_values: Object.keys(anchors).reduce((acc, k) => (acc[k] = anchors[k].value, acc), {}),
-          context: t.data
+      const pauseMs = Number(state.prefs.ai_review_pause_ms ?? 0);
+      const concurrency = Math.max(1, Number(state.prefs.ai_review_concurrency ?? 1));
+      const queue = fields.filter(f => getFieldMaturity(t, f) < 3);
+
+      let active = 0;
+      let index = 0;
+      await new Promise(resolve => {
+        const launchNext = () => {
+          if(index >= queue.length && active === 0) return resolve();
+          while(active < concurrency && index < queue.length){
+            const field = queue[index++];
+            active++;
+            setSuggestStatus(t.id, field, "working");
+            renderForm();
+
+            const payload = {
+              plan: { name: plan.name, created: plan.created, updated: plan.updated },
+              all_tests: allTestsPayload,
+              test_no: t.data.test_no || "",
+              test_name: t.data.test_name || "",
+              field,
+              current_value: t.data[field] ?? "",
+              field_prompt: t.data?._ai?.field_prompts?.[field] || "",
+              field_label: t.data?._ai?.field_labels?.[field] || field,
+              maturity: getFieldMaturity(t, field),
+              authoritative_values: Object.keys(anchors).reduce((acc, k) => (acc[k] = anchors[k].value, acc), {}),
+              context: t.data
+            };
+
+            (async () => {
+              try{
+                if(state.prefs.ai_review_debug){
+                  logLine(`AI Review debug payload: ${JSON.stringify(payload).slice(0, 800)}...`, "warn");
+                }
+                const resp = await fetch("https://api.openai.com/v1/responses", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${key}`
+                  },
+                  body: JSON.stringify({
+                    model,
+                    input: [
+                      { role:"system", content:"Return STRICT JSON: {\"value\": \"...\"}. Value must be a plain string. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief." },
+                      { role:"user", content: JSON.stringify(payload, null, 2) }
+                    ],
+                    max_output_tokens: 120
+                  })
+                });
+                if(!resp.ok){
+                  const ttxt = await resp.text().catch(()=> "");
+                  throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
+                }
+                const data = await resp.json();
+                const raw = extractResponseText(data);
+                if(state.prefs.ai_review_debug){
+                  logLine(`AI Review debug response: ${String(raw).slice(0, 800)}...`, "warn");
+                  state.prefs.ai_review_debug = false;
+                  savePrefs();
+                }
+                const parsed = safeParseJson(raw, "AI Review");
+                const val = parsed?.value;
+                if(typeof val === "string" && val.trim() && val.trim() !== String(t.data[field] ?? "").trim()){
+                  t.data[field] = val.trim();
+                  setFieldMaturity(t, field, 2);
+                  t.modified = true;
+                  if(!t._dirtyFields) t._dirtyFields = {};
+                  t._dirtyFields[field] = true;
+                  changedCount++;
+                }
+                setSuggestStatus(t.id, field, "accepted");
+              }catch(err){
+                setSuggestStatus(t.id, field, "");
+                logLine(`AI Review: failed ${t.data.test_no || t.id.slice(0,6)}.${field} (${err.message || err}).`, "warn");
+              }finally{
+                active--;
+                if(pauseMs > 0) await sleep(pauseMs);
+                launchNext();
+              }
+            })();
+          }
         };
-
-        try{
-          if(state.prefs.ai_review_debug){
-            logLine(`AI Review debug payload: ${JSON.stringify(payload).slice(0, 800)}...`, "warn");
-          }
-          const resp = await fetch("https://api.openai.com/v1/responses", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${key}`
-            },
-            body: JSON.stringify({
-              model,
-              input: [
-                { role:"system", content:"Return STRICT JSON: {\"value\": \"...\"}. Value must be a plain string. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief." },
-                { role:"user", content: JSON.stringify(payload, null, 2) }
-              ],
-              max_output_tokens: 120
-            })
-          });
-          if(!resp.ok){
-            const ttxt = await resp.text().catch(()=> "");
-            throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
-          }
-          const data = await resp.json();
-          const raw = extractResponseText(data);
-          if(state.prefs.ai_review_debug){
-            logLine(`AI Review debug response: ${String(raw).slice(0, 800)}...`, "warn");
-            state.prefs.ai_review_debug = false;
-            savePrefs();
-          }
-          const parsed = safeParseJson(raw, "AI Review");
-          const val = parsed?.value;
-          if(typeof val === "string" && val.trim() && val.trim() !== String(t.data[field] ?? "").trim()){
-            t.data[field] = val.trim();
-            setFieldMaturity(t, field, 2);
-            t.modified = true;
-            if(!t._dirtyFields) t._dirtyFields = {};
-            t._dirtyFields[field] = true;
-            changedCount++;
-          }
-          setSuggestStatus(t.id, field, "accepted");
-        }catch(err){
-          setSuggestStatus(t.id, field, "");
-          logLine(`AI Review: failed ${t.data.test_no || t.id.slice(0,6)}.${field} (${err.message || err}).`, "warn");
-        }
-
-        const pauseMs = Number(state.prefs.ai_review_pause_ms ?? 0);
-        if(pauseMs > 0) await sleep(pauseMs);
-      }
+        launchNext();
+      });
 
       if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
       t.data._ai.last_ai_reviewed = nowIsoTimestamp();
@@ -3369,6 +3388,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             </select>
             <div class="label" style="margin-top:10px;">AI Review Pause (ms)</div>
             <input class="input" id="prefAiReviewPause" type="number" min="0" step="50" />
+            <div class="label" style="margin-top:10px;">AI Review Concurrency</div>
+            <input class="input" id="prefAiReviewConcurrency" type="number" min="1" step="1" />
           </div>
         </div>
 
@@ -3408,6 +3429,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(dbgSel) dbgSel.value = state.prefs.ai_review_debug ? "true" : "false";
       const pauseInput = $("prefAiReviewPause");
       if(pauseInput) pauseInput.value = String(state.prefs.ai_review_pause_ms ?? 300);
+      const concInput = $("prefAiReviewConcurrency");
+      if(concInput) concInput.value = String(state.prefs.ai_review_concurrency ?? 1);
       const advBtn = $("prefToggleAdvanced");
       if(advBtn){
         advBtn.onclick = () => {
@@ -3461,6 +3484,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(dbgSel) state.prefs.ai_review_debug = dbgSel.value === "true";
         const pauseInput = $("prefAiReviewPause");
         if(pauseInput) state.prefs.ai_review_pause_ms = Math.max(0, Number(pauseInput.value) || 0);
+        const concInput = $("prefAiReviewConcurrency");
+        if(concInput) state.prefs.ai_review_concurrency = Math.max(1, Number(concInput.value) || 1);
         savePrefs();
 
         hideModal();
