@@ -968,7 +968,9 @@
     ai_review_pause_ms: 300,          // pause between AI review field calls
     ai_review_concurrency: 1,         // concurrent AI review calls
     fallback_on_save: "auto_fill",    // auto_fill | prompt
-    fallback_format: "generic"        // generic | dated
+    fallback_format: "generic",       // generic | dated
+    new_test_template_mode: "default",// default | choose
+    new_test_template_default: "__blank__"
   });
 
   function loadPrefs(){
@@ -1190,6 +1192,34 @@
     const root = await ensurePlanRootHandle();
     if(!root) return null;
     return await root.getDirectoryHandle("templates", { create: true });
+  }
+
+  async function fsListTestTemplates(plan){
+    if(!plan) return [];
+    const entry = await fsFindPlanDirById(plan.id);
+    if(!entry) return [];
+    let testsDir = null;
+    try{
+      testsDir = await entry.dir.getDirectoryHandle("tests");
+    }catch{
+      return [];
+    }
+    let templatesDir = null;
+    try{
+      templatesDir = await testsDir.getDirectoryHandle("templates");
+    }catch{
+      return [];
+    }
+    const list = [];
+    for await (const [name, handle] of templatesDir.entries()){
+      if(handle.kind !== "file" || !name.toLowerCase().endsWith(".json")) continue;
+      const data = await fsReadJson(templatesDir, name);
+      if(!data) continue;
+      const testData = data.data || data;
+      const title = (testData?.test_name || "").trim() || name.replace(/\.json$/i, "");
+      list.push({ id: name, name: title, file: name, data: testData });
+    }
+    return list.sort((a,b) => a.name.localeCompare(b.name));
   }
 
   async function fsCopyDir(srcHandle, destHandle){
@@ -3263,22 +3293,33 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   /* ---------- Test ops ---------- */
-  function newTest(){
+  async function newTest(){
     const plan = state.currentPlan;
     if(!plan) return;
+
+    const templates = await getAvailableTestTemplates(plan);
+    const mode = state.prefs.new_test_template_mode || "default";
+    let chosen = null;
+    if(mode === "choose"){
+      chosen = await pickTestTemplate(templates);
+      if(!chosen) return;
+    }else{
+      const defId = state.prefs.new_test_template_default || "__blank__";
+      chosen = templates.find(t => t.id === defId) || templates[0];
+    }
 
     const nextOrder = (plan.tests?.reduce((m,t)=>Math.max(m, t.order||0), 0) || 0) + 1;
     const t = {
       id: uid(),
       order: nextOrder,
       modified: true,
-      data: normalizeTestData({})
+      data: normalizeTestData(chosen?.data ? structuredClone(chosen.data) : {})
     };
     plan.tests.push(t);
     state.currentTestId = t.id;
 
-    logLine("Created new test (unsaved).", "ok");
-    toast("New test", "Test created (unsaved).", "ok");
+    logLine(`Created new test (unsaved)${chosen?.name ? ` from "${chosen.name}"` : ""}.`, "ok");
+    toast("New test", chosen?.name ? `Test created from "${chosen.name}".` : "Test created (unsaved).", "ok");
     renderEditor();
   }
 
@@ -3541,6 +3582,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           </div>
         </div>
 
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="label">New Test Template Mode</div>
+            <select class="select" id="prefNewTestTemplateMode">
+              <option value="default">Use default template</option>
+              <option value="choose">Choose on every new test</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Default Test Template</div>
+            <select class="select" id="prefNewTestTemplateDefault">
+              <option value="__blank__">Blank (schema)</option>
+            </select>
+            <div class="hint">Templates are read from the current plan's tests/templates folder.</div>
+          </div>
+        </div>
+
         <div class="toolbarRow" style="margin-top:6px;">
           <button class="btn mini" id="prefToggleAdvanced">Advanced</button>
         </div>
@@ -3573,6 +3631,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
       $("prefFallbackOnSave").value = state.prefs.fallback_on_save;
       $("prefFallbackFormat").value = state.prefs.fallback_format;
+      $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
+      const defaultTemplateSelect = $("prefNewTestTemplateDefault");
+      if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
       const dbgSel = $("prefAiReviewDebug");
       if(dbgSel) dbgSel.value = state.prefs.ai_review_debug ? "true" : "false";
       const pauseInput = $("prefAiReviewPause");
@@ -3622,12 +3683,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         logLine(`Preferences: ai_model set to ${val}.`, "ok");
         toast("AI Model", `Set to ${val}.`, "ok");
       });
+      runAsync(async () => {
+        const sel = $("prefNewTestTemplateDefault");
+        if(!sel) return;
+        const templates = await getAvailableTestTemplates(state.currentPlan);
+        sel.innerHTML = templates.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
+        const chosen = state.prefs.new_test_template_default || "__blank__";
+        sel.value = templates.some(t => t.id === chosen) ? chosen : "__blank__";
+      });
       $("savePrefsBtn").onclick = () => {
         state.prefs.ai_enabled = $("prefAiEnabled").value === "true";
         state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.fallback_on_save = $("prefFallbackOnSave").value;
         state.prefs.fallback_format = $("prefFallbackFormat").value;
+        state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
+        state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
         if(dbgSel) state.prefs.ai_review_debug = dbgSel.value === "true";
         const pauseInput = $("prefAiReviewPause");
@@ -3642,6 +3713,45 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         runAsync(renderLibrary());
         if(state.currentPlan) renderEditor();
       };
+    });
+  }
+
+  async function getAvailableTestTemplates(plan){
+    const list = [{ id: "__blank__", name: "Blank (schema)", data: {} }];
+    if(state.planRootHandle && plan){
+      const extra = await fsListTestTemplates(plan);
+      for(const t of extra) list.push(t);
+    }
+    return list;
+  }
+
+  function pickTestTemplate(templates){
+    return new Promise(resolve => {
+      if(!templates || !templates.length){
+        toast("Templates", "No test templates found.", "warn");
+        return resolve(null);
+      }
+      const options = templates.map(t =>
+        `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`
+      ).join("");
+      showModal("Choose Test Template", (body, footer) => {
+        body.innerHTML = `
+          <div class="label">Template</div>
+          <select class="select" id="testTemplatePick">${options}</select>
+          <div class="hint">Templates are loaded from the plan's tests/templates folder.</div>
+        `;
+        footer.innerHTML = `
+          <button class="btn" id="cancelTemplatePick">Cancel</button>
+          <button class="btn primary" id="confirmTemplatePick">Create Test</button>
+        `;
+        $("cancelTemplatePick").onclick = () => { hideModal(); resolve(null); };
+        $("confirmTemplatePick").onclick = () => {
+          const id = $("testTemplatePick").value;
+          const chosen = templates.find(t => t.id === id) || templates[0];
+          hideModal();
+          resolve(chosen);
+        };
+      });
     });
   }
 
@@ -5001,7 +5111,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("saveAllBtn").addEventListener("click", () => runAsync(saveAll()));
 
     $("testSearch").addEventListener("input", renderTestsList);
-    $("btnNewTest").addEventListener("click", newTest);
+    $("btnNewTest").addEventListener("click", () => runAsync(newTest()));
     $("btnDeleteTest").addEventListener("click", deleteCurrentTest);
     $("btnSaveTest").addEventListener("click", () => runAsync(saveCurrentTest()));
     $("btnAddField").addEventListener("click", () => runAsync(addFieldFlow()));
