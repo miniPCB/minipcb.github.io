@@ -1661,10 +1661,24 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           });
         return JSON.parse(fixed);
       }catch(e2){
-        logLine(`${label} parse failed: ${e.message || e}`, "warn");
-        return {};
+        const fallback = parseLooseJsonPairs(text);
+        logLine(`${label} parse failed: ${e.message || e}. Fallback pairs: ${Object.keys(fallback).length}`, "warn");
+        return fallback;
       }
     }
+  }
+
+  function parseLooseJsonPairs(text){
+    const out = {};
+    const re = /"([^"\\]+)"\s*:\s*"((?:\\.|[^"\\])*)"/g;
+    let m;
+    while((m = re.exec(text))){
+      const key = m[1];
+      let val = m[2];
+      val = val.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\"/g, "\"");
+      out[key] = val;
+    }
+    return out;
   }
 
   function getReviewStatus(testId){
