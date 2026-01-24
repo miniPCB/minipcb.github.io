@@ -1640,6 +1640,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     showModal(title, renderFn);
   }
 
+  function safeParseJson(raw, contextLabel){
+    const label = contextLabel || "JSON";
+    let text = String(raw || "").trim();
+    if(!text) return {};
+    text = text.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+    const first = text.indexOf("{");
+    const last = text.lastIndexOf("}");
+    if(first >= 0 && last > first) text = text.slice(first, last + 1);
+    try{ return JSON.parse(text); }
+    catch(e){
+      logLine(`${label} parse failed: ${e.message || e}`, "warn");
+      return {};
+    }
+  }
+
   function getReviewStatus(testId){
     return state.aiReviewStatus?.[testId] || "";
   }
@@ -1850,8 +1865,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           savePrefs();
         }
         if(!raw) throw new Error("No text returned");
-        let parsed = {};
-        try{ parsed = JSON.parse(raw); }catch{ parsed = {}; }
+        const parsed = safeParseJson(raw, "AI Review");
         let changedCount = 0;
         for(const f of fields){
           const val = parsed?.[f];
