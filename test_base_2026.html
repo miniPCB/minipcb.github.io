@@ -618,7 +618,7 @@
         <!-- Left -->
         <div class="panel">
           <div class="panelHeader">
-            <h3>Test List</h3>
+            <h3 id="testListTitle">Test List</h3>
             <div class="toolbarRow">
               <button class="btn mini primary" id="btnNewTest">New Test</button>
               <button class="btn mini" id="btnManageTestTemplates">Templates</button>
@@ -1711,6 +1711,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     focusField: null,
     aiSuggestStatus: {},
     planRootHandle: null,
+    templateListCache: [],
+    templateEditReturnPlanId: null,
     flow: { x: 0, y: 0, scale: 1 },
     modelList: []
   };
@@ -2360,6 +2362,36 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const wrap = $("testsList");
     wrap.innerHTML = "";
 
+    if(state.currentTestTemplate){
+      const listTitle = $("testListTitle");
+      if(listTitle) listTitle.textContent = "Template List";
+      const templates = (state.templateListCache || []).filter(t => t.id !== "__blank__");
+      const filtered = templates.filter(t => !q || (t.name || "").toLowerCase().includes(q));
+      if(!filtered.length){
+        wrap.innerHTML = `<div class="muted" style="padding:10px 2px;">No templates found.</div>`;
+        return;
+      }
+      for(const t of filtered){
+        const row = document.createElement("div");
+        row.className = "testRow";
+        row.innerHTML = `
+          <div class="top">
+            <div class="tno">${escapeHtml(t.file || "")}</div>
+            <div class="tag">Template</div>
+          </div>
+          <div class="tname">${escapeHtml(t.name)}</div>
+        `;
+        row.addEventListener("click", () => {
+          runAsync(openTestTemplateEditor(t, state.currentTestTemplate.basePlanId));
+        });
+        wrap.appendChild(row);
+      }
+      return;
+    }
+
+    const listTitle = $("testListTitle");
+    if(listTitle) listTitle.textContent = "Test List";
+
     const tests = (plan.tests || []).slice().sort((a,b) => (a.order||0) - (b.order||0));
     for(const t of tests){
       const d = t.data || {};
@@ -2502,6 +2534,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("dirtyHint").style.display = test.modified ? "" : "none";
     const saveBtn = $("btnSaveTest");
     if(saveBtn) saveBtn.textContent = state.currentTestTemplate ? "Save Template" : "Save Test";
+    const newBtn = $("btnNewTest");
+    if(newBtn) newBtn.textContent = state.currentTestTemplate ? "Tests" : "New Test";
+    const tmplBtn = $("btnManageTestTemplates");
+    if(tmplBtn){
+      tmplBtn.disabled = !!state.currentTestTemplate;
+      tmplBtn.title = state.currentTestTemplate ? "Already editing templates" : "";
+    }
 
     const fields = getFieldKeys(test);
     for(const k of fields){
@@ -3042,6 +3081,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       state.currentPlan = plan;
       state.currentTemplateId = null;
       state.currentTestTemplate = null;
+      state.templateEditReturnPlanId = null;
       state.currentTestId = plan.tests[0]?.id || null;
 
       logLine(`Opened plan: ${plan.name}`, "ok");
@@ -3160,6 +3200,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       state.currentPlan = tpl;
       state.currentTemplateId = id;
       state.currentTestTemplate = null;
+      state.templateEditReturnPlanId = null;
       state.currentTestId = tpl.tests[0]?.id || null;
 
       logLine(`Opened template: ${tpl.name}`, "ok");
@@ -3956,6 +3997,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
   }
 
+  async function refreshTemplateList(){
+    if(!state.currentTestTemplate?.basePlanId) return;
+    const basePlan = await Store.loadPlan(state.currentTestTemplate.basePlanId).catch(() => null);
+    if(!basePlan) return;
+    state.templateListCache = await getAvailableTestTemplates(basePlan);
+    renderTestsList();
+  }
+
   async function openManageTestTemplates(){
     const plan = state.currentPlan;
     if(!plan){
@@ -4055,6 +4104,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       toast("Templates", "Base plan not found.", "warn");
       return;
     }
+    state.templateEditReturnPlanId = basePlan.id;
     const testData = normalizeTestData(structuredClone(template.data || {}));
     const tempPlan = {
       id: `template_test_${uid()}`,
@@ -4074,6 +4124,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       name: template.name,
       basePlanId: basePlan.id
     };
+    await refreshTemplateList();
     showEditor();
     renderEditor();
     toast("Template edit", `Editing ${template.name}`, "ok");
@@ -5437,7 +5488,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("testSearch").addEventListener("input", renderTestsList);
     document.addEventListener("click", hideContextMenu);
     document.addEventListener("scroll", hideContextMenu, true);
-    $("btnNewTest").addEventListener("click", () => runAsync(newTest()));
+    $("btnNewTest").addEventListener("click", () => {
+      if(state.currentTestTemplate && state.templateEditReturnPlanId){
+        runAsync(openPlanById(state.templateEditReturnPlanId));
+      }else{
+        runAsync(newTest());
+      }
+    });
     $("btnManageTestTemplates").addEventListener("click", () => runAsync(openManageTestTemplates()));
     $("btnDeleteTest").addEventListener("click", deleteCurrentTest);
     $("btnSaveTest").addEventListener("click", () => runAsync(saveCurrentTest()));
