@@ -1714,7 +1714,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     planRootHandle: null,
     templateListCache: [],
     templateEditReturnPlanId: null,
-    templateEditReturnIsTemplate: false,
     flow: { x: 0, y: 0, scale: 1 },
     modelList: []
   };
@@ -2387,7 +2386,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <div class="tname">${escapeHtml(t.name)}</div>
         `;
         row.addEventListener("click", () => {
-          runAsync(openTestTemplateEditor(t, state.currentTestTemplate.basePlanId, state.currentTestTemplate.baseIsTemplate));
+          runAsync(openTestTemplateEditor(t, state.currentTestTemplate.basePlanId));
         });
         wrap.appendChild(row);
       }
@@ -3087,7 +3086,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       state.currentTemplateId = null;
       state.currentTestTemplate = null;
       state.templateEditReturnPlanId = null;
-      state.templateEditReturnIsTemplate = false;
       state.currentTestId = plan.tests[0]?.id || null;
 
       logLine(`Opened plan: ${plan.name}`, "ok");
@@ -3207,7 +3205,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       state.currentTemplateId = id;
       state.currentTestTemplate = null;
       state.templateEditReturnPlanId = null;
-      state.templateEditReturnIsTemplate = false;
       state.currentTestId = tpl.tests[0]?.id || null;
 
       logLine(`Opened template: ${tpl.name}`, "ok");
@@ -4006,9 +4003,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   async function refreshTemplateList(){
     if(!state.currentTestTemplate?.basePlanId) return;
-    const basePlan = state.currentTestTemplate.baseIsTemplate
-      ? await Templates.loadTemplate(state.currentTestTemplate.basePlanId).catch(() => null)
-      : await Store.loadPlan(state.currentTestTemplate.basePlanId).catch(() => null);
+    const basePlan = await Store.loadPlan(state.currentTestTemplate.basePlanId).catch(() => null);
     if(!basePlan) return;
     state.templateListCache = await getAvailableTestTemplates(basePlan);
     renderTestsList();
@@ -4101,24 +4096,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           const chosen = list.find(t => t.file === file);
           if(!chosen) return;
           hideModal();
-          await openTestTemplateEditor(chosen, plan.id, !!state.currentTemplateId);
+          await openTestTemplateEditor(chosen, plan.id);
         });
       });
     });
   }
 
-  async function openTestTemplateEditor(template, basePlanId, baseIsTemplate){
-    const basePlan = basePlanId
-      ? (baseIsTemplate
-          ? await Templates.loadTemplate(basePlanId).catch(() => null)
-          : await Store.loadPlan(basePlanId).catch(() => null))
-      : null;
+  async function openTestTemplateEditor(template, basePlanId){
+    const basePlan = basePlanId ? await Store.loadPlan(basePlanId).catch(() => null) : null;
     if(!basePlan){
       toast("Templates", "Base plan not found.", "warn");
       return;
     }
     state.templateEditReturnPlanId = basePlan.id;
-    state.templateEditReturnIsTemplate = !!baseIsTemplate;
     const testData = normalizeTestData(structuredClone(template.data || {}));
     const tempPlan = {
       id: `template_test_${uid()}`,
@@ -4136,8 +4126,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     state.currentTestTemplate = {
       file: template.file,
       name: template.name,
-      basePlanId: basePlan.id,
-      baseIsTemplate: !!baseIsTemplate
+      basePlanId: basePlan.id
     };
     await refreshTemplateList();
     showEditor();
@@ -5505,11 +5494,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     document.addEventListener("scroll", hideContextMenu, true);
     $("btnNewTest").addEventListener("click", () => {
       if(state.currentTestTemplate && state.templateEditReturnPlanId){
-        if(state.templateEditReturnIsTemplate){
-          runAsync(openTemplateById(state.templateEditReturnPlanId));
-        }else{
-          runAsync(openPlanById(state.templateEditReturnPlanId));
-        }
+        runAsync(openPlanById(state.templateEditReturnPlanId));
       }else{
         runAsync(newTest());
       }
