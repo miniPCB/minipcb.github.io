@@ -1808,6 +1808,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         fields: fields.filter(f => f !== "uut_pn"),
         current_values: fields.reduce((acc, k) => (acc[k] = t.data[k] ?? "", acc), {}),
         field_prompts: fields.reduce((acc, k) => (acc[k] = t.data?._ai?.field_prompts?.[k] || "", acc), {}),
+        field_labels: fields.reduce((acc, k) => (acc[k] = t.data?._ai?.field_labels?.[k] || k, acc), {}),
         maturity: fields.reduce((acc, k) => (acc[k] = getFieldMaturity(t, k), acc), {}),
         authoritative_values: Object.keys(anchors).reduce((acc, k) => (acc[k] = anchors[k].value, acc), {}),
         context: t.data
@@ -1827,7 +1828,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           body: JSON.stringify({
             model,
             input: [
-              { role:"system", content:"Return STRICT JSON object mapping field -> improved_value for ALL fields provided. Do NOT omit keys; if no improvement, repeat the current value. Values must be plain strings, not critiques. Use authoritative_values to keep consistency across tests. Use field_prompts[field] as guidance. If current_values[field] contains TODO or Auto-filled text, replace it with improved content." },
+              { role:"system", content:"Return STRICT JSON object mapping field -> improved_value for ALL fields provided. Do NOT omit keys; if no improvement, repeat the current value. Values must be plain strings, not critiques. Use authoritative_values to keep consistency across tests. Use field_prompts[field] and field_labels[field] as guidance. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief." },
               { role:"user", content: JSON.stringify(payload, null, 2) }
             ],
             max_output_tokens: 800
@@ -1842,6 +1843,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!raw) throw new Error("No text returned");
         let parsed = {};
         try{ parsed = JSON.parse(raw); }catch{ parsed = {}; }
+        let changedCount = 0;
         for(const f of fields){
           const val = parsed?.[f];
           if(typeof val === "string" && val.trim() && val.trim() !== String(t.data[f] ?? "").trim()){
@@ -1850,6 +1852,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             t.modified = true;
             if(!t._dirtyFields) t._dirtyFields = {};
             t._dirtyFields[f] = true;
+            changedCount++;
           }
         }
         if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
@@ -1878,7 +1881,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         setReviewStatus(t.id, "done");
         renderForm();
         renderTestsList();
-        logLine(`AI Review: updated ${t.data.test_no || t.id.slice(0,6)}.`, "ok");
+        logLine(`AI Review: updated ${t.data.test_no || t.id.slice(0,6)} (${changedCount} changes).`, changedCount ? "ok" : "warn");
       }catch(err){
         for(const f of fields) setSuggestStatus(t.id, f, "");
         setReviewStatus(t.id, "done");
