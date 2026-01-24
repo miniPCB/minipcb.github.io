@@ -2247,8 +2247,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <div class="tname">${escapeHtml(name)}</div>
         <div class="sub">
           <span class="tag">${escapeHtml(type)}</span>
-          <span class="tag">${escapeHtml(String(d.param1_label || "Units"))}: ${escapeHtml(String(d[d.param1_value || "units"] || "N/A"))}</span>
-          <span class="tag">${escapeHtml(String(d.param2_label || "Target Value"))}: ${escapeHtml(String(d[d.param2_value || "tv"] || "N/A"))}</span>
+          <span class="tag param-tag" data-param="1" title="Double-click to edit">${escapeHtml(String(d.param1_label || "Units"))}: ${escapeHtml(String(d[d.param1_value || "units"] || "N/A"))}</span>
+          <span class="tag param-tag" data-param="2" title="Double-click to edit">${escapeHtml(String(d.param2_label || "Target Value"))}: ${escapeHtml(String(d[d.param2_value || "tv"] || "N/A"))}</span>
         </div>
       `;
       row.addEventListener("click", () => {
@@ -2277,6 +2277,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const dragId = e.dataTransfer.getData("text/plain");
         if(!dragId || dragId === t.id) return;
         reorderTests(dragId, t.id);
+      });
+      row.querySelectorAll(".param-tag").forEach(tag => {
+        tag.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const which = Number(tag.getAttribute("data-param") || "1");
+          openParamEditDialog(t, which);
+        });
       });
       wrap.appendChild(row);
     }
@@ -2515,6 +2523,56 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         renderTestsList();
       };
       setTimeout(() => $("newFieldLabel").focus(), 20);
+    });
+  }
+
+  function openParamEditDialog(test, which){
+    if(!test || !test.data) return;
+    const labelKey = which === 2 ? "param2_label" : "param1_label";
+    const valueKey = which === 2 ? "param2_value" : "param1_value";
+    const defaultLabel = which === 2 ? "Target Value" : "Units";
+    const defaultValue = which === 2 ? "tv" : "units";
+    const currentLabel = String(test.data[labelKey] ?? defaultLabel);
+    const currentValue = String(test.data[valueKey] ?? defaultValue);
+    const keysForValues = getFieldKeys(test).filter(key =>
+      !["_ai","param1_label","param1_value","param2_label","param2_value"].includes(key)
+    );
+    if(!keysForValues.includes(currentValue)) keysForValues.unshift(currentValue);
+
+    showModal(which === 2 ? "Edit Parameter 2" : "Edit Parameter 1", (body, footer) => {
+      const options = keysForValues.map(key => {
+        const lbl = test.data?._ai?.field_labels?.[key] || key;
+        const selected = key === currentValue ? " selected" : "";
+        return `<option value="${escapeHtml(key)}"${selected}>${escapeHtml(lbl)}</option>`;
+      }).join("");
+      body.innerHTML = `
+        <div class="label">Label</div>
+        <input class="input" id="paramEditLabel" value="${escapeHtml(currentLabel)}" />
+        <div class="hr"></div>
+        <div class="label">Value Source</div>
+        <select class="select" id="paramEditValue">${options}</select>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelParamEdit">Cancel</button>
+        <button class="btn primary" id="confirmParamEdit">Save</button>
+      `;
+      $("cancelParamEdit").onclick = hideModal;
+      $("confirmParamEdit").onclick = () => {
+        const newLabel = $("paramEditLabel").value.trim();
+        const newValue = $("paramEditValue").value || defaultValue;
+        test.data[labelKey] = newLabel;
+        test.data[valueKey] = newValue;
+        setFieldMaturity(test, labelKey, 3);
+        setFieldMaturity(test, valueKey, 3);
+        test.modified = true;
+        if(!test._dirtyFields) test._dirtyFields = {};
+        test._dirtyFields[labelKey] = true;
+        test._dirtyFields[valueKey] = true;
+        hideModal();
+        renderTestsList();
+        if(state.currentTestId === test.id) renderEditor();
+      };
+      setTimeout(() => $("paramEditLabel").focus(), 20);
     });
   }
 
