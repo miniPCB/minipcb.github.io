@@ -2610,9 +2610,47 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelRenameField">Cancel</button>
+        <button class="btn danger" id="deleteField">Delete</button>
         <button class="btn primary" id="confirmRenameField">Save</button>
       `;
       $("cancelRenameField").onclick = hideModal;
+      $("deleteField").onclick = () => {
+        const data = test.data || {};
+        if(!(fieldKey in data)){
+          hideModal();
+          return;
+        }
+        showModal("Delete Field", (body2, footer2) => {
+          body2.innerHTML = `
+            <div class="muted" style="line-height:1.4;">
+              Delete <span class="tag">${escapeHtml(fieldKey)}</span>? This removes the field from the test data and AI metadata.
+            </div>
+          `;
+          footer2.innerHTML = `
+            <button class="btn" id="cancelDeleteField">Cancel</button>
+            <button class="btn danger" id="confirmDeleteField">Delete</button>
+          `;
+          $("cancelDeleteField").onclick = hideModal;
+          $("confirmDeleteField").onclick = () => {
+            const next = {};
+            const keys = Object.keys(data).filter(k => k !== "_ai");
+            for(const k of keys){
+              if(k !== fieldKey) next[k] = data[k];
+            }
+            next._ai = data._ai || ensureAiMeta(null, Object.keys(next).filter(k => k !== "_ai"));
+            if(next._ai?.maturity) delete next._ai.maturity[fieldKey];
+            if(next._ai?.field_labels) delete next._ai.field_labels[fieldKey];
+            if(next._ai?.field_types) delete next._ai.field_types[fieldKey];
+            if(next._ai?.field_prompts) delete next._ai.field_prompts[fieldKey];
+            test.data = next;
+            test.modified = true;
+            if(test._dirtyFields) delete test._dirtyFields[fieldKey];
+            hideModal();
+            renderForm();
+            renderTestsList();
+          };
+        });
+      };
       $("confirmRenameField").onclick = () => {
         const newLabel = $("editFieldLabel").value.trim();
         const newKey = $("editFieldKey").value.trim();
