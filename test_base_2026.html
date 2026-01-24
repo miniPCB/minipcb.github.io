@@ -3853,6 +3853,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   async function createTestTemplateFromData(plan, name, data){
+    const root = await ensurePlanRootHandle();
+    if(!root){
+      toast("Templates", "Grant folder access to save templates.", "warn");
+      return false;
+    }
     const templatesDir = await fsEnsureTestTemplatesDir(plan, true);
     if(!templatesDir){
       toast("Templates", "Plan folder not set or unavailable.", "warn");
@@ -3871,8 +3876,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
     }
     const payload = { data: normalizeTestData(data || {}) };
-    await fsWriteText(templatesDir, file, JSON.stringify(payload, null, 2), "application/json");
-    return true;
+    try{
+      await fsWriteText(templatesDir, file, JSON.stringify(payload, null, 2), "application/json");
+      logLine(`Template saved: ${file}`, "ok");
+      return true;
+    }catch(e){
+      logLine(`Template save failed: ${e.message || e}`, "warn");
+      toast("Templates", "Template save failed. Check folder permissions.", "warn");
+      return false;
+    }
   }
 
   async function deleteTestTemplate(plan, file){
