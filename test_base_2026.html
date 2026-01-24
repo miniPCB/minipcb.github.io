@@ -266,6 +266,7 @@
     .testRow.review-pending{ border-color: rgba(255,124,124,.35); background: rgba(255,124,124,.08); }
     .testRow.review-working{ border-color: rgba(255,211,124,.55); background: rgba(255,211,124,.12); }
     .testRow.review-done{ border-color: rgba(124,255,176,.40); background: rgba(124,255,176,.10); }
+    .testRow.modified{ border-color: rgba(124,255,176,.55); background: rgba(124,255,176,.10); }
     .testRow.dragging{ opacity:.55; }
     .testRow.dragover{ outline:2px dashed rgba(124,196,255,.55); outline-offset:-4px; }
     .testRow .top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
@@ -2371,13 +2372,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         wrap.innerHTML = `<div class="muted" style="padding:10px 2px;">No templates found.</div>`;
         return;
       }
+      const currentTest = state.currentTestTemplate ? currentTest() : null;
       for(const t of filtered){
         const row = document.createElement("div");
-        row.className = "testRow";
+        const isCurrent = state.currentTestTemplate?.file === t.file;
+        const isModified = !!(isCurrent && currentTest && currentTest.modified);
+        row.className = "testRow" + (isModified ? " modified" : "");
         row.innerHTML = `
           <div class="top">
             <div class="tno">${escapeHtml(t.file || "")}</div>
-            <div class="tag">Template</div>
+            <div class="tag ${isModified ? "dirty" : ""}">${isModified ? "Modified" : "Template"}</div>
           </div>
           <div class="tname">${escapeHtml(t.name)}</div>
         `;
