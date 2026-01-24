@@ -394,6 +394,32 @@
     .toast .t{ font-weight:750; }
     .toast .m{ margin-top:4px; color: var(--muted); }
 
+    .contextMenu{
+      position:fixed;
+      z-index: 9999;
+      min-width: 200px;
+      background: rgba(16,22,34,.98);
+      border:1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding:6px;
+      display:none;
+    }
+    .contextMenu button{
+      width:100%;
+      text-align:left;
+      border:none;
+      background:transparent;
+      color:var(--text);
+      font-size:12px;
+      padding:8px 10px;
+      border-radius:8px;
+      cursor:pointer;
+    }
+    .contextMenu button:hover{
+      background: rgba(124,196,255,.12);
+    }
+
     /* Modal */
     .modalOverlay{
       position:fixed; inset:0;
@@ -595,6 +621,7 @@
             <h3>Test List</h3>
             <div class="toolbarRow">
               <button class="btn mini primary" id="btnNewTest">New Test</button>
+              <button class="btn mini" id="btnManageTestTemplates">Manage Templates</button>
               <button class="btn mini danger" id="btnDeleteTest" disabled>Delete</button>
             </div>
           </div>
@@ -708,6 +735,8 @@
   <div class="t" id="toastTitle">—</div>
   <div class="m" id="toastMsg">—</div>
 </div>
+
+<div class="contextMenu" id="contextMenu"></div>
 
 <!-- MODAL -->
 <div class="modalOverlay" id="modalOverlay">
@@ -1196,20 +1225,8 @@
 
   async function fsListTestTemplates(plan){
     if(!plan) return [];
-    const entry = await fsFindPlanDirById(plan.id);
-    if(!entry) return [];
-    let testsDir = null;
-    try{
-      testsDir = await entry.dir.getDirectoryHandle("tests");
-    }catch{
-      return [];
-    }
-    let templatesDir = null;
-    try{
-      templatesDir = await testsDir.getDirectoryHandle("templates");
-    }catch{
-      return [];
-    }
+    const templatesDir = await fsEnsureTestTemplatesDir(plan, false);
+    if(!templatesDir) return [];
     const list = [];
     for await (const [name, handle] of templatesDir.entries()){
       if(handle.kind !== "file" || !name.toLowerCase().endsWith(".json")) continue;
@@ -1220,6 +1237,36 @@
       list.push({ id: name, name: title, file: name, data: testData });
     }
     return list.sort((a,b) => a.name.localeCompare(b.name));
+  }
+
+  async function fsEnsureTestTemplatesDir(plan, create){
+    if(!plan) return null;
+    const root = await ensurePlanRootHandle();
+    if(!root) return null;
+    let entry = await fsFindPlanDirById(plan.id);
+    if(!entry && create){
+      try{
+        await fsSavePlan(plan);
+      }catch{}
+      entry = await fsFindPlanDirById(plan.id);
+    }
+    if(!entry) return null;
+    let testsDir = null;
+    try{
+      testsDir = await entry.dir.getDirectoryHandle("tests", { create: !!create });
+    }catch{
+      return null;
+    }
+    try{
+      return await testsDir.getDirectoryHandle("templates", { create: !!create });
+    }catch{
+      return null;
+    }
+  }
+
+  function makeTestTemplateFileName(name){
+    const safe = safeFilePart(name || "template", "template");
+    return `${safe}.json`;
   }
 
   async function fsCopyDir(srcHandle, destHandle){
@@ -1670,6 +1717,34 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
     clearTimeout(state._toastTimer);
     state._toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
+  }
+
+  function hideContextMenu(){
+    const menu = $("contextMenu");
+    if(menu) menu.style.display = "none";
+  }
+
+  function showContextMenu(x, y, items){
+    const menu = $("contextMenu");
+    if(!menu) return;
+    menu.innerHTML = (items || []).map(it =>
+      `<button type="button" data-action="${escapeHtml(it.id)}">${escapeHtml(it.label)}</button>`
+    ).join("");
+    menu.style.display = "block";
+    const pad = 8;
+    const rect = menu.getBoundingClientRect();
+    const maxX = window.innerWidth - rect.width - pad;
+    const maxY = window.innerHeight - rect.height - pad;
+    menu.style.left = `${Math.max(pad, Math.min(x, maxX))}px`;
+    menu.style.top = `${Math.max(pad, Math.min(y, maxY))}px`;
+    menu.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-action");
+        const action = (items || []).find(it => it.id === id);
+        hideContextMenu();
+        if(action && typeof action.onClick === "function") action.onClick();
+      });
+    });
   }
 
   function logLine(msg, level="info"){
@@ -2325,6 +2400,28 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const dragId = e.dataTransfer.getData("text/plain");
         if(!dragId || dragId === t.id) return;
         reorderTests(dragId, t.id);
+      });
+      row.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const items = [
+          {
+            id: "save_template",
+            label: "Save as Test Template",
+            onClick: async () => {
+              if(!state.planRootHandle){
+                toast("Templates", "Set a Plan Folder to use test templates.", "warn");
+                return;
+              }
+              const name = prompt("Template name:", t.data?.test_name || "New Test Template");
+              if(name === null) return;
+              const ok = await createTestTemplateFromData(state.currentPlan, name, t.data);
+              if(ok) toast("Templates", "Template created.", "ok");
+              else toast("Templates", "Template creation failed.", "warn");
+            }
+          }
+        ];
+        showContextMenu(e.clientX, e.clientY, items);
       });
       row.querySelectorAll(".param-tag").forEach(tag => {
         tag.addEventListener("dblclick", (e) => {
@@ -3755,6 +3852,120 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     });
   }
 
+  async function createTestTemplateFromData(plan, name, data){
+    const templatesDir = await fsEnsureTestTemplatesDir(plan, true);
+    if(!templatesDir){
+      toast("Templates", "Plan folder not set or unavailable.", "warn");
+      return false;
+    }
+    let baseName = (name || "template").trim();
+    if(!baseName) baseName = "template";
+    let file = makeTestTemplateFileName(baseName);
+    let i = 2;
+    while(true){
+      try{
+        await templatesDir.getFileHandle(file);
+        file = makeTestTemplateFileName(`${baseName}_${i++}`);
+      }catch{
+        break;
+      }
+    }
+    const payload = { data: normalizeTestData(data || {}) };
+    await fsWriteText(templatesDir, file, JSON.stringify(payload, null, 2), "application/json");
+    return true;
+  }
+
+  async function deleteTestTemplate(plan, file){
+    const templatesDir = await fsEnsureTestTemplatesDir(plan, false);
+    if(!templatesDir) return false;
+    try{
+      await templatesDir.removeEntry(file);
+      return true;
+    }catch{
+      return false;
+    }
+  }
+
+  async function openManageTestTemplates(){
+    const plan = state.currentPlan;
+    if(!plan){
+      toast("Templates", "Open a plan first.", "warn");
+      return;
+    }
+    if(!state.planRootHandle){
+      toast("Templates", "Set a Plan Folder to use test templates.", "warn");
+      return;
+    }
+    const templates = await getAvailableTestTemplates(plan);
+    showModal("Manage Test Templates", (body, footer) => {
+      const list = templates.filter(t => t.id !== "__blank__");
+      const rows = list.map(t => `
+        <div class="item">
+          <div class="left">
+            <div class="name">${escapeHtml(t.name)}</div>
+            <div class="meta"><span class="tag">${escapeHtml(t.file)}</span></div>
+          </div>
+          <div class="actions">
+            <button class="btn mini danger" data-del="${escapeHtml(t.file)}">Delete</button>
+          </div>
+        </div>
+      `).join("");
+      body.innerHTML = `
+        <div class="toolbarRow" style="margin-bottom:10px;">
+          <button class="btn mini" id="tmplRefresh">Refresh</button>
+          <button class="btn mini primary" id="tmplCreateFromCurrent">Create From Current Test</button>
+          <button class="btn mini" id="tmplCreateBlank">Create Blank Template</button>
+        </div>
+        <div class="list" style="border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+          ${rows || `<div class="item"><div class="left"><div class="name">(No templates yet)</div></div></div>`}
+        </div>
+      `;
+      footer.innerHTML = `<button class="btn" id="tmplClose">Close</button>`;
+      $("tmplClose").onclick = hideModal;
+      $("tmplRefresh").onclick = () => { hideModal(); runAsync(openManageTestTemplates()); };
+      $("tmplCreateFromCurrent").onclick = async () => {
+        const test = currentTest();
+        if(!test){
+          toast("Templates", "Select a test first.", "warn");
+          return;
+        }
+        const name = prompt("Template name:", test.data?.test_name || "New Test Template");
+        if(name === null) return;
+        const ok = await createTestTemplateFromData(plan, name, test.data);
+        if(ok){
+          toast("Templates", "Template created.", "ok");
+          hideModal();
+          runAsync(openManageTestTemplates());
+        }
+      };
+      $("tmplCreateBlank").onclick = async () => {
+        const name = prompt("Template name:", "Blank Test Template");
+        if(name === null) return;
+        const ok = await createTestTemplateFromData(plan, name, {});
+        if(ok){
+          toast("Templates", "Template created.", "ok");
+          hideModal();
+          runAsync(openManageTestTemplates());
+        }
+      };
+      body.querySelectorAll("[data-del]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const file = btn.getAttribute("data-del");
+          if(!file) return;
+          if(!confirm(`Delete template ${file}?`)) return;
+          const ok = await deleteTestTemplate(plan, file);
+          if(ok){
+            toast("Templates", "Template deleted.", "warn");
+            hideModal();
+            runAsync(openManageTestTemplates());
+          }else{
+            toast("Templates", "Delete failed.", "warn");
+          }
+        });
+      });
+    });
+  }
+
   /* ---------- AI Key Dialog ---------- */
   const AI_SESSION_KEY = "tb26_ai_key_session";
   const AI_LOCAL_KEY = "tb26_ai_key_local";
@@ -5111,7 +5322,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("saveAllBtn").addEventListener("click", () => runAsync(saveAll()));
 
     $("testSearch").addEventListener("input", renderTestsList);
+    document.addEventListener("click", hideContextMenu);
+    document.addEventListener("scroll", hideContextMenu, true);
     $("btnNewTest").addEventListener("click", () => runAsync(newTest()));
+    $("btnManageTestTemplates").addEventListener("click", () => runAsync(openManageTestTemplates()));
     $("btnDeleteTest").addEventListener("click", deleteCurrentTest);
     $("btnSaveTest").addEventListener("click", () => runAsync(saveCurrentTest()));
     $("btnAddField").addEventListener("click", () => runAsync(addFieldFlow()));
