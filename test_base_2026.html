@@ -1908,7 +1908,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   body: JSON.stringify({
                     model,
                     input: [
-                      { role:"system", content:"Return STRICT JSON: {\"value\": \"...\"}. Value must be a plain string. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief." },
+                      { role:"system", content:"Return ONLY the field value text. No JSON, no extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief." },
                       { role:"user", content: JSON.stringify(payload, null, 2) }
                     ],
                     max_output_tokens: 120
@@ -1925,10 +1925,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   state.prefs.ai_review_debug = false;
                   savePrefs();
                 }
-                const parsed = safeParseJson(raw, "AI Review");
-                const val = parsed?.value;
-                if(typeof val === "string" && val.trim() && val.trim() !== String(t.data[field] ?? "").trim()){
-                  t.data[field] = val.trim();
+                let val = String(raw || "").trim();
+                if(val.startsWith("{")){
+                  const parsed = safeParseJson(val, "AI Review");
+                  if(typeof parsed?.value === "string") val = parsed.value.trim();
+                }
+                if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
+                  val = val.slice(1, -1).trim();
+                }
+                if(val && val !== String(t.data[field] ?? "").trim()){
+                  t.data[field] = val;
                   setFieldMaturity(t, field, 2);
                   t.modified = true;
                   if(!t._dirtyFields) t._dirtyFields = {};
