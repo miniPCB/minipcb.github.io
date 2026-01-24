@@ -820,6 +820,7 @@
       last_human_reviewed: "",
       notes: "",
       field_labels: {},
+      field_prompts: {},
       field_types: {}
     };
     if(ai && typeof ai === "object"){
@@ -838,6 +839,11 @@
           out.field_labels[k] = safeStringify(v);
         }
       }
+      if(ai.field_prompts && typeof ai.field_prompts === "object"){
+        for(const [k,v] of Object.entries(ai.field_prompts)){
+          out.field_prompts[k] = safeStringify(v);
+        }
+      }
       if(ai.field_types && typeof ai.field_types === "object"){
         for(const [k,v] of Object.entries(ai.field_types)){
           out.field_types[k] = safeStringify(v);
@@ -847,6 +853,7 @@
     const keys = Array.isArray(dataKeys) ? dataKeys : Object.keys(TEST_SCHEMA_DEFAULT);
     for(const k of keys){
       if(!(k in out.maturity)) out.maturity[k] = 0;
+      if(!(k in out.field_prompts)) out.field_prompts[k] = "";
     }
     out.maturity.last_ai_reviewed = Math.max(Number(out.maturity.last_ai_reviewed) || 0, 4);
     out.maturity.last_ai_review_model = Math.max(Number(out.maturity.last_ai_review_model) || 0, 4);
@@ -2328,6 +2335,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         test.data._ai.maturity[name] = 0;
         if(!test.data._ai.field_labels) test.data._ai.field_labels = {};
         test.data._ai.field_labels[name] = label || name;
+        if(!test.data._ai.field_prompts) test.data._ai.field_prompts = {};
+        test.data._ai.field_prompts[name] = "";
         if(!test.data._ai.field_types) test.data._ai.field_types = {};
         test.data._ai.field_types[name] = type;
         test.modified = true;
@@ -2349,6 +2358,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     showModal("Edit Field", (body, footer) => {
       const currentLabel = test.data?._ai?.field_labels?.[fieldKey] || fieldKey;
       const currentType = test.data?._ai?.field_types?.[fieldKey] || "text";
+      const currentPrompt = test.data?._ai?.field_prompts?.[fieldKey] || "";
       body.innerHTML = `
         <div class="label">Form Label</div>
         <input class="input" id="editFieldLabel" value="${escapeHtml(currentLabel)}" />
@@ -2361,6 +2371,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <option value="text">Text (single line)</option>
           <option value="textarea">Text (multi-line)</option>
         </select>
+        <div class="hr"></div>
+        <div class="label">Field Prompt (AI guidance)</div>
+        <textarea class="input" id="editFieldPrompt" spellcheck="false">${escapeHtml(currentPrompt)}</textarea>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelRenameField">Cancel</button>
@@ -2371,6 +2384,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const newLabel = $("editFieldLabel").value.trim();
         const newKey = $("editFieldKey").value.trim();
         const newType = $("editFieldType").value || "text";
+        const newPrompt = $("editFieldPrompt").value.trim();
         if(!newKey){ toast("Missing name", "Enter a data label.", "warn"); return; }
 
         const data = test.data || {};
@@ -2389,6 +2403,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!out._ai.field_labels) out._ai.field_labels = {};
         if(newLabel) out._ai.field_labels[newKey] = newLabel;
         else delete out._ai.field_labels[newKey];
+        if(!out._ai.field_prompts) out._ai.field_prompts = {};
+        if(newPrompt) out._ai.field_prompts[newKey] = newPrompt;
+        else delete out._ai.field_prompts[newKey];
 
         if(out._ai?.maturity && out._ai.maturity[fieldKey] != null){
           out._ai.maturity[newKey] = out._ai.maturity[fieldKey];
@@ -2403,6 +2420,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
         if(!out._ai.field_types) out._ai.field_types = {};
         out._ai.field_types[newKey] = newType;
+        if(out._ai?.field_prompts && out._ai.field_prompts[fieldKey] != null && newKey !== fieldKey){
+          out._ai.field_prompts[newKey] = out._ai.field_prompts[fieldKey];
+          delete out._ai.field_prompts[fieldKey];
+        }
         if(out._ai?.field_labels && out._ai.field_labels[fieldKey] != null && newKey !== fieldKey){
           out._ai.field_labels[newKey] = out._ai.field_labels[fieldKey];
           delete out._ai.field_labels[fieldKey];
@@ -3813,6 +3834,31 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_unable_adjust: "OOT High Unable to Adjust Conclusion",
               oot_high_next_step: "OOT High Next Step"
             },
+            field_prompts: {
+              test_name: "",
+              test_no: "",
+              uut_pn: "",
+              last_test_no: "",
+              test_type: "",
+              purpose: "",
+              scope: "",
+              setup: "",
+              procedure: "",
+              measurement: "",
+              parameter: "",
+              ll: "",
+              tv: "",
+              ul: "",
+              units: "",
+              in_tol_conclusion: "",
+              in_tol_next_step: "",
+              oot_low_conclusion: "",
+              oot_low_unable_adjust: "",
+              oot_low_next_step: "",
+              oot_high_conclusion: "",
+              oot_high_unable_adjust: "",
+              oot_high_next_step: ""
+            },
             field_types: {
               test_name: "text",
               test_no: "text",
@@ -3922,6 +3968,31 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_conclusion: "OOT High Conclusion",
               oot_high_unable_adjust: "OOT High Unable to Adjust Conclusion",
               oot_high_next_step: "OOT High Next Step"
+            },
+            field_prompts: {
+              test_name: "",
+              test_no: "",
+              uut_pn: "",
+              last_test_no: "",
+              test_type: "",
+              purpose: "",
+              scope: "",
+              setup: "",
+              procedure: "",
+              measurement: "",
+              parameter: "",
+              ll: "",
+              tv: "",
+              ul: "",
+              units: "",
+              in_tol_conclusion: "",
+              in_tol_next_step: "",
+              oot_low_conclusion: "",
+              oot_low_unable_adjust: "",
+              oot_low_next_step: "",
+              oot_high_conclusion: "",
+              oot_high_unable_adjust: "",
+              oot_high_next_step: ""
             },
             field_types: {
               test_name: "text",
@@ -4033,6 +4104,31 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_unable_adjust: "OOT High Unable to Adjust Conclusion",
               oot_high_next_step: "OOT High Next Step"
             },
+            field_prompts: {
+              test_name: "",
+              test_no: "",
+              uut_pn: "",
+              last_test_no: "",
+              test_type: "",
+              purpose: "",
+              scope: "",
+              setup: "",
+              procedure: "",
+              measurement: "",
+              parameter: "",
+              ll: "",
+              tv: "",
+              ul: "",
+              units: "",
+              in_tol_conclusion: "",
+              in_tol_next_step: "",
+              oot_low_conclusion: "",
+              oot_low_unable_adjust: "",
+              oot_low_next_step: "",
+              oot_high_conclusion: "",
+              oot_high_unable_adjust: "",
+              oot_high_next_step: ""
+            },
             field_types: {
               test_name: "text",
               test_no: "text",
@@ -4143,6 +4239,31 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_unable_adjust: "OOT High Unable to Adjust Conclusion",
               oot_high_next_step: "OOT High Next Step"
             },
+            field_prompts: {
+              test_name: "",
+              test_no: "",
+              uut_pn: "",
+              last_test_no: "",
+              test_type: "",
+              purpose: "",
+              scope: "",
+              setup: "",
+              procedure: "",
+              measurement: "",
+              parameter: "",
+              ll: "",
+              tv: "",
+              ul: "",
+              units: "",
+              in_tol_conclusion: "",
+              in_tol_next_step: "",
+              oot_low_conclusion: "",
+              oot_low_unable_adjust: "",
+              oot_low_next_step: "",
+              oot_high_conclusion: "",
+              oot_high_unable_adjust: "",
+              oot_high_next_step: ""
+            },
             field_types: {
               test_name: "text",
               test_no: "text",
@@ -4252,6 +4373,31 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_conclusion: "OOT High Conclusion",
               oot_high_unable_adjust: "OOT High Unable to Adjust Conclusion",
               oot_high_next_step: "OOT High Next Step"
+            },
+            field_prompts: {
+              test_name: "",
+              test_no: "",
+              uut_pn: "",
+              last_test_no: "",
+              test_type: "",
+              purpose: "",
+              scope: "",
+              setup: "",
+              procedure: "",
+              measurement: "",
+              parameter: "",
+              ll: "",
+              tv: "",
+              ul: "",
+              units: "",
+              in_tol_conclusion: "",
+              in_tol_next_step: "",
+              oot_low_conclusion: "",
+              oot_low_unable_adjust: "",
+              oot_low_next_step: "",
+              oot_high_conclusion: "",
+              oot_high_unable_adjust: "",
+              oot_high_next_step: ""
             },
             field_types: {
               test_name: "text",
