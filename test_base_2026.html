@@ -1043,6 +1043,8 @@
     try{
       const handle = await idbGet("planRoot");
       if(handle) state.planRootHandle = handle;
+      const path = await idbGet("planRootPath");
+      if(path) state.planRootPath = String(path);
     }catch{}
   }
 
@@ -1055,6 +1057,11 @@
       const handle = await window.showDirectoryPicker({ mode: "readwrite" });
       state.planRootHandle = handle;
       await idbSet("planRoot", handle);
+      const pathHint = prompt("Optional: paste the full plan folder path (display only).", state.planRootPath || "");
+      if(pathHint !== null){
+        state.planRootPath = pathHint.trim();
+        await idbSet("planRootPath", state.planRootPath);
+      }
       updatePlanRootUI();
       runAsync(renderLibrary());
       toast("Plan folder set", "Library root selected.", "ok");
@@ -1066,7 +1073,11 @@
   function updatePlanRootUI(){
     const text = $("planRootText");
     if(text){
-      text.textContent = state.planRootHandle ? (state.planRootHandle.name || "Selected folder") : "Not set";
+      if(state.planRootHandle){
+        text.textContent = state.planRootPath || state.planRootHandle.name || "Selected folder";
+      }else{
+        text.textContent = "Not set";
+      }
     }
     const setBtn = $("btnSetPlanRoot");
     if(setBtn){
