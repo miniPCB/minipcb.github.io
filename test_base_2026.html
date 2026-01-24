@@ -1749,6 +1749,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         test_name: t.data.test_name || "",
         fields: fields.filter(f => f !== "uut_pn"),
         current_values: fields.reduce((acc, k) => (acc[k] = t.data[k] ?? "", acc), {}),
+        field_prompts: fields.reduce((acc, k) => (acc[k] = t.data?._ai?.field_prompts?.[k] || "", acc), {}),
         maturity: fields.reduce((acc, k) => (acc[k] = getFieldMaturity(t, k), acc), {}),
         authoritative_values: Object.keys(anchors).reduce((acc, k) => (acc[k] = anchors[k].value, acc), {}),
         context: t.data
@@ -1768,7 +1769,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           body: JSON.stringify({
             model,
             input: [
-              { role:"system", content:"Return STRICT JSON object mapping field -> improved_value for ALL fields provided. Do NOT omit keys; if no improvement, repeat the current value. Values must be plain strings, not critiques. Use authoritative_values to keep consistency across tests." },
+              { role:"system", content:"Return STRICT JSON object mapping field -> improved_value for ALL fields provided. Do NOT omit keys; if no improvement, repeat the current value. Values must be plain strings, not critiques. Use authoritative_values to keep consistency across tests. Use field_prompts[field] as guidance." },
               { role:"user", content: JSON.stringify(payload, null, 2) }
             ],
             max_output_tokens: 800
@@ -2313,6 +2314,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <option value="text">Text (single line)</option>
           <option value="textarea">Text (multi-line)</option>
         </select>
+        <div class="hr"></div>
+        <div class="label">Field Prompt (AI guidance)</div>
+        <textarea class="input" id="newFieldPrompt" spellcheck="false"></textarea>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelAddField">Cancel</button>
@@ -2322,6 +2326,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("confirmAddField").onclick = () => {
         const label = $("newFieldLabel").value.trim();
         const name = $("newFieldName").value.trim();
+        const prompt = $("newFieldPrompt").value.trim();
         if(!name){ toast("Missing name", "Enter a data label.", "warn"); return; }
         if(test.data[name] !== undefined){
           toast("Duplicate field", "That field already exists.", "warn");
@@ -2336,7 +2341,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!test.data._ai.field_labels) test.data._ai.field_labels = {};
         test.data._ai.field_labels[name] = label || name;
         if(!test.data._ai.field_prompts) test.data._ai.field_prompts = {};
-        test.data._ai.field_prompts[name] = "";
+        test.data._ai.field_prompts[name] = prompt;
         if(!test.data._ai.field_types) test.data._ai.field_types = {};
         test.data._ai.field_types[name] = type;
         test.modified = true;
@@ -3461,6 +3466,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         test_name: test.data.test_name || "",
         field,
         current_value: test.data[field] || "",
+        field_prompt: test.data?._ai?.field_prompts?.[field] || "",
         context: test.data
       };
       const model = state.prefs.ai_model || "gpt-4.1-mini";
@@ -3469,8 +3475,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       async function callSuggestion(forceDifferent){
         const isLimitField = ["ll","tv","ul","units"].includes(field);
         const system = forceDifferent
-          ? "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays)."
-          : "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays).";
+          ? "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance."
+          : "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance.";
         const limitsNote = isLimitField
           ? "For ll/tv/ul/units, return measurement values only (e.g., numeric limits or a unit token). Do NOT return explanations or JSON fragments."
           : "";
