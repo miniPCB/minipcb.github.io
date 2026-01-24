@@ -747,6 +747,10 @@
     tv: "N/A",
     ul: "N/A",
     units: "N/A",
+    param1_label: "Units",
+    param1_value: "units",
+    param2_label: "Target Value",
+    param2_value: "tv",
     // dependency-ish fields (wire these into flowchart later)
     in_tol_conclusion: "",
     in_tol_next_step: "",
@@ -774,6 +778,10 @@
     tv: "Target Value (tv)",
     ul: "Upper Limit (ul)",
     units: "Units",
+    param1_label: "Param 1 Label",
+    param1_value: "Param 1 Value",
+    param2_label: "Param 2 Label",
+    param2_value: "Param 2 Value",
     in_tol_conclusion: "In-Tolerance Conclusion",
     in_tol_next_step: "In-Tolerance Next Step",
     oot_low_conclusion: "OOT Low Conclusion",
@@ -800,6 +808,10 @@
     tv: "Enter the target value or N/A.",
     ul: "Enter the upper limit value or N/A.",
     units: "Enter measurement units (e.g., V, A, W) or N/A.",
+    param1_label: "Enter the label for Parameter 1 (e.g., Units).",
+    param1_value: "Select which field supplies Parameter 1's value.",
+    param2_label: "Enter the label for Parameter 2 (e.g., Target Value).",
+    param2_value: "Select which field supplies Parameter 2's value.",
     in_tol_conclusion: "Describe pass criteria and expected conclusion when in tolerance.",
     in_tol_next_step: "Specify the next test number or END PASS.",
     oot_low_conclusion: "Describe failure criteria for low out-of-tolerance.",
@@ -1562,12 +1574,18 @@
 - **Total Tests:** ${tests.length}
 
 ## Test List
-| Order | test_no | test_name | test_type |
-|------:|--------:|-----------|-----------|
+| Order | test_no | test_name | test_type | Param 1 | Param 2 |
+|------:|--------:|-----------|-----------|---------|---------|
 ${tests.map((t, idx) => {
   const d = t.data || {};
   const esc = (x) => String(x ?? "").replace(/\|/g, "\\|");
-  return `| ${idx+1} | ${esc(d.test_no)} | ${esc(d.test_name)} | ${esc(d.test_type)} |`;
+  const p1Label = d.param1_label || "Units";
+  const p1Key = d.param1_value || "units";
+  const p1Val = d[p1Key] ?? "N/A";
+  const p2Label = d.param2_label || "Target Value";
+  const p2Key = d.param2_value || "tv";
+  const p2Val = d[p2Key] ?? "N/A";
+  return `| ${idx+1} | ${esc(d.test_no)} | ${esc(d.test_name)} | ${esc(d.test_type)} | ${esc(`${p1Label}: ${p1Val}`)} | ${esc(`${p2Label}: ${p2Val}`)} |`;
 }).join("\n")}
 
 ## Notes
@@ -2229,8 +2247,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <div class="tname">${escapeHtml(name)}</div>
         <div class="sub">
           <span class="tag">${escapeHtml(type)}</span>
-          <span class="tag">${escapeHtml(String(d.units || "N/A"))}</span>
-          <span class="tag">${escapeHtml(String(d.tv || "N/A"))}</span>
+          <span class="tag">${escapeHtml(String(d.param1_label || "Units"))}: ${escapeHtml(String(d[d.param1_value || "units"] || "N/A"))}</span>
+          <span class="tag">${escapeHtml(String(d.param2_label || "Target Value"))}: ${escapeHtml(String(d[d.param2_value || "tv"] || "N/A"))}</span>
         </div>
       `;
       row.addEventListener("click", () => {
@@ -2353,28 +2371,43 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
 
       const input = document.createElement(isTextArea ? "textarea" : "input");
-      input.className = "input";
-      if(!isTextArea) input.type = "text";
-      input.value = (test.data[k] ?? "");
-      input.setAttribute("data-field", k);
+      const isParamValue = (k === "param1_value" || k === "param2_value");
+      let control = input;
+      if(isParamValue){
+        const select = document.createElement("select");
+        select.className = "select";
+        const keysForValues = getFieldKeys(test).filter(key =>
+          !["_ai","param1_label","param1_value","param2_label","param2_value"].includes(key)
+        );
+        select.innerHTML = keysForValues.map(key => {
+          const lbl = test.data?._ai?.field_labels?.[key] || key;
+          return `<option value="${escapeHtml(key)}">${escapeHtml(lbl)}</option>`;
+        }).join("");
+        control = select;
+      }else{
+        control.className = "input";
+        if(!isTextArea) control.type = "text";
+      }
+      control.value = (test.data[k] ?? "");
+      control.setAttribute("data-field", k);
 
         const s = getSuggestStatus(test.id, k);
         if(s) input.classList.add(`ai-${s}`);
-        if(test._dirtyFields?.[k]) input.classList.add("dirty-field");
+        if(test._dirtyFields?.[k]) control.classList.add("dirty-field");
 
-        input.addEventListener("input", () => {
-          test.data[k] = input.value;
+        control.addEventListener("input", () => {
+          test.data[k] = control.value;
           test.modified = true;
           if(!test._dirtyFields) test._dirtyFields = {};
           test._dirtyFields[k] = true;
-          input.classList.add("dirty-field");
+          control.classList.add("dirty-field");
           $("dirtyHint").style.display = "";
           setSuggestStatus(test.id, k, "");
           setFieldMaturity(test, k, 3);
           if(maturityTag) maturityTag.textContent = "M3";
           renderTestsList();
         });
-      input.addEventListener("focus", () => {
+      control.addEventListener("focus", () => {
         state.focusField = k;
       });
 
@@ -2387,7 +2420,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
 
       cell.appendChild(head);
-      cell.appendChild(input);
+      cell.appendChild(control);
       grid.appendChild(cell);
       }
 
@@ -3937,6 +3970,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           tv: "N/A",
           ul: "N/A",
           units: "N/A",
+          param1_label: "Units",
+          param1_value: "units",
+          param2_label: "Target Value",
+          param2_value: "tv",
           in_tol_conclusion: "The unit passes all visual inspection criteria with no signs of damage, contamination, corrosion, overheating, missing or incorrect parts, loose hardware, or workmanship defects; all required labels and markings are present, accurate, and legible. Result: PASS.",
           in_tol_next_step: "002",
           oot_low_conclusion: "Visual inspection identified one or more nonconformities against acceptance criteria. Result: FAIL (OOT).",
@@ -3995,6 +4032,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Target Value (tv)",
               ul: "Upper Limit (ul)",
               units: "Units",
+              param1_label: "Param 1 Label",
+              param1_value: "Param 1 Value",
+              param2_label: "Param 2 Label",
+              param2_value: "Param 2 Value",
               in_tol_conclusion: "In-Tolerance Conclusion",
               in_tol_next_step: "In-Tolerance Next Step",
               oot_low_conclusion: "OOT Low Conclusion",
@@ -4020,6 +4061,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Enter the target value or N/A.",
               ul: "Enter the upper limit value or N/A.",
               units: "Enter measurement units (e.g., V, A, W) or N/A.",
+              param1_label: "Enter the label for Parameter 1 (e.g., Units).",
+              param1_value: "Select which field supplies Parameter 1's value.",
+              param2_label: "Enter the label for Parameter 2 (e.g., Target Value).",
+              param2_value: "Select which field supplies Parameter 2's value.",
               in_tol_conclusion: "Describe pass criteria and expected conclusion when in tolerance.",
               in_tol_next_step: "Specify the next test number or END PASS.",
               oot_low_conclusion: "Describe failure criteria for low out-of-tolerance.",
@@ -4045,6 +4090,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "text",
               ul: "text",
               units: "text",
+              param1_label: "text",
+              param1_value: "text",
+              param2_label: "text",
+              param2_value: "text",
               in_tol_conclusion: "text",
               in_tol_next_step: "text",
               oot_low_conclusion: "text",
@@ -4072,6 +4121,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           tv: "1k",
           ul: "N/A",
           units: "Ω",
+          param1_label: "Units",
+          param1_value: "units",
+          param2_label: "Target Value",
+          param2_value: "tv",
           in_tol_conclusion: "All required functional checks and measurements conform to the specified acceptance criteria; the unit under test passes this test.",
           in_tol_next_step: "003",
           oot_low_conclusion: "At least one required measurement is below the specified lower limit; the UUT does not meet acceptance criteria and is nonconforming.",
@@ -4130,6 +4183,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Target Value (tv)",
               ul: "Upper Limit (ul)",
               units: "Units",
+              param1_label: "Param 1 Label",
+              param1_value: "Param 1 Value",
+              param2_label: "Param 2 Label",
+              param2_value: "Param 2 Value",
               in_tol_conclusion: "In-Tolerance Conclusion",
               in_tol_next_step: "In-Tolerance Next Step",
               oot_low_conclusion: "OOT Low Conclusion",
@@ -4155,6 +4212,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Enter the target value or N/A.",
               ul: "Enter the upper limit value or N/A.",
               units: "Enter measurement units (e.g., V, A, W) or N/A.",
+              param1_label: "Enter the label for Parameter 1 (e.g., Units).",
+              param1_value: "Select which field supplies Parameter 1's value.",
+              param2_label: "Enter the label for Parameter 2 (e.g., Target Value).",
+              param2_value: "Select which field supplies Parameter 2's value.",
               in_tol_conclusion: "Describe pass criteria and expected conclusion when in tolerance.",
               in_tol_next_step: "Specify the next test number or END PASS.",
               oot_low_conclusion: "Describe failure criteria for low out-of-tolerance.",
@@ -4180,6 +4241,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "text",
               ul: "text",
               units: "text",
+              param1_label: "text",
+              param1_value: "text",
+              param2_label: "text",
+              param2_value: "text",
               in_tol_conclusion: "text",
               in_tol_next_step: "text",
               oot_low_conclusion: "text",
@@ -4207,6 +4272,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           tv: "5.0",
           ul: "5.2",
           units: "V",
+          param1_label: "Units",
+          param1_value: "units",
+          param2_label: "Target Value",
+          param2_value: "tv",
           in_tol_conclusion: "All output voltage measurements are within specified limits with no abnormal operation; the UUT passes this test step.",
           in_tol_next_step: "004",
           oot_low_conclusion: "One or more output voltage measurements fall below the specified lower limit and/or functional requirements are not satisfied; the UUT fails this test step (OOT Low).",
@@ -4265,6 +4334,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Target Value (tv)",
               ul: "Upper Limit (ul)",
               units: "Units",
+              param1_label: "Param 1 Label",
+              param1_value: "Param 1 Value",
+              param2_label: "Param 2 Label",
+              param2_value: "Param 2 Value",
               in_tol_conclusion: "In-Tolerance Conclusion",
               in_tol_next_step: "In-Tolerance Next Step",
               oot_low_conclusion: "OOT Low Conclusion",
@@ -4290,6 +4363,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Enter the target value or N/A.",
               ul: "Enter the upper limit value or N/A.",
               units: "Enter measurement units (e.g., V, A, W) or N/A.",
+              param1_label: "Enter the label for Parameter 1 (e.g., Units).",
+              param1_value: "Select which field supplies Parameter 1's value.",
+              param2_label: "Enter the label for Parameter 2 (e.g., Target Value).",
+              param2_value: "Select which field supplies Parameter 2's value.",
               in_tol_conclusion: "Describe pass criteria and expected conclusion when in tolerance.",
               in_tol_next_step: "Specify the next test number or END PASS.",
               oot_low_conclusion: "Describe failure criteria for low out-of-tolerance.",
@@ -4315,6 +4392,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "text",
               ul: "text",
               units: "text",
+              param1_label: "text",
+              param1_value: "text",
+              param2_label: "text",
+              param2_value: "text",
               in_tol_conclusion: "text",
               in_tol_next_step: "text",
               oot_low_conclusion: "text",
@@ -4342,6 +4423,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           tv: "3.0",
           ul: "3.5",
           units: "W",
+          param1_label: "Units",
+          param1_value: "units",
+          param2_label: "Target Value",
+          param2_value: "tv",
           in_tol_conclusion: "All required measurements meet specified limits; the Unit Under Test passes Test 004.",
           in_tol_next_step: "005",
           oot_low_conclusion: "One or more required measurements fall below the specified lower limit (OOT-LOW); the Unit Under Test fails Test 004.",
@@ -4400,6 +4485,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Target Value (tv)",
               ul: "Upper Limit (ul)",
               units: "Units",
+              param1_label: "Param 1 Label",
+              param1_value: "Param 1 Value",
+              param2_label: "Param 2 Label",
+              param2_value: "Param 2 Value",
               in_tol_conclusion: "In-Tolerance Conclusion",
               in_tol_next_step: "In-Tolerance Next Step",
               oot_low_conclusion: "OOT Low Conclusion",
@@ -4425,6 +4514,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Enter the target value or N/A.",
               ul: "Enter the upper limit value or N/A.",
               units: "Enter measurement units (e.g., V, A, W) or N/A.",
+              param1_label: "Enter the label for Parameter 1 (e.g., Units).",
+              param1_value: "Select which field supplies Parameter 1's value.",
+              param2_label: "Enter the label for Parameter 2 (e.g., Target Value).",
+              param2_value: "Select which field supplies Parameter 2's value.",
               in_tol_conclusion: "Describe pass criteria and expected conclusion when in tolerance.",
               in_tol_next_step: "Specify the next test number or END PASS.",
               oot_low_conclusion: "Describe failure criteria for low out-of-tolerance.",
@@ -4450,6 +4543,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "text",
               ul: "text",
               units: "text",
+              param1_label: "text",
+              param1_value: "text",
+              param2_label: "text",
+              param2_value: "text",
               in_tol_conclusion: "text",
               in_tol_next_step: "text",
               oot_low_conclusion: "text",
@@ -4477,6 +4574,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           tv: "2.5",
           ul: "3.0",
           units: "W",
+          param1_label: "Units",
+          param1_value: "units",
+          param2_label: "Target Value",
+          param2_value: "tv",
           in_tol_conclusion: "All output power measurements are within specified limits and conform to acceptance criteria; the UUT passes the test.",
           in_tol_next_step: "END PASS",
           oot_low_conclusion: "One or more measured parameters fall below specified lower limits, indicating the UUT does not meet requirements; test result is FAIL (OOT Low).",
@@ -4535,6 +4636,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Target Value (tv)",
               ul: "Upper Limit (ul)",
               units: "Units",
+              param1_label: "Param 1 Label",
+              param1_value: "Param 1 Value",
+              param2_label: "Param 2 Label",
+              param2_value: "Param 2 Value",
               in_tol_conclusion: "In-Tolerance Conclusion",
               in_tol_next_step: "In-Tolerance Next Step",
               oot_low_conclusion: "OOT Low Conclusion",
@@ -4560,6 +4665,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "Enter the target value or N/A.",
               ul: "Enter the upper limit value or N/A.",
               units: "Enter measurement units (e.g., V, A, W) or N/A.",
+              param1_label: "Enter the label for Parameter 1 (e.g., Units).",
+              param1_value: "Select which field supplies Parameter 1's value.",
+              param2_label: "Enter the label for Parameter 2 (e.g., Target Value).",
+              param2_value: "Select which field supplies Parameter 2's value.",
               in_tol_conclusion: "Describe pass criteria and expected conclusion when in tolerance.",
               in_tol_next_step: "Specify the next test number or END PASS.",
               oot_low_conclusion: "Describe failure criteria for low out-of-tolerance.",
@@ -4585,6 +4694,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               tv: "text",
               ul: "text",
               units: "text",
+              param1_label: "text",
+              param1_value: "text",
+              param2_label: "text",
+              param2_value: "text",
               in_tol_conclusion: "text",
               in_tol_next_step: "text",
               oot_low_conclusion: "text",
