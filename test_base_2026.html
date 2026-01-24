@@ -1827,7 +1827,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           body: JSON.stringify({
             model,
             input: [
-              { role:"system", content:"Return STRICT JSON object mapping field -> improved_value for ALL fields provided. Do NOT omit keys; if no improvement, repeat the current value. Values must be plain strings, not critiques. Use authoritative_values to keep consistency across tests. Use field_prompts[field] as guidance." },
+              { role:"system", content:"Return STRICT JSON object mapping field -> improved_value for ALL fields provided. Do NOT omit keys; if no improvement, repeat the current value. Values must be plain strings, not critiques. Use authoritative_values to keep consistency across tests. Use field_prompts[field] as guidance. If current_values[field] contains TODO or Auto-filled text, replace it with improved content." },
               { role:"user", content: JSON.stringify(payload, null, 2) }
             ],
             max_output_tokens: 800
@@ -3533,8 +3533,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       async function callSuggestion(forceDifferent){
         const isLimitField = ["ll","tv","ul","units"].includes(field);
         const system = forceDifferent
-          ? "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance."
-          : "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance.";
+          ? "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance. If current_value contains TODO or Auto-filled text, replace it with improved content."
+          : "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance. If current_value contains TODO or Auto-filled text, replace it with improved content.";
         const limitsNote = isLimitField
           ? "For ll/tv/ul/units, return measurement values only (e.g., numeric limits or a unit token). Do NOT return explanations or JSON fragments."
           : "";
