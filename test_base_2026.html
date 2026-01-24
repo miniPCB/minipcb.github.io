@@ -1243,12 +1243,23 @@
     if(!plan) return null;
     const root = await ensurePlanRootHandle();
     if(!root) return null;
-    let entry = await fsFindPlanDirById(plan.id);
-    if(!entry && create){
-      try{
-        await fsSavePlan(plan);
-      }catch{}
+    let entry = null;
+    if(state.currentTemplateId){
+      entry = await fsFindTemplateDirById(state.currentTemplateId);
+      if(!entry && create){
+        try{
+          await fsSaveTemplate(plan);
+        }catch{}
+        entry = await fsFindTemplateDirById(state.currentTemplateId);
+      }
+    }else{
       entry = await fsFindPlanDirById(plan.id);
+      if(!entry && create){
+        try{
+          await fsSavePlan(plan);
+        }catch{}
+        entry = await fsFindPlanDirById(plan.id);
+      }
     }
     if(!entry) return null;
     let testsDir = null;
@@ -3878,7 +3889,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const payload = { data: normalizeTestData(data || {}) };
     try{
       await fsWriteText(templatesDir, file, JSON.stringify(payload, null, 2), "application/json");
-      logLine(`Template saved: ${file}`, "ok");
+      const location = state.currentTemplateId ? "template/tests/templates" : "plan/tests/templates";
+      logLine(`Template saved: ${file} (${location})`, "ok");
       return true;
     }catch(e){
       logLine(`Template save failed: ${e.message || e}`, "warn");
@@ -3922,12 +3934,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           </div>
         </div>
       `).join("");
+      const loc = state.currentTemplateId ? "template/tests/templates" : "plan/tests/templates";
       body.innerHTML = `
         <div class="toolbarRow" style="margin-bottom:10px;">
           <button class="btn mini" id="tmplRefresh">Refresh</button>
           <button class="btn mini primary" id="tmplCreateFromCurrent">Create From Current Test</button>
           <button class="btn mini" id="tmplCreateBlank">Create Blank Template</button>
         </div>
+        <div class="hint" style="margin-bottom:10px;">Saved in ${escapeHtml(loc)}.</div>
         <div class="list" style="border:1px solid var(--border); border-radius:12px; overflow:hidden;">
           ${rows || `<div class="item"><div class="left"><div class="name">(No templates yet)</div></div></div>`}
         </div>
