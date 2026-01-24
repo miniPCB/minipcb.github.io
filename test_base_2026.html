@@ -2491,7 +2491,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(state.currentTestTemplate){
       $("editorSub").textContent = "";
       if(tmplSub){
-        tmplSub.textContent = `Template: ${state.currentTestTemplate.name}`;
+        const tname = String(state.currentTestTemplate.name || "").trim();
+        tmplSub.textContent = /^todo:/i.test(tname) ? "Template editing" : `Template: ${tname}`;
         tmplSub.style.display = "";
       }
     }else{
@@ -2499,6 +2500,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(tmplSub) tmplSub.style.display = "none";
     }
     $("dirtyHint").style.display = test.modified ? "" : "none";
+    const saveBtn = $("btnSaveTest");
+    if(saveBtn) saveBtn.textContent = state.currentTestTemplate ? "Save Template" : "Save Test";
 
     const fields = getFieldKeys(test);
     for(const k of fields){
@@ -3509,22 +3512,24 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     test.data._ai.last_human_reviewed = nowIsoTimestamp();
 
     // required enforcement (never blocks)
-    const missing = emptyFields(test.data);
-    if(missing.length){
-      if(state.prefs.fallback_on_save === "prompt"){
-        const ok = confirm(
-          `Missing required fields:\n- ${missing.join("\n- ")}\n\nAI is unavailable (skeleton). Auto-fill placeholders and save?`
-        );
-        if(!ok){
-          logLine("Save canceled by user (prompt).", "warn");
-          toast("Canceled", "Save canceled.", "warn");
-          return;
+    if(!state.currentTestTemplate){
+      const missing = emptyFields(test.data);
+      if(missing.length){
+        if(state.prefs.fallback_on_save === "prompt"){
+          const ok = confirm(
+            `Missing required fields:\n- ${missing.join("\n- ")}\n\nAI is unavailable (skeleton). Auto-fill placeholders and save?`
+          );
+          if(!ok){
+            logLine("Save canceled by user (prompt).", "warn");
+            toast("Canceled", "Save canceled.", "warn");
+            return;
+          }
         }
-      }
-      const changed = applyFallback(test.data, missing);
-      if(changed.length){
-        logLine(`Filled placeholders: ${changed.join(", ")}`, "warn");
-        toast("Filled placeholders", `Auto-filled: ${changed.join(", ")}`, "warn");
+        const changed = applyFallback(test.data, missing);
+        if(changed.length){
+          logLine(`Filled placeholders: ${changed.join(", ")}`, "warn");
+          toast("Filled placeholders", `Auto-filled: ${changed.join(", ")}`, "warn");
+        }
       }
     }
 
