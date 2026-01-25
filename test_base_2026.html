@@ -3320,6 +3320,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   async function renamePlanFlow(planId){
     const base = state.plansCache.find(p => p.id === planId);
     if(!base) return;
+    const plan = await Store.loadPlan(planId).catch(() => null);
+    const goalVal = plan?.goal ?? base.goal ?? "";
+    const scopeVal = plan?.scope ?? base.scope ?? "";
 
     showModal("Rename Plan", (body, footer) => {
       body.innerHTML = `
@@ -3332,13 +3335,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <div class="row" style="margin-top:8px;">
           <div>
             <div class="label">Plan Goal</div>
-            <input class="input" id="renamePlanGoal" value="${escapeHtml(base.goal || "")}" />
+            <input class="input" id="renamePlanGoal" value="${escapeHtml(goalVal)}" />
           </div>
         </div>
         <div class="row" style="margin-top:8px;">
           <div>
             <div class="label">Plan Scope</div>
-            <textarea class="input" id="renamePlanScope" rows="3">${escapeHtml(base.scope || "")}</textarea>
+            <textarea class="input" id="renamePlanScope" rows="3">${escapeHtml(scopeVal)}</textarea>
           </div>
         </div>
       `;
@@ -3351,24 +3354,24 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const newName = $("renamePlanName").value.trim();
         if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
 
-        const plan = await Store.loadPlan(planId);
-        const oldNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
-        plan.name = newName;
-        plan.slug = slugifyPlanName(newName);
-        plan.goal = $("renamePlanGoal").value.trim();
-        plan.scope = $("renamePlanScope").value.trim();
-        plan.userNotes = oldNotes;
+        const live = await Store.loadPlan(planId);
+        const oldNotes = live.userNotes ?? extractUserNotes(live.markdown || "");
+        live.name = newName;
+        live.slug = slugifyPlanName(newName);
+        live.goal = $("renamePlanGoal").value.trim();
+        live.scope = $("renamePlanScope").value.trim();
+        live.userNotes = oldNotes;
         if(useFileSystemStore()){
           try{
-            const desiredFolder = makePlanFolderName(plan);
-            const newFolder = await fsRenamePlanFolder(plan, desiredFolder);
-            if(newFolder) plan.folder = newFolder;
+            const desiredFolder = makePlanFolderName(live);
+            const newFolder = await fsRenamePlanFolder(live, desiredFolder);
+            if(newFolder) live.folder = newFolder;
           }catch(e){
             logLine(`Rename folder failed (FS). ${e.message || e}`, "warn");
           }
         }
-        generatePlanMarkdown(plan);
-        await Store.savePlan(plan);
+        generatePlanMarkdown(live);
+        await Store.savePlan(live);
 
         hideModal();
         logLine(`Renamed plan: ${newName}`, "ok");
