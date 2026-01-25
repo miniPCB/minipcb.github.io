@@ -1042,6 +1042,7 @@
     ai_review_pause_ms: 300,          // pause between AI review field calls
     ai_review_concurrency: 1,         // concurrent AI review calls
     ai_chat_permission: 1,            // 0=search, 1=revise, 2=create/delete
+    ai_maturity_clicks: 4,            // 2=inline select, 4=modal
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -1054,6 +1055,7 @@
         prefs.ai_model = DEFAULT_PREFS.ai_model;
       }
       prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
+      prefs.ai_maturity_clicks = normalizeMaturityClicks(prefs.ai_maturity_clicks ?? DEFAULT_PREFS.ai_maturity_clicks);
       return prefs;
     }catch{
       return { ...DEFAULT_PREFS };
@@ -1092,6 +1094,11 @@
   function aiChatPermissionLabel(val){
     const lvl = normalizeAiChatPermission(val);
     return AI_CHAT_PERMISSION_LEVELS.find(l => l.value === lvl)?.label || "Revise/Edit";
+  }
+
+  function normalizeMaturityClicks(val){
+    const num = Number(val);
+    return num === 2 ? 2 : 4;
   }
 
   function nextTestNo(plan){
@@ -2438,6 +2445,38 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     });
   }
 
+  function openMaturityQuick(test, field, tagEl){
+    if(!test || !tagEl) return;
+    if(tagEl.querySelector("select")) return;
+    const current = getFieldMaturity(test, field);
+    const select = document.createElement("select");
+    select.className = "select mini";
+    select.innerHTML = `
+      <option value="0">M0</option>
+      <option value="1">M1</option>
+      <option value="2">M2</option>
+      <option value="3">M3</option>
+      <option value="4">M4</option>
+    `;
+    select.value = String(current);
+    tagEl.textContent = "";
+    tagEl.appendChild(select);
+    select.focus();
+    const applyVal = (val) => {
+      const num = Number(val);
+      if(!test.data._ai) test.data._ai = { maturity:{} };
+      if(!test.data._ai.maturity) test.data._ai.maturity = {};
+      test.data._ai.maturity[field] = Number.isFinite(num) ? num : 0;
+      test.modified = true;
+      $("dirtyHint").style.display = "";
+      tagEl.textContent = `M${Number.isFinite(num) ? num : 0}`;
+    };
+    select.addEventListener("change", () => applyVal(select.value));
+    select.addEventListener("blur", () => {
+      if(tagEl.textContent.trim() === "") tagEl.textContent = `M${current}`;
+    });
+  }
+
   function downloadText(filename, text, mime="text/plain"){
     const blob = new Blob([text], {type: mime});
     const url = URL.createObjectURL(blob);
@@ -2939,7 +2978,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       grid.querySelectorAll("[data-maturity]").forEach(el => {
         el.addEventListener("click", () => {
           const field = el.getAttribute("data-maturity");
-          openMaturityDialog(test, field);
+          const clicks = normalizeMaturityClicks(state.prefs.ai_maturity_clicks ?? 4);
+          if(clicks === 2){
+            openMaturityQuick(test, field, el);
+          }else{
+            openMaturityDialog(test, field);
+          }
         });
       });
     }
@@ -4282,6 +4326,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <option value="2">M2</option>
             </select>
           </div>
+          <div>
+            <div class="label">AI Maturity Level Process</div>
+            <select class="select" id="prefMaturityClicks">
+              <option value="2">2 Click</option>
+              <option value="4">4 Click</option>
+            </select>
+          </div>
           <div id="prefAdvanced" style="display:none;">
             <div class="label">AI Review Debug</div>
             <select class="select" id="prefAiReviewDebug">
@@ -4342,6 +4393,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
       if(modelSelect) modelSelect.value = currentModel;
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
+      const prefMaturityClicks = $("prefMaturityClicks");
+      if(prefMaturityClicks) prefMaturityClicks.value = String(state.prefs.ai_maturity_clicks ?? 4);
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -4406,6 +4459,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.ai_enabled = $("prefAiEnabled").value === "true";
         state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
+        state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
