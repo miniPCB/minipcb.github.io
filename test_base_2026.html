@@ -622,7 +622,6 @@
             <div class="toolbarRow">
               <button class="btn mini primary" id="btnNewTest">New Test</button>
               <button class="btn mini" id="btnManageTestTemplates">Templates</button>
-              <button class="btn mini danger" id="btnDeleteTest" disabled>Delete</button>
             </div>
           </div>
           <div class="panelBody">
@@ -2341,7 +2340,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       updateAiUI();
     $("btnSaveTest").disabled = !state.currentTestId;
-    $("btnDeleteTest").disabled = !state.currentTestId;
+    const delBtn = $("btnDeleteTest");
+    if(delBtn) delBtn.disabled = !state.currentTestId;
     $("btnAddField").disabled = !state.currentTestId;
 
     renderTestsList();
@@ -2481,6 +2481,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               if(ok) toast("Templates", "Template created.", "ok");
               else toast("Templates", "Template creation failed.", "warn");
             }
+          },
+          {
+            id: "duplicate_below",
+            label: "Duplicate (insert below)",
+            onClick: () => duplicateTestBelow(t.id)
+          },
+          {
+            id: "delete_test",
+            label: "Delete",
+            onClick: () => deleteTestById(t.id)
           }
         ];
         showContextMenu(e.clientX, e.clientY, items);
@@ -3507,10 +3517,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     renderEditor();
   }
 
-  function deleteCurrentTest(){
+  function deleteTestById(testId){
     const plan = state.currentPlan;
-    const test = currentTest();
-    if(!plan || !test) return;
+    if(!plan) return;
+    const test = (plan.tests || []).find(t => t.id === testId);
+    if(!test) return;
 
     showModal("Delete Test", (body, footer) => {
       const d = test.data || {};
@@ -3533,6 +3544,34 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         renderEditor();
       };
     });
+  }
+
+  function deleteCurrentTest(){
+    const test = currentTest();
+    if(!test) return;
+    deleteTestById(test.id);
+  }
+
+  function duplicateTestBelow(testId){
+    const plan = state.currentPlan;
+    if(!plan) return;
+    const ordered = (plan.tests || []).slice().sort((a,b) => (a.order||0) - (b.order||0));
+    const idx = ordered.findIndex(t => t.id === testId);
+    if(idx < 0) return;
+    const source = ordered[idx];
+    const clone = {
+      id: uid(),
+      order: source.order || (idx + 1),
+      modified: true,
+      data: normalizeTestData(structuredClone(source.data || {}))
+    };
+    ordered.splice(idx + 1, 0, clone);
+    ordered.forEach((t, i) => { t.order = i + 1; });
+    plan.tests = ordered;
+    state.currentTestId = clone.id;
+    logLine(`Duplicated test ${source.data?.test_no || source.id.slice(0,6)}.`, "ok");
+    toast("Duplicate", "Inserted copy below.", "ok");
+    renderEditor();
   }
 
   function normalizeCurrentTest(){
@@ -5541,7 +5580,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
     });
     $("btnManageTestTemplates").addEventListener("click", () => runAsync(openManageTestTemplates()));
-    $("btnDeleteTest").addEventListener("click", deleteCurrentTest);
+    const delBtn = $("btnDeleteTest");
+    if(delBtn) delBtn.addEventListener("click", deleteCurrentTest);
     $("btnSaveTest").addEventListener("click", () => runAsync(saveCurrentTest()));
     $("btnAddField").addEventListener("click", () => runAsync(addFieldFlow()));
     $("btnAiSuggest").addEventListener("click", aiSuggestFocusedField);
