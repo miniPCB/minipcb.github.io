@@ -3198,17 +3198,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               const testNos = list.map(t => String(t?.test_no || "").trim()).filter(Boolean);
               if(testNos.length){
                 for(const [idx, testNo] of testNos.entries()){
+                  const baseData = normalizeTestData({});
+                  baseData.test_no = testNo;
+                  baseData.uut_pn = uutPn;
                   const t = {
                     id: uid(),
                     order: idx + 1,
                     modified: true,
-                    data: normalizeTestData({
-                      test_no: testNo,
-                      test_name: "",
-                      test_type: "",
-                      test_equipment: "",
-                      uut_pn: uutPn
-                    })
+                    data: baseData
                   };
                   plan.tests.push(t);
                 }
@@ -3223,17 +3220,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!plan.tests.length){
           for(let i = 1; i <= count; i++){
             const testNo = String(i).padStart(3, "0");
+            const baseData = normalizeTestData({});
+            baseData.test_no = testNo;
+            baseData.uut_pn = uutPn;
             plan.tests.push({
               id: uid(),
               order: i,
               modified: true,
-              data: normalizeTestData({
-                test_no: testNo,
-                test_name: "",
-                test_type: "",
-                test_equipment: "",
-                uut_pn: uutPn
-              })
+              data: baseData
             });
           }
         }
@@ -3908,7 +3902,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <div>
             <div class="label">Default Test Template</div>
             <select class="select" id="prefNewTestTemplateDefault">
-              <option value="__blank__">Blank (schema)</option>
+              <option value="__blank__">Blank (full schema)</option>
             </select>
             <div class="hint">Templates are read from the current plan's tests/templates folder.</div>
           </div>
@@ -4028,7 +4022,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   async function getAvailableTestTemplates(plan){
-    const list = [{ id: "__blank__", name: "Blank (schema)", data: {} }];
+    const list = [{ id: "__blank__", name: "Blank (full schema)", data: {} }];
     if(state.planRootHandle && plan){
       const extra = await fsListTestTemplates(plan);
       for(const t of extra) list.push(t);
