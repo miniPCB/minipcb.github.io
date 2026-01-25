@@ -1173,6 +1173,15 @@
     return (state.prefs?.test_editor_lock || "locked") === "unlocked";
   }
 
+  function maturityDescription(level){
+    const m = Number(level);
+    return m === 0 ? "M0 — Unknown" :
+           m === 1 ? "M1 — Placeholder" :
+           m === 2 ? "M2 — AI-Assisted" :
+           m === 3 ? "M3 — Human-Reviewed" :
+           m === 4 ? "M4 — Locked" : "M0 — Unknown";
+  }
+
   function mergeAiMeta(base, override){
     const out = structuredClone(base || {});
     const src = override || {};
@@ -3065,7 +3074,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const maturity = getFieldMaturity(test, k);
       head.innerHTML = `
           <div class="label" data-field="${escapeHtml(k)}">${escapeHtml(labelText)}</div>
-          <span class="tag" data-maturity="${k}" title="Click to set maturity">M${maturity}</span>
+          <span class="tag" data-maturity="${k}" title="${escapeHtml(maturityDescription(maturity))}">M${maturity}</span>
         `;
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
       if(test._dirtyFields?.[`_ai.maturity.${k}`]) maturityTag.classList.add("maturity-dirty");
