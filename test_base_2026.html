@@ -1068,7 +1068,6 @@
     ai_chat_permission: 1,            // 0=search, 1=revise, 2=create/delete
     ai_maturity_clicks: 4,            // 2=inline select, 4=modal
     test_editor_lock: "locked",
-    show_plan_sanitize: false,
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -1083,7 +1082,6 @@
       prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
       prefs.ai_maturity_clicks = normalizeMaturityClicks(prefs.ai_maturity_clicks ?? DEFAULT_PREFS.ai_maturity_clicks);
       prefs.test_editor_lock = (prefs.test_editor_lock === "unlocked") ? "unlocked" : "locked";
-      prefs.show_plan_sanitize = !!prefs.show_plan_sanitize;
       return prefs;
     }catch{
       return { ...DEFAULT_PREFS };
@@ -2803,7 +2801,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         </div>
         <div class="actions">
           <button class="btn mini primary" data-act="open" data-id="${escapeHtml(p.id)}">Open</button>
-          ${state.prefs.show_plan_sanitize ? `<button class="btn mini" data-act="sanitize" data-id="${escapeHtml(p.id)}">JSON Sanitize</button>` : ""}
           <button class="btn mini" data-act="review" data-id="${escapeHtml(p.id)}">AI Review</button>
           <button class="btn mini" data-act="rename" data-id="${escapeHtml(p.id)}">Rename</button>
           <button class="btn mini" data-act="save-template" data-id="${escapeHtml(p.id)}">Save as Template</button>
@@ -2811,6 +2808,32 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <button class="btn mini danger" data-act="delete" data-id="${escapeHtml(p.id)}">Delete</button>
         </div>
       `;
+      el.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        const items = [
+          {
+            id: "sanitize",
+            label: "JSON Sanitize",
+            onClick: () => runAsync((async () => {
+              try{
+                await sanitizePlanJson(p.id);
+                logLine("JSON Sanitize: completed.", "ok");
+                toast("JSON Sanitize", "Plan JSON sanitized.", "ok");
+                runAsync(renderLibrary());
+              }catch(err){
+                logLine(`JSON Sanitize failed: ${err.message || err}`, "warn");
+                toast("JSON Sanitize", err.message || "Failed.", "warn");
+              }
+            })())
+          },
+          { id: "review", label: "AI Review", onClick: () => runAsync(aiReviewPlan(p.id)) },
+          { id: "rename", label: "Rename", onClick: () => runAsync(renamePlanFlow(p.id)) },
+          { id: "save-template", label: "Save as Template", onClick: () => runAsync(saveTemplateFlow(p.id)) },
+          { id: "duplicate", label: "Duplicate", onClick: () => runAsync(duplicatePlanFlow(p.id)) },
+          { id: "delete", label: "Delete", onClick: () => runAsync(deletePlanFlow(p.id)) }
+        ];
+        showContextMenu(e.clientX, e.clientY, items);
+      });
       list.appendChild(el);
     }
 
@@ -2830,17 +2853,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const act = btn.getAttribute("data-act");
         const id = btn.getAttribute("data-id");
         if(act === "open") runAsync(openPlanById(id));
-        if(act === "sanitize") runAsync((async () => {
-          try{
-            await sanitizePlanJson(id);
-            logLine("JSON Sanitize: completed.", "ok");
-            toast("JSON Sanitize", "Plan JSON sanitized.", "ok");
-            runAsync(renderLibrary());
-          }catch(e){
-            logLine(`JSON Sanitize failed: ${e.message || e}`, "warn");
-            toast("JSON Sanitize", e.message || "Failed.", "warn");
-          }
-        })());
         if(act === "review") runAsync(aiReviewPlan(id));
         if(act === "rename") runAsync(renamePlanFlow(id));
         if(act === "save-template") runAsync(saveTemplateFlow(id));
@@ -4769,13 +4781,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <option value="unlocked">Unlocked</option>
             </select>
           </div>
-          <div>
-            <div class="label">All Plans: JSON Sanitize Button</div>
-            <select class="select" id="prefShowPlanSanitize">
-              <option value="false">Off</option>
-              <option value="true">On</option>
-            </select>
-          </div>
         </div>
 
         <div class="row" style="margin-top:10px;">
@@ -4829,8 +4834,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(prefMaturityClicks) prefMaturityClicks.value = String(state.prefs.ai_maturity_clicks ?? 4);
       const prefTestEditorLock = $("prefTestEditorLock");
       if(prefTestEditorLock) prefTestEditorLock.value = state.prefs.test_editor_lock || "locked";
-      const prefShowPlanSanitize = $("prefShowPlanSanitize");
-      if(prefShowPlanSanitize) prefShowPlanSanitize.value = String(!!state.prefs.show_plan_sanitize);
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -4897,7 +4900,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
         state.prefs.test_editor_lock = $("prefTestEditorLock").value || "locked";
-        state.prefs.show_plan_sanitize = $("prefShowPlanSanitize").value === "true";
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
