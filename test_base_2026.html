@@ -1095,6 +1095,36 @@
     return AI_CHAT_PERMISSION_LEVELS.find(l => l.value === lvl)?.label || "Revise/Edit";
   }
 
+  function nextTestNo(plan){
+    const nums = (plan?.tests || [])
+      .map(t => String(t?.data?.test_no || "").trim())
+      .map(v => (v.match(/^(\d+)$/) ? Number(v) : NaN))
+      .filter(n => Number.isFinite(n));
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return String(next).padStart(3, "0");
+  }
+
+  function createTestFromSet(plan, set, testNo){
+    const nextOrder = (plan.tests?.reduce((m,t)=>Math.max(m, t.order||0), 0) || 0) + 1;
+    const data = { ...(set || {}) };
+    if(testNo) data.test_no = testNo;
+    const t = {
+      id: uid(),
+      order: nextOrder,
+      modified: true,
+      data: normalizeTestData(data)
+    };
+    const keys = Object.keys(set || {});
+    for(const k of keys){
+      if(k === "_ai") continue;
+      setFieldMaturity(t, k, 2);
+    }
+    if(!t._dirtyFields) t._dirtyFields = {};
+    for(const k of keys) t._dirtyFields[k] = true;
+    plan.tests.push(t);
+    return t;
+  }
+
   /* ---------- File System Root (optional) ---------- */
   const FS_DB = "tb26_fs";
   const FS_STORE = "handles";
@@ -2212,9 +2242,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       for(const item of payload.tests){
         const testNo = String(item?.test_no || "").trim();
         const set = item?.set || {};
-        if(!testNo || !set || typeof set !== "object") continue;
-        const test = plan.tests.find(t => String(t.data?.test_no || "").trim() === testNo);
-        if(!test) continue;
+        if(!set || typeof set !== "object") continue;
+        let test = testNo ? plan.tests.find(t => String(t.data?.test_no || "").trim() === testNo) : null;
+        if(!test){
+          if(perm < 2) continue;
+          const newNo = testNo || nextTestNo(plan);
+          const safeSet = {};
+          for(const [k, v] of Object.entries(set)){
+            if(!schemaKeys.has(k)) continue;
+            safeSet[k] = sanitizeAiText(v);
+          }
+          test = createTestFromSet(plan, safeSet, newNo);
+          changed = true;
+        }
         for(const [k, v] of Object.entries(set)){
           if(!schemaKeys.has(k)) continue;
           const val = sanitizeAiText(v);
@@ -2284,7 +2324,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         body: JSON.stringify({
           model,
           input: [
-            { role:"system", content:`You edit a test plan. Permission level: ${permLabel} (${perm}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no, set:{field:value}}). Only include fields to change. Use existing test_no values. Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only.` },
+            { role:"system", content:`You edit a test plan. Permission level: ${permLabel} (${perm}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no?, set:{field:value}}). Only include fields to change. Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number).` },
             { role:"user", content: JSON.stringify(payload) }
           ],
           max_output_tokens: 600
