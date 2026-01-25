@@ -918,6 +918,24 @@
     try { return JSON.stringify(val); } catch { return String(val); }
   }
 
+  function sanitizeAiText(value){
+    if(value === null || value === undefined) return "";
+    let text = String(value);
+    // Normalize non-standard characters that can break Word imports
+    const replacements = {
+      "\u2018": "'", "\u2019": "'", "\u201A": "'", "\u201B": "'",
+      "\u201C": "\"", "\u201D": "\"", "\u201E": "\"", "\u201F": "\"",
+      "\u2026": "...",
+      "\u2013": "-", "\u2014": "-", "\u2015": "-",
+      "\u00A0": " ", "\u2007": " ", "\u202F": " ",
+      "\u200B": "", "\u200C": "", "\u200D": "", "\u2060": "", "\uFEFF": ""
+    };
+    text = text.replace(/[\u2018\u2019\u201A\u201B\u201C\u201D\u201E\u201F\u2026\u2013\u2014\u2015\u00A0\u2007\u202F\u200B\u200C\u200D\u2060\uFEFF]/g, (ch) => replacements[ch] ?? ch);
+    // Strip control chars except tab/newline/CR
+    text = text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+    return text;
+  }
+
   function ensureAiMeta(ai, dataKeys){
     const out = {
       maturity: {},
@@ -2062,6 +2080,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
                   val = val.slice(1, -1).trim();
                 }
+                val = sanitizeAiText(val);
                 if(val && val !== String(t.data[field] ?? "").trim()){
                   t.data[field] = val;
                   setFieldMaturity(t, field, 2);
@@ -4323,6 +4342,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         result = await callSuggestion(true);
       }
       if(result.value.trim() === current) return { noChange: true, rationale: result.rationale || "No meaningful change returned." };
+      result.value = sanitizeAiText(result.value);
+      result.rationale = sanitizeAiText(result.rationale);
       return result;
     }
 
@@ -4368,7 +4389,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             if(res && res.noChange){
               suggestions.push({ field, current: test.data[field] || "", proposed: "", noChange: true, rationale: res.rationale || "" });
             }else if(res){
-              suggestions.push({ field, current: test.data[field] || "", proposed: res.value, rationale: res.rationale || "" });
+              suggestions.push({ field, current: test.data[field] || "", proposed: sanitizeAiText(res.value), rationale: sanitizeAiText(res.rationale || "") });
             }else{
               suggestions.push({ field, current: test.data[field] || "", proposed: "", noChange: true, rationale: "" });
             }
@@ -4442,7 +4463,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               const idx = Number(c.getAttribute("data-idx"));
               const s = suggestions[idx];
               if(!s || s.error) continue;
-              test.data[s.field] = s.proposed;
+              test.data[s.field] = sanitizeAiText(s.proposed);
               if(!test.data._ai) test.data._ai = { maturity:{} };
               if(!test.data._ai.maturity) test.data._ai.maturity = {};
               test.data._ai.maturity[s.field] = 2;
