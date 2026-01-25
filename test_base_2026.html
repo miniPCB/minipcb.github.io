@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -166,6 +166,19 @@
       border-color: rgba(124,255,176,.55);
     }
     .btn.attn:hover{ background: rgba(124,255,176,.24); border-color: rgba(124,255,176,.75); }
+
+    .aiPermRow{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-top:6px;
+      flex-wrap:wrap;
+    }
+    .aiPermRow .tag{ margin-left:2px; }
+    .aiPermRange{
+      width:180px;
+      accent-color: var(--accent);
+    }
 
     .input, .select, textarea{
       width:100%;
@@ -701,6 +714,11 @@
             <div>
               <h3 style="margin:0;">AI Plan Editor</h3>
               <div class="muted">AI Model: <span id="aiChatModel">—</span></div>
+              <div class="aiPermRow">
+                <span class="muted">AI Permission</span>
+                <input class="aiPermRange" type="range" id="aiPermSlider" min="0" max="2" step="1" value="1" />
+                <span class="tag" id="aiPermLabel">Revise/Edit</span>
+              </div>
             </div>
           </div>
 
@@ -1024,6 +1042,7 @@
     ai_review_debug: false,           // log one AI Review payload + response
     ai_review_pause_ms: 300,          // pause between AI review field calls
     ai_review_concurrency: 1,         // concurrent AI review calls
+    ai_chat_permission: 1,            // 0=search, 1=revise, 2=create/delete
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -1035,6 +1054,7 @@
       if(typeof prefs.ai_model !== "string" || !/^gpt-/i.test(prefs.ai_model)){
         prefs.ai_model = DEFAULT_PREFS.ai_model;
       }
+      prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
       return prefs;
     }catch{
       return { ...DEFAULT_PREFS };
@@ -1056,6 +1076,23 @@
 
   function saveModelCache(list){
     localStorage.setItem("tb26_models", JSON.stringify(list || []));
+  }
+
+  const AI_CHAT_PERMISSION_LEVELS = [
+    { value: 0, label: "Search/Find", desc: "Read-only. No edits are applied." },
+    { value: 1, label: "Revise/Edit", desc: "Update existing plan and test fields." },
+    { value: 2, label: "Create/Delete", desc: "May add or remove items if supported." }
+  ];
+
+  function normalizeAiChatPermission(val){
+    const num = Number(val);
+    if(Number.isNaN(num)) return 1;
+    return Math.min(2, Math.max(0, Math.round(num)));
+  }
+
+  function aiChatPermissionLabel(val){
+    const lvl = normalizeAiChatPermission(val);
+    return AI_CHAT_PERMISSION_LEVELS.find(l => l.value === lvl)?.label || "Revise/Edit";
   }
 
   /* ---------- File System Root (optional) ---------- */
@@ -2151,6 +2188,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   async function applyAiChatUpdates(plan, payload){
+    const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
+    if(perm <= 0) return false;
     let changed = false;
     if(payload?.plan){
       const p = payload.plan;
@@ -2223,6 +2262,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(!plan.scope) plan.scope = mdMeta.scope || "";
     }
     const model = state.prefs.ai_model || "gpt-4.1-mini";
+    const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
+    const permLabel = aiChatPermissionLabel(perm);
     const payload = {
       plan: { name: plan.name || "", goal: plan.goal || "", scope: plan.scope || "" },
       tests: (plan.tests || []).map(t => ({
@@ -2230,6 +2271,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         test_name: t.data?.test_name || "",
         test_type: t.data?.test_type || ""
       })),
+      permission: { level: perm, label: permLabel },
       request: text
     };
     try{
@@ -2242,7 +2284,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         body: JSON.stringify({
           model,
           input: [
-            { role:"system", content:"You edit a test plan. Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no, set:{field:value}}). Only include fields to change. Use existing test_no values. Do not add new tests. Use schema field keys for set." },
+            { role:"system", content:`You edit a test plan. Permission level: ${permLabel} (${perm}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no, set:{field:value}}). Only include fields to change. Use existing test_no values. Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only.` },
             { role:"user", content: JSON.stringify(payload) }
           ],
           max_output_tokens: 600
@@ -2265,6 +2307,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const message = sanitizeAiText(parsed.message || "Applied requested updates.");
         appendChatMessage("ai", message);
         const changed = await applyAiChatUpdates(plan, parsed);
+        if(!changed && normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1) <= 0){
+          appendChatMessage("ai", "Request not applied. AI Permission is set to Search/Find (read-only).");
+        }
         if(changed){
           renderEditor();
           renderTestsList();
@@ -2475,6 +2520,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     updateAiUI();
     const aiModelEl = $("aiChatModel");
     if(aiModelEl) aiModelEl.textContent = state.prefs.ai_model || "gpt-4.1-mini";
+    const permSlider = $("aiPermSlider");
+    const permLabel = $("aiPermLabel");
+    if(permSlider){
+      const permVal = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
+      permSlider.value = String(permVal);
+      if(permLabel) permLabel.textContent = aiChatPermissionLabel(permVal);
+    }
     $("btnSaveTest").disabled = !state.currentTestId;
     const delBtn = $("btnDeleteTest");
     if(delBtn) delBtn.disabled = !state.currentTestId;
@@ -5944,6 +5996,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
       });
     }
+    const permSlider = $("aiPermSlider");
+    if(permSlider){
+      permSlider.addEventListener("input", () => {
+        const val = normalizeAiChatPermission(permSlider.value);
+        const label = $("aiPermLabel");
+        if(label) label.textContent = aiChatPermissionLabel(val);
+      });
+      permSlider.addEventListener("change", () => {
+        const val = normalizeAiChatPermission(permSlider.value);
+        state.prefs.ai_chat_permission = val;
+        savePrefs();
+        const label = $("aiPermLabel");
+        if(label) label.textContent = aiChatPermissionLabel(val);
+        logLine(`AI Permission set to ${aiChatPermissionLabel(val)}.`, "ok");
+      });
+    }
     const planBadgeName = $("planBadgeName");
     if(planBadgeName) planBadgeName.addEventListener("click", showMarkdownModal);
 
@@ -5987,3 +6055,4 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 </script>
 </body>
 </html>
+
