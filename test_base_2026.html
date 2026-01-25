@@ -101,6 +101,8 @@
     }
     .chip.clickable{ cursor:pointer; }
     .chip.clickable:hover{ border-color: rgba(124,196,255,.35); background: rgba(124,196,255,.06); }
+    .clickableText{ cursor:pointer; }
+    .clickableText:hover{ color: var(--accent); }
     .chip strong{ color:var(--text); font-weight:650; }
     .led{
       width:10px;height:10px;border-radius:999px;
@@ -341,6 +343,25 @@
       flex:1;
       min-height:0;
     }
+    .chatWrap{ display:flex; flex-direction:column; gap:10px; min-height:0; }
+    .chatLog{
+      flex:1;
+      min-height:0;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px;
+      background: rgba(255,255,255,.03);
+      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      font-size:12px;
+      line-height:1.4;
+    }
+    .chatMsg{ padding:8px 10px; border-radius:10px; max-width:85%; }
+    .chatMsg.user{ align-self:flex-end; background: rgba(68,140,255,.18); border:1px solid rgba(68,140,255,.35); }
+    .chatMsg.ai{ align-self:flex-start; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); }
+    .chatInput{ min-height:70px; }
 
     /* Log */
     .logbar{
@@ -500,7 +521,7 @@
     <div class="menu">
 
       <div class="planBadge" id="planBadge" style="display:none;">
-        <div class="name" id="planBadgeName">—</div>
+        <div class="name clickableText" id="planBadgeName">—</div>
         <div class="sub" id="planBadgeSub">0 tests</div>
       </div>
 
@@ -677,38 +698,24 @@
         <!-- Right -->
         <div class="panel">
           <div class="panelHeader">
-            <h3>Test Plan</h3>
-            <div class="tabs">
-              <button class="btn mini" id="btnAiReviewPlan">AI Review</button>
-              <div class="tab active" data-tab="flow">Flowchart</div>
-              <div class="tab" data-tab="md">Markdown</div>
+            <div>
+              <h3 style="margin:0;">AI Plan Editor</h3>
+              <div class="muted">AI Model: <span id="aiChatModel">—</span></div>
             </div>
           </div>
 
           <div class="panelBody">
-            <div class="tabContent active" id="tab-flow">
-              <div class="flowWrap">
-                <div class="flowTop">
-                  <div class="toolbarRow">
-                    <button class="btn mini" id="btnFitFlow">Fit</button>
-                  </div>
-                </div>
-                <svg id="flowSvg" viewBox="0 0 900 520" preserveAspectRatio="none"></svg>
-                <div class="svgNote"></div>
+            <div class="chatWrap">
+              <div class="chatLog" id="aiChatLog"></div>
+              <textarea class="input chatInput" id="aiChatInput" placeholder="Tell the AI what to change in the plan…"></textarea>
+              <div class="row">
+                <button class="btn primary" id="btnAiChatSend">Send</button>
+                <button class="btn" id="btnAiChatClear">Clear</button>
               </div>
-            </div>
-
-            <div class="tabContent" id="tab-md">
-              <div class="mdWrap">
-                <div class="mdTop">
-                  <div class="toolbarRow">
-                    <button class="btn mini primary" id="btnApplyNotes">Apply Notes</button>
-                  </div>
-                </div>
-                <textarea class="mdArea" id="notesArea" spellcheck="false"></textarea>
-                <div class="mdPreview" id="mdPreview"></div>
+              <div class="hr"></div>
+              <div class="row">
+                <button class="btn mini" id="btnAiReviewPlan">AI Review</button>
               </div>
-
             </div>
           </div>
         </div>
@@ -2124,6 +2131,133 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
   }
 
+  function appendChatMessage(role, text){
+    const log = $("aiChatLog");
+    if(!log) return;
+    const msg = document.createElement("div");
+    msg.className = `chatMsg ${role}`;
+    msg.textContent = text;
+    log.appendChild(msg);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function applyAiChatUpdates(plan, payload){
+    let changed = false;
+    if(payload?.plan){
+      const p = payload.plan;
+      if(typeof p.name === "string" && p.name.trim()){
+        plan.name = sanitizeAiText(p.name.trim());
+        plan.slug = slugifyPlanName(plan.name);
+        changed = true;
+      }
+      if(typeof p.goal === "string"){
+        plan.goal = sanitizeAiText(p.goal);
+        changed = true;
+      }
+      if(typeof p.scope === "string"){
+        plan.scope = sanitizeAiText(p.scope);
+        changed = true;
+      }
+    }
+    if(Array.isArray(payload?.tests)){
+      const schemaKeys = new Set(Object.keys(TEST_SCHEMA_DEFAULT));
+      for(const item of payload.tests){
+        const testNo = String(item?.test_no || "").trim();
+        const set = item?.set || {};
+        if(!testNo || !set || typeof set !== "object") continue;
+        const test = plan.tests.find(t => String(t.data?.test_no || "").trim() === testNo);
+        if(!test) continue;
+        for(const [k, v] of Object.entries(set)){
+          if(!schemaKeys.has(k)) continue;
+          const val = sanitizeAiText(v);
+          if(String(test.data?.[k] ?? "") === val) continue;
+          test.data[k] = val;
+          setFieldMaturity(test, k, 2);
+          test.modified = true;
+          if(!test._dirtyFields) test._dirtyFields = {};
+          test._dirtyFields[k] = true;
+          changed = true;
+        }
+      }
+    }
+    if(changed){
+      plan.updated = nowIsoDate();
+      generatePlanMarkdown(plan);
+      await Store.savePlan(plan);
+    }
+    return changed;
+  }
+
+  async function aiChatSend(){
+    const plan = state.currentPlan;
+    if(!plan){ toast("AI Chat", "Open a plan first.", "warn"); return; }
+    const input = $("aiChatInput");
+    if(!input) return;
+    const text = input.value.trim();
+    if(!text) return;
+    input.value = "";
+    appendChatMessage("user", text);
+
+    const key = getAiKey();
+    if(!key || !state.prefs.ai_enabled){
+      appendChatMessage("ai", "AI unavailable. Set a key in Preferences.");
+      return;
+    }
+    if(!plan.goal || !plan.scope){
+      const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
+      if(!plan.goal) plan.goal = mdMeta.goal || "";
+      if(!plan.scope) plan.scope = mdMeta.scope || "";
+    }
+    const model = state.prefs.ai_model || "gpt-4.1-mini";
+    const payload = {
+      plan: { name: plan.name || "", goal: plan.goal || "", scope: plan.scope || "" },
+      tests: (plan.tests || []).map(t => ({
+        test_no: t.data?.test_no || "",
+        test_name: t.data?.test_name || "",
+        test_type: t.data?.test_type || ""
+      })),
+      request: text
+    };
+    try{
+      const resp = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${key}`
+        },
+        body: JSON.stringify({
+          model,
+          input: [
+            { role:"system", content:"You edit a test plan. Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no, set:{field:value}}). Only include fields to change. Use existing test_no values. Do not add new tests. Use schema field keys for set." },
+            { role:"user", content: JSON.stringify(payload) }
+          ],
+          max_output_tokens: 600
+        })
+      });
+      if(!resp.ok){
+        const ttxt = await resp.text().catch(()=> "");
+        throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
+      }
+      const data = await resp.json();
+      const raw = extractResponseText(data);
+      let parsed = null;
+      try{ parsed = typeof raw === "string" ? JSON.parse(raw) : raw; }catch{}
+      if(parsed && typeof parsed === "object"){
+        const message = sanitizeAiText(parsed.message || "Applied requested updates.");
+        appendChatMessage("ai", message);
+        const changed = await applyAiChatUpdates(plan, parsed);
+        if(changed){
+          renderEditor();
+          renderTestsList();
+        }
+      }else{
+        appendChatMessage("ai", sanitizeAiText(String(raw || "")));
+      }
+    }catch(e){
+      appendChatMessage("ai", `AI error: ${e.message || e}`);
+    }
+  }
+
   function openMaturityDialog(test, field){
     if(!test) return;
     const current = getFieldMaturity(test, field);
@@ -2319,7 +2453,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("planBadgeName").textContent = plan.name || "(Unnamed Plan)";
     $("planBadgeSub").textContent = `${plan.tests.length} tests`;
 
-      updateAiUI();
+    updateAiUI();
+    const aiModelEl = $("aiChatModel");
+    if(aiModelEl) aiModelEl.textContent = state.prefs.ai_model || "gpt-4.1-mini";
     $("btnSaveTest").disabled = !state.currentTestId;
     const delBtn = $("btnDeleteTest");
     if(delBtn) delBtn.disabled = !state.currentTestId;
@@ -2947,6 +3083,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   function drawFlowchart(){
     const svg = $("flowSvg");
+    if(!svg) return;
     svg.innerHTML = "";
     const plan = state.currentPlan;
     if(!plan) return;
@@ -3890,14 +4027,43 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const plan = state.currentPlan;
     if(!plan) return;
     if(!plan.markdown) generatePlanMarkdown(plan);
-    $("notesArea").value = plan.userNotes ?? extractUserNotes(plan.markdown);
-    $("mdPreview").textContent = plan.markdown || "";
+    const notes = $("notesArea");
+    const preview = $("mdPreview");
+    if(!notes || !preview) return;
+    notes.value = plan.userNotes ?? extractUserNotes(plan.markdown);
+    preview.textContent = plan.markdown || "";
+  }
+
+  function showMarkdownModal(){
+    const plan = state.currentPlan;
+    if(!plan) return;
+    showModal("Plan Markdown", (body, footer) => {
+      body.innerHTML = `
+        <div class="mdWrap" style="display:flex; flex-direction:column; min-height:0;">
+          <div class="mdTop">
+            <div class="toolbarRow">
+              <button class="btn mini primary" id="btnApplyNotes">Apply Notes</button>
+              <button class="btn mini" id="btnRegenerateMd">Regenerate</button>
+            </div>
+          </div>
+          <textarea class="mdArea" id="notesArea" spellcheck="false"></textarea>
+          <div class="mdPreview" id="mdPreview"></div>
+        </div>
+      `;
+      footer.innerHTML = `<button class="btn" id="closeMdModal">Close</button>`;
+      $("closeMdModal").onclick = hideModal;
+      $("btnApplyNotes").onclick = applyNotes;
+      $("btnRegenerateMd").onclick = regenerateMd;
+      refreshMarkdownUI();
+    });
   }
 
   async function applyNotes(){
     const plan = state.currentPlan;
     if(!plan) return;
-    plan.userNotes = $("notesArea").value || "";
+    const notes = $("notesArea");
+    if(!notes) return;
+    plan.userNotes = notes.value || "";
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
     refreshMarkdownUI();
@@ -3909,7 +4075,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const plan = state.currentPlan;
     if(!plan) return;
     // preserve notes explicitly
-    plan.userNotes = $("notesArea").value || plan.userNotes || "";
+    const notes = $("notesArea");
+    if(notes) plan.userNotes = notes.value || plan.userNotes || "";
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
     refreshMarkdownUI();
@@ -5736,10 +5903,30 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(!state.currentPlan) return;
       runAsync(aiReviewPlan(state.currentPlan.id));
     });
-    $("btnFitFlow").addEventListener("click", fitFlowToView);
-    $("btnApplyNotes").addEventListener("click", () => runAsync(applyNotes()));
-    $("btnRegenerateMd").addEventListener("click", () => runAsync(regenerateMd()));
-    $("btnDownloadMd").addEventListener("click", downloadMd);
+    const fitBtn = $("btnFitFlow");
+    if(fitBtn) fitBtn.addEventListener("click", fitFlowToView);
+    const applyBtn = $("btnApplyNotes");
+    if(applyBtn) applyBtn.addEventListener("click", () => runAsync(applyNotes()));
+    const regenBtn = $("btnRegenerateMd");
+    if(regenBtn) regenBtn.addEventListener("click", () => runAsync(regenerateMd()));
+    const dlBtn = $("btnDownloadMd");
+    if(dlBtn) dlBtn.addEventListener("click", downloadMd);
+
+    const chatSend = $("btnAiChatSend");
+    if(chatSend) chatSend.addEventListener("click", () => runAsync(aiChatSend()));
+    const chatClear = $("btnAiChatClear");
+    if(chatClear) chatClear.addEventListener("click", () => { const log = $("aiChatLog"); if(log) log.innerHTML = ""; });
+    const chatInput = $("aiChatInput");
+    if(chatInput){
+      chatInput.addEventListener("keydown", (e) => {
+        if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){
+          e.preventDefault();
+          runAsync(aiChatSend());
+        }
+      });
+    }
+    const planBadgeName = $("planBadgeName");
+    if(planBadgeName) planBadgeName.addEventListener("click", showMarkdownModal);
 
     $("btnCopyLog").addEventListener("click", async () => {
       const lines = [...$("log").querySelectorAll(".line")].map(x => x.textContent);
