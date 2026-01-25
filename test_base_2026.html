@@ -189,6 +189,12 @@
       border-color: rgba(124,255,176,.55);
       box-shadow: 0 0 0 1px rgba(124,255,176,.18) inset;
     }
+    .drag-handle{
+      cursor: grab;
+    }
+    .dragging{
+      opacity: .6;
+    }
 
     .input, .select, textarea{
       width:100%;
@@ -1053,6 +1059,7 @@
     ai_review_concurrency: 1,         // concurrent AI review calls
     ai_chat_permission: 1,            // 0=search, 1=revise, 2=create/delete
     ai_maturity_clicks: 4,            // 2=inline select, 4=modal
+    test_editor_lock: "locked",
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -1066,6 +1073,7 @@
       }
       prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
       prefs.ai_maturity_clicks = normalizeMaturityClicks(prefs.ai_maturity_clicks ?? DEFAULT_PREFS.ai_maturity_clicks);
+      prefs.test_editor_lock = (prefs.test_editor_lock === "unlocked") ? "unlocked" : "locked";
       return prefs;
     }catch{
       return { ...DEFAULT_PREFS };
@@ -1154,6 +1162,10 @@
   function normalizeMaturityClicks(val){
     const num = Number(val);
     return num === 2 ? 2 : 4;
+  }
+
+  function isTestEditorUnlocked(){
+    return (state.prefs?.test_editor_lock || "locked") === "unlocked";
   }
 
   function mergeAiMeta(base, override){
@@ -3014,6 +3026,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       const cell = document.createElement("div");
       cell.className = full ? "full" : "";
+      cell.setAttribute("data-field", k);
 
       const head = document.createElement("div");
       head.className = "fieldHead";
@@ -3051,6 +3064,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         `;
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
       if(test._dirtyFields?.[`_ai.maturity.${k}`]) maturityTag.classList.add("maturity-dirty");
+      const dragEnabled = isTestEditorUnlocked();
+      if(dragEnabled){
+        head.classList.add("drag-handle");
+        head.setAttribute("draggable", "true");
+      }
 
       const input = document.createElement(isTextArea ? "textarea" : "input");
       const isParamValue = (k === "param1_value" || k === "param2_value");
@@ -3134,6 +3152,28 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         });
       }
 
+      if(dragEnabled){
+        head.addEventListener("dragstart", (e) => {
+          e.dataTransfer?.setData("text/plain", k);
+          head.classList.add("dragging");
+        });
+        head.addEventListener("dragend", () => {
+          head.classList.remove("dragging");
+        });
+        cell.addEventListener("dragover", (e) => {
+          e.preventDefault();
+        });
+        cell.addEventListener("drop", (e) => {
+          e.preventDefault();
+          const fromKey = e.dataTransfer?.getData("text/plain") || "";
+          const toKey = cell.getAttribute("data-field") || "";
+          if(!fromKey || !toKey || fromKey === toKey) return;
+          reorderFieldByKey(test, fromKey, toKey);
+          $("dirtyHint").style.display = "";
+          renderForm();
+        });
+      }
+
       cell.appendChild(head);
       cell.appendChild(control);
       grid.appendChild(cell);
@@ -3177,6 +3217,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!inserted) out[newKey] = value;
     out._ai = data._ai || ensureAiMeta(null, Object.keys(out).filter(k => k !== "_ai"));
     return out;
+  }
+
+  function reorderFieldByKey(test, fromKey, toKey){
+    if(!test || !fromKey || !toKey || fromKey === toKey) return;
+    const data = test.data || {};
+    const keys = Object.keys(data).filter(k => k !== "_ai");
+    if(!keys.includes(fromKey) || !keys.includes(toKey)) return;
+    const nextKeys = keys.filter(k => k !== fromKey);
+    const idx = nextKeys.indexOf(toKey);
+    nextKeys.splice(Math.max(idx, 0), 0, fromKey);
+    const next = {};
+    for(const k of nextKeys) next[k] = data[k];
+    next._ai = data._ai || ensureAiMeta(null, Object.keys(next).filter(k => k !== "_ai"));
+    test.data = next;
+    test.modified = true;
+    if(!test._dirtyFields) test._dirtyFields = {};
+    test._dirtyFields[fromKey] = true;
   }
 
   function insertFieldBefore(test, beforeKey, newKey, value){
@@ -4610,6 +4667,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <input class="input" id="prefAiReviewConcurrency" type="number" min="1" step="1" />
           </div>
         </div>
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="label">Test Editor</div>
+            <select class="select" id="prefTestEditorLock">
+              <option value="locked">Locked</option>
+              <option value="unlocked">Unlocked</option>
+            </select>
+          </div>
+        </div>
 
         <div class="row" style="margin-top:10px;">
           <div>
@@ -4660,6 +4726,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
       const prefMaturityClicks = $("prefMaturityClicks");
       if(prefMaturityClicks) prefMaturityClicks.value = String(state.prefs.ai_maturity_clicks ?? 4);
+      const prefTestEditorLock = $("prefTestEditorLock");
+      if(prefTestEditorLock) prefTestEditorLock.value = state.prefs.test_editor_lock || "locked";
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -4725,6 +4793,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
+        state.prefs.test_editor_lock = $("prefTestEditorLock").value || "locked";
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
