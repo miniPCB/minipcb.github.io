@@ -1649,6 +1649,8 @@
 
 ## Plan Metadata
 - **Plan Name:** ${plan.name}
+- **Plan Goal:** ${plan.goal || ""}
+- **Plan Scope:** ${plan.scope || ""}
 - **Created:** ${created}
 - **Last Updated:** ${updated}
 - **Total Tests:** ${tests.length}
@@ -3088,6 +3090,18 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <div class="hr"></div>
         <div class="label">Plan Name</div>
         <input class="input" id="newPlanName" placeholder="e.g., Capacitor Thermal Stress Validation" />
+        <div class="row" style="margin-top:8px;">
+          <div>
+            <div class="label">Plan Goal</div>
+            <input class="input" id="newPlanGoal" placeholder="Single-line goal statement" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <div>
+            <div class="label">Plan Scope</div>
+            <textarea class="input" id="newPlanScope" rows="3" placeholder="Brief scope description"></textarea>
+          </div>
+        </div>
         <div class="hint">Slug rules: lowercase, spaces -> underscores, remove non [a-z0-9_], collapse underscores.</div>
         <div class="hr"></div>
         <div class="label">AI Test Creation (optional)</div>
@@ -3137,6 +3151,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           updated: nowIsoDate(),
           tests: [],
           markdown: "",
+          goal: $("newPlanGoal").value.trim(),
+          scope: $("newPlanScope").value.trim(),
           userNotes: "Add plan-level notes here (equipment, safety, lab setup, etc.)."
         };
         generatePlanMarkdown(plan);
@@ -3172,6 +3188,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const count = Math.max(1, Number($("newPlanTestCount").value) || 1);
         const templateId = $("newPlanTestTemplate")?.value || "__blank__";
         const selectedTemplate = templateList.find(t => t.id === templateId)?.data || null;
+        const goal = $("newPlanGoal").value.trim();
+        const scope = $("newPlanScope").value.trim();
 
         const plan = {
           id: uid(),
@@ -3181,6 +3199,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           updated: nowIsoDate(),
           tests: [],
           markdown: "",
+          goal,
+          scope,
           userNotes: "Add plan-level notes here (equipment, safety, lab setup, etc.)."
         };
 
@@ -3194,6 +3214,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               plan_name: name,
               uut_pn: uutPn,
               device_type: deviceType,
+              goal,
+              scope,
               test_count: count
             };
             const resp = await fetch("https://api.openai.com/v1/responses", {
@@ -3205,7 +3227,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               body: JSON.stringify({
                 model,
                 input: [
-                  { role:"system", content:"Return STRICT JSON: {\"tests\":[{\"test_no\":\"001\"}, ...]}. Provide exactly test_count items with 3-digit test_no strings. No extra text." },
+                  { role:"system", content:"Return STRICT JSON: {\"tests\":[{\"test_no\":\"001\",\"test_name\":\"...\"}, ...]}. Provide exactly test_count items with 3-digit test_no strings and meaningful test_name values in a logical flow toward the plan goal. No extra text." },
                   { role:"user", content: JSON.stringify(payload) }
                 ],
                 max_output_tokens: 300
@@ -3216,12 +3238,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               const raw = extractResponseText(data);
               const parsed = safeParseJson(raw, "AI Create");
               const list = Array.isArray(parsed?.tests) ? parsed.tests : [];
-              const testNos = list.map(t => String(t?.test_no || "").trim()).filter(Boolean);
-              if(testNos.length){
-                for(const [idx, testNo] of testNos.entries()){
+              const cleaned = list.map(t => ({
+                test_no: String(t?.test_no || "").trim(),
+                test_name: String(t?.test_name || "").trim()
+              })).filter(t => t.test_no);
+              if(cleaned.length){
+                for(const [idx, item] of cleaned.entries()){
+                  const testNo = item.test_no;
                   const baseData = normalizeTestData({});
                   if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
                   baseData.test_no = testNo;
+                  if(item.test_name) baseData.test_name = item.test_name;
                   baseData.uut_pn = uutPn;
                   const t = {
                     id: uid(),
