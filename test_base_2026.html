@@ -912,7 +912,7 @@
     if (val === null || val === undefined) return "";
     if (typeof val === "string") return val;
     if (typeof val === "number" || typeof val === "boolean" || typeof val === "bigint") return String(val);
-    try { return JSON.stringify(val); } catch (e) { return String(val); }
+    try { return JSON.stringify(val); } catch { return String(val); }
   }
 
   function ensureAiMeta(ai, dataKeys){
@@ -984,7 +984,7 @@
     const missing = [];
     for(const k of Object.keys(data || {})){
       if(k === "_ai") continue;
-      if(((data[k] == null ? "" : data[k]) + "").trim() === "") missing.push(k);
+      if(((data[k] ?? "") + "").trim() === "") missing.push(k);
     }
     return missing;
   }
@@ -1011,7 +1011,7 @@
         prefs.ai_model = DEFAULT_PREFS.ai_model;
       }
       return prefs;
-    }catch(e){
+    }catch{
       return { ...DEFAULT_PREFS };
     }
   }
@@ -1024,7 +1024,7 @@
     try{
       const raw = JSON.parse(localStorage.getItem("tb26_models") || "[]");
       return Array.isArray(raw) ? raw : [];
-    }catch(e){
+    }catch{
       return [];
     }
   }
@@ -1077,7 +1077,7 @@
       if(handle) state.planRootHandle = handle;
       const path = await idbGet("planRootPath");
       if(path) state.planRootPath = String(path);
-    }catch(e){}
+    }catch{}
   }
 
   async function setPlanRoot(){
@@ -1160,7 +1160,7 @@
       if(perm === "granted") return state.planRootHandle;
       const req = await state.planRootHandle.requestPermission({ mode: "readwrite" });
       return req === "granted" ? state.planRootHandle : null;
-    }catch(e){
+    }catch{
       return null;
     }
   }
@@ -1178,8 +1178,8 @@
   }
 
   function makeTestFileName(test, used){
-    const order = ((String(test.order) != null ? String(test.order : 0)).padStart(3, "0");
-    const tno = safeFilePart((test.data && test.data.test_no) || "", "test");
+    const order = String(test.order ?? 0).padStart(3, "0");
+    const tno = safeFilePart(test.data?.test_no || "", "test");
     let name = `test_${order}_${tno}.json`;
     if(used.has(name)){
       let i = 2;
@@ -1202,7 +1202,7 @@
       const fileHandle = await dirHandle.getFileHandle(filename);
       const file = await fileHandle.getFile();
       return await file.text();
-    }catch(e){
+    }catch{
       return null;
     }
   }
@@ -1210,7 +1210,7 @@
   async function fsReadJson(dirHandle, filename){
     const text = await fsReadText(dirHandle, filename);
     if(!text) return null;
-    try{ return JSON.parse(text); }catch(e){ return null; }
+    try{ return JSON.parse(text); }catch{ return null; }
   }
 
   async function fsEnsureTemplatesRoot(){
@@ -1229,7 +1229,7 @@
       const data = await fsReadJson(templatesDir, name);
       if(!data) continue;
       const testData = data.data || data;
-      const title = ((testData && testData.test_name) || "").trim() || name.replace(/\.json$/i, "");
+      const title = (testData?.test_name || "").trim() || name.replace(/\.json$/i, "");
       list.push({ id: name, name: title, file: name, data: testData });
     }
     return list.sort((a,b) => a.name.localeCompare(b.name));
@@ -1245,7 +1245,7 @@
       if(!entry && create){
         try{
           await fsSaveTemplate(plan);
-        }catch(e){}
+        }catch{}
         entry = await fsFindTemplateDirById(state.currentTemplateId);
       }
     }else{
@@ -1253,7 +1253,7 @@
       if(!entry && create){
         try{
           await fsSavePlan(plan);
-        }catch(e){}
+        }catch{}
         entry = await fsFindPlanDirById(plan.id);
       }
     }
@@ -1261,12 +1261,12 @@
     let testsDir = null;
     try{
       testsDir = await entry.dir.getDirectoryHandle("tests", { create: !!create });
-    }catch(e){
+    }catch{
       return null;
     }
     try{
       return await testsDir.getDirectoryHandle("templates", { create: !!create });
-    }catch(e){
+    }catch{
       return null;
     }
   }
@@ -1301,7 +1301,7 @@
         const meta = await fsReadJson(dir, "plan.json");
         if(meta && meta.id === planId) return name;
         name = `${baseName}_${i++}`;
-      }catch(e){
+      }catch{
         return name;
       }
     }
@@ -1327,7 +1327,7 @@
     const md = await fsReadText(dirHandle, "plan.md");
     let tests = [];
     let testsDir = null;
-    try{ testsDir = await dirHandle.getDirectoryHandle("tests"); }catch(e){}
+    try{ testsDir = await dirHandle.getDirectoryHandle("tests"); }catch{}
     if(Array.isArray(meta.tests) && testsDir){
       for(const t of meta.tests){
         if(!t || !t.file) continue;
@@ -1335,7 +1335,7 @@
         if(!tjson) continue;
         tests.push({
           id: t.id || tjson.id || uid(),
-          order: ((t.order) != null ? t.order : ((tjson.order) != null ? tjson.order : 0,))
+          order: t.order ?? tjson.order ?? 0,
           modified: false,
           data: normalizeTestData(tjson.data || tjson)
         });
@@ -1347,7 +1347,7 @@
         if(!tjson) continue;
         tests.push({
           id: tjson.id || uid(),
-          order: ((tjson.order) != null ? tjson.order : 0,)
+          order: tjson.order ?? 0,
           modified: false,
           data: normalizeTestData(tjson.data || tjson)
         });
@@ -1362,7 +1362,7 @@
       updated: meta.updated || nowIsoDate(),
       tests,
       markdown: md || meta.markdown || "",
-      userNotes: ((meta.userNotes) != null ? meta.userNotes : extractUserNotes(md || meta.markdown || ""))
+      userNotes: meta.userNotes ?? extractUserNotes(md || meta.markdown || "")
     };
     if(!plan.markdown) generatePlanMarkdown(plan);
     return plan;
@@ -1419,7 +1419,7 @@
       const file = makeTestFileName(t, used);
       const payload = {
         id: t.id || uid(),
-        order: ((t.order) != null ? t.order : 0,)
+        order: t.order ?? 0,
         data: normalizeTestData(t.data || {})
       };
       await fsWriteText(testsDir, file, JSON.stringify(payload, null, 2), "application/json");
@@ -1433,7 +1433,7 @@
     }
     for(const name of existing){
       if(!used.has(name)){
-        try{ await testsDir.removeEntry(name); }catch(e){}
+        try{ await testsDir.removeEntry(name); }catch{}
       }
     }
     if(!plan.markdown) generatePlanMarkdown(plan);
@@ -1595,12 +1595,12 @@
 
   function loadPlans(){
     try{ return JSON.parse(localStorage.getItem(Store.key) || "[]") || []; }
-    catch(e){ return []; }
+    catch{ return []; }
   }
 
   function loadTemplates(){
     try{ return JSON.parse(localStorage.getItem(templatesKey()) || "[]") || []; }
-    catch(e){ return []; }
+    catch{ return []; }
   }
 
   /* ---------- Fallback placeholders ---------- */
@@ -1629,7 +1629,7 @@
   function applyFallback(data, missing){
     const changed = [];
     for(const k of missing){
-      if(((data[k] == null ? "" : data[k]) + "").trim() === ""){
+      if(((data[k] ?? "") + "").trim() === ""){
         data[k] = placeholderFor(k);
         changed.push(k);
       }
@@ -1674,13 +1674,13 @@
 |------:|--------:|-----------|-----------|---------|---------|
 ${tests.map((t, idx) => {
   const d = t.data || {};
-  const esc = (x) => ((String(x) != null ? String(x : "")).replace(/\|/g, "\\|");
+  const esc = (x) => String(x ?? "").replace(/\|/g, "\\|");
   const p1Label = d.param1_label || "Units";
   const p1Key = d.param1_value || "units";
-  const p1Val = ((d[p1Key]) != null ? d[p1Key] : "N/A");
+  const p1Val = d[p1Key] ?? "N/A";
   const p2Label = d.param2_label || "Target Value";
   const p2Key = d.param2_value || "tv";
-  const p2Val = ((d[p2Key]) != null ? d[p2Key] : "N/A");
+  const p2Val = d[p2Key] ?? "N/A";
   return `| ${idx+1} | ${esc(d.test_no)} | ${esc(d.test_name)} | ${esc(d.test_type)} | ${esc(`${p1Label}: ${p1Val}`)} | ${esc(`${p2Label}: ${p2Val}`)} |`;
 }).join("\n")}
 
@@ -1833,7 +1833,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   function getReviewStatus(testId){
-    return (state.aiReviewStatus && state.aiReviewStatus[testId]) || "";
+    return state.aiReviewStatus?.[testId] || "";
   }
 
   function setReviewStatus(testId, status){
@@ -1843,7 +1843,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   function getFieldKeys(test){
-    const keys = Object.keys((test && test.data) || {}).filter(k => k !== "_ai");
+    const keys = Object.keys(test?.data || {}).filter(k => k !== "_ai");
     return keys.length ? keys : Object.keys(TEST_SCHEMA_DEFAULT);
   }
 
@@ -1854,7 +1854,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(k === "_ai") continue;
       const m = getFieldMaturity(test, k);
       if(m > 2) continue;
-      const v = (((test.data[k]) != null ? (test.data[k] : ""));
+      const v = (test.data[k] ?? "");
       if(["ll","tv","ul","units"].includes(k) && String(v).trim().toUpperCase() === "N/A") continue;
       out.push(k);
     }
@@ -1885,7 +1885,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     // Open plan in editor and visualize progress inline
     state.currentPlan = plan;
-    state.currentTestId = tests[(0] && 0].id) || null;
+    state.currentTestId = tests[0]?.id || null;
     showEditor();
 
     const model = state.prefs.ai_model || "gpt-4.1-mini";
@@ -1924,8 +1924,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
 
     // Deterministic UUT P/N: lock to first test's value for all later tests
-    const firstUutPn = String(tests[(0] && (0].data) && ((0].data).uut_pn)) != null ? 0].data).uut_pn) : "")).trim();
-    if(firstUutPn) anchors.uut_pn = { value: firstUutPn, maturity: 3, test_no: tests[(0] && (0].data) && 0].data).test_no) || "" };
+    const firstUutPn = String(tests[0]?.data?.uut_pn ?? "").trim();
+    if(firstUutPn) anchors.uut_pn = { value: firstUutPn, maturity: 3, test_no: tests[0]?.data?.test_no || "" };
 
     // Pre-mark tests with pending review status
     for(const t of tests){
@@ -1942,8 +1942,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       // Force UUT P/N to match first test (no AI suggestion)
       if(anchors.uut_pn && t !== tests[0]){
-        const curVal = ((String(t.data.uut_pn) != null ? String(t.data.uut_pn : "")).trim();
-        const anchorVal = ((String(anchors.uut_pn.value) != null ? String(anchors.uut_pn.value : "")).trim();
+        const curVal = String(t.data.uut_pn ?? "").trim();
+        const anchorVal = String(anchors.uut_pn.value ?? "").trim();
         if(anchorVal && curVal !== anchorVal){
           t.data.uut_pn = anchorVal;
           setFieldMaturity(t, "uut_pn", 3);
@@ -1957,7 +1957,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const a = anchors[k];
         if(!a || a.maturity !== 3) continue;
         const curM = getFieldMaturity(t, k);
-        const curVal = ((String(t.data[k]) != null ? String(t.data[k] : "")).trim();
+        const curVal = String(t.data[k] ?? "").trim();
         if(curM === 4 && a.value && curVal !== a.value){
           t.data[k] = a.value;
           setFieldMaturity(t, k, 3);
@@ -1991,8 +1991,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         data: tt.data
       }));
 
-      const pauseMs = ((Number(state.prefs.ai_review_pause_ms) != null ? Number(state.prefs.ai_review_pause_ms : 0));
-      const concurrency = Math.max(1, ((Number(state.prefs.ai_review_concurrency) != null ? Number(state.prefs.ai_review_concurrency : 1)));
+      const pauseMs = Number(state.prefs.ai_review_pause_ms ?? 0);
+      const concurrency = Math.max(1, Number(state.prefs.ai_review_concurrency ?? 1));
       const queue = fields.filter(f => getFieldMaturity(t, f) < 3);
 
       let active = 0;
@@ -2012,9 +2012,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: t.data.test_no || "",
               test_name: t.data.test_name || "",
               field,
-              current_value: ((t.data[field]) != null ? t.data[field] : "",)
-              field_prompt: (t.data && t.data._ai)?(.field_prompts && .field_prompts[field]) || "",
-              field_label: (t.data && t.data._ai)?(.field_labels && .field_labels[field]) || field,
+              current_value: t.data[field] ?? "",
+              field_prompt: t.data?._ai?.field_prompts?.[field] || "",
+              field_label: t.data?._ai?.field_labels?.[field] || field,
               maturity: getFieldMaturity(t, field),
               authoritative_values: Object.keys(anchors).reduce((acc, k) => (acc[k] = anchors[k].value, acc), {}),
               context: t.data
@@ -2054,12 +2054,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 let val = String(raw || "").trim();
                 if(val.startsWith("{")){
                   const parsed = safeParseJson(val, "AI Review");
-                  if(typeof (parsed && parsed.value) === "string") val = parsed.value.trim();
+                  if(typeof parsed?.value === "string") val = parsed.value.trim();
                 }
                 if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
                   val = val.slice(1, -1).trim();
                 }
-                if(val && val !== ((String(t.data[field]) != null ? String(t.data[field] : "")).trim()){
+                if(val && val !== String(t.data[field] ?? "").trim()){
                   t.data[field] = val;
                   setFieldMaturity(t, field, 2);
                   t.modified = true;
@@ -2092,10 +2092,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ];
       for(const u of unableAdjustPairs){
         if(!fields.includes(u.field)) continue;
-        const cur = ((String(t.data[u.field]) != null ? String(t.data[u.field] : "")).trim();
+        const cur = String(t.data[u.field] ?? "").trim();
         if(cur) continue;
-        const nextStep = ((String(t.data[u.next]) != null ? String(t.data[u.next] : "")).trim();
-        const conclusion = ((String(t.data[u.concl]) != null ? String(t.data[u.concl] : "")).trim();
+        const nextStep = String(t.data[u.next] ?? "").trim();
+        const conclusion = String(t.data[u.concl] ?? "").trim();
         if(!nextStep && !conclusion) continue;
         const suffix = nextStep ? ` Next: ${nextStep}` : "";
         t.data[u.field] = `Unable to adjust.${suffix}`.trim();
@@ -2168,7 +2168,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   function buildPlanFromAi(name, aiPlan, testCount, aiInputs){
-    const list = Array.isArray((aiPlan && aiPlan.tests)) ? aiPlan.tests : [];
+    const list = Array.isArray(aiPlan?.tests) ? aiPlan.tests : [];
     const trimmed = list.slice(0, testCount);
     while(trimmed.length < testCount) trimmed.push({});
     const tests = trimmed.map((d, idx) => {
@@ -2289,8 +2289,8 @@ function openMaturityDialog(test, field){
     state.plansCache = plans;
     state.templatesCache = templates;
 
-    const totalTests = plans.reduce((sum, p) => sum + ((p.tests && p.tests.length) || 0), 0);
-    const totalTemplateTests = templates.reduce((sum, t) => sum + ((t.tests && t.tests.length) || 0), 0);
+    const totalTests = plans.reduce((sum, p) => sum + (p.tests?.length || 0), 0);
+    const totalTemplateTests = templates.reduce((sum, t) => sum + (t.tests?.length || 0), 0);
     const planCount = $("wsPlanCount");
     const testCount = $("wsTestCount");
     const templateCount = $("wsTemplateCount");
@@ -2530,7 +2530,7 @@ function openMaturityDialog(test, field){
                 toast("Templates", "Set a Plan Folder to use test templates.", "warn");
                 return;
               }
-              const name = prompt("Template name:", (t.data && t.data.test_name) || "New Test Template");
+              const name = prompt("Template name:", t.data?.test_name || "New Test Template");
               if(name === null) return;
               const ok = await createTestTemplateFromData(state.currentPlan, name, t.data);
               if(ok) toast("Templates", "Template created.", "ok");
@@ -2617,9 +2617,9 @@ function openMaturityDialog(test, field){
     const fields = getFieldKeys(test);
     for(const k of fields){
       if(["param1_label","param1_value","param2_label","param2_value"].includes(k)) continue;
-      const type = (test.data && test.data._ai)?(.field_types && .field_types[k]) || "";
+      const type = test.data?._ai?.field_types?.[k] || "";
       const isTextArea = type === "textarea"
-        || /[\r\n]/.test(String((test.data && ((test.data[k])) != null ? test.data[k]) : "")))
+        || /[\r\n]/.test(String(test.data?.[k] ?? ""))
         || ["purpose","scope","setup","procedure","measurement","in_tol_conclusion","oot_low_conclusion","oot_low_unable_adjust","oot_high_conclusion","oot_high_unable_adjust"].includes(k);
       const full = isTextArea;
 
@@ -2653,7 +2653,7 @@ function openMaturityDialog(test, field){
         oot_high_unable_adjust: "OOT High Unable to Adjust Conclusion",
         oot_high_next_step: "OOT High Next Step"
       };
-      const labelText = ((test.data && test.data._ai)?(.field_labels && .field_labels[k]) || LABEL_OVERRIDES[k] || k);
+      const labelText = (test.data?._ai?.field_labels?.[k] || LABEL_OVERRIDES[k] || k);
         const maturity = getFieldMaturity(test, k);
       head.innerHTML = `
           <div class="label" data-field="${escapeHtml(k)}">${escapeHtml(labelText)}</div>
@@ -2671,7 +2671,7 @@ function openMaturityDialog(test, field){
           !["_ai","param1_label","param1_value","param2_label","param2_value"].includes(key)
         );
         select.innerHTML = keysForValues.map(key => {
-          const lbl = (test.data && test.data._ai)?(.field_labels && .field_labels[key]) || key;
+          const lbl = test.data?._ai?.field_labels?.[key] || key;
           return `<option value="${escapeHtml(key)}">${escapeHtml(lbl)}</option>`;
         }).join("");
         control = select;
@@ -2679,12 +2679,12 @@ function openMaturityDialog(test, field){
         control.className = "input";
         if(!isTextArea) control.type = "text";
       }
-      control.value = (((test.data[k]) != null ? (test.data[k] : ""));
+      control.value = (test.data[k] ?? "");
       control.setAttribute("data-field", k);
 
         const s = getSuggestStatus(test.id, k);
         if(s) input.classList.add(`ai-${s}`);
-        if((test._dirtyFields && test._dirtyFields[k])) control.classList.add("dirty-field");
+        if(test._dirtyFields?.[k]) control.classList.add("dirty-field");
 
         control.addEventListener("input", () => {
           test.data[k] = control.value;
@@ -2726,7 +2726,7 @@ function openMaturityDialog(test, field){
   /* ---------- Flowchart (placeholder skeleton) ---------- */
   function applyFlowTransform(){
     const svg = $("flowSvg");
-    const g = (svg && svg.querySelector)("#flowViewport");
+    const g = svg?.querySelector("#flowViewport");
     if(!g) return;
     g.setAttribute("transform", `translate(${state.flow.x} ${state.flow.y}) scale(${state.flow.scale})`);
   }
@@ -2815,8 +2815,8 @@ function openMaturityDialog(test, field){
     const valueKey = which === 2 ? "param2_value" : "param1_value";
     const defaultLabel = which === 2 ? "Target Value" : "Units";
     const defaultValue = which === 2 ? "tv" : "units";
-    const currentLabel = ((String(test.data[labelKey]) != null ? String(test.data[labelKey] : defaultLabel));
-    const currentValue = ((String(test.data[valueKey]) != null ? String(test.data[valueKey] : defaultValue));
+    const currentLabel = String(test.data[labelKey] ?? defaultLabel);
+    const currentValue = String(test.data[valueKey] ?? defaultValue);
     const keysForValues = getFieldKeys(test).filter(key =>
       !["_ai","param1_label","param1_value","param2_label","param2_value"].includes(key)
     );
@@ -2824,7 +2824,7 @@ function openMaturityDialog(test, field){
 
     showModal(which === 2 ? "Edit Parameter 2" : "Edit Parameter 1", (body, footer) => {
       const options = keysForValues.map(key => {
-        const lbl = (test.data && test.data._ai)?(.field_labels && .field_labels[key]) || key;
+        const lbl = test.data?._ai?.field_labels?.[key] || key;
         const selected = key === currentValue ? " selected" : "";
         return `<option value="${escapeHtml(key)}"${selected}>${escapeHtml(lbl)}</option>`;
       }).join("");
@@ -2864,9 +2864,9 @@ function openMaturityDialog(test, field){
     if(!test || !fieldKey) return;
 
     showModal("Edit Field", (body, footer) => {
-      const currentLabel = (test.data && test.data._ai)?(.field_labels && .field_labels[fieldKey]) || fieldKey;
-      const currentType = (test.data && test.data._ai)?(.field_types && .field_types[fieldKey]) || "text";
-      const currentPrompt = (test.data && test.data._ai)?(.field_prompts && .field_prompts[fieldKey]) || "";
+      const currentLabel = test.data?._ai?.field_labels?.[fieldKey] || fieldKey;
+      const currentType = test.data?._ai?.field_types?.[fieldKey] || "text";
+      const currentPrompt = test.data?._ai?.field_prompts?.[fieldKey] || "";
       body.innerHTML = `
         <div class="label">Form Label</div>
         <input class="input" id="editFieldLabel" value="${escapeHtml(currentLabel)}" />
@@ -2913,10 +2913,10 @@ function openMaturityDialog(test, field){
               if(k !== fieldKey) next[k] = data[k];
             }
             next._ai = data._ai || ensureAiMeta(null, Object.keys(next).filter(k => k !== "_ai"));
-            if((next._ai && next._ai.maturity)) delete next._ai.maturity[fieldKey];
-            if((next._ai && next._ai.field_labels)) delete next._ai.field_labels[fieldKey];
-            if((next._ai && next._ai.field_types)) delete next._ai.field_types[fieldKey];
-            if((next._ai && next._ai.field_prompts)) delete next._ai.field_prompts[fieldKey];
+            if(next._ai?.maturity) delete next._ai.maturity[fieldKey];
+            if(next._ai?.field_labels) delete next._ai.field_labels[fieldKey];
+            if(next._ai?.field_types) delete next._ai.field_types[fieldKey];
+            if(next._ai?.field_prompts) delete next._ai.field_prompts[fieldKey];
             test.data = next;
             test.modified = true;
             if(test._dirtyFields) delete test._dirtyFields[fieldKey];
@@ -2953,24 +2953,24 @@ function openMaturityDialog(test, field){
         if(newPrompt) out._ai.field_prompts[newKey] = newPrompt;
         else delete out._ai.field_prompts[newKey];
 
-        if((out._ai && out._ai.maturity) && out._ai.maturity[fieldKey] != null){
+        if(out._ai?.maturity && out._ai.maturity[fieldKey] != null){
           out._ai.maturity[newKey] = out._ai.maturity[fieldKey];
           delete out._ai.maturity[fieldKey];
         }else{
           if(!out._ai.maturity) out._ai.maturity = {};
           out._ai.maturity[newKey] = 0;
         }
-        if((out._ai && out._ai.field_types) && out._ai.field_types[fieldKey] != null){
+        if(out._ai?.field_types && out._ai.field_types[fieldKey] != null){
           out._ai.field_types[newKey] = out._ai.field_types[fieldKey];
           delete out._ai.field_types[fieldKey];
         }
         if(!out._ai.field_types) out._ai.field_types = {};
         out._ai.field_types[newKey] = newType;
-        if((out._ai && out._ai.field_prompts) && out._ai.field_prompts[fieldKey] != null && newKey !== fieldKey){
+        if(out._ai?.field_prompts && out._ai.field_prompts[fieldKey] != null && newKey !== fieldKey){
           out._ai.field_prompts[newKey] = out._ai.field_prompts[fieldKey];
           delete out._ai.field_prompts[fieldKey];
         }
-        if((out._ai && out._ai.field_labels) && out._ai.field_labels[fieldKey] != null && newKey !== fieldKey){
+        if(out._ai?.field_labels && out._ai.field_labels[fieldKey] != null && newKey !== fieldKey){
           out._ai.field_labels[newKey] = out._ai.field_labels[fieldKey];
           delete out._ai.field_labels[fieldKey];
         }
@@ -2993,7 +2993,7 @@ function openMaturityDialog(test, field){
 
   function fitFlowToView(){
     const svg = $("flowSvg");
-    const g = (svg && svg.querySelector)("#flowViewport");
+    const g = svg?.querySelector("#flowViewport");
     if(!svg || !g) return;
     const vb = svg.viewBox.baseVal;
     const viewW = vb && vb.width ? vb.width : 900;
@@ -3125,7 +3125,7 @@ function openMaturityDialog(test, field){
       t1.textContent = n.testNo;
       txt.appendChild(t1);
 
-      const name = ((n.data && n.data.test_name) || "(no test_name)").trim();
+      const name = (n.data?.test_name || "(no test_name)").trim();
       const t2 = make("tspan", {x:String(n.x+12), dy:"14", fill:"rgba(167,179,200,.95)"});
       t2.textContent = name.length > 32 ? name.slice(0,32) + "…" : name;
       txt.appendChild(t2);
@@ -3143,18 +3143,18 @@ function openMaturityDialog(test, field){
       plan.slug = plan.slug || slugifyPlanName(plan.name || "plan");
       plan.tests = (plan.tests || []).map((t, idx) => ({
         id: t.id || uid(),
-        order: (((t.order) != null ? (t.order : idx+1)),
+        order: (t.order ?? idx+1),
         modified: !!t.modified,
         data: normalizeTestData(t.data)
       }));
-      plan.userNotes = ((plan.userNotes) != null ? plan.userNotes : extractUserNotes(plan.markdown || ""));
+      plan.userNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
       if(!plan.markdown) generatePlanMarkdown(plan);
 
       state.currentPlan = plan;
       state.currentTemplateId = null;
       state.currentTestTemplate = null;
       state.templateEditReturnPlanId = null;
-      state.currentTestId = plan.tests[(0] && 0].id) || null;
+      state.currentTestId = plan.tests[0]?.id || null;
 
       logLine(`Opened plan: ${plan.name}`, "ok");
       toast("Plan opened", plan.name, "ok");
@@ -3176,7 +3176,7 @@ function openMaturityDialog(test, field){
 
         <div class="label">Plan Name</div>
         <input class="input" id="newPlanName" placeholder="e.g., Power Supply CCA (Generic)" />
-        <div class="hint">Slug rules: lowercase, ((spaces) != null ? spaces : ?underscores, remove non [a-z0-9_], collapse underscores.</div>)
+        <div class="hint">Slug rules: lowercase, spaces???underscores, remove non [a-z0-9_], collapse underscores.</div>
 
         <div class="hr"></div>
         <div class="label">Use Plan Template (optional)</div>
@@ -3226,7 +3226,7 @@ function openMaturityDialog(test, field){
         <div class="row" style="margin-top:10px;">
           <div>
             <div class="label">Environment</div>
-            <input class="input" id="newPlanEnvironment" placeholder="e.g., Ambient, 23?((C) != null ? C : 5?C" />)
+            <input class="input" id="newPlanEnvironment" placeholder="e.g., Ambient, 23?C ?? 5?C" />
           </div>
           <div>
             <div class="label">Pass/Fail Philosophy</div>
@@ -3301,10 +3301,10 @@ function openMaturityDialog(test, field){
           copy.folder = null;
           copy.created = nowIsoDate();
           copy.updated = nowIsoDate();
-          copy.userNotes = ((basePlan.userNotes) != null ? basePlan.userNotes : extractUserNotes(basePlan.markdown || ""));
+          copy.userNotes = basePlan.userNotes ?? extractUserNotes(basePlan.markdown || "");
           copy.tests = (basePlan.tests || []).map((t, idx) => ({
             id: uid(),
-            order: ((t.order) != null ? t.order : (idx + 1)),
+            order: t.order ?? (idx + 1),
             modified: false,
             data: structuredClone(t.data || {})
           }));
@@ -3363,7 +3363,7 @@ function openMaturityDialog(test, field){
         if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
 
         const plan = await Store.loadPlan(planId);
-        const oldNotes = ((plan.userNotes) != null ? plan.userNotes : extractUserNotes(plan.markdown || ""));
+        const oldNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
         plan.name = newName;
         plan.slug = slugifyPlanName(newName);
         plan.userNotes = oldNotes;
@@ -3394,18 +3394,18 @@ function openMaturityDialog(test, field){
       tpl.slug = tpl.slug || slugifyPlanName(tpl.name || "template");
       tpl.tests = (tpl.tests || []).map((t, idx) => ({
         id: t.id || uid(),
-        order: (((t.order) != null ? (t.order : idx+1)),
+        order: (t.order ?? idx+1),
         modified: !!t.modified,
         data: normalizeTestData(t.data)
       }));
-      tpl.userNotes = ((tpl.userNotes) != null ? tpl.userNotes : extractUserNotes(tpl.markdown || ""));
+      tpl.userNotes = tpl.userNotes ?? extractUserNotes(tpl.markdown || "");
       if(!tpl.markdown) generatePlanMarkdown(tpl);
 
       state.currentPlan = tpl;
       state.currentTemplateId = id;
       state.currentTestTemplate = null;
       state.templateEditReturnPlanId = null;
-      state.currentTestId = tpl.tests[(0] && 0].id) || null;
+      state.currentTestId = tpl.tests[0]?.id || null;
 
       logLine(`Opened template: ${tpl.name}`, "ok");
       toast("Template opened", tpl.name, "ok");
@@ -3446,10 +3446,10 @@ function openMaturityDialog(test, field){
         copy.folder = null;
         copy.created = nowIsoDate();
         copy.updated = nowIsoDate();
-        copy.userNotes = ((plan.userNotes) != null ? plan.userNotes : extractUserNotes(plan.markdown || ""));
+        copy.userNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
         copy.tests = (plan.tests || []).map((t, idx) => ({
           id: uid(),
-          order: ((t.order) != null ? t.order : (idx + 1)),
+          order: t.order ?? (idx + 1),
           modified: false,
           data: structuredClone(t.data || {})
         }));
@@ -3495,10 +3495,10 @@ function openMaturityDialog(test, field){
         copy.folder = null;
         copy.created = nowIsoDate();
         copy.updated = nowIsoDate();
-        copy.userNotes = ((plan.userNotes) != null ? plan.userNotes : extractUserNotes(plan.markdown || ""));
+        copy.userNotes = plan.userNotes ?? extractUserNotes(plan.markdown || "");
         copy.tests = (plan.tests || []).map((t, idx) => ({
           id: uid(),
-          order: ((t.order) != null ? t.order : (idx + 1)),
+          order: t.order ?? (idx + 1),
           modified: false,
           data: structuredClone(t.data || {})
         }));
@@ -3544,10 +3544,10 @@ function openMaturityDialog(test, field){
         copy.folder = null;
         copy.created = nowIsoDate();
         copy.updated = nowIsoDate();
-        copy.userNotes = ((tpl.userNotes) != null ? tpl.userNotes : extractUserNotes(tpl.markdown || ""));
+        copy.userNotes = tpl.userNotes ?? extractUserNotes(tpl.markdown || "");
         copy.tests = (tpl.tests || []).map((t, idx) => ({
           id: uid(),
-          order: ((t.order) != null ? t.order : (idx + 1)),
+          order: t.order ?? (idx + 1),
           modified: false,
           data: structuredClone(t.data || {})
         }));
@@ -3584,7 +3584,7 @@ function openMaturityDialog(test, field){
         const tpl = await Templates.loadTemplate(templateId);
         tpl.name = newName;
         tpl.slug = slugifyPlanName(newName);
-        tpl.userNotes = ((tpl.userNotes) != null ? tpl.userNotes : extractUserNotes(tpl.markdown || ""));
+        tpl.userNotes = tpl.userNotes ?? extractUserNotes(tpl.markdown || "");
         generatePlanMarkdown(tpl);
         await Templates.saveTemplate(tpl);
 
@@ -3678,18 +3678,18 @@ function openMaturityDialog(test, field){
       chosen = templates.find(t => t.id === defId) || templates[0];
     }
 
-    const nextOrder = ((plan.tests && plan.tests.reduce)((m,t)=>Math.max(m, t.order||0), 0) || 0) + 1;
+    const nextOrder = (plan.tests?.reduce((m,t)=>Math.max(m, t.order||0), 0) || 0) + 1;
     const t = {
       id: uid(),
       order: nextOrder,
       modified: true,
-      data: normalizeTestData((chosen && chosen.data) ? structuredClone(chosen.data) : {})
+      data: normalizeTestData(chosen?.data ? structuredClone(chosen.data) : {})
     };
     plan.tests.push(t);
     state.currentTestId = t.id;
 
-    logLine(`Created new test (unsaved)${(chosen && chosen.name) ? ` from "${chosen.name}"` : ""}.`, "ok");
-    toast("New test", (chosen && chosen.name) ? `Test created from "${chosen.name}".` : "Test created (unsaved).", "ok");
+    logLine(`Created new test (unsaved)${chosen?.name ? ` from "${chosen.name}"` : ""}.`, "ok");
+    toast("New test", chosen?.name ? `Test created from "${chosen.name}".` : "Test created (unsaved).", "ok");
     renderEditor();
   }
 
@@ -3712,7 +3712,7 @@ function openMaturityDialog(test, field){
       $("cancelDelTest").onclick = hideModal;
       $("confirmDelTest").onclick = () => {
         plan.tests = plan.tests.filter(x => x.id !== test.id);
-        state.currentTestId = plan.tests[(0] && 0].id) || null;
+        state.currentTestId = plan.tests[0]?.id || null;
         hideModal();
         logLine("Deleted test.", "warn");
         toast("Test deleted", "Removed from plan.", "warn");
@@ -3874,7 +3874,7 @@ function openMaturityDialog(test, field){
     const plan = state.currentPlan;
     if(!plan) return;
     if(!plan.markdown) generatePlanMarkdown(plan);
-    $("notesArea").value = ((plan.userNotes) != null ? plan.userNotes : extractUserNotes(plan.markdown));
+    $("notesArea").value = plan.userNotes ?? extractUserNotes(plan.markdown);
     $("mdPreview").textContent = plan.markdown || "";
   }
 
@@ -4027,7 +4027,7 @@ function openMaturityDialog(test, field){
         modelSelect.appendChild(opt);
       }
       if(modelSelect) modelSelect.value = currentModel;
-      $("prefSuggestMax").value = ((String(state.prefs.ai_suggest_maturity_max) != null ? String(state.prefs.ai_suggest_maturity_max : 2));
+      $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
       $("prefFallbackOnSave").value = state.prefs.fallback_on_save;
       $("prefFallbackFormat").value = state.prefs.fallback_format;
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
@@ -4036,9 +4036,9 @@ function openMaturityDialog(test, field){
       const dbgSel = $("prefAiReviewDebug");
       if(dbgSel) dbgSel.value = state.prefs.ai_review_debug ? "true" : "false";
       const pauseInput = $("prefAiReviewPause");
-      if(pauseInput) pauseInput.value = ((String(state.prefs.ai_review_pause_ms) != null ? String(state.prefs.ai_review_pause_ms : 300));
+      if(pauseInput) pauseInput.value = String(state.prefs.ai_review_pause_ms ?? 300);
       const concInput = $("prefAiReviewConcurrency");
-      if(concInput) concInput.value = ((String(state.prefs.ai_review_concurrency) != null ? String(state.prefs.ai_review_concurrency : 1));
+      if(concInput) concInput.value = String(state.prefs.ai_review_concurrency ?? 1);
       const advBtn = $("prefToggleAdvanced");
       if(advBtn){
         advBtn.onclick = () => {
@@ -4173,7 +4173,7 @@ function openMaturityDialog(test, field){
       try{
         await templatesDir.getFileHandle(file);
         file = makeTestTemplateFileName(`${baseName}_${i++}`);
-      }catch(e){
+      }catch{
         break;
       }
     }
@@ -4196,13 +4196,13 @@ function openMaturityDialog(test, field){
     try{
       await templatesDir.removeEntry(file);
       return true;
-    }catch(e){
+    }catch{
       return false;
     }
   }
 
   async function refreshTemplateList(){
-    if(!(state.currentTestTemplate && state.currentTestTemplate.basePlanId)) return;
+    if(!state.currentTestTemplate?.basePlanId) return;
     const basePlan = await Store.loadPlan(state.currentTestTemplate.basePlanId).catch(() => null);
     if(!basePlan) return;
     state.templateListCache = await getAvailableTestTemplates(basePlan);
@@ -4255,7 +4255,7 @@ function openMaturityDialog(test, field){
           toast("Templates", "Select a test first.", "warn");
           return;
         }
-        const name = prompt("Template name:", (test.data && test.data.test_name) || "New Test Template");
+        const name = prompt("Template name:", test.data?.test_name || "New Test Template");
         if(name === null) return;
         const ok = await createTestTemplateFromData(plan, name, test.data);
         if(ok){
@@ -4371,7 +4371,7 @@ function openMaturityDialog(test, field){
       throw new Error(`HTTP ${resp.status}: ${t.slice(0,160)}`);
     }
     const data = await resp.json();
-    const ids = ((data && data.data) || []).map(m => (m && m.id)).filter(Boolean);
+    const ids = (data?.data || []).map(m => m?.id).filter(Boolean);
     const unique = Array.from(new Set(ids)).sort();
     state.modelList = unique;
     saveModelCache(unique);
@@ -4414,11 +4414,11 @@ function openMaturityDialog(test, field){
     }
 
     function getFieldMaturity(test, field){
-      return Number((test && test.data)?(._ai && (._ai.maturity) && ((._ai.maturity)[field])) != null ? ._ai.maturity)[field]) : 0));
+      return Number(test?.data?._ai?.maturity?.[field] ?? 0);
     }
 
     function setFieldMaturity(test, field, val){
-      if(!(test && test.data)) return;
+      if(!test?.data) return;
       if(!test.data._ai) test.data._ai = { maturity:{} };
       if(!test.data._ai.maturity) test.data._ai.maturity = {};
       test.data._ai.maturity[field] = Number.isFinite(val) ? val : 0;
@@ -4429,7 +4429,7 @@ function openMaturityDialog(test, field){
     }
 
     function getSuggestStatus(testId, field){
-      return (state.aiSuggestStatus && state.aiSuggestStatus[(testId]) && testId])[field]) || "";
+      return state.aiSuggestStatus?.[testId]?.[field] || "";
     }
 
     function setSuggestStatus(testId, field, status){
@@ -4439,11 +4439,11 @@ function openMaturityDialog(test, field){
     }
 
     function fieldsNeedingSuggestion(test){
-      const maxMaturity = ((Number(state.prefs.ai_suggest_maturity_max) != null ? Number(state.prefs.ai_suggest_maturity_max : 2));
+      const maxMaturity = Number(state.prefs.ai_suggest_maturity_max ?? 2);
       const keys = getFieldKeys(test);
       const out = [];
       for(const k of keys){
-        const v = (((test.data[k]) != null ? (test.data[k] : ""));
+        const v = (test.data[k] ?? "");
         const m = getFieldMaturity(test, k);
         if(m >= 3) continue; // do not touch M3/M4
         const todo = isTodoValue(v);
@@ -4459,7 +4459,7 @@ function openMaturityDialog(test, field){
       const key = getAiKey();
       if(!key) throw new Error("No API key set");
       if(["ll","tv","ul","units"].includes(field)){
-        const cur = ((String(test.data[field]) != null ? String(test.data[field] : "")).trim().toUpperCase();
+        const cur = String(test.data[field] ?? "").trim().toUpperCase();
         if(cur === "N/A") return { noChange: true, rationale: "Left as N/A." };
       }
       const payload = {
@@ -4467,11 +4467,11 @@ function openMaturityDialog(test, field){
         test_name: test.data.test_name || "",
         field,
         current_value: test.data[field] || "",
-        field_prompt: (test.data && test.data._ai)?(.field_prompts && .field_prompts[field]) || "",
+        field_prompt: test.data?._ai?.field_prompts?.[field] || "",
         context: test.data
       };
       const model = state.prefs.ai_model || "gpt-4.1-mini";
-      const current = ((String(test.data[field]) != null ? String(test.data[field] : "")).trim();
+      const current = String(test.data[field] ?? "").trim();
 
       async function callSuggestion(forceDifferent){
         const isLimitField = ["ll","tv","ul","units"].includes(field);
@@ -4507,7 +4507,7 @@ function openMaturityDialog(test, field){
         let parsed = null;
         try{
           parsed = JSON.parse(raw);
-        }catch(e){
+        }catch{
           // fallback: treat as value, attach generic rationale
           parsed = { value: raw, rationale: "Suggested improvement from AI." };
         }
@@ -4517,8 +4517,8 @@ function openMaturityDialog(test, field){
           if(!forceDifferent) return await callSuggestion(true);
           throw new Error("AI returned non-string value.");
         }
-        value = ((String(value) != null ? String(value : "")).trim();
-        const rationale = ((String(parsed.rationale) != null ? String(parsed.rationale : "")).trim() || "Suggested improvement from AI.";
+        value = String(value ?? "").trim();
+        const rationale = String(parsed.rationale ?? "").trim() || "Suggested improvement from AI.";
         return { value, rationale };
       }
 
@@ -4550,7 +4550,7 @@ function openMaturityDialog(test, field){
       logLine(`AI Suggest: using model "${model}".`, "ok");
       const targets = fieldsNeedingSuggestion(test);
       if(!targets.length){
-      const focused = state.focusField || (document.activeElement && document.activeElement.getAttribute ? document.activeElement.getAttribute("data-field") : "");
+        const focused = state.focusField || document.activeElement?.getAttribute?.("data-field");
         if(!focused){
           toast("AI Suggest", "No low-maturity fields found.", "warn");
           logLine("AI Suggest: no low-maturity fields.", "warn");
@@ -4712,7 +4712,7 @@ function openMaturityDialog(test, field){
     inp.type = "file";
     inp.accept = "application/json";
     inp.onchange = async () => {
-      const file = (inp.files && inp.files[0]);
+      const file = inp.files?.[0];
       if(!file) return;
       try{
         const txt = await file.text();
@@ -4729,12 +4729,12 @@ function openMaturityDialog(test, field){
             updated: nowIsoDate(),
             tests: (p.tests || []).map((t, idx) => ({
               id: t.id || uid(),
-              order: (((t.order) != null ? (t.order : idx+1)),
+              order: (t.order ?? idx+1),
               modified: false,
               data: normalizeTestData(t.data || t)
             })),
             markdown: p.markdown || "",
-            userNotes: ((p.userNotes) != null ? p.userNotes : extractUserNotes(p.markdown || ""))
+            userNotes: p.userNotes ?? extractUserNotes(p.markdown || "")
           };
           if(!plan.markdown) generatePlanMarkdown(plan);
           await Store.savePlan(plan);
@@ -5682,7 +5682,7 @@ function openMaturityDialog(test, field){
     // Library details toggle removed
 
     $("switchPlanBtn").addEventListener("click", () => {
-      const dirty = (state.currentPlan && (state.currentPlan.tests) && state.currentPlan.tests).some)(t => t.modified);
+      const dirty = state.currentPlan?.tests?.some(t => t.modified);
       if(dirty && !confirm("You have unsaved changes. Switch plans anyway?")) return;
       showLibrary();
     });
@@ -5723,7 +5723,7 @@ function openMaturityDialog(test, field){
       try{
         await navigator.clipboard.writeText(lines.join("\n"));
         toast("Log copied", "Copied to clipboard.", "ok");
-      }catch(e){
+      }catch{
         toast("Copy failed", "Clipboard permission denied.", "warn");
       }
     });
