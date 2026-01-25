@@ -1024,6 +1024,7 @@
     ai_review_debug: false,           // log one AI Review payload + response
     ai_review_pause_ms: 300,          // pause between AI review field calls
     ai_review_concurrency: 1,         // concurrent AI review calls
+    ai_chat_permission: "edit",       // search | edit | create
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -2152,6 +2153,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   async function applyAiChatUpdates(plan, payload){
     let changed = false;
+    const perm = state.prefs.ai_chat_permission || "edit";
+    if(perm === "search"){
+      return false;
+    }
     if(payload?.plan){
       const p = payload.plan;
       if(typeof p.name === "string" && p.name.trim()){
@@ -2189,6 +2194,29 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
       }
     }
+    if(perm === "create"){
+      if(Array.isArray(payload?.create_tests)){
+        const ordered = (plan.tests || []).slice().sort((a,b) => (a.order||0)-(b.order||0));
+        let nextOrder = (ordered.reduce((m,t)=>Math.max(m, t.order||0), 0) || 0) + 1;
+        for(const item of payload.create_tests){
+          const testNo = String(item?.test_no || "").trim();
+          if(!testNo) continue;
+          const baseData = normalizeTestData({});
+          baseData.test_no = testNo;
+          if(item?.test_name) baseData.test_name = sanitizeAiText(item.test_name);
+          if(item?.test_type) baseData.test_type = sanitizeAiText(item.test_type);
+          ordered.push({ id: uid(), order: nextOrder++, modified: true, data: baseData });
+          changed = true;
+        }
+        plan.tests = ordered;
+      }
+      if(Array.isArray(payload?.delete_tests)){
+        const idsToDelete = new Set(payload.delete_tests.map(n => String(n).trim()).filter(Boolean));
+        const before = plan.tests.length;
+        plan.tests = plan.tests.filter(t => !idsToDelete.has(String(t.data?.test_no || "").trim()));
+        if(plan.tests.length !== before) changed = true;
+      }
+    }
     if(changed){
       plan.updated = nowIsoDate();
       generatePlanMarkdown(plan);
@@ -2217,6 +2245,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       appendChatMessage("ai", "AI is disabled. Enable it in Preferences.");
       return;
     }
+    const perm = state.prefs.ai_chat_permission || "edit";
+    if(perm === "search"){
+      appendChatMessage("ai", "AI chat is in SEARCH/FIND mode. No edits will be applied.");
+    }
     if(!plan.goal || !plan.scope){
       const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
       if(!plan.goal) plan.goal = mdMeta.goal || "";
@@ -2232,6 +2264,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       })),
       request: text
     };
+    const perm = state.prefs.ai_chat_permission || "edit";
+    const ruleText = perm === "search"
+      ? "You may only search/describe. Do not propose changes."
+      : perm === "create"
+        ? "You may edit existing tests and may create/delete tests."
+        : "You may only modify existing tests. Do not create/delete tests.";
     try{
       const resp = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
@@ -2242,7 +2280,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         body: JSON.stringify({
           model,
           input: [
-            { role:"system", content:"You edit a test plan. Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no, set:{field:value}}). Only include fields to change. Use existing test_no values. Do not add new tests. Use schema field keys for set." },
+            { role:"system", content:`You edit a test plan. ${ruleText} Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no, set:{field:value}}). Use schema field keys for set. If creating tests, return create_tests: [{test_no,test_name,test_type}]. If deleting tests, return delete_tests: [test_no].` },
             { role:"user", content: JSON.stringify(payload) }
           ],
           max_output_tokens: 600
@@ -4153,6 +4191,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <option value="2">M2</option>
             </select>
           </div>
+          <div>
+            <div class="label">AI Chat Permission</div>
+            <select class="select" id="prefAiChatPermission">
+              <option value="search">SEARCH/FIND</option>
+              <option value="edit">REVISE/EDIT</option>
+              <option value="create">CREATE/DELETE</option>
+            </select>
+          </div>
           <div id="prefAdvanced" style="display:none;">
             <div class="label">AI Review Debug</div>
             <select class="select" id="prefAiReviewDebug">
@@ -4213,6 +4259,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
       if(modelSelect) modelSelect.value = currentModel;
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
+      const permSel = $("prefAiChatPermission");
+      if(permSel) permSel.value = state.prefs.ai_chat_permission || "edit";
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -4277,6 +4325,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.ai_enabled = $("prefAiEnabled").value === "true";
         state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
+        state.prefs.ai_chat_permission = $("prefAiChatPermission").value;
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
