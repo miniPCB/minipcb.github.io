@@ -1065,6 +1065,7 @@
     ai_chat_permission: 1,            // 0=search, 1=revise, 2=create/delete
     ai_maturity_clicks: 4,            // 2=inline select, 4=modal
     test_editor_lock: "locked",
+    show_plan_sanitize: false,
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -1079,6 +1080,7 @@
       prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
       prefs.ai_maturity_clicks = normalizeMaturityClicks(prefs.ai_maturity_clicks ?? DEFAULT_PREFS.ai_maturity_clicks);
       prefs.test_editor_lock = (prefs.test_editor_lock === "unlocked") ? "unlocked" : "locked";
+      prefs.show_plan_sanitize = !!prefs.show_plan_sanitize;
       return prefs;
     }catch{
       return { ...DEFAULT_PREFS };
@@ -1266,6 +1268,63 @@
     const circuitId = extractMarkdownSectionTable(md, "Circuit Identification");
     const testPoints = partlist.filter(p => /test point/i.test(p["PART TYPE"] || p["Part Type"] || p["PART"] || ""));
     return { netlist, partlist, pinout, circuitId, testPoints };
+  }
+
+  function sanitizeAiMeta(meta){
+    if(!meta || typeof meta !== "object") return meta;
+    const out = structuredClone(meta);
+    if(out.maturity && typeof out.maturity === "object"){
+      out.maturity = { ...out.maturity };
+    }
+    if(out.field_labels && typeof out.field_labels === "object"){
+      for(const k of Object.keys(out.field_labels)){
+        out.field_labels[k] = sanitizeAiText(out.field_labels[k]);
+      }
+    }
+    if(out.field_prompts && typeof out.field_prompts === "object"){
+      for(const k of Object.keys(out.field_prompts)){
+        out.field_prompts[k] = sanitizeAiText(out.field_prompts[k]);
+      }
+    }
+    if(out.field_types && typeof out.field_types === "object"){
+      for(const k of Object.keys(out.field_types)){
+        out.field_types[k] = sanitizeAiText(out.field_types[k]);
+      }
+    }
+    if(out.last_ai_reviewed != null) out.last_ai_reviewed = sanitizeAiText(out.last_ai_reviewed);
+    if(out.last_ai_review_model != null) out.last_ai_review_model = sanitizeAiText(out.last_ai_review_model);
+    if(out.last_human_reviewed != null) out.last_human_reviewed = sanitizeAiText(out.last_human_reviewed);
+    if(out.notes != null) out.notes = sanitizeAiText(out.notes);
+    return out;
+  }
+
+  function sanitizeTestData(test){
+    if(!test?.data) return;
+    const data = test.data;
+    for(const k of Object.keys(data)){
+      if(k === "_ai") continue;
+      if(typeof data[k] === "string" || typeof data[k] === "number" || typeof data[k] === "boolean"){
+        data[k] = sanitizeAiText(data[k]);
+      }
+    }
+    if(data._ai) data._ai = sanitizeAiMeta(data._ai);
+  }
+
+  async function sanitizePlanJson(planId){
+    const plan = await Store.loadPlan(planId).catch(() => null);
+    if(!plan) throw new Error("Plan not found");
+    plan.name = sanitizeAiText(plan.name || "");
+    plan.goal = sanitizeAiText(plan.goal || "");
+    plan.scope = sanitizeAiText(plan.scope || "");
+    if(plan.userNotes) plan.userNotes = sanitizeAiText(plan.userNotes);
+    for(const t of (plan.tests || [])){
+      sanitizeTestData(t);
+      t.modified = true;
+    }
+    plan.updated = nowIsoDate();
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    return plan;
   }
 
   /* ---------- File System Root (optional) ---------- */
@@ -2741,6 +2800,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         </div>
         <div class="actions">
           <button class="btn mini primary" data-act="open" data-id="${escapeHtml(p.id)}">Open</button>
+          ${state.prefs.show_plan_sanitize ? `<button class="btn mini" data-act="sanitize" data-id="${escapeHtml(p.id)}">JSON Sanitize</button>` : ""}
           <button class="btn mini" data-act="review" data-id="${escapeHtml(p.id)}">AI Review</button>
           <button class="btn mini" data-act="rename" data-id="${escapeHtml(p.id)}">Rename</button>
           <button class="btn mini" data-act="save-template" data-id="${escapeHtml(p.id)}">Save as Template</button>
@@ -2767,6 +2827,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const act = btn.getAttribute("data-act");
         const id = btn.getAttribute("data-id");
         if(act === "open") runAsync(openPlanById(id));
+        if(act === "sanitize") runAsync((async () => {
+          try{
+            await sanitizePlanJson(id);
+            logLine("JSON Sanitize: completed.", "ok");
+            toast("JSON Sanitize", "Plan JSON sanitized.", "ok");
+            runAsync(renderLibrary());
+          }catch(e){
+            logLine(`JSON Sanitize failed: ${e.message || e}`, "warn");
+            toast("JSON Sanitize", e.message || "Failed.", "warn");
+          }
+        })());
         if(act === "review") runAsync(aiReviewPlan(id));
         if(act === "rename") runAsync(renamePlanFlow(id));
         if(act === "save-template") runAsync(saveTemplateFlow(id));
@@ -4044,15 +4115,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       `;
       $("cancelRename").onclick = hideModal;
       $("confirmRename").onclick = async () => {
-        const newName = $("renamePlanName").value.trim();
+        const newName = sanitizeAiText($("renamePlanName").value.trim());
         if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
 
         const live = await Store.loadPlan(planId);
         const oldNotes = live.userNotes ?? extractUserNotes(live.markdown || "");
         live.name = newName;
         live.slug = slugifyPlanName(newName);
-        live.goal = $("renamePlanGoal").value.trim();
-        live.scope = $("renamePlanScope").value.trim();
+        live.goal = sanitizeAiText($("renamePlanGoal").value.trim());
+        live.scope = sanitizeAiText($("renamePlanScope").value.trim());
         live.userNotes = oldNotes;
         if(useFileSystemStore()){
           try{
@@ -4695,6 +4766,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <option value="unlocked">Unlocked</option>
             </select>
           </div>
+          <div>
+            <div class="label">All Plans: JSON Sanitize Button</div>
+            <select class="select" id="prefShowPlanSanitize">
+              <option value="false">Off</option>
+              <option value="true">On</option>
+            </select>
+          </div>
         </div>
 
         <div class="row" style="margin-top:10px;">
@@ -4748,6 +4826,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(prefMaturityClicks) prefMaturityClicks.value = String(state.prefs.ai_maturity_clicks ?? 4);
       const prefTestEditorLock = $("prefTestEditorLock");
       if(prefTestEditorLock) prefTestEditorLock.value = state.prefs.test_editor_lock || "locked";
+      const prefShowPlanSanitize = $("prefShowPlanSanitize");
+      if(prefShowPlanSanitize) prefShowPlanSanitize.value = String(!!state.prefs.show_plan_sanitize);
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -4814,6 +4894,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
         state.prefs.test_editor_lock = $("prefTestEditorLock").value || "locked";
+        state.prefs.show_plan_sanitize = $("prefShowPlanSanitize").value === "true";
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
