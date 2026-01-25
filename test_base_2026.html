@@ -1111,6 +1111,20 @@
     return num === 2 ? 2 : 4;
   }
 
+  function mergeAiMeta(base, override){
+    const out = structuredClone(base || {});
+    const src = override || {};
+    out.maturity = { ...(out.maturity || {}), ...(src.maturity || {}) };
+    out.field_labels = { ...(out.field_labels || {}), ...(src.field_labels || {}) };
+    out.field_prompts = { ...(out.field_prompts || {}), ...(src.field_prompts || {}) };
+    out.field_types = { ...(out.field_types || {}), ...(src.field_types || {}) };
+    if(src.last_ai_reviewed != null) out.last_ai_reviewed = src.last_ai_reviewed;
+    if(src.last_ai_review_model != null) out.last_ai_review_model = src.last_ai_review_model;
+    if(src.last_human_reviewed != null) out.last_human_reviewed = src.last_human_reviewed;
+    if(src.notes != null) out.notes = src.notes;
+    return out;
+  }
+
   function nextTestNo(plan){
     const nums = (plan?.tests || [])
       .map(t => String(t?.data?.test_no || "").trim())
@@ -1145,6 +1159,42 @@
     if(!plan?.tests) return;
     plan.tests = plan.tests.slice().sort((a,b) => (a.order||0) - (b.order||0));
     plan.tests.forEach((t, i) => { t.order = i + 1; });
+  }
+
+  function parseMarkdownTableLines(lines){
+    const rows = lines.filter(l => /\|/.test(l));
+    if(rows.length < 2) return [];
+    const headerCells = rows[0].split("|").map(s => s.trim()).filter(Boolean);
+    const dataRows = rows.slice(2);
+    const out = [];
+    for(const row of dataRows){
+      const cells = row.split("|").map(s => s.trim()).filter(Boolean);
+      if(!cells.length) continue;
+      const item = {};
+      headerCells.forEach((h, i) => { item[h] = cells[i] ?? ""; });
+      out.push(item);
+    }
+    return out;
+  }
+
+  function extractMarkdownSectionTable(md, heading){
+    if(!md) return [];
+    const re = new RegExp(`^#\\s+${heading}\\s*$`, "im");
+    const match = md.match(re);
+    if(!match) return [];
+    const start = md.slice(match.index + match[0].length);
+    const section = start.split(/\n# /)[0];
+    const lines = section.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    return parseMarkdownTableLines(lines);
+  }
+
+  function extractSchematicMarkdownData(md){
+    const netlist = extractMarkdownSectionTable(md, "Netlist");
+    const partlist = extractMarkdownSectionTable(md, "Partlist");
+    const pinout = extractMarkdownSectionTable(md, "Pinout Description Table, P1");
+    const circuitId = extractMarkdownSectionTable(md, "Circuit Identification");
+    const testPoints = partlist.filter(p => /test point/i.test(p["PART TYPE"] || p["Part Type"] || p["PART"] || ""));
+    return { netlist, partlist, pinout, circuitId, testPoints };
   }
 
   /* ---------- File System Root (optional) ---------- */
@@ -3508,6 +3558,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   function createNewPlanFlow(){
+    let mdText = "";
+    let mdName = "";
+    let mdInfoEl = null;
     showModal("Create New Plan", (body, footer) => {
       body.innerHTML = `
         <div class="muted" style="line-height:1.45;">
@@ -3532,7 +3585,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <div class="hr"></div>
         <div class="label">AI Test Creation (optional)</div>
         <div class="muted" style="line-height:1.45; margin-bottom:6px;">
-          Generates a plan shell with empty tests. Uses your AI model if available.
+          Generates a test plan from your inputs. Uses your AI model if available.
         </div>
         <div class="row">
           <div>
@@ -3555,6 +3608,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <option value="__blank__">Blank (full schema)</option>
             </select>
             <div class="hint">Templates are loaded from the current plan's tests/templates folder.</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <div>
+            <div class="label">Source Markdown (optional)</div>
+            <input class="input" id="newPlanMdFile" type="file" accept=".md,.markdown,text/markdown" />
+            <div class="hint" id="newPlanMdInfo">No markdown selected.</div>
           </div>
         </div>
         <div class="hint">AI model: ${escapeHtml(state.prefs.ai_model || "gpt-4.1-mini")}</div>
@@ -3605,6 +3665,31 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
         sel.value = templateList[0]?.id || "__blank__";
       });
+      const mdInput = $("newPlanMdFile");
+      mdInfoEl = $("newPlanMdInfo");
+      if(mdInput){
+        mdInput.addEventListener("change", () => {
+          const file = mdInput.files?.[0];
+          if(!file){
+            mdText = "";
+            mdName = "";
+            if(mdInfoEl) mdInfoEl.textContent = "No markdown selected.";
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            mdText = String(reader.result || "");
+            mdName = file.name || "markdown";
+            if(mdInfoEl) mdInfoEl.textContent = `Loaded: ${mdName} (${mdText.length} chars)`;
+          };
+          reader.onerror = () => {
+            mdText = "";
+            mdName = "";
+            if(mdInfoEl) mdInfoEl.textContent = "Failed to read markdown file.";
+          };
+          reader.readAsText(file);
+        });
+      }
 
       $("confirmNewPlanAi").onclick = async () => {
         const name = $("newPlanName").value.trim();
@@ -3636,13 +3721,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(key && state.prefs.ai_enabled){
           try{
             logLine(`AI Create: using model "${model}".`, "ok");
+            const mdData = mdText ? extractSchematicMarkdownData(mdText) : null;
             const payload = {
               plan_name: name,
               uut_pn: uutPn,
               device_type: deviceType,
               goal,
               scope,
-              test_count: count
+              test_count: count,
+              source_markdown_name: mdName,
+              source_markdown_text: mdText || "",
+              pin_interface_descriptions: mdData?.pinout || [],
+              test_point_list: mdData?.testPoints || [],
+              netlist: mdData?.netlist || [],
+              partlist: mdData?.partlist || [],
+              circuit_identification: mdData?.circuitId || []
             };
             const resp = await fetch("https://api.openai.com/v1/responses", {
               method: "POST",
@@ -3653,36 +3746,41 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               body: JSON.stringify({
                 model,
                 input: [
-                  { role:"system", content:"Return STRICT JSON: {\"tests\":[{\"test_no\":\"001\",\"test_name\":\"...\"}, ...]}. Provide exactly test_count items with 3-digit test_no strings and meaningful test_name values in a logical flow toward the plan goal. No extra text." },
+                  { role:"system", content:`Return STRICT JSON: {"plan":{"goal":"","scope":""},"tests":[{"test_no":"001","test_name":"...","set":{...}}, ...]}. Provide exactly test_count tests with 3-digit test_no values and meaningful test_name values. The set object should use full schema keys: ${Object.keys(TEST_SCHEMA_DEFAULT).filter(k=>k!=="_ai").join(", ")}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.` },
                   { role:"user", content: JSON.stringify(payload) }
                 ],
-                max_output_tokens: 300
+                max_output_tokens: 1400
               })
             });
             if(resp.ok){
               const data = await resp.json();
               const raw = extractResponseText(data);
               const parsed = safeParseJson(raw, "AI Create");
+              if(parsed?.plan){
+                if(!plan.goal && typeof parsed.plan.goal === "string") plan.goal = sanitizeAiText(parsed.plan.goal);
+                if(!plan.scope && typeof parsed.plan.scope === "string") plan.scope = sanitizeAiText(parsed.plan.scope);
+              }
               const list = Array.isArray(parsed?.tests) ? parsed.tests : [];
               const cleaned = list.map(t => ({
                 test_no: String(t?.test_no || "").trim(),
-                test_name: String(t?.test_name || "").trim()
+                test_name: String(t?.test_name || "").trim(),
+                set: t?.set && typeof t.set === "object" ? t.set : {}
               })).filter(t => t.test_no);
               if(cleaned.length){
                 for(const [idx, item] of cleaned.entries()){
-                  const testNo = item.test_no;
-                  const baseData = normalizeTestData({});
-                  if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
-                  baseData.test_no = testNo;
-                  if(item.test_name) baseData.test_name = item.test_name;
-                  baseData.uut_pn = uutPn;
-                  const t = {
+                  const testNo = item.test_no || String(idx + 1).padStart(3, "0");
+                  const set = { ...item.set };
+                  if(item.test_name && !set.test_name) set.test_name = item.test_name;
+                  if(testNo && !set.test_no) set.test_no = testNo;
+                  const baseData = normalizeTestData(set);
+                  if(uutPn && !baseData.uut_pn) baseData.uut_pn = uutPn;
+                  if(selectedTemplate?._ai) baseData._ai = mergeAiMeta(baseData._ai, selectedTemplate._ai);
+                  plan.tests.push({
                     id: uid(),
                     order: idx + 1,
                     modified: true,
                     data: baseData
-                  };
-                  plan.tests.push(t);
+                  });
                 }
                 usedAi = true;
               }
@@ -3694,6 +3792,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
         if(!plan.tests.length){
           for(let i = 1; i <= count; i++){
+            const testNo = String(i).padStart(3, "0");
+            const baseData = normalizeTestData({});
+            if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
+            baseData.test_no = testNo;
+            baseData.uut_pn = uutPn;
+            plan.tests.push({
+              id: uid(),
+              order: i,
+              modified: true,
+              data: baseData
+            });
+          }
+        }else if(plan.tests.length < count){
+          const start = plan.tests.length + 1;
+          for(let i = start; i <= count; i++){
             const testNo = String(i).padStart(3, "0");
             const baseData = normalizeTestData({});
             if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
