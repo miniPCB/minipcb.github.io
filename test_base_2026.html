@@ -3108,6 +3108,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <input class="input" id="newPlanTestCount" type="number" min="1" step="1" value="5" />
           </div>
         </div>
+        <div class="row" style="margin-top:8px;">
+          <div>
+            <div class="label">Test Template</div>
+            <select class="select" id="newPlanTestTemplate">
+              <option value="__blank__">Blank (full schema)</option>
+            </select>
+            <div class="hint">Templates are loaded from the current plan's tests/templates folder.</div>
+          </div>
+        </div>
         <div class="hint">AI model: ${escapeHtml(state.prefs.ai_model || "gpt-4.1-mini")}</div>
       `;
       footer.innerHTML = `
@@ -3145,12 +3154,24 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         showEditor();
         renderEditor();
       };
+      let templateList = [{ id: "__blank__", name: "Blank (full schema)", data: {} }];
+      runAsync(async () => {
+        const sel = $("newPlanTestTemplate");
+        if(!sel) return;
+        const list = await getAvailableTestTemplates(state.currentPlan);
+        templateList = list.length ? list : templateList;
+        sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
+        sel.value = templateList[0]?.id || "__blank__";
+      });
+
       $("confirmNewPlanAi").onclick = async () => {
         const name = $("newPlanName").value.trim();
         if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
         const uutPn = $("newPlanUutPn").value.trim();
         const deviceType = $("newPlanDeviceType").value.trim();
         const count = Math.max(1, Number($("newPlanTestCount").value) || 1);
+        const templateId = $("newPlanTestTemplate")?.value || "__blank__";
+        const selectedTemplate = templateList.find(t => t.id === templateId)?.data || null;
 
         const plan = {
           id: uid(),
@@ -3201,6 +3222,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   const baseData = normalizeTestData({});
                   baseData.test_no = testNo;
                   baseData.uut_pn = uutPn;
+                  const baseData = normalizeTestData({});
+                  if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
+                  baseData.test_no = testNo;
+                  baseData.uut_pn = uutPn;
                   const t = {
                     id: uid(),
                     order: idx + 1,
@@ -3221,6 +3246,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           for(let i = 1; i <= count; i++){
             const testNo = String(i).padStart(3, "0");
             const baseData = normalizeTestData({});
+            if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
             baseData.test_no = testNo;
             baseData.uut_pn = uutPn;
             plan.tests.push({
