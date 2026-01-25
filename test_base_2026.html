@@ -2210,7 +2210,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               field_label: t.data?._ai?.field_labels?.[field] || field,
               maturity: getFieldMaturity(t, field),
               authoritative_values: Object.keys(anchors).reduce((acc, k) => (acc[k] = anchors[k].value, acc), {}),
-              context: t.data
+              context: t.data,
+              context_files: (state.aiChatContextFiles || []).slice(0, 1).map(f => ({
+                name: f.name,
+                type: f.type,
+                truncated: !!f.truncated,
+                text: f.text
+              }))
             };
 
             (async () => {
@@ -2227,7 +2233,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   body: JSON.stringify({
                     model,
                     input: [
-                      { role:"system", content:"Return ONLY the field value text. No JSON, no extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief." },
+                      { role:"system", content:"Return ONLY the field value text. No JSON, no extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Use context_files (if provided) as source material. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief." },
                       { role:"user", content: JSON.stringify(payload, null, 2) }
                     ],
                     max_output_tokens: 120
