@@ -1641,9 +1641,18 @@
 
   function extractPlanMetaFromMarkdown(md){
     const s = md || "";
-    const goal = (s.match(/^\s*-\s*\*\*Plan Goal:\*\*\s*(.*)$/mi) || [])[1] || "";
-    const scope = (s.match(/^\s*-\s*\*\*Plan Scope:\*\*\s*(.*)$/mi) || [])[1] || "";
-    return { goal: goal.trim(), scope: scope.trim() };
+    let goal = "";
+    let scope = "";
+    for(const rawLine of s.split(/\r?\n/)){
+      const line = rawLine.trim();
+      if(line.toLowerCase().startsWith("- **plan goal:**")){
+        goal = line.slice("- **Plan Goal:**".length).trim();
+      }
+      if(line.toLowerCase().startsWith("- **plan scope:**")){
+        scope = line.slice("- **Plan Scope:**".length).trim();
+      }
+    }
+    return { goal, scope };
   }
 
   function generatePlanMarkdown(plan){
