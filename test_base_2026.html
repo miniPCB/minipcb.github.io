@@ -3137,6 +3137,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         logLine(`Created plan: ${plan.name}`, "ok");
         toast("Plan created", plan.name, "ok");
         runAsync(renderLibrary());
+        state.currentPlan = plan;
+        state.currentTemplateId = null;
+        state.currentTestTemplate = null;
+        state.templateEditReturnPlanId = null;
+        state.currentTestId = plan.tests[0]?.id || null;
+        showEditor();
+        renderEditor();
       };
       $("confirmNewPlanAi").onclick = async () => {
         const name = $("newPlanName").value.trim();
@@ -3244,9 +3251,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
 
         hideModal();
-        logLine(`Created plan: ${plan.name}${usedAi ? " (AI assist)" : ""}.`, "ok");
-        toast("Plan created", usedAi ? `${plan.name} (AI assist)` : plan.name, "ok");
+        const testMsg = `${plan.tests.length} test${plan.tests.length === 1 ? "" : "s"}`;
+        logLine(`Created plan: ${plan.name}${usedAi ? " (AI assist)" : ""} — ${testMsg}.`, "ok");
+        if(!aiAvailable){
+          logLine("AI unavailable. Saved to browser store.", "warn");
+          toast("Plan created", `${plan.name} (${testMsg}) — saved to browser store`, "warn");
+        }else{
+          toast("Plan created", usedAi ? `${plan.name} (${testMsg}) — AI assist` : `${plan.name} (${testMsg})`, "ok");
+        }
         runAsync(renderLibrary());
+        state.currentPlan = plan;
+        state.currentTemplateId = null;
+        state.currentTestTemplate = null;
+        state.templateEditReturnPlanId = null;
+        state.currentTestId = plan.tests[0]?.id || null;
+        showEditor();
+        renderEditor();
       };
 
       setTimeout(() => $("newPlanName").focus(), 20);
