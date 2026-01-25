@@ -184,6 +184,11 @@
       border-color: rgba(124,255,176,.65);
       color: var(--text);
     }
+    .tag.maturity-dirty{
+      background: rgba(124,255,176,.18);
+      border-color: rgba(124,255,176,.55);
+      box-shadow: 0 0 0 1px rgba(124,255,176,.18) inset;
+    }
 
     .input, .select, textarea{
       width:100%;
@@ -2443,6 +2448,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!test.data._ai.maturity) test.data._ai.maturity = {};
         test.data._ai.maturity[field] = Number.isFinite(val) ? val : 0;
         test.modified = true;
+        if(!test._dirtyFields) test._dirtyFields = {};
+        test._dirtyFields[`_ai.maturity.${field}`] = true;
         $("dirtyHint").style.display = "";
         hideModal();
         renderForm();
@@ -2468,7 +2475,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(!test.data._ai.maturity) test.data._ai.maturity = {};
       test.data._ai.maturity[field] = Number.isFinite(num) ? num : 0;
       test.modified = true;
+      if(!test._dirtyFields) test._dirtyFields = {};
+      test._dirtyFields[`_ai.maturity.${field}`] = true;
       $("dirtyHint").style.display = "";
+      tagEl.classList.add("maturity-dirty");
       tagEl.textContent = `M${Number.isFinite(num) ? num : 0}`;
     };
     tagEl.textContent = "";
@@ -2932,6 +2942,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <span class="tag" data-maturity="${k}" title="Click to set maturity">M${maturity}</span>
         `;
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
+      if(test._dirtyFields?.[`_ai.maturity.${k}`]) maturityTag.classList.add("maturity-dirty");
 
       const input = document.createElement(isTextArea ? "textarea" : "input");
       const isParamValue = (k === "param1_value" || k === "param2_value");
