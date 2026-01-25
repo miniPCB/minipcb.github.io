@@ -2122,7 +2122,84 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
   }
 
-  function openMaturityDialog(test, field){
+  
+
+  async function aiGeneratePlan(inputs, basePlan){
+    const key = getAiKey();
+    const model = state.prefs.ai_model || "gpt-4.1-mini";
+    const payload = {
+      inputs,
+      base_template: basePlan ? {
+        name: basePlan.name,
+        tests: (basePlan.tests || []).map(t => t.data || t)
+      } : null,
+      schema_fields: Object.keys(TEST_SCHEMA_DEFAULT).filter(k => k !== "_ai"),
+      notes: "Return JSON only. Leave fields blank if unknown. Provide a tests array."
+    };
+    try{
+      logLine(`AI Create: using model "${model}".`, "ok");
+      const resp = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${key}`
+        },
+        body: JSON.stringify({
+          model,
+          input: [
+            { role:"system", content:"Return STRICT JSON with shape: {"tests":[{...}]}. Use schema_fields only. Leave unknown fields empty strings. Use inputs to build a plan structure. If base_template is provided, align style and naming. Do not include extra keys." },
+            { role:"user", content: JSON.stringify(payload, null, 2) }
+          ],
+          max_output_tokens: 2000
+        })
+      });
+      if(!resp.ok){
+        const t = await resp.text().catch(() => "");
+        throw new Error(`HTTP ${resp.status}: ${t.slice(0,160)}`);
+      }
+      const data = await resp.json();
+      const raw = extractResponseText(data);
+      const parsed = safeParseJson(raw, "AI Create");
+      return parsed && typeof parsed === "object" ? parsed : null;
+    }catch(e){
+      logLine(`AI Create failed: ${e.message || e}`, "warn");
+      return null;
+    }
+  }
+
+  function buildPlanFromAi(name, aiPlan, testCount, aiInputs){
+    const list = Array.isArray(aiPlan?.tests) ? aiPlan.tests : [];
+    const trimmed = list.slice(0, testCount);
+    while(trimmed.length < testCount) trimmed.push({});
+    const tests = trimmed.map((d, idx) => {
+      const raw = d || {};
+      const data = normalizeTestData(raw);
+      for(const k of ["ll","tv","ul","units"]){
+        if(raw[k] == null || String(raw[k]).trim() === "") data[k] = "";
+      }
+      return {
+        id: uid(),
+        order: idx + 1,
+        modified: true,
+        data
+      };
+    });
+    const plan = {
+      id: uid(),
+      name,
+      slug: slugifyPlanName(name),
+      created: nowIsoDate(),
+      updated: nowIsoDate(),
+      tests,
+      markdown: "",
+      userNotes: "Add plan-level notes here (equipment, safety, lab setup, etc.).",
+      ai_plan_inputs: aiInputs || null
+    };
+    generatePlanMarkdown(plan);
+    return plan;
+  }
+
+function openMaturityDialog(test, field){
     if(!test) return;
     const current = getFieldMaturity(test, field);
     showModal("AI Maturity", (body, footer) => {
@@ -3090,23 +3167,155 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   function createNewPlanFlow(){
     showModal("Create New Plan", (body, footer) => {
+      const model = state.prefs.ai_model || "gpt-4.1-mini";
       body.innerHTML = `
         <div class="muted" style="line-height:1.45;">
           Creates a new plan. If a Plan Folder is set, a folder is created with test JSON files and plan markdown.
         </div>
         <div class="hr"></div>
+
         <div class="label">Plan Name</div>
-        <input class="input" id="newPlanName" placeholder="e.g., Capacitor Thermal Stress Validation" />
-        <div class="hint">Slug rules: lowercase, spaces→underscores, remove non [a-z0-9_], collapse underscores.</div>
+        <input class="input" id="newPlanName" placeholder="e.g., Power Supply CCA (Generic)" />
+        <div class="hint">Slug rules: lowercase, spaces???underscores, remove non [a-z0-9_], collapse underscores.</div>
+
+        <div class="hr"></div>
+        <div class="label">Use Plan Template (optional)</div>
+        <select class="select" id="newPlanTemplate">
+          <option value="">None (blank)</option>
+        </select>
+
+        <div class="hr"></div>
+        <div class="row">
+          <div>
+            <div class="label">AI Generate</div>
+            <select class="select" id="newPlanAiMode">
+              <option value="off">Off</option>
+              <option value="on">On (structure only)</option>
+            </select>
+            <div class="hint">Model: <span class="tag">${escapeHtml(model)}</span></div>
+          </div>
+          <div>
+            <div class="label"># of Tests</div>
+            <input class="input" id="newPlanTestCount" type="number" min="1" step="1" value="5" />
+          </div>
+        </div>
+
+        <div class="hr"></div>
+        <div class="row">
+          <div>
+            <div class="label">UUT P/N</div>
+            <input class="input" id="newPlanUutPn" placeholder="e.g., TBD or 21A-00" />
+          </div>
+          <div>
+            <div class="label">Device Type</div>
+            <input class="input" id="newPlanDeviceType" placeholder="e.g., Power Supply, CCA, Sensor Module" />
+          </div>
+        </div>
+        <div class="label" style="margin-top:10px;">Test Scope</div>
+        <textarea class="input" id="newPlanScope" placeholder="High-level scope and exclusions"></textarea>
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="label">Test Types</div>
+            <input class="input" id="newPlanTestTypes" placeholder="e.g., Inspection, Functional Verification" />
+          </div>
+          <div>
+            <div class="label">Target Standards</div>
+            <input class="input" id="newPlanStandards" placeholder="e.g., IPC-A-610, MIL-STD-461" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="label">Environment</div>
+            <input class="input" id="newPlanEnvironment" placeholder="e.g., Ambient, 23?C ?? 5?C" />
+          </div>
+          <div>
+            <div class="label">Pass/Fail Philosophy</div>
+            <input class="input" id="newPlanPassFail" placeholder="e.g., Conservative, safety-first" />
+          </div>
+        </div>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelNewPlan">Cancel</button>
         <button class="btn primary" id="confirmNewPlan">Create</button>
       `;
       $("cancelNewPlan").onclick = hideModal;
+
+      runAsync(async () => {
+        const sel = $("newPlanTemplate");
+        const templates = await Templates.listTemplates();
+        sel.innerHTML = `<option value="">None (blank)</option>` + templates.map(t =>
+          `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`
+        ).join("");
+      });
+
       $("confirmNewPlan").onclick = async () => {
         const name = $("newPlanName").value.trim();
         if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+
+        const templateId = $("newPlanTemplate").value || "";
+        const aiMode = $("newPlanAiMode").value || "off";
+        const testCount = Math.max(1, Number($("newPlanTestCount").value) || 1);
+
+        let basePlan = null;
+        if(templateId){
+          basePlan = await Templates.loadTemplate(templateId).catch(() => null);
+        }
+
+        const aiInputs = {
+          plan_name: name,
+          uut_pn: $("newPlanUutPn").value.trim(),
+          device_type: $("newPlanDeviceType").value.trim(),
+          test_scope: $("newPlanScope").value.trim(),
+          test_types: $("newPlanTestTypes").value.trim(),
+          target_standards: $("newPlanStandards").value.trim(),
+          environment: $("newPlanEnvironment").value.trim(),
+          pass_fail_philosophy: $("newPlanPassFail").value.trim(),
+          test_count: testCount
+        };
+
+        if(aiMode === "on"){
+          const key = getAiKey();
+          if(!key){
+            toast("AI Create", "Set an API key in Preferences first.", "warn");
+            return;
+          }
+          const aiPlan = await aiGeneratePlan(aiInputs, basePlan);
+          if(!aiPlan){
+            toast("AI Create", "AI generation failed.", "warn");
+            return;
+          }
+          const plan = buildPlanFromAi(name, aiPlan, testCount, aiInputs);
+          await Store.savePlan(plan);
+          hideModal();
+          logLine(`Created plan: ${plan.name} (AI)`, "ok");
+          toast("Plan created", plan.name, "ok");
+          runAsync(renderLibrary());
+          return;
+        }
+
+        if(basePlan){
+          const copy = structuredClone(basePlan);
+          copy.id = uid();
+          copy.name = name;
+          copy.slug = slugifyPlanName(name);
+          copy.folder = null;
+          copy.created = nowIsoDate();
+          copy.updated = nowIsoDate();
+          copy.userNotes = basePlan.userNotes ?? extractUserNotes(basePlan.markdown || "");
+          copy.tests = (basePlan.tests || []).map((t, idx) => ({
+            id: uid(),
+            order: t.order ?? (idx + 1),
+            modified: false,
+            data: structuredClone(t.data || {})
+          }));
+          generatePlanMarkdown(copy);
+          await Store.savePlan(copy);
+          hideModal();
+          logLine(`Created plan from template: ${copy.name}`, "ok");
+          toast("Plan created", copy.name, "ok");
+          runAsync(renderLibrary());
+          return;
+        }
 
         const plan = {
           id: uid(),
@@ -3131,7 +3340,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     });
   }
 
-  async function renamePlanFlow(planId){
+  async function renamePlanFlowasync function renamePlanFlow(planId){
     const base = state.plansCache.find(p => p.id === planId);
     if(!base) return;
 
