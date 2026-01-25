@@ -3012,7 +3012,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           {
             id: "ai_suggest_field",
             label: "AI Suggest this Field",
-            onClick: () => aiSuggestFocusedField()
+            onClick: () => aiSuggestFocusedField(k)
           }
         ];
         showContextMenu(e.clientX, e.clientY, items);
@@ -4973,7 +4973,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       return result;
     }
 
-    async function aiSuggestFocusedField(){
+    async function aiSuggestFocusedField(fieldOverride){
       const test = currentTest();
       if(!test){
         toast("AI Suggest", "Select a test first.", "warn");
@@ -4990,15 +4990,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
       const model = state.prefs.ai_model || "gpt-4.1-mini";
       logLine(`AI Suggest: using model "${model}".`, "ok");
-      const targets = fieldsNeedingSuggestion(test);
-      if(!targets.length){
-        const focused = state.focusField || document.activeElement?.getAttribute?.("data-field");
-        if(!focused){
-          toast("AI Suggest", "No low-maturity fields found.", "warn");
-          logLine("AI Suggest: no low-maturity fields.", "warn");
-          return;
+      const targets = [];
+      if(fieldOverride && Object.prototype.hasOwnProperty.call(test.data || {}, fieldOverride)){
+        targets.push(fieldOverride);
+      }else{
+        const lowMaturity = fieldsNeedingSuggestion(test);
+        if(!lowMaturity.length){
+          const focused = state.focusField || document.activeElement?.getAttribute?.("data-field");
+          if(!focused){
+            toast("AI Suggest", "No low-maturity fields found.", "warn");
+            logLine("AI Suggest: no low-maturity fields.", "warn");
+            return;
+          }
+          targets.push(focused);
+        }else{
+          targets.push(...lowMaturity);
         }
-        targets.push(focused);
       }
       logLine(`AI Suggest: ${targets.length} field(s) queued (maturity <= ${state.prefs.ai_suggest_maturity_max}).`, "ok");
       for(const f of targets) setSuggestStatus(test.id, f, "pending");
