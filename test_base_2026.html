@@ -3625,6 +3625,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <button class="btn primary" id="confirmNewPlanAi">Create (AI Assist)</button>
       `;
       $("cancelNewPlan").onclick = hideModal;
+      const setCreateBusy = (busy, label) => {
+        const cancelBtn = $("cancelNewPlan");
+        const blankBtn = $("confirmNewPlanBlank");
+        const aiBtn = $("confirmNewPlanAi");
+        if(cancelBtn) cancelBtn.disabled = !!busy;
+        if(blankBtn) blankBtn.disabled = !!busy;
+        if(aiBtn){
+          aiBtn.disabled = !!busy;
+          aiBtn.textContent = busy ? (label || "Creating…") : "Create (AI Assist)";
+        }
+      };
       $("confirmNewPlanBlank").onclick = async () => {
         const name = $("newPlanName").value.trim();
         if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
@@ -3694,162 +3705,169 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("confirmNewPlanAi").onclick = async () => {
         const name = $("newPlanName").value.trim();
         if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
-        const uutPn = $("newPlanUutPn").value.trim();
-        const deviceType = $("newPlanDeviceType").value.trim();
-        const count = Math.max(1, Number($("newPlanTestCount").value) || 1);
-        const templateId = $("newPlanTestTemplate")?.value || "__blank__";
-        const selectedTemplate = templateList.find(t => t.id === templateId)?.data || null;
-        const goal = $("newPlanGoal").value.trim();
-        const scope = $("newPlanScope").value.trim();
+        setCreateBusy(true, "Creating…");
+        logLine("AI Create: started. Please wait…", "ok");
+        toast("AI Create", "Started. Please wait…", "ok");
+        try{
+          const uutPn = $("newPlanUutPn").value.trim();
+          const deviceType = $("newPlanDeviceType").value.trim();
+          const count = Math.max(1, Number($("newPlanTestCount").value) || 1);
+          const templateId = $("newPlanTestTemplate")?.value || "__blank__";
+          const selectedTemplate = templateList.find(t => t.id === templateId)?.data || null;
+          const goal = $("newPlanGoal").value.trim();
+          const scope = $("newPlanScope").value.trim();
 
-        const plan = {
-          id: uid(),
-          name,
-          slug: slugifyPlanName(name),
-          created: nowIsoDate(),
-          updated: nowIsoDate(),
-          tests: [],
-          markdown: "",
-          goal,
-          scope,
-          userNotes: "Add plan-level notes here (equipment, safety, lab setup, etc.)."
-        };
+          const plan = {
+            id: uid(),
+            name,
+            slug: slugifyPlanName(name),
+            created: nowIsoDate(),
+            updated: nowIsoDate(),
+            tests: [],
+            markdown: "",
+            goal,
+            scope,
+            userNotes: "Add plan-level notes here (equipment, safety, lab setup, etc.)."
+          };
 
-        const key = getAiKey();
-        const model = state.prefs.ai_model || "gpt-4.1-mini";
-        let usedAi = false;
-        if(key && state.prefs.ai_enabled){
-          try{
-            logLine(`AI Create: using model "${model}".`, "ok");
-            const mdData = mdText ? extractSchematicMarkdownData(mdText) : null;
-            const payload = {
-              plan_name: name,
-              uut_pn: uutPn,
-              device_type: deviceType,
-              goal,
-              scope,
-              test_count: count,
-              source_markdown_name: mdName,
-              source_markdown_text: mdText || "",
-              pin_interface_descriptions: mdData?.pinout || [],
-              test_point_list: mdData?.testPoints || [],
-              netlist: mdData?.netlist || [],
-              partlist: mdData?.partlist || [],
-              circuit_identification: mdData?.circuitId || []
-            };
-            const resp = await fetch("https://api.openai.com/v1/responses", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${key}`
-              },
-              body: JSON.stringify({
-                model,
-                input: [
-                  { role:"system", content:`Return STRICT JSON: {"plan":{"goal":"","scope":""},"tests":[{"test_no":"001","test_name":"...","set":{...}}, ...]}. Provide exactly test_count tests with 3-digit test_no values and meaningful test_name values. The set object should use full schema keys: ${Object.keys(TEST_SCHEMA_DEFAULT).filter(k=>k!=="_ai").join(", ")}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.` },
-                  { role:"user", content: JSON.stringify(payload) }
-                ],
-                max_output_tokens: 1400
-              })
-            });
-            if(resp.ok){
-              const data = await resp.json();
-              const raw = extractResponseText(data);
-              const parsed = safeParseJson(raw, "AI Create");
-              if(parsed?.plan){
-                if(!plan.goal && typeof parsed.plan.goal === "string") plan.goal = sanitizeAiText(parsed.plan.goal);
-                if(!plan.scope && typeof parsed.plan.scope === "string") plan.scope = sanitizeAiText(parsed.plan.scope);
-              }
-              const list = Array.isArray(parsed?.tests) ? parsed.tests : [];
-              const cleaned = list.map(t => ({
-                test_no: String(t?.test_no || "").trim(),
-                test_name: String(t?.test_name || "").trim(),
-                set: t?.set && typeof t.set === "object" ? t.set : {}
-              })).filter(t => t.test_no);
-              if(cleaned.length){
-                for(const [idx, item] of cleaned.entries()){
-                  const testNo = item.test_no || String(idx + 1).padStart(3, "0");
-                  const set = { ...item.set };
-                  if(item.test_name && !set.test_name) set.test_name = item.test_name;
-                  if(testNo && !set.test_no) set.test_no = testNo;
-                  const baseData = normalizeTestData(set);
-                  if(uutPn && !baseData.uut_pn) baseData.uut_pn = uutPn;
-                  if(selectedTemplate?._ai) baseData._ai = mergeAiMeta(baseData._ai, selectedTemplate._ai);
-                  plan.tests.push({
-                    id: uid(),
-                    order: idx + 1,
-                    modified: true,
-                    data: baseData
-                  });
+          const key = getAiKey();
+          const model = state.prefs.ai_model || "gpt-4.1-mini";
+          let usedAi = false;
+          if(key && state.prefs.ai_enabled){
+            try{
+              logLine(`AI Create: using model "${model}".`, "ok");
+              const mdData = mdText ? extractSchematicMarkdownData(mdText) : null;
+              const payload = {
+                plan_name: name,
+                uut_pn: uutPn,
+                device_type: deviceType,
+                goal,
+                scope,
+                test_count: count,
+                source_markdown_name: mdName,
+                source_markdown_text: mdText || "",
+                pin_interface_descriptions: mdData?.pinout || [],
+                test_point_list: mdData?.testPoints || [],
+                netlist: mdData?.netlist || [],
+                partlist: mdData?.partlist || [],
+                circuit_identification: mdData?.circuitId || []
+              };
+              const resp = await fetch("https://api.openai.com/v1/responses", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${key}`
+                },
+                body: JSON.stringify({
+                  model,
+                  input: [
+                    { role:"system", content:`Return STRICT JSON: {"plan":{"goal":"","scope":""},"tests":[{"test_no":"001","test_name":"...","set":{...}}, ...]}. Provide exactly test_count tests with 3-digit test_no values and meaningful test_name values. The set object should use full schema keys: ${Object.keys(TEST_SCHEMA_DEFAULT).filter(k=>k!=="_ai").join(", ")}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.` },
+                    { role:"user", content: JSON.stringify(payload) }
+                  ],
+                  max_output_tokens: 1400
+                })
+              });
+              if(resp.ok){
+                const data = await resp.json();
+                const raw = extractResponseText(data);
+                const parsed = safeParseJson(raw, "AI Create");
+                if(parsed?.plan){
+                  if(!plan.goal && typeof parsed.plan.goal === "string") plan.goal = sanitizeAiText(parsed.plan.goal);
+                  if(!plan.scope && typeof parsed.plan.scope === "string") plan.scope = sanitizeAiText(parsed.plan.scope);
                 }
-                usedAi = true;
+                const list = Array.isArray(parsed?.tests) ? parsed.tests : [];
+                const cleaned = list.map(t => ({
+                  test_no: String(t?.test_no || "").trim(),
+                  test_name: String(t?.test_name || "").trim(),
+                  set: t?.set && typeof t.set === "object" ? t.set : {}
+                })).filter(t => t.test_no);
+                if(cleaned.length){
+                  for(const [idx, item] of cleaned.entries()){
+                    const testNo = item.test_no || String(idx + 1).padStart(3, "0");
+                    const set = { ...item.set };
+                    if(item.test_name && !set.test_name) set.test_name = item.test_name;
+                    if(testNo && !set.test_no) set.test_no = testNo;
+                    const baseData = normalizeTestData(set);
+                    if(uutPn && !baseData.uut_pn) baseData.uut_pn = uutPn;
+                    if(selectedTemplate?._ai) baseData._ai = mergeAiMeta(baseData._ai, selectedTemplate._ai);
+                    plan.tests.push({
+                      id: uid(),
+                      order: idx + 1,
+                      modified: true,
+                      data: baseData
+                    });
+                  }
+                  usedAi = true;
+                }
               }
+            }catch(e){
+              logLine(`AI Create failed: ${e.message || e}`, "warn");
             }
-          }catch(e){
-            logLine(`AI Create failed: ${e.message || e}`, "warn");
           }
-        }
 
-        if(!plan.tests.length){
-          for(let i = 1; i <= count; i++){
-            const testNo = String(i).padStart(3, "0");
-            const baseData = normalizeTestData({});
-            if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
-            baseData.test_no = testNo;
-            baseData.uut_pn = uutPn;
-            plan.tests.push({
-              id: uid(),
-              order: i,
-              modified: true,
-              data: baseData
-            });
+          if(!plan.tests.length){
+            for(let i = 1; i <= count; i++){
+              const testNo = String(i).padStart(3, "0");
+              const baseData = normalizeTestData({});
+              if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
+              baseData.test_no = testNo;
+              baseData.uut_pn = uutPn;
+              plan.tests.push({
+                id: uid(),
+                order: i,
+                modified: true,
+                data: baseData
+              });
+            }
+          }else if(plan.tests.length < count){
+            const start = plan.tests.length + 1;
+            for(let i = start; i <= count; i++){
+              const testNo = String(i).padStart(3, "0");
+              const baseData = normalizeTestData({});
+              if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
+              baseData.test_no = testNo;
+              baseData.uut_pn = uutPn;
+              plan.tests.push({
+                id: uid(),
+                order: i,
+                modified: true,
+                data: baseData
+              });
+            }
           }
-        }else if(plan.tests.length < count){
-          const start = plan.tests.length + 1;
-          for(let i = start; i <= count; i++){
-            const testNo = String(i).padStart(3, "0");
-            const baseData = normalizeTestData({});
-            if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
-            baseData.test_no = testNo;
-            baseData.uut_pn = uutPn;
-            plan.tests.push({
-              id: uid(),
-              order: i,
-              modified: true,
-              data: baseData
-            });
+
+          generatePlanMarkdown(plan);
+          const aiAvailable = key && state.prefs.ai_enabled;
+          if(!aiAvailable){
+            const all = loadPlans();
+            const idx = all.findIndex(x => x.id === plan.id);
+            if(idx >= 0) all[idx] = structuredClone(plan);
+            else all.push(structuredClone(plan));
+            localStorage.setItem(Store.key, JSON.stringify(all));
+          }else{
+            await Store.savePlan(plan);
           }
-        }
 
-        generatePlanMarkdown(plan);
-        const aiAvailable = key && state.prefs.ai_enabled;
-        if(!aiAvailable){
-          const all = loadPlans();
-          const idx = all.findIndex(x => x.id === plan.id);
-          if(idx >= 0) all[idx] = structuredClone(plan);
-          else all.push(structuredClone(plan));
-          localStorage.setItem(Store.key, JSON.stringify(all));
-        }else{
-          await Store.savePlan(plan);
+          hideModal();
+          const testMsg = `${plan.tests.length} test${plan.tests.length === 1 ? "" : "s"}`;
+          logLine(`Created plan: ${plan.name}${usedAi ? " (AI assist)" : ""} — ${testMsg}.`, "ok");
+          if(!aiAvailable){
+            logLine("AI unavailable. Saved to browser store.", "warn");
+            toast("Plan created", `${plan.name} (${testMsg}) — saved to browser store`, "warn");
+          }else{
+            toast("Plan created", usedAi ? `${plan.name} (${testMsg}) — AI assist` : `${plan.name} (${testMsg})`, "ok");
+          }
+          runAsync(renderLibrary());
+          state.currentPlan = plan;
+          state.currentTemplateId = null;
+          state.currentTestTemplate = null;
+          state.templateEditReturnPlanId = null;
+          state.currentTestId = plan.tests[0]?.id || null;
+          showEditor();
+          renderEditor();
+        }finally{
+          setCreateBusy(false);
         }
-
-        hideModal();
-        const testMsg = `${plan.tests.length} test${plan.tests.length === 1 ? "" : "s"}`;
-        logLine(`Created plan: ${plan.name}${usedAi ? " (AI assist)" : ""} — ${testMsg}.`, "ok");
-        if(!aiAvailable){
-          logLine("AI unavailable. Saved to browser store.", "warn");
-          toast("Plan created", `${plan.name} (${testMsg}) — saved to browser store`, "warn");
-        }else{
-          toast("Plan created", usedAi ? `${plan.name} (${testMsg}) — AI assist` : `${plan.name} (${testMsg})`, "ok");
-        }
-        runAsync(renderLibrary());
-        state.currentPlan = plan;
-        state.currentTemplateId = null;
-        state.currentTestTemplate = null;
-        state.templateEditReturnPlanId = null;
-        state.currentTestId = plan.tests[0]?.id || null;
-        showEditor();
-        renderEditor();
       };
 
       setTimeout(() => $("newPlanName").focus(), 20);
