@@ -622,7 +622,7 @@
             <div class="toolbarRow">
               <button class="btn mini primary" id="btnNewTest">New Test</button>
               <button class="btn mini" id="btnManageTestTemplates">Templates</button>
-              <button class="btn mini danger" id="btnDeleteTest" disabled style="display:none;">Delete</button>
+              <button class="btn mini danger" id="btnDeleteTest" disabled>Delete</button>
             </div>
           </div>
           <div class="panelBody">
@@ -2532,44 +2532,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               const ok = await createTestTemplateFromData(state.currentPlan, name, t.data);
               if(ok) toast("Templates", "Template created.", "ok");
               else toast("Templates", "Template creation failed.", "warn");
-            }
-          }
-          ,{
-            id: "dup_below",
-            label: "Duplicate (insert below)",
-            onClick: async () => {
-              const plan = state.currentPlan;
-              if(!plan) return;
-              const ordered = (plan.tests || []).slice().sort((a,b) => (a.order||0)-(b.order||0));
-              const idx = ordered.findIndex(x => x.id === t.id);
-              const copy = {
-                id: uid(),
-                order: (t.order || 0) + 0.1,
-                modified: true,
-                data: structuredClone(t.data || {})
-              };
-              plan.tests.push(copy);
-              const resorted = (plan.tests || []).slice().sort((a,b) => (a.order||0)-(b.order||0));
-              resorted.forEach((item, i) => item.order = i + 1);
-              state.currentTestId = copy.id;
-              renderEditor();
-              logLine("Duplicated test (inserted below).", "ok");
-              toast("Test duplicated", "Inserted below.", "ok");
-            }
-          },{
-            id: "delete_test",
-            label: "Delete",
-            onClick: () => {
-              const plan = state.currentPlan;
-              if(!plan) return;
-              if(!confirm("Delete this test?")) return;
-              plan.tests = plan.tests.filter(x => x.id !== t.id);
-              if(state.currentTestId === t.id){
-                state.currentTestId = plan.tests[0]?.id || null;
-              }
-              renderEditor();
-              logLine("Deleted test.", "warn");
-              toast("Test deleted", "Removed from plan.", "warn");
             }
           }
         ];
@@ -5747,14 +5709,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(!state.currentPlan) return;
       runAsync(aiReviewPlan(state.currentPlan.id));
     });
-    const btnFitFlow = $("btnFitFlow");
-    if(btnFitFlow) btnFitFlow.addEventListener("click", fitFlowToView);
-    const btnApplyNotes = $("btnApplyNotes");
-    if(btnApplyNotes) btnApplyNotes.addEventListener("click", () => runAsync(applyNotes()));
-    const btnRegenerateMd = $("btnRegenerateMd");
-    if(btnRegenerateMd) btnRegenerateMd.addEventListener("click", () => runAsync(regenerateMd()));
-    const btnDownloadMd = $("btnDownloadMd");
-    if(btnDownloadMd) btnDownloadMd.addEventListener("click", downloadMd);
+    $("btnFitFlow").addEventListener("click", fitFlowToView);
+    $("btnApplyNotes").addEventListener("click", () => runAsync(applyNotes()));
+    $("btnRegenerateMd").addEventListener("click", () => runAsync(regenerateMd()));
+    $("btnDownloadMd").addEventListener("click", downloadMd);
 
     $("btnCopyLog").addEventListener("click", async () => {
       const lines = [...$("log").querySelectorAll(".line")].map(x => x.textContent);
