@@ -1017,8 +1017,6 @@
     ai_review_debug: false,           // log one AI Review payload + response
     ai_review_pause_ms: 300,          // pause between AI review field calls
     ai_review_concurrency: 1,         // concurrent AI review calls
-    fallback_on_save: "auto_fill",    // auto_fill | prompt
-    fallback_format: "generic",       // generic | dated
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -1621,40 +1619,6 @@
   function loadTemplates(){
     try{ return JSON.parse(localStorage.getItem(templatesKey()) || "[]") || []; }
     catch{ return []; }
-  }
-
-  /* ---------- Fallback placeholders ---------- */
-  function placeholderFor(fieldName){
-    const fmt = state.prefs.fallback_format;
-    const dated = fmt === "dated";
-    const date = nowIsoDate();
-
-    const map = {
-      purpose: "TODO: Describe the objective of this test.",
-      procedure: "TODO: Write step-by-step procedure.",
-      measurement: "TODO: Describe what is measured and how.",
-      setup: "TODO: Describe equipment, connections, and initial conditions.",
-      test_name: "TODO: Name this test.",
-      test_no: "TODO: Assign a test number (e.g., T1).",
-      uut_pn: "TODO: Specify UUT part number.",
-      in_tol_next_step: "TODO: Specify next test_no or END PASS.",
-      oot_low_next_step: "TODO: Specify next test_no or END FAIL.",
-      oot_high_next_step: "TODO: Specify next test_no or END FAIL."
-    };
-
-    const base = map[fieldName] || `TODO: Fill in ${fieldName}.`;
-    return dated ? `${base} (Auto-filled: AI unavailable on ${date})` : base;
-  }
-
-  function applyFallback(data, missing){
-    const changed = [];
-    for(const k of missing){
-      if(((data[k] ?? "") + "").trim() === ""){
-        data[k] = placeholderFor(k);
-        changed.push(k);
-      }
-    }
-    return changed;
   }
 
   /* ---------- Markdown generation (skeleton) ---------- */
@@ -3609,28 +3573,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
     test.data._ai.last_human_reviewed = nowIsoTimestamp();
 
-    // required enforcement (never blocks)
-    if(!state.currentTestTemplate){
-      const missing = emptyFields(test.data);
-      if(missing.length){
-        if(state.prefs.fallback_on_save === "prompt"){
-          const ok = confirm(
-            `Missing required fields:\n- ${missing.join("\n- ")}\n\nAI is unavailable (skeleton). Auto-fill placeholders and save?`
-          );
-          if(!ok){
-            logLine("Save canceled by user (prompt).", "warn");
-            toast("Canceled", "Save canceled.", "warn");
-            return;
-          }
-        }
-        const changed = applyFallback(test.data, missing);
-        if(changed.length){
-          logLine(`Filled placeholders: ${changed.join(", ")}`, "warn");
-          toast("Filled placeholders", `Auto-filled: ${changed.join(", ")}`, "warn");
-        }
-      }
-    }
-
     if(state.currentTestTemplate){
       const basePlan = await Store.loadPlan(state.currentTestTemplate.basePlanId).catch(() => null);
       if(!basePlan){
@@ -3678,17 +3620,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const plan = state.currentPlan;
     if(!plan) return;
 
-    // normalize + fallback across all tests
-    let totalFilled = 0;
+    // normalize across all tests
     for(const t of plan.tests){
       t.data = normalizeTestData(t.data);
       if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
       t.data._ai.last_human_reviewed = nowIsoTimestamp();
-      const missing = emptyFields(t.data);
-      if(missing.length){
-        const changed = applyFallback(t.data, missing);
-        totalFilled += changed.length;
-      }
       t.modified = false;
       t._dirtyFields = {};
     }
@@ -3706,9 +3642,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       await Store.savePlan(plan);
     }
 
-    const saveMsg = totalFilled ? `Saved. Placeholders inserted: ${totalFilled}` : "Saved. No placeholders needed.";
-    logLine(`Saved all tests. Placeholders inserted: ${totalFilled}`, totalFilled ? "warn" : "ok");
-    toast("Save All", saveMsg, totalFilled ? "warn" : "ok");
+    logLine("Saved all tests.", "ok");
+    toast("Save All", "Saved.", "ok");
     state.aiReviewStatus = {};
     state.aiSuggestStatus = {};
     renderTestsList();
@@ -3804,23 +3739,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <option value="2">M2</option>
             </select>
           </div>
-          <div>
-            <div class="label">Fallback on Save</div>
-            <select class="select" id="prefFallbackOnSave">
-              <option value="auto_fill">Auto-fill and save</option>
-              <option value="prompt">Prompt before auto-fill</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:10px;">
-          <div>
-            <div class="label">Fallback Format</div>
-            <select class="select" id="prefFallbackFormat">
-              <option value="generic">Generic TODO</option>
-              <option value="dated">Dated TODO</option>
-            </select>
-          </div>
           <div id="prefAdvanced" style="display:none;">
             <div class="label">AI Review Debug</div>
             <select class="select" id="prefAiReviewDebug">
@@ -3881,8 +3799,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
       if(modelSelect) modelSelect.value = currentModel;
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
-      $("prefFallbackOnSave").value = state.prefs.fallback_on_save;
-      $("prefFallbackFormat").value = state.prefs.fallback_format;
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -3947,8 +3863,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.ai_enabled = $("prefAiEnabled").value === "true";
         state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
-        state.prefs.fallback_on_save = $("prefFallbackOnSave").value;
-        state.prefs.fallback_format = $("prefFallbackFormat").value;
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
