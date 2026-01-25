@@ -701,10 +701,6 @@
             <div>
               <h3 style="margin:0;">AI Plan Editor</h3>
               <div class="muted">AI Model: <span id="aiChatModel">—</span></div>
-              <div class="muted" style="margin-top:4px;">
-                Permission: <span id="aiChatPermLabel">REVISE/EDIT</span>
-              </div>
-              <input class="input" id="aiChatPermSlider" type="range" min="0" max="2" step="1" value="1" style="margin-top:8px; width:220px;" />
             </div>
           </div>
 
@@ -2145,25 +2141,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     log.scrollTop = log.scrollHeight;
   }
 
-  function aiChatPermToLabel(perm){
-    if(perm === "search") return "SEARCH/FIND";
-    if(perm === "create") return "CREATE/DELETE";
-    return "REVISE/EDIT";
-  }
-
-  function aiChatPermToSlider(perm){
-    if(perm === "search") return 0;
-    if(perm === "create") return 2;
-    return 1;
-  }
-
-  function aiChatSliderToPerm(val){
-    const n = Number(val);
-    if(n === 0) return "search";
-    if(n === 2) return "create";
-    return "edit";
-  }
-
   function extractJsonBlock(text){
     const s = String(text || "");
     const fenced = s.match(/```json\s*([\s\S]*?)```/i);
@@ -2498,10 +2475,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     updateAiUI();
     const aiModelEl = $("aiChatModel");
     if(aiModelEl) aiModelEl.textContent = state.prefs.ai_model || "gpt-4.1-mini";
-    const permLabel = $("aiChatPermLabel");
-    const permSlider = $("aiChatPermSlider");
-    if(permLabel) permLabel.textContent = aiChatPermToLabel(state.prefs.ai_chat_permission || "edit");
-    if(permSlider) permSlider.value = String(aiChatPermToSlider(state.prefs.ai_chat_permission || "edit"));
     $("btnSaveTest").disabled = !state.currentTestId;
     const delBtn = $("btnDeleteTest");
     if(delBtn) delBtn.disabled = !state.currentTestId;
@@ -5985,16 +5958,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           e.preventDefault();
           runAsync(aiChatSend());
         }
-      });
-    }
-    const permSlider = $("aiChatPermSlider");
-    if(permSlider){
-      permSlider.addEventListener("input", () => {
-        const perm = aiChatSliderToPerm(permSlider.value);
-        state.prefs.ai_chat_permission = perm;
-        savePrefs();
-        const label = $("aiChatPermLabel");
-        if(label) label.textContent = aiChatPermToLabel(perm);
       });
     }
     const planBadgeName = $("planBadgeName");
