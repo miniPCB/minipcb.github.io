@@ -1106,6 +1106,51 @@
     return AI_CHAT_PERMISSION_LEVELS.find(l => l.value === lvl)?.label || "Revise/Edit";
   }
 
+  const MAX_CHAT_CONTEXT_FILES = 5;
+  const MAX_CHAT_CONTEXT_CHARS = 20000;
+
+  function addAiChatContextFile(file, text){
+    const name = file?.name || "context";
+    const type = file?.type || "text/plain";
+    let content = String(text || "");
+    let truncated = false;
+    if(content.length > MAX_CHAT_CONTEXT_CHARS){
+      content = content.slice(0, MAX_CHAT_CONTEXT_CHARS);
+      truncated = true;
+    }
+    state.aiChatContextFiles = (state.aiChatContextFiles || []).filter(f => f.name !== name);
+    state.aiChatContextFiles.unshift({
+      name,
+      type,
+      size: file?.size || content.length,
+      truncated,
+      text: content
+    });
+    state.aiChatContextFiles = state.aiChatContextFiles.slice(0, MAX_CHAT_CONTEXT_FILES);
+  }
+
+  function openAiChatFilePicker(){
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".md,.markdown,.json,text/markdown,application/json,text/plain";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result || "");
+        addAiChatContextFile(file, text);
+        appendChatMessage("ai", `Loaded context file: ${file.name}`);
+        logLine(`AI Chat: loaded context file "${file.name}" (${text.length} chars).`, "ok");
+      };
+      reader.onerror = () => {
+        toast("AI Chat", "Failed to read file.", "warn");
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+
   function normalizeMaturityClicks(val){
     const num = Number(val);
     return num === 2 ? 2 : 4;
@@ -1851,7 +1896,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     templateListCache: [],
     templateEditReturnPlanId: null,
     flow: { x: 0, y: 0, scale: 1 },
-    modelList: []
+    modelList: [],
+    aiChatContextFiles: []
   };
 
   /* ---------- UI primitives ---------- */
@@ -2416,6 +2462,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         test_type: t.data?.test_type || ""
       })),
       permission: { level: perm, label: permLabel },
+      context_files: (state.aiChatContextFiles || []).map(f => ({
+        name: f.name,
+        type: f.type,
+        truncated: !!f.truncated,
+        text: f.text
+      })),
       request: text
     };
     try{
@@ -2428,7 +2480,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         body: JSON.stringify({
           model,
           input: [
-            { role:"system", content:`You edit a test plan. Permission level: ${permLabel} (${perm}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Only include fields to change. Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true.` },
+            { role:"system", content:`You edit a test plan. Permission level: ${permLabel} (${perm}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.` },
             { role:"user", content: JSON.stringify(payload) }
           ],
           max_output_tokens: 600
@@ -6334,6 +6386,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(chatClear) chatClear.addEventListener("click", () => { const log = $("aiChatLog"); if(log) log.innerHTML = ""; });
     const chatInput = $("aiChatInput");
     if(chatInput){
+      chatInput.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        const items = [
+          {
+            id: "load_file",
+            label: "Load File",
+            onClick: () => openAiChatFilePicker()
+          }
+        ];
+        showContextMenu(e.clientX, e.clientY, items);
+      });
       chatInput.addEventListener("keydown", (e) => {
         if(e.key === "Enter" && (e.ctrlKey || e.metaKey)){
           e.preventDefault();
