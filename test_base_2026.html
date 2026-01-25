@@ -1106,7 +1106,7 @@
 
   function createTestFromSet(plan, set, testNo){
     const nextOrder = (plan.tests?.reduce((m,t)=>Math.max(m, t.order||0), 0) || 0) + 1;
-    const data = { ...(set || {}) };
+    const data = { ...TEST_SCHEMA_DEFAULT, ...(set || {}) };
     if(testNo) data.test_no = testNo;
     const t = {
       id: uid(),
@@ -1123,6 +1123,12 @@
     for(const k of keys) t._dirtyFields[k] = true;
     plan.tests.push(t);
     return t;
+  }
+
+  function normalizeTestOrder(plan){
+    if(!plan?.tests) return;
+    plan.tests = plan.tests.slice().sort((a,b) => (a.order||0) - (b.order||0));
+    plan.tests.forEach((t, i) => { t.order = i + 1; });
   }
 
   /* ---------- File System Root (optional) ---------- */
@@ -2221,6 +2227,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
     if(perm <= 0) return false;
     let changed = false;
+    const schemaKeys = new Set(Object.keys(TEST_SCHEMA_DEFAULT));
+    const deleteSet = new Set();
+    if(perm >= 2){
+      if(payload?.delete_all === true){
+        if(plan.tests.length){
+          plan.tests = [];
+          changed = true;
+        }
+      }
+      if(Array.isArray(payload?.delete_tests)){
+        for(const rawNo of payload.delete_tests){
+          const testNo = String(rawNo || "").trim();
+          if(!testNo) continue;
+          deleteSet.add(testNo);
+        }
+      }
+    }
     if(payload?.plan){
       const p = payload.plan;
       if(typeof p.name === "string" && p.name.trim()){
@@ -2238,10 +2261,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
     }
     if(Array.isArray(payload?.tests)){
-      const schemaKeys = new Set(Object.keys(TEST_SCHEMA_DEFAULT));
       for(const item of payload.tests){
         const testNo = String(item?.test_no || "").trim();
         const set = item?.set || {};
+        const wantsDelete = perm >= 2 && item?.delete === true;
+        if(wantsDelete && testNo){
+          deleteSet.add(testNo);
+          continue;
+        }
         if(!set || typeof set !== "object") continue;
         let test = testNo ? plan.tests.find(t => String(t.data?.test_no || "").trim() === testNo) : null;
         if(!test){
@@ -2266,6 +2293,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test._dirtyFields[k] = true;
           changed = true;
         }
+      }
+    }
+    if(perm >= 2 && deleteSet.size){
+      const before = plan.tests.length;
+      plan.tests = plan.tests.filter(t => !deleteSet.has(String(t.data?.test_no || "").trim()));
+      if(plan.tests.length !== before) changed = true;
+    }
+    if(changed){
+      normalizeTestOrder(plan);
+      if(state.currentTestId && !plan.tests.find(t => t.id === state.currentTestId)){
+        state.currentTestId = plan.tests[0]?.id || null;
       }
     }
     if(changed){
@@ -2324,7 +2362,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         body: JSON.stringify({
           model,
           input: [
-            { role:"system", content:`You edit a test plan. Permission level: ${permLabel} (${perm}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no?, set:{field:value}}). Only include fields to change. Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number).` },
+            { role:"system", content:`You edit a test plan. Permission level: ${permLabel} (${perm}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Only include fields to change. Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true.` },
             { role:"user", content: JSON.stringify(payload) }
           ],
           max_output_tokens: 600
