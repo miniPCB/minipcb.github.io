@@ -1639,6 +1639,13 @@
     return "Add plan-level notes here (equipment, safety, lab setup, etc.).";
   }
 
+  function extractPlanMetaFromMarkdown(md){
+    const s = md || "";
+    const goal = (s.match(/^\s*-\s*\*\*Plan Goal:\*\*\s*(.*)$/mi) || [])[1] || "";
+    const scope = (s.match(/^\s*-\s*\*\*Plan Scope:\*\*\s*(.*)$/mi) || [])[1] || "";
+    return { goal: goal.trim(), scope: scope.trim() };
+  }
+
   function generatePlanMarkdown(plan){
     const tests = (plan.tests || []).slice().sort((a,b) => (a.order||0) - (b.order||0));
     const created = plan.created || nowIsoDate();
@@ -3321,8 +3328,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const base = state.plansCache.find(p => p.id === planId);
     if(!base) return;
     const plan = await Store.loadPlan(planId).catch(() => null);
-    const goalVal = plan?.goal ?? base.goal ?? "";
-    const scopeVal = plan?.scope ?? base.scope ?? "";
+    const mdMeta = extractPlanMetaFromMarkdown(plan?.markdown || "");
+    const goalVal = plan?.goal ?? base.goal ?? mdMeta.goal ?? "";
+    const scopeVal = plan?.scope ?? base.scope ?? mdMeta.scope ?? "";
 
     showModal("Rename Plan", (body, footer) => {
       body.innerHTML = `
