@@ -2141,6 +2141,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     log.scrollTop = log.scrollHeight;
   }
 
+  function extractJsonBlock(text){
+    const s = String(text || "");
+    const fenced = s.match(/```json\s*([\s\S]*?)```/i);
+    if(fenced && fenced[1]) return fenced[1].trim();
+    const generic = s.match(/```([\s\S]*?)```/);
+    if(generic && generic[1]) return generic[1].trim();
+    return s.trim();
+  }
+
   async function applyAiChatUpdates(plan, payload){
     let changed = false;
     if(payload?.plan){
@@ -2246,7 +2255,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = await resp.json();
       const raw = extractResponseText(data);
       let parsed = null;
-      try{ parsed = typeof raw === "string" ? JSON.parse(raw) : raw; }catch{}
+      if(typeof raw === "string"){
+        const extracted = extractJsonBlock(raw);
+        try{ parsed = JSON.parse(extracted); }catch{ parsed = null; }
+      }else if(raw && typeof raw === "object"){
+        parsed = raw;
+      }
       if(parsed && typeof parsed === "object"){
         const message = sanitizeAiText(parsed.message || "Applied requested updates.");
         appendChatMessage("ai", message);
