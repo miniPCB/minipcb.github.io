@@ -2447,21 +2447,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   function openMaturityQuick(test, field, tagEl){
     if(!test || !tagEl) return;
-    if(tagEl.querySelector("select")) return;
+    if(tagEl.querySelector(".maturity-menu")) return;
     const current = getFieldMaturity(test, field);
-    const select = document.createElement("select");
-    select.className = "select mini";
-    select.innerHTML = `
-      <option value="0">M0</option>
-      <option value="1">M1</option>
-      <option value="2">M2</option>
-      <option value="3">M3</option>
-      <option value="4">M4</option>
-    `;
-    select.value = String(current);
-    tagEl.textContent = "";
-    tagEl.appendChild(select);
-    select.focus();
+    const menu = document.createElement("div");
+    menu.className = "maturity-menu";
+    menu.style.display = "flex";
+    menu.style.gap = "4px";
+    menu.style.alignItems = "center";
+    menu.innerHTML = [0,1,2,3,4].map(n => (
+      `<button class="btn mini" data-m="${n}" type="button">M${n}</button>`
+    )).join("");
     const applyVal = (val) => {
       const num = Number(val);
       if(!test.data._ai) test.data._ai = { maturity:{} };
@@ -2471,10 +2466,20 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("dirtyHint").style.display = "";
       tagEl.textContent = `M${Number.isFinite(num) ? num : 0}`;
     };
-    select.addEventListener("change", () => applyVal(select.value));
-    select.addEventListener("blur", () => {
-      if(tagEl.textContent.trim() === "") tagEl.textContent = `M${current}`;
+    tagEl.textContent = "";
+    tagEl.appendChild(menu);
+    menu.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        applyVal(btn.getAttribute("data-m"));
+      });
     });
+    const onDoc = (e) => {
+      if(tagEl.contains(e.target)) return;
+      document.removeEventListener("click", onDoc, true);
+      if(tagEl.textContent.trim() === "") tagEl.textContent = `M${current}`;
+    };
+    document.addEventListener("click", onDoc, true);
   }
 
   function downloadText(filename, text, mime="text/plain"){
