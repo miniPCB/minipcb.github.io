@@ -912,7 +912,7 @@
     if (val === null || val === undefined) return "";
     if (typeof val === "string") return val;
     if (typeof val === "number" || typeof val === "boolean" || typeof val === "bigint") return String(val);
-    try { return JSON.stringify(val); } catch(e){ return String(val); }
+    try { return JSON.stringify(val); } catch { return String(val); }
   }
 
   function ensureAiMeta(ai, dataKeys){
@@ -1011,7 +1011,7 @@
         prefs.ai_model = DEFAULT_PREFS.ai_model;
       }
       return prefs;
-    }catch(e){
+    }catch{
       return { ...DEFAULT_PREFS };
     }
   }
@@ -1024,7 +1024,7 @@
     try{
       const raw = JSON.parse(localStorage.getItem("tb26_models") || "[]");
       return Array.isArray(raw) ? raw : [];
-    }catch(e){
+    }catch{
       return [];
     }
   }
@@ -1077,7 +1077,7 @@
       if(handle) state.planRootHandle = handle;
       const path = await idbGet("planRootPath");
       if(path) state.planRootPath = String(path);
-    }catch(e){}
+    }catch{}
   }
 
   async function setPlanRoot(){
@@ -1160,7 +1160,7 @@
       if(perm === "granted") return state.planRootHandle;
       const req = await state.planRootHandle.requestPermission({ mode: "readwrite" });
       return req === "granted" ? state.planRootHandle : null;
-    }catch(e){
+    }catch{
       return null;
     }
   }
@@ -1202,7 +1202,7 @@
       const fileHandle = await dirHandle.getFileHandle(filename);
       const file = await fileHandle.getFile();
       return await file.text();
-    }catch(e){
+    }catch{
       return null;
     }
   }
@@ -1210,7 +1210,7 @@
   async function fsReadJson(dirHandle, filename){
     const text = await fsReadText(dirHandle, filename);
     if(!text) return null;
-    try{ return JSON.parse(text); }catch(e){ return null; }
+    try{ return JSON.parse(text); }catch{ return null; }
   }
 
   async function fsEnsureTemplatesRoot(){
@@ -1245,7 +1245,7 @@
       if(!entry && create){
         try{
           await fsSaveTemplate(plan);
-        }catch(e){}
+        }catch{}
         entry = await fsFindTemplateDirById(state.currentTemplateId);
       }
     }else{
@@ -1253,7 +1253,7 @@
       if(!entry && create){
         try{
           await fsSavePlan(plan);
-        }catch(e){}
+        }catch{}
         entry = await fsFindPlanDirById(plan.id);
       }
     }
@@ -1261,12 +1261,12 @@
     let testsDir = null;
     try{
       testsDir = await entry.dir.getDirectoryHandle("tests", { create: !!create });
-    }catch(e){
+    }catch{
       return null;
     }
     try{
       return await testsDir.getDirectoryHandle("templates", { create: !!create });
-    }catch(e){
+    }catch{
       return null;
     }
   }
@@ -1301,7 +1301,7 @@
         const meta = await fsReadJson(dir, "plan.json");
         if(meta && meta.id === planId) return name;
         name = `${baseName}_${i++}`;
-      }catch(e){
+      }catch{
         return name;
       }
     }
@@ -1327,7 +1327,7 @@
     const md = await fsReadText(dirHandle, "plan.md");
     let tests = [];
     let testsDir = null;
-    try{ testsDir = await dirHandle.getDirectoryHandle("tests"); }catch(e){}
+    try{ testsDir = await dirHandle.getDirectoryHandle("tests"); }catch{}
     if(Array.isArray(meta.tests) && testsDir){
       for(const t of meta.tests){
         if(!t || !t.file) continue;
@@ -1433,7 +1433,7 @@
     }
     for(const name of existing){
       if(!used.has(name)){
-        try{ await testsDir.removeEntry(name); }catch(e){}
+        try{ await testsDir.removeEntry(name); }catch{}
       }
     }
     if(!plan.markdown) generatePlanMarkdown(plan);
@@ -1595,12 +1595,12 @@
 
   function loadPlans(){
     try{ return JSON.parse(localStorage.getItem(Store.key) || "[]") || []; }
-    catch(e){ return []; }
+    catch{ return []; }
   }
 
   function loadTemplates(){
     try{ return JSON.parse(localStorage.getItem(templatesKey()) || "[]") || []; }
-    catch(e){ return []; }
+    catch{ return []; }
   }
 
   /* ---------- Fallback placeholders ---------- */
@@ -4207,7 +4207,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       try{
         await templatesDir.getFileHandle(file);
         file = makeTestTemplateFileName(`${baseName}_${i++}`);
-      }catch(e){
+      }catch{
         break;
       }
     }
@@ -4230,7 +4230,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     try{
       await templatesDir.removeEntry(file);
       return true;
-    }catch(e){
+    }catch{
       return false;
     }
   }
@@ -4541,7 +4541,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         let parsed = null;
         try{
           parsed = JSON.parse(raw);
-        }catch(e){
+        }catch{
           // fallback: treat as value, attach generic rationale
           parsed = { value: raw, rationale: "Suggested improvement from AI." };
         }
@@ -5704,87 +5704,80 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     setupTabs();
     setupFlowPanZoom();
 
-    const on = (id, evt, handler) => {
-      const el = $(id);
-      if(el) el.addEventListener(evt, handler);
-    };
+    $("btnNewPlan").addEventListener("click", createNewPlanFlow);
+    $("btnPrefs").addEventListener("click", openPreferences);
+    $("planSearch").addEventListener("input", () => runAsync(renderLibrary()));
 
-    on("btnNewPlan", "click", createNewPlanFlow);
-    on("btnPrefs", "click", openPreferences);
-    on("planSearch", "input", () => runAsync(renderLibrary()));
+    // Import/Export removed
+    // Wipe removed
+    $("btnSeedDemo").addEventListener("click", () => runAsync(seedDemo()));
+    $("btnClearBrowser").addEventListener("click", clearBrowserCacheOnly);
+    $("btnSetPlanRoot").addEventListener("click", () => runAsync(setPlanRoot()));
+    // Library details toggle removed
 
-    on("btnSeedDemo", "click", () => runAsync(seedDemo()));
-    on("btnClearBrowser", "click", clearBrowserCacheOnly);
-    on("btnSetPlanRoot", "click", () => runAsync(setPlanRoot()));
-
-    on("switchPlanBtn", "click", () => {
+    $("switchPlanBtn").addEventListener("click", () => {
       const dirty = state.currentPlan?.tests?.some(t => t.modified);
       if(dirty && !confirm("You have unsaved changes. Switch plans anyway?")) return;
       showLibrary();
     });
 
-    on("saveAllBtn", "click", () => runAsync(saveAll()));
+    $("saveAllBtn").addEventListener("click", () => runAsync(saveAll()));
 
-    on("testSearch", "input", renderTestsList);
+    $("testSearch").addEventListener("input", renderTestsList);
     document.addEventListener("click", hideContextMenu);
     document.addEventListener("scroll", hideContextMenu, true);
-
-    on("btnNewTest", "click", () => {
+    $("btnNewTest").addEventListener("click", () => {
       if(state.currentTestTemplate && state.templateEditReturnPlanId){
-        if(state.templateEditReturnIsTemplate){
-          runAsync(openTemplateById(state.templateEditReturnPlanId));
-        }else{
-          runAsync(openPlanById(state.templateEditReturnPlanId));
-        }
+        runAsync(openPlanById(state.templateEditReturnPlanId));
       }else{
         runAsync(newTest());
       }
     });
-    on("btnManageTestTemplates", "click", () => runAsync(openManageTestTemplates()));
-    on("btnDeleteTest", "click", deleteCurrentTest);
-    on("btnSaveTest", "click", () => runAsync(saveCurrentTest()));
-    on("btnAddField", "click", () => runAsync(addFieldFlow()));
-    on("btnAiSuggest", "click", aiSuggestFocusedField);
+    $("btnManageTestTemplates").addEventListener("click", () => runAsync(openManageTestTemplates()));
+    $("btnDeleteTest").addEventListener("click", deleteCurrentTest);
+    $("btnSaveTest").addEventListener("click", () => runAsync(saveCurrentTest()));
+    $("btnAddField").addEventListener("click", () => runAsync(addFieldFlow()));
+    $("btnAiSuggest").addEventListener("click", aiSuggestFocusedField);
 
     const btnNormalize = $("btnNormalize");
     if(btnNormalize) btnNormalize.addEventListener("click", normalizeCurrentTest);
-    on("btnShowJson", "click", showCurrentJsonModal);
+    $("btnShowJson").addEventListener("click", showCurrentJsonModal);
 
-    on("btnAiReviewPlan", "click", () => {
+    $("btnAiReviewPlan").addEventListener("click", () => {
       if(!state.currentPlan) return;
       runAsync(aiReviewPlan(state.currentPlan.id));
     });
-
     const btnFitFlow = $("btnFitFlow");
     if(btnFitFlow) btnFitFlow.addEventListener("click", fitFlowToView);
     const btnApplyNotes = $("btnApplyNotes");
     if(btnApplyNotes) btnApplyNotes.addEventListener("click", () => runAsync(applyNotes()));
+    const btnRegenerateMd = $("btnRegenerateMd");
+    if(btnRegenerateMd) btnRegenerateMd.addEventListener("click", () => runAsync(regenerateMd()));
+    const btnDownloadMd = $("btnDownloadMd");
+    if(btnDownloadMd) btnDownloadMd.addEventListener("click", downloadMd);
 
-    on("btnCopyLog", "click", async () => {
-      const logEl = $("log");
-      const lines = logEl ? [...logEl.querySelectorAll(".line")].map(x => x.textContent) : [];
+    $("btnCopyLog").addEventListener("click", async () => {
+      const lines = [...$("log").querySelectorAll(".line")].map(x => x.textContent);
       try{
-        await navigator.clipboard.writeText(lines.join("
-"));
+        await navigator.clipboard.writeText(lines.join("\n"));
         toast("Log copied", "Copied to clipboard.", "ok");
       }catch{
         toast("Copy failed", "Clipboard permission denied.", "warn");
       }
     });
-    on("btnClearLog", "click", () => { const l = $("log"); if(l) l.innerHTML = ""; });
+    $("btnClearLog").addEventListener("click", () => $("log").innerHTML = "");
 
     const modalClose = $("modalClose");
     if(modalClose) modalClose.addEventListener("click", hideModal);
-    const overlay = $("modalOverlay");
-    if(overlay){
-      overlay.addEventListener("click", (e) => {
-        if(e.target === overlay) hideModal();
-      });
-    }
-    on("aiChip", "click", openPreferences);
+    $("modalOverlay").addEventListener("click", (e) => {
+      if(e.target === $("modalOverlay")) hideModal();
+    });
+    $("aiChip").addEventListener("click", openPreferences);
+
+    // Top menus removed (small UI)
   }
 
-/* ---------- Init ---------- */
+  /* ---------- Init ---------- */
   function init(){
     wire();
     showLibrary();
