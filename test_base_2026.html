@@ -195,6 +195,11 @@
     .dragging{
       opacity: .6;
     }
+    .drag-target{
+      outline: 2px dashed rgba(124,196,255,.6);
+      outline-offset: 2px;
+      background: rgba(124,196,255,.06);
+    }
 
     .input, .select, textarea{
       width:100%;
@@ -3159,12 +3164,18 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         });
         head.addEventListener("dragend", () => {
           head.classList.remove("dragging");
+          grid.querySelectorAll(".drag-target").forEach(el => el.classList.remove("drag-target"));
         });
         cell.addEventListener("dragover", (e) => {
           e.preventDefault();
+          cell.classList.add("drag-target");
+        });
+        cell.addEventListener("dragleave", () => {
+          cell.classList.remove("drag-target");
         });
         cell.addEventListener("drop", (e) => {
           e.preventDefault();
+          cell.classList.remove("drag-target");
           const fromKey = e.dataTransfer?.getData("text/plain") || "";
           const toKey = cell.getAttribute("data-field") || "";
           if(!fromKey || !toKey || fromKey === toKey) return;
