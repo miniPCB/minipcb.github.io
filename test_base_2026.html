@@ -3088,14 +3088,35 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <div class="hr"></div>
         <div class="label">Plan Name</div>
         <input class="input" id="newPlanName" placeholder="e.g., Capacitor Thermal Stress Validation" />
-        <div class="hint">Slug rules: lowercase, spaces→underscores, remove non [a-z0-9_], collapse underscores.</div>
+        <div class="hint">Slug rules: lowercase, spaces -> underscores, remove non [a-z0-9_], collapse underscores.</div>
+        <div class="hr"></div>
+        <div class="label">AI Test Creation (optional)</div>
+        <div class="muted" style="line-height:1.45; margin-bottom:6px;">
+          Generates a plan shell with empty tests. Uses your AI model if available.
+        </div>
+        <div class="row">
+          <div>
+            <div class="label">UUT P/N</div>
+            <input class="input" id="newPlanUutPn" placeholder="e.g., 21A-00" />
+          </div>
+          <div>
+            <div class="label">Device Type</div>
+            <input class="input" id="newPlanDeviceType" placeholder="e.g., Power Supply CCA" />
+          </div>
+          <div>
+            <div class="label"># of Tests</div>
+            <input class="input" id="newPlanTestCount" type="number" min="1" step="1" value="5" />
+          </div>
+        </div>
+        <div class="hint">AI model: ${escapeHtml(state.prefs.ai_model || "gpt-4.1-mini")}</div>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelNewPlan">Cancel</button>
-        <button class="btn primary" id="confirmNewPlan">Create</button>
+        <button class="btn" id="confirmNewPlanBlank">Create Blank</button>
+        <button class="btn primary" id="confirmNewPlanAi">Create (AI Assist)</button>
       `;
       $("cancelNewPlan").onclick = hideModal;
-      $("confirmNewPlan").onclick = async () => {
+      $("confirmNewPlanBlank").onclick = async () => {
         const name = $("newPlanName").value.trim();
         if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
 
@@ -3115,6 +3136,116 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         hideModal();
         logLine(`Created plan: ${plan.name}`, "ok");
         toast("Plan created", plan.name, "ok");
+        runAsync(renderLibrary());
+      };
+      $("confirmNewPlanAi").onclick = async () => {
+        const name = $("newPlanName").value.trim();
+        if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+        const uutPn = $("newPlanUutPn").value.trim();
+        const deviceType = $("newPlanDeviceType").value.trim();
+        const count = Math.max(1, Number($("newPlanTestCount").value) || 1);
+
+        const plan = {
+          id: uid(),
+          name,
+          slug: slugifyPlanName(name),
+          created: nowIsoDate(),
+          updated: nowIsoDate(),
+          tests: [],
+          markdown: "",
+          userNotes: "Add plan-level notes here (equipment, safety, lab setup, etc.)."
+        };
+
+        const key = getAiKey();
+        const model = state.prefs.ai_model || "gpt-4.1-mini";
+        let usedAi = false;
+        if(key && state.prefs.ai_enabled){
+          try{
+            logLine(`AI Create: using model "${model}".`, "ok");
+            const payload = {
+              plan_name: name,
+              uut_pn: uutPn,
+              device_type: deviceType,
+              test_count: count
+            };
+            const resp = await fetch("https://api.openai.com/v1/responses", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${key}`
+              },
+              body: JSON.stringify({
+                model,
+                input: [
+                  { role:"system", content:"Return STRICT JSON: {\"tests\":[{\"test_no\":\"001\"}, ...]}. Provide exactly test_count items with 3-digit test_no strings. No extra text." },
+                  { role:"user", content: JSON.stringify(payload) }
+                ],
+                max_output_tokens: 300
+              })
+            });
+            if(resp.ok){
+              const data = await resp.json();
+              const raw = extractResponseText(data);
+              const parsed = safeParseJson(raw, "AI Create");
+              const list = Array.isArray(parsed?.tests) ? parsed.tests : [];
+              const testNos = list.map(t => String(t?.test_no || "").trim()).filter(Boolean);
+              if(testNos.length){
+                for(const [idx, testNo] of testNos.entries()){
+                  const t = {
+                    id: uid(),
+                    order: idx + 1,
+                    modified: true,
+                    data: normalizeTestData({
+                      test_no: testNo,
+                      test_name: "",
+                      test_type: "",
+                      test_equipment: "",
+                      uut_pn: uutPn
+                    })
+                  };
+                  plan.tests.push(t);
+                }
+                usedAi = true;
+              }
+            }
+          }catch(e){
+            logLine(`AI Create failed: ${e.message || e}`, "warn");
+          }
+        }
+
+        if(!plan.tests.length){
+          for(let i = 1; i <= count; i++){
+            const testNo = String(i).padStart(3, "0");
+            plan.tests.push({
+              id: uid(),
+              order: i,
+              modified: true,
+              data: normalizeTestData({
+                test_no: testNo,
+                test_name: "",
+                test_type: "",
+                test_equipment: "",
+                uut_pn: uutPn
+              })
+            });
+          }
+        }
+
+        generatePlanMarkdown(plan);
+        const aiAvailable = key && state.prefs.ai_enabled;
+        if(!aiAvailable){
+          const all = loadPlans();
+          const idx = all.findIndex(x => x.id === plan.id);
+          if(idx >= 0) all[idx] = structuredClone(plan);
+          else all.push(structuredClone(plan));
+          localStorage.setItem(Store.key, JSON.stringify(all));
+        }else{
+          await Store.savePlan(plan);
+        }
+
+        hideModal();
+        logLine(`Created plan: ${plan.name}${usedAi ? " (AI assist)" : ""}.`, "ok");
+        toast("Plan created", usedAi ? `${plan.name} (AI assist)` : plan.name, "ok");
         runAsync(renderLibrary());
       };
 
