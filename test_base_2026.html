@@ -2985,6 +2985,39 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.focusField = k;
       });
 
+      cell.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        state.focusField = k;
+        const items = [
+          {
+            id: "add_after",
+            label: "Add Field After",
+            onClick: () => runAsync(addFieldFlow(k, "after"))
+          },
+          {
+            id: "add_before",
+            label: "Add Field Before",
+            onClick: () => runAsync(addFieldFlow(k, "before"))
+          },
+          {
+            id: "delete_field",
+            label: "Delete Field",
+            onClick: () => deleteFieldByKey(test, k)
+          },
+          {
+            id: "save_test",
+            label: "Save Test",
+            onClick: () => runAsync(saveCurrentTest())
+          },
+          {
+            id: "ai_suggest_field",
+            label: "AI Suggest this Field",
+            onClick: () => aiSuggestFocusedField()
+          }
+        ];
+        showContextMenu(e.clientX, e.clientY, items);
+      });
+
       const labelEl = head.querySelector(`[data-field]`);
       if(labelEl){
         labelEl.addEventListener("dblclick", (e) => {
@@ -3038,7 +3071,26 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return out;
   }
 
-  async function addFieldFlow(){
+  function insertFieldBefore(test, beforeKey, newKey, value){
+    const data = test.data || {};
+    const keys = Object.keys(data).filter(k => k !== "_ai");
+    const out = {};
+    let inserted = false;
+    if(keys.length){
+      for(const k of keys){
+        if(beforeKey && k === beforeKey && !inserted){
+          out[newKey] = value;
+          inserted = true;
+        }
+        out[k] = data[k];
+      }
+    }
+    if(!inserted) out[newKey] = value;
+    out._ai = data._ai || ensureAiMeta(null, Object.keys(out).filter(k => k !== "_ai"));
+    return out;
+  }
+
+  async function addFieldFlow(anchorKey = "", position = "after"){
     const test = currentTest();
     if(!test) return;
 
@@ -3073,9 +3125,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           toast("Duplicate field", "That field already exists.", "warn");
           return;
         }
-        const afterKey = state.focusField || "";
         const type = $("newFieldType").value || "text";
-        test.data = insertFieldAfter(test, afterKey, name, "");
+        const anchor = anchorKey || state.focusField || "";
+        if(position === "before") test.data = insertFieldBefore(test, anchor, name, "");
+        else test.data = insertFieldAfter(test, anchor, name, "");
         if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
         if(!test.data._ai.maturity) test.data._ai.maturity = {};
         test.data._ai.maturity[name] = 0;
@@ -3094,6 +3147,42 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         renderTestsList();
       };
       setTimeout(() => $("newFieldLabel").focus(), 20);
+    });
+  }
+
+  function deleteFieldByKey(test, fieldKey){
+    if(!test || !fieldKey) return;
+    const data = test.data || {};
+    if(!(fieldKey in data)) return;
+    showModal("Delete Field", (body2, footer2) => {
+      body2.innerHTML = `
+        <div class="muted" style="line-height:1.4;">
+          Delete <span class="tag">${escapeHtml(fieldKey)}</span>? This removes the field from the test data and AI metadata.
+        </div>
+      `;
+      footer2.innerHTML = `
+        <button class="btn" id="cancelDeleteField">Cancel</button>
+        <button class="btn danger" id="confirmDeleteField">Delete</button>
+      `;
+      $("cancelDeleteField").onclick = hideModal;
+      $("confirmDeleteField").onclick = () => {
+        const next = {};
+        const keys = Object.keys(data).filter(k => k !== "_ai");
+        for(const k of keys){
+          if(k !== fieldKey) next[k] = data[k];
+        }
+        next._ai = data._ai || ensureAiMeta(null, Object.keys(next).filter(k => k !== "_ai"));
+        if(next._ai?.maturity) delete next._ai.maturity[fieldKey];
+        if(next._ai?.field_labels) delete next._ai.field_labels[fieldKey];
+        if(next._ai?.field_types) delete next._ai.field_types[fieldKey];
+        if(next._ai?.field_prompts) delete next._ai.field_prompts[fieldKey];
+        test.data = next;
+        test.modified = true;
+        if(test._dirtyFields) delete test._dirtyFields[fieldKey];
+        hideModal();
+        renderForm();
+        renderTestsList();
+      };
     });
   }
 
@@ -3177,43 +3266,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <button class="btn primary" id="confirmRenameField">Save</button>
       `;
       $("cancelRenameField").onclick = hideModal;
-      $("deleteField").onclick = () => {
-        const data = test.data || {};
-        if(!(fieldKey in data)){
-          hideModal();
-          return;
-        }
-        showModal("Delete Field", (body2, footer2) => {
-          body2.innerHTML = `
-            <div class="muted" style="line-height:1.4;">
-              Delete <span class="tag">${escapeHtml(fieldKey)}</span>? This removes the field from the test data and AI metadata.
-            </div>
-          `;
-          footer2.innerHTML = `
-            <button class="btn" id="cancelDeleteField">Cancel</button>
-            <button class="btn danger" id="confirmDeleteField">Delete</button>
-          `;
-          $("cancelDeleteField").onclick = hideModal;
-          $("confirmDeleteField").onclick = () => {
-            const next = {};
-            const keys = Object.keys(data).filter(k => k !== "_ai");
-            for(const k of keys){
-              if(k !== fieldKey) next[k] = data[k];
-            }
-            next._ai = data._ai || ensureAiMeta(null, Object.keys(next).filter(k => k !== "_ai"));
-            if(next._ai?.maturity) delete next._ai.maturity[fieldKey];
-            if(next._ai?.field_labels) delete next._ai.field_labels[fieldKey];
-            if(next._ai?.field_types) delete next._ai.field_types[fieldKey];
-            if(next._ai?.field_prompts) delete next._ai.field_prompts[fieldKey];
-            test.data = next;
-            test.modified = true;
-            if(test._dirtyFields) delete test._dirtyFields[fieldKey];
-            hideModal();
-            renderForm();
-            renderTestsList();
-          };
-        });
-      };
+      $("deleteField").onclick = () => deleteFieldByKey(test, fieldKey);
       $("confirmRenameField").onclick = () => {
         const newLabel = $("editFieldLabel").value.trim();
         const newKey = $("editFieldKey").value.trim();
