@@ -2871,6 +2871,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return state.currentPlan.tests.find(t => t.id === state.currentTestId) || null;
   }
 
+  function updateSaveAllIndicator(){
+    const plan = state.currentPlan;
+    const saveAllBtn = $("saveAllBtn");
+    if(!saveAllBtn || !plan) return;
+    const dirty = !!plan.tests?.some(t => t.modified);
+    saveAllBtn.classList.toggle("attn", dirty);
+  }
+
   function renderEditor(){
     const plan = state.currentPlan;
     if(!plan){ showLibrary(); return; }
@@ -3054,6 +3062,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       });
       wrap.appendChild(row);
     }
+    updateSaveAllIndicator();
   }
 
   async function reorderTests(dragId, targetId){
@@ -3096,6 +3105,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       return;
     }
 
+    updateSaveAllIndicator();
+
     const tmplSub = $("templateEditSub");
     if(state.currentTestTemplate){
       $("editorSub").textContent = "";
@@ -3118,11 +3129,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       tmplBtn.disabled = !!state.currentTestTemplate;
       tmplBtn.title = state.currentTestTemplate ? "Already editing templates" : "";
     }
-    const saveAllBtn = $("saveAllBtn");
-    if(saveAllBtn){
-      const dirty = !!plan.tests?.some(t => t.modified);
-      saveAllBtn.classList.toggle("attn", dirty);
-    }
+    updateSaveAllIndicator();
 
     const fields = getFieldKeys(test);
     for(const k of fields){
@@ -3217,6 +3224,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test._dirtyFields[k] = true;
           control.classList.add("dirty-field");
           $("dirtyHint").style.display = "";
+          updateSaveAllIndicator();
           setSuggestStatus(test.id, k, "");
           setFieldMaturity(test, k, 3);
           if(maturityTag) maturityTag.textContent = "M3";
