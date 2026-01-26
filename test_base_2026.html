@@ -3916,7 +3916,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       runAsync(async () => {
         const sel = $("newPlanTestTemplate");
         if(!sel) return;
-        const list = await Templates.listTemplates();
+        let list = await Templates.listTemplates();
+        if(useFileSystemStore()){
+          const browserList = loadTemplates();
+          if(browserList?.length){
+            const byId = new Map(list.map(t => [t.id, t]));
+            for(const t of browserList){
+              if(!byId.has(t.id)) byId.set(t.id, t);
+            }
+            list = Array.from(byId.values());
+          }
+        }
         templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }, ...list.map(t => ({ ...t, type: "plan" }))];
         sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
         sel.value = templateList[0]?.id || "__blank__";
