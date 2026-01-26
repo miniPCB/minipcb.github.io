@@ -3848,11 +3848,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         </div>
         <div class="row" style="margin-top:8px;">
           <div>
-            <div class="label">Test Template</div>
+            <div class="label">Test Plan Template</div>
             <select class="select" id="newPlanTestTemplate">
               <option value="__blank__">Blank (full schema)</option>
             </select>
-            <div class="hint">Templates are loaded from the current plan's tests/templates folder.</div>
+            <div class="hint">Test plan templates are loaded from the Templates library.</div>
           </div>
         </div>
         <div class="row" style="margin-top:8px;">
@@ -3912,12 +3912,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         showEditor();
         renderEditor();
       };
-      let templateList = [{ id: "__blank__", name: "Blank (full schema)", data: {} }];
+      let templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }];
       runAsync(async () => {
         const sel = $("newPlanTestTemplate");
         if(!sel) return;
-        const list = await getAvailableTestTemplates(state.currentPlan);
-        templateList = list.length ? list : templateList;
+        const list = await Templates.listTemplates();
+        templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }, ...list.map(t => ({ ...t, type: "plan" }))];
         sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
         sel.value = templateList[0]?.id || "__blank__";
       });
@@ -3958,7 +3958,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           const deviceType = $("newPlanDeviceType").value.trim();
           const count = Math.max(1, Number($("newPlanTestCount").value) || 1);
           const templateId = $("newPlanTestTemplate")?.value || "__blank__";
-          const selectedTemplate = templateList.find(t => t.id === templateId)?.data || null;
+          const selectedTemplate = templateList.find(t => t.id === templateId) || null;
+          const selectedTemplateAi = selectedTemplate?.tests?.[0]?.data?._ai || selectedTemplate?.data?._ai || null;
           const goal = $("newPlanGoal").value.trim();
           const scope = $("newPlanScope").value.trim();
 
@@ -4034,7 +4035,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                     if(testNo && !set.test_no) set.test_no = testNo;
                     const baseData = normalizeTestData(set);
                     if(uutPn && !baseData.uut_pn) baseData.uut_pn = uutPn;
-                    if(selectedTemplate?._ai) baseData._ai = mergeAiMeta(baseData._ai, selectedTemplate._ai);
+                    if(selectedTemplateAi) baseData._ai = mergeAiMeta(baseData._ai, selectedTemplateAi);
                     plan.tests.push({
                       id: uid(),
                       order: idx + 1,
@@ -4054,7 +4055,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             for(let i = 1; i <= count; i++){
               const testNo = String(i).padStart(3, "0");
               const baseData = normalizeTestData({});
-              if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
+              if(selectedTemplateAi) baseData._ai = structuredClone(selectedTemplateAi);
               baseData.test_no = testNo;
               baseData.uut_pn = uutPn;
               plan.tests.push({
@@ -4069,7 +4070,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             for(let i = start; i <= count; i++){
               const testNo = String(i).padStart(3, "0");
               const baseData = normalizeTestData({});
-              if(selectedTemplate?._ai) baseData._ai = structuredClone(selectedTemplate._ai);
+            if(selectedTemplateAi) baseData._ai = structuredClone(selectedTemplateAi);
               baseData.test_no = testNo;
               baseData.uut_pn = uutPn;
               plan.tests.push({
