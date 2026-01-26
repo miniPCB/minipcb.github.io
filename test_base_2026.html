@@ -189,6 +189,10 @@
       border-color: rgba(124,255,176,.55);
       box-shadow: 0 0 0 1px rgba(124,255,176,.18) inset;
     }
+    .locked-field{
+      opacity: .7;
+      cursor: not-allowed;
+    }
     .drag-handle{
       cursor: grab;
     }
@@ -3190,8 +3194,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const s = getSuggestStatus(test.id, k);
         if(s) input.classList.add(`ai-${s}`);
         if(test._dirtyFields?.[k]) control.classList.add("dirty-field");
+        const locked = Number(maturity) >= 4;
+        if(locked){
+          control.disabled = true;
+          control.classList.add("locked-field");
+          control.title = "Locked (M4)";
+        }
 
-        control.addEventListener("input", () => {
+        if(!locked) control.addEventListener("input", () => {
           test.data[k] = control.value;
           test.modified = true;
           if(!test._dirtyFields) test._dirtyFields = {};
