@@ -3113,6 +3113,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       tmplBtn.disabled = !!state.currentTestTemplate;
       tmplBtn.title = state.currentTestTemplate ? "Already editing templates" : "";
     }
+    const saveAllBtn = $("saveAllBtn");
+    if(saveAllBtn){
+      const dirty = !!plan.tests?.some(t => t.modified);
+      saveAllBtn.classList.toggle("attn", dirty);
+    }
 
     const fields = getFieldKeys(test);
     for(const k of fields){
@@ -6630,6 +6635,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("aiChip").addEventListener("click", openPreferences);
 
     // Top menus removed (small UI)
+    document.addEventListener("keydown", (e) => {
+      if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s"){
+        e.preventDefault();
+        runAsync(saveAll());
+      }
+    });
   }
 
   /* ---------- Init ---------- */
