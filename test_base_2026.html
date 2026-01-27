@@ -2329,50 +2329,71 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: getFieldMaturity(test, field),
         context: test.data
       };
+      const tasks = [];
       for(const [personaId, persona] of personas){
         const existing = String(persona?.field_comments?.[field] ?? "").trim();
         if(existing) continue;
-        const focus = DEFAULT_REVIEW_PERSONALITY_FOCUS[personaId] || "clarity and usefulness";
-        const prompt = {
-          ...payloadBase,
-          persona: { id: personaId, label: persona?.label || personaId, focus }
-        };
-        try{
-          logLine(`AI Review: persona ${persona?.label || personaId} reviewing ${test.data.test_no || test.id.slice(0,6)}.${field}...`, "ok");
-          const resp = await fetch("https://api.openai.com/v1/responses", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${key}`
-            },
-            body: JSON.stringify({
-              model,
-              input: [
-                { role:"system", content:`You are a ${persona?.label || personaId}. Provide a concise review comment for this field focused on ${focus}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.` },
-                { role:"user", content: JSON.stringify(prompt, null, 2) }
-              ],
-              max_output_tokens: 120
-            })
-          });
-          if(!resp.ok){
-            const ttxt = await resp.text().catch(()=> "");
-            throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
-          }
-          const data = await resp.json();
-          let val = String(extractResponseText(data) || "").trim();
-          if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
-            val = val.slice(1, -1).trim();
-          }
-          val = sanitizeAiText(val);
-          if(val){
-            setPersonalityComment(test, field, personaId, val, model);
-          }
-        }catch(err){
-          logLine(`AI Review: comment failed ${test.data.test_no || test.id.slice(0,6)}.${field}.${personaId} (${err.message || err}).`, "warn");
-        }
-        const pauseMsLocal = Number(state.prefs.ai_review_pause_ms ?? 0);
-        if(pauseMsLocal > 0) await sleep(pauseMsLocal);
+        tasks.push({ personaId, persona });
       }
+      if(!tasks.length) return;
+      const concurrency = Math.max(1, Number(state.prefs.ai_review_concurrency ?? 1));
+      let active = 0;
+      let index = 0;
+      await new Promise(resolve => {
+        const launchNext = () => {
+          if(index >= tasks.length && active === 0) return resolve();
+          while(active < concurrency && index < tasks.length){
+            const { personaId, persona } = tasks[index++];
+            active++;
+            const focus = DEFAULT_REVIEW_PERSONALITY_FOCUS[personaId] || "clarity and usefulness";
+            const prompt = {
+              ...payloadBase,
+              persona: { id: personaId, label: persona?.label || personaId, focus }
+            };
+            (async () => {
+              try{
+                logLine(`AI Review: persona ${persona?.label || personaId} reviewing ${test.data.test_no || test.id.slice(0,6)}.${field}...`, "ok");
+                const resp = await fetch("https://api.openai.com/v1/responses", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${key}`
+                  },
+                  body: JSON.stringify({
+                    model,
+                    input: [
+                      { role:"system", content:`You are a ${persona?.label || personaId}. Provide a concise review comment for this field focused on ${focus}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.` },
+                      { role:"user", content: JSON.stringify(prompt, null, 2) }
+                    ],
+                    max_output_tokens: 120
+                  })
+                });
+                if(!resp.ok){
+                  const ttxt = await resp.text().catch(()=> "");
+                  throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
+                }
+                const data = await resp.json();
+                let val = String(extractResponseText(data) || "").trim();
+                if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
+                  val = val.slice(1, -1).trim();
+                }
+                val = sanitizeAiText(val);
+                if(val){
+                  setPersonalityComment(test, field, personaId, val, model);
+                }
+              }catch(err){
+                logLine(`AI Review: comment failed ${test.data.test_no || test.id.slice(0,6)}.${field}.${personaId} (${err.message || err}).`, "warn");
+              }finally{
+                active--;
+                const pauseMsLocal = Number(state.prefs.ai_review_pause_ms ?? 0);
+                if(pauseMsLocal > 0) await sleep(pauseMsLocal);
+                launchNext();
+              }
+            })();
+          }
+        };
+        launchNext();
+      });
     }
 
     const anchors = {};
