@@ -917,6 +917,44 @@
     reliability_analyst: "robustness, failure modes, and long-term reliability risks"
   });
 
+  function seedReviewComment(personaId, label, prompt){
+    const lbl = label || "this field";
+    const guide = prompt ? ` Guide: ${prompt}` : "";
+    switch(personaId){
+      case "quality_assurance":
+        return `QA: Validate ${lbl} for completeness, clarity, and acceptance criteria.${guide}`;
+      case "design_engineer":
+        return `Design: Verify ${lbl} is technically correct and aligned with design intent.${guide}`;
+      case "reliability_analyst":
+        return `Reliability: Check ${lbl} for robustness and failure-mode coverage.${guide}`;
+      default:
+        return `Review ${lbl} for clarity and correctness.${guide}`;
+    }
+  }
+
+  function buildSeedReviewPersonalitiesForData(data){
+    const keys = Object.keys(data || {}).filter(k => k !== "_ai");
+    const ai = data._ai || ensureAiMeta(null, keys);
+    const out = {};
+    for(const [id,label] of Object.entries(DEFAULT_REVIEW_PERSONALITIES)){
+      const field_comments = {};
+      for(const k of keys){
+        const lbl = ai.field_labels?.[k] || k;
+        const prompt = ai.field_prompts?.[k] || "";
+        field_comments[k] = seedReviewComment(id, lbl, prompt);
+      }
+      out[id] = {
+        label,
+        last_reviewed: nowIsoTimestamp(),
+        model: "seed",
+        summary: "Seed review comments generated for all fields.",
+        notes: "",
+        field_comments
+      };
+    }
+    return out;
+  }
+
   function buildDefaultReviewPersonalities(keys){
     const fieldKeys = Array.isArray(keys) ? keys : Object.keys(TEST_SCHEMA_DEFAULT);
     const out = {};
@@ -6696,6 +6734,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     for(const t of plan.tests){
       if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
       t.data._ai.field_types = { ...DEFAULT_FIELD_TYPES };
+      t.data._ai.review_personalities = buildSeedReviewPersonalitiesForData(t.data);
     }
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
