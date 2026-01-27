@@ -1156,6 +1156,7 @@
     ai_review_concurrency: 1,         // concurrent AI review calls
     ai_chat_permission: 1,            // 0=search, 1=revise, 2=create/delete
     ai_maturity_clicks: 4,            // 2=inline select, 4=modal
+    ai_personality_dialog: false,
     test_editor_lock: "locked",
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
@@ -1168,14 +1169,15 @@
       if(typeof prefs.ai_model !== "string" || !/^gpt-/i.test(prefs.ai_model)){
         prefs.ai_model = DEFAULT_PREFS.ai_model;
       }
-      prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
-      prefs.ai_maturity_clicks = normalizeMaturityClicks(prefs.ai_maturity_clicks ?? DEFAULT_PREFS.ai_maturity_clicks);
-      prefs.test_editor_lock = (prefs.test_editor_lock === "unlocked") ? "unlocked" : "locked";
-      return prefs;
-    }catch{
-      return { ...DEFAULT_PREFS };
+        prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
+        prefs.ai_maturity_clicks = normalizeMaturityClicks(prefs.ai_maturity_clicks ?? DEFAULT_PREFS.ai_maturity_clicks);
+        prefs.test_editor_lock = (prefs.test_editor_lock === "unlocked") ? "unlocked" : "locked";
+        prefs.ai_personality_dialog = !!prefs.ai_personality_dialog;
+        return prefs;
+      }catch{
+        return { ...DEFAULT_PREFS };
+      }
     }
-  }
 
   function savePrefs(){
     localStorage.setItem("tb26_prefs", JSON.stringify(state.prefs));
@@ -3422,13 +3424,20 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           if(maturityTag) maturityTag.textContent = "M3";
           renderTestsList();
         });
-      control.addEventListener("focus", () => {
-        state.focusField = k;
-      });
+        const handlePersonalityClick = (e) => {
+          if(!state.prefs.ai_personality_dialog) return;
+          if(e && typeof e.preventDefault === "function") e.preventDefault();
+          if(e && typeof e.stopPropagation === "function") e.stopPropagation();
+          openPersonalityDialog(test, k);
+        };
+        control.addEventListener("dblclick", handlePersonalityClick);
+        control.addEventListener("focus", () => {
+          state.focusField = k;
+        });
 
-      cell.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        state.focusField = k;
+        cell.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          state.focusField = k;
         const items = [
           {
             id: "add_after",
@@ -3456,8 +3465,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             onClick: () => aiSuggestFocusedField(k)
           }
         ];
-        showContextMenu(e.clientX, e.clientY, items);
-      });
+          showContextMenu(e.clientX, e.clientY, items);
+        });
+        cell.addEventListener("dblclick", (e) => {
+          if(!state.prefs.ai_personality_dialog) return;
+          const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+          if(tag === "input" || tag === "textarea" || tag === "select"){
+            handlePersonalityClick(e);
+          }
+        });
 
       const labelEl = head.querySelector(`[data-field]`);
       if(labelEl){
@@ -4978,12 +4994,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     showModal("Preferences", (body, footer) => {
       const hasKey = !!getAiKey();
       const cachedModels = state.modelList.length ? state.modelList : loadModelCache();
-      body.innerHTML = `
-        <div class="row">
-          <div>
-            <div class="label">AI Status</div>
-            <div class="input" style="display:flex;align-items:center;">${hasKey ? "Key set" : "Not set"}</div>
-          </div>
+        body.innerHTML = `
+          <div class="row">
+            <div>
+              <div class="label">AI Status</div>
+              <div class="input" style="display:flex;align-items:center;">${hasKey ? "Key set" : "Not set"}</div>
+            </div>
           <div>
             <div class="label">Plan Storage</div>
             <div class="input" style="display:flex;align-items:center;">${state.planRootHandle ? "File System" : "Browser Store"}</div>
@@ -5006,28 +5022,35 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           </div>
         </div>
 
-        <div class="row" style="margin-top:10px;">
-          <div>
-            <div class="label">AI Suggest Maturity Max</div>
-            <select class="select" id="prefSuggestMax">
-              <option value="0">M0</option>
-              <option value="1">M1</option>
-              <option value="2">M2</option>
-            </select>
-          </div>
-          <div>
-            <div class="label">AI Maturity Level Process</div>
-            <select class="select" id="prefMaturityClicks">
-              <option value="2">2 Click</option>
-              <option value="4">4 Click</option>
-            </select>
-          </div>
-          <div id="prefAdvanced" style="display:none;">
-            <div class="label">AI Review Debug</div>
-            <select class="select" id="prefAiReviewDebug">
-              <option value="false">Off</option>
-              <option value="true">On (next test only)</option>
-            </select>
+          <div class="row" style="margin-top:10px;">
+            <div>
+              <div class="label">AI Suggest Maturity Max</div>
+              <select class="select" id="prefSuggestMax">
+                <option value="0">M0</option>
+                <option value="1">M1</option>
+                <option value="2">M2</option>
+              </select>
+            </div>
+            <div>
+              <div class="label">AI Maturity Level Process</div>
+              <select class="select" id="prefMaturityClicks">
+                <option value="2">2 Click</option>
+                <option value="4">4 Click</option>
+              </select>
+            </div>
+            <div>
+              <div class="label">Personalities Dialog</div>
+              <select class="select" id="prefPersonalityDialog">
+                <option value="false">Disabled</option>
+                <option value="true">Enabled</option>
+              </select>
+            </div>
+            <div id="prefAdvanced" style="display:none;">
+              <div class="label">AI Review Debug</div>
+              <select class="select" id="prefAiReviewDebug">
+                <option value="false">Off</option>
+                <option value="true">On (next test only)</option>
+              </select>
             <div class="label" style="margin-top:10px;">AI Review Pause (ms)</div>
             <input class="input" id="prefAiReviewPause" type="number" min="0" step="50" />
             <div class="label" style="margin-top:10px;">AI Review Concurrency</div>
@@ -5091,6 +5114,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
       if(modelSelect) modelSelect.value = currentModel;
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
+      const prefPersonalityDialog = $("prefPersonalityDialog");
+      if(prefPersonalityDialog) prefPersonalityDialog.value = state.prefs.ai_personality_dialog ? "true" : "false";
       const prefMaturityClicks = $("prefMaturityClicks");
       if(prefMaturityClicks) prefMaturityClicks.value = String(state.prefs.ai_maturity_clicks ?? 4);
       const prefTestEditorLock = $("prefTestEditorLock");
@@ -5160,6 +5185,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
+        const prefPersonalityDialog = $("prefPersonalityDialog");
+        if(prefPersonalityDialog) state.prefs.ai_personality_dialog = prefPersonalityDialog.value === "true";
         state.prefs.test_editor_lock = $("prefTestEditorLock").value || "locked";
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
@@ -6912,6 +6939,37 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         e.preventDefault();
         runAsync(saveAll());
       }
+    });
+  }
+
+  function openPersonalityDialog(test, fieldKey){
+    if(!test || !fieldKey) return;
+    if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
+    const personas = mergeReviewPersonalities(
+      buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai")),
+      test.data._ai.review_personalities || {},
+      Object.keys(test.data).filter(k => k !== "_ai")
+    );
+    const label = test.data?._ai?.field_labels?.[fieldKey] || fieldKey;
+    showModal("Field Reviews", (body, footer) => {
+      const blocks = Object.keys(DEFAULT_REVIEW_PERSONALITIES).map(id => {
+        const p = personas[id] || { label: id, field_comments: {} };
+        const comment = p.field_comments?.[fieldKey] || "";
+        const safeLabel = escapeHtml(p.label || id);
+        const safeComment = escapeHtml(comment);
+        return `
+          <div class="label">${safeLabel}</div>
+          <textarea class="input" rows="3" readonly>${safeComment}</textarea>
+        `;
+      }).join("");
+      body.innerHTML = `
+        <div class="label">Field</div>
+        <div class="input" style="display:flex;align-items:center;">${escapeHtml(label)}</div>
+        <div class="hr"></div>
+        ${blocks}
+      `;
+      footer.innerHTML = `<button class="btn" id="closePersonaDialog">Close</button>`;
+      $("closePersonaDialog").onclick = hideModal;
     });
   }
 
