@@ -911,6 +911,12 @@
     reliability_analyst: "Reliability Analyst"
   });
 
+  const DEFAULT_REVIEW_PERSONALITY_FOCUS = Object.freeze({
+    quality_assurance: "compliance, clarity, completeness, and acceptance criteria",
+    design_engineer: "technical correctness, feasibility, and alignment with design intent",
+    reliability_analyst: "robustness, failure modes, and long-term reliability risks"
+  });
+
   function buildDefaultReviewPersonalities(keys){
     const fieldKeys = Array.isArray(keys) ? keys : Object.keys(TEST_SCHEMA_DEFAULT);
     const out = {};
@@ -2246,6 +2252,28 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return out;
   }
 
+  function fieldsForPersonalityReview(test){
+    const keys = getFieldKeys(test);
+    return keys.filter(k => !["_ai","param1_label","param1_value","param2_label","param2_value"].includes(k));
+  }
+
+  function setPersonalityComment(test, field, personaId, comment, model){
+    if(!test || !field || !personaId) return;
+    if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
+    if(!test.data._ai.review_personalities || typeof test.data._ai.review_personalities !== "object"){
+      test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"));
+    }
+    const persona = test.data._ai.review_personalities[personaId];
+    if(!persona) return;
+    if(!persona.field_comments || typeof persona.field_comments !== "object") persona.field_comments = {};
+    persona.field_comments[field] = comment;
+    persona.last_reviewed = nowIsoTimestamp();
+    persona.model = model || "";
+    test.modified = true;
+    if(!test._dirtyFields) test._dirtyFields = {};
+    test._dirtyFields[`_ai.review_personalities.${personaId}.field_comments.${field}`] = true;
+  }
+
   async function aiReviewPlan(planId){
     const key = getAiKey();
     if(!key){
@@ -2280,6 +2308,69 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const model = state.prefs.ai_model || "gpt-4.1-mini";
     logLine(`AI Review: using model "${model}".`, "ok");
+
+    async function reviewFieldComments(test, field){
+      if(!test?.data) return;
+      if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
+      if(!test.data._ai.review_personalities || typeof test.data._ai.review_personalities !== "object"){
+        test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"));
+      }
+      const personas = Object.entries(test.data._ai.review_personalities);
+      const payloadBase = {
+        plan: { name: plan.name, created: plan.created, updated: plan.updated },
+        test_no: test.data.test_no || "",
+        test_name: test.data.test_name || "",
+        field,
+        current_value: test.data[field] ?? "",
+        field_prompt: test.data?._ai?.field_prompts?.[field] || "",
+        field_label: test.data?._ai?.field_labels?.[field] || field,
+        maturity: getFieldMaturity(test, field),
+        context: test.data
+      };
+      for(const [personaId, persona] of personas){
+        const existing = String(persona?.field_comments?.[field] ?? "").trim();
+        if(existing) continue;
+        const focus = DEFAULT_REVIEW_PERSONALITY_FOCUS[personaId] || "clarity and usefulness";
+        const prompt = {
+          ...payloadBase,
+          persona: { id: personaId, label: persona?.label || personaId, focus }
+        };
+        try{
+          const resp = await fetch("https://api.openai.com/v1/responses", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${key}`
+            },
+            body: JSON.stringify({
+              model,
+              input: [
+                { role:"system", content:`You are a ${persona?.label || personaId}. Provide a concise review comment for this field focused on ${focus}. Return ONLY the comment text.` },
+                { role:"user", content: JSON.stringify(prompt, null, 2) }
+              ],
+              max_output_tokens: 120
+            })
+          });
+          if(!resp.ok){
+            const ttxt = await resp.text().catch(()=> "");
+            throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
+          }
+          const data = await resp.json();
+          let val = String(extractResponseText(data) || "").trim();
+          if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
+            val = val.slice(1, -1).trim();
+          }
+          val = sanitizeAiText(val);
+          if(val){
+            setPersonalityComment(test, field, personaId, val, model);
+          }
+        }catch(err){
+          logLine(`AI Review: comment failed ${test.data.test_no || test.id.slice(0,6)}.${field}.${personaId} (${err.message || err}).`, "warn");
+        }
+        const pauseMsLocal = Number(state.prefs.ai_review_pause_ms ?? 0);
+        if(pauseMsLocal > 0) await sleep(pauseMsLocal);
+      }
+    }
 
     const anchors = {};
     function considerAnchor(field, value, maturity, testNo){
@@ -2323,12 +2414,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
     renderTestsList();
 
-    for(const t of tests){
-      state.currentTestId = t.id;
-      setReviewStatus(t.id, "working");
-      const fields = fieldsForAiReview(t, anchors);
-      for(const f of fields) setSuggestStatus(t.id, f, "pending");
-      renderEditor();
+      for(const t of tests){
+        state.currentTestId = t.id;
+        setReviewStatus(t.id, "working");
+        if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
+        const fields = fieldsForAiReview(t, anchors);
+        for(const f of fields) setSuggestStatus(t.id, f, "pending");
+        renderEditor();
 
       // Force UUT P/N to match first test (no AI suggestion)
       if(anchors.uut_pn && t !== tests[0]){
@@ -2387,7 +2479,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       let active = 0;
       let index = 0;
-      await new Promise(resolve => {
+        await new Promise(resolve => {
         const launchNext = () => {
           if(index >= queue.length && active === 0) return resolve();
           while(active < concurrency && index < queue.length){
@@ -2477,11 +2569,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         };
         launchNext();
-      });
+        });
 
-      if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
-      t.data._ai.last_ai_reviewed = nowIsoTimestamp();
-      t.data._ai.last_ai_review_model = model;
+        const commentFields = fieldsForPersonalityReview(t);
+        if(commentFields.length){
+          logLine(`AI Review: generating review comments for ${t.data.test_no || t.id.slice(0,6)} (${commentFields.length} fields)...`, "ok");
+          for(const field of commentFields){
+            await reviewFieldComments(t, field);
+          }
+        }
+        t.data._ai.last_ai_reviewed = nowIsoTimestamp();
+        t.data._ai.last_ai_review_model = model;
       // If AI omits the new Unable-to-Adjust fields, derive a safe default.
       const unableAdjustPairs = [
         { field: "oot_low_unable_adjust", next: "oot_low_next_step", concl: "oot_low_conclusion" },
