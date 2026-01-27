@@ -2449,14 +2449,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           logLine(`AI Review: enforced M3 "${k}" from ${a.test_no || "prior test"} on ${t.data.test_no || t.id.slice(0,6)}.`, "warn");
         }
       }
-      if(!fields.length){
-        for(const f of fields) setSuggestStatus(t.id, f, "accepted");
-        setReviewStatus(t.id, "done");
-        renderForm();
-        renderTestsList();
-        buildAnchorsFromTest(t);
-        continue;
-      }
+        if(!fields.length){
+          const commentFields = fieldsForPersonalityReview(t);
+          if(commentFields.length){
+            logLine(`AI Review: generating review comments for ${t.data.test_no || t.id.slice(0,6)} (${commentFields.length} fields)...`, "ok");
+            for(const field of commentFields){
+              await reviewFieldComments(t, field);
+            }
+          }
+          for(const f of fields) setSuggestStatus(t.id, f, "accepted");
+          setReviewStatus(t.id, "done");
+          renderForm();
+          renderTestsList();
+          buildAnchorsFromTest(t);
+          continue;
+        }
 
       logLine(`AI Review: reviewing ${t.data.test_no || t.id.slice(0,6)} (${fields.length} fields)...`, "ok");
 
