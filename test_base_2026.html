@@ -2338,6 +2338,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           persona: { id: personaId, label: persona?.label || personaId, focus }
         };
         try{
+          logLine(`AI Review: persona ${persona?.label || personaId} reviewing ${test.data.test_no || test.id.slice(0,6)}.${field}...`, "ok");
           const resp = await fetch("https://api.openai.com/v1/responses", {
             method: "POST",
             headers: {
@@ -2347,7 +2348,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             body: JSON.stringify({
               model,
               input: [
-                { role:"system", content:`You are a ${persona?.label || personaId}. Provide a concise review comment for this field focused on ${focus}. Return ONLY the comment text.` },
+                { role:"system", content:`You are a ${persona?.label || personaId}. Provide a concise review comment for this field focused on ${focus}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.` },
                 { role:"user", content: JSON.stringify(prompt, null, 2) }
               ],
               max_output_tokens: 120
