@@ -905,6 +905,68 @@
     oot_high_next_step: "Specify next action/step after high OOT."
   });
 
+  const DEFAULT_REVIEW_PERSONALITIES = Object.freeze({
+    quality_assurance: "Quality Assurance",
+    design_engineer: "Design Engineer",
+    reliability_analyst: "Reliability Analyst"
+  });
+
+  function buildDefaultReviewPersonalities(keys){
+    const fieldKeys = Array.isArray(keys) ? keys : Object.keys(TEST_SCHEMA_DEFAULT);
+    const out = {};
+    for(const [id,label] of Object.entries(DEFAULT_REVIEW_PERSONALITIES)){
+      const field_comments = {};
+      for(const k of fieldKeys) field_comments[k] = "";
+      out[id] = {
+        label,
+        last_reviewed: "",
+        model: "",
+        summary: "",
+        notes: "",
+        field_comments
+      };
+    }
+    return out;
+  }
+
+  function mergeReviewPersonalities(base, override, keys){
+    const fieldKeys = Array.isArray(keys) ? keys : Object.keys(TEST_SCHEMA_DEFAULT);
+    const out = structuredClone(base || {});
+    for(const [id,label] of Object.entries(DEFAULT_REVIEW_PERSONALITIES)){
+      if(!out[id]) out[id] = { label, last_reviewed:"", model:"", summary:"", notes:"", field_comments:{} };
+      if(!out[id].label) out[id].label = label;
+    }
+    if(override && typeof override === "object"){
+      for(const [id, p] of Object.entries(override)){
+        if(!out[id]){
+          out[id] = { label: safeStringify(p?.label) || id, last_reviewed:"", model:"", summary:"", notes:"", field_comments:{} };
+        }
+        const dest = out[id];
+        if(p && typeof p === "object"){
+          if(p.label != null) dest.label = safeStringify(p.label);
+          if(p.last_reviewed != null) dest.last_reviewed = safeStringify(p.last_reviewed);
+          if(p.model != null) dest.model = safeStringify(p.model);
+          if(p.summary != null) dest.summary = safeStringify(p.summary);
+          if(p.notes != null) dest.notes = safeStringify(p.notes);
+          if(p.field_comments && typeof p.field_comments === "object"){
+            dest.field_comments = { ...(dest.field_comments || {}) };
+            for(const [k,v] of Object.entries(p.field_comments)){
+              dest.field_comments[k] = safeStringify(v);
+            }
+          }
+        }
+      }
+    }
+    for(const id of Object.keys(out)){
+      const dest = out[id];
+      if(!dest.field_comments || typeof dest.field_comments !== "object") dest.field_comments = {};
+      for(const k of fieldKeys){
+        if(!(k in dest.field_comments)) dest.field_comments[k] = "";
+      }
+    }
+    return out;
+  }
+
   const TEXTAREA_FIELDS = Object.freeze([
     "purpose","scope","setup","test_equipment","procedure","measurement","parameter",
     "in_tol_conclusion","in_tol_next_step",
@@ -998,17 +1060,18 @@
     return text;
   }
 
-  function ensureAiMeta(ai, dataKeys){
-    const out = {
-      maturity: {},
-      last_ai_reviewed: "",
-      last_ai_review_model: "",
-      last_human_reviewed: "",
-      notes: "",
-      field_labels: {},
-      field_prompts: {},
-      field_types: {}
-    };
+    function ensureAiMeta(ai, dataKeys){
+      const out = {
+        maturity: {},
+        last_ai_reviewed: "",
+        last_ai_review_model: "",
+        last_human_reviewed: "",
+        notes: "",
+        review_personalities: {},
+        field_labels: {},
+        field_prompts: {},
+        field_types: {}
+      };
     if(ai && typeof ai === "object"){
       if(ai.maturity && typeof ai.maturity === "object"){
         for(const [k,v] of Object.entries(ai.maturity)){
@@ -1036,17 +1099,22 @@
         }
       }
     }
-    const keys = Array.isArray(dataKeys) ? dataKeys : Object.keys(TEST_SCHEMA_DEFAULT);
-    for(const k of keys){
-      if(!(k in out.maturity)) out.maturity[k] = 0;
-      if(!(k in out.field_labels)) out.field_labels[k] = DEFAULT_FIELD_LABELS[k] || k;
-      if(!(k in out.field_prompts)) out.field_prompts[k] = DEFAULT_FIELD_PROMPTS[k] || "";
-      if(!(k in out.field_types)) out.field_types[k] = DEFAULT_FIELD_TYPES[k] || "text";
-    }
-    out.maturity.last_ai_reviewed = Math.max(Number(out.maturity.last_ai_reviewed) || 0, 4);
-    out.maturity.last_ai_review_model = Math.max(Number(out.maturity.last_ai_review_model) || 0, 4);
-    out.maturity.last_human_reviewed = Math.max(Number(out.maturity.last_human_reviewed) || 0, 4);
-    out.maturity.notes = Math.max(Number(out.maturity.notes) || 0, 3);
+      const keys = Array.isArray(dataKeys) ? dataKeys : Object.keys(TEST_SCHEMA_DEFAULT);
+      for(const k of keys){
+        if(!(k in out.maturity)) out.maturity[k] = 0;
+        if(!(k in out.field_labels)) out.field_labels[k] = DEFAULT_FIELD_LABELS[k] || k;
+        if(!(k in out.field_prompts)) out.field_prompts[k] = DEFAULT_FIELD_PROMPTS[k] || "";
+        if(!(k in out.field_types)) out.field_types[k] = DEFAULT_FIELD_TYPES[k] || "text";
+      }
+      out.review_personalities = mergeReviewPersonalities(
+        buildDefaultReviewPersonalities(keys),
+        ai && typeof ai === "object" ? ai.review_personalities : null,
+        keys
+      );
+      out.maturity.last_ai_reviewed = Math.max(Number(out.maturity.last_ai_reviewed) || 0, 4);
+      out.maturity.last_ai_review_model = Math.max(Number(out.maturity.last_ai_review_model) || 0, 4);
+      out.maturity.last_human_reviewed = Math.max(Number(out.maturity.last_human_reviewed) || 0, 4);
+      out.maturity.notes = Math.max(Number(out.maturity.notes) || 0, 3);
     return out;
   }
 
@@ -1207,6 +1275,13 @@
     out.field_labels = { ...(out.field_labels || {}), ...(src.field_labels || {}) };
     out.field_prompts = { ...(out.field_prompts || {}), ...(src.field_prompts || {}) };
     out.field_types = { ...(out.field_types || {}), ...(src.field_types || {}) };
+    if(src.review_personalities || out.review_personalities){
+      out.review_personalities = mergeReviewPersonalities(
+        out.review_personalities || {},
+        src.review_personalities || {},
+        Object.keys(TEST_SCHEMA_DEFAULT)
+      );
+    }
     if(src.last_ai_reviewed != null) out.last_ai_reviewed = src.last_ai_reviewed;
     if(src.last_ai_review_model != null) out.last_ai_review_model = src.last_ai_review_model;
     if(src.last_human_reviewed != null) out.last_human_reviewed = src.last_human_reviewed;
@@ -1286,17 +1361,32 @@
     return { netlist, partlist, pinout, circuitId, testPoints };
   }
 
-  function sanitizeAiMeta(meta){
-    if(!meta || typeof meta !== "object") return meta;
-    const out = structuredClone(meta);
-    if(out.maturity && typeof out.maturity === "object"){
-      out.maturity = { ...out.maturity };
-    }
-    if(out.field_labels && typeof out.field_labels === "object"){
-      for(const k of Object.keys(out.field_labels)){
-        out.field_labels[k] = sanitizeAiText(out.field_labels[k]);
+    function sanitizeAiMeta(meta){
+      if(!meta || typeof meta !== "object") return meta;
+      const out = structuredClone(meta);
+      if(out.maturity && typeof out.maturity === "object"){
+        out.maturity = { ...out.maturity };
       }
-    }
+      if(out.review_personalities && typeof out.review_personalities === "object"){
+        for(const [id,p] of Object.entries(out.review_personalities)){
+          if(!p || typeof p !== "object") continue;
+          if(p.label != null) p.label = sanitizeAiText(p.label);
+          if(p.last_reviewed != null) p.last_reviewed = sanitizeAiText(p.last_reviewed);
+          if(p.model != null) p.model = sanitizeAiText(p.model);
+          if(p.summary != null) p.summary = sanitizeAiText(p.summary);
+          if(p.notes != null) p.notes = sanitizeAiText(p.notes);
+          if(p.field_comments && typeof p.field_comments === "object"){
+            for(const k of Object.keys(p.field_comments)){
+              p.field_comments[k] = sanitizeAiText(p.field_comments[k]);
+            }
+          }
+        }
+      }
+      if(out.field_labels && typeof out.field_labels === "object"){
+        for(const k of Object.keys(out.field_labels)){
+          out.field_labels[k] = sanitizeAiText(out.field_labels[k]);
+        }
+      }
     if(out.field_prompts && typeof out.field_prompts === "object"){
       for(const k of Object.keys(out.field_prompts)){
         out.field_prompts[k] = sanitizeAiText(out.field_prompts[k]);
@@ -3434,9 +3524,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         test.data._ai.field_labels[name] = label || name;
         if(!test.data._ai.field_prompts) test.data._ai.field_prompts = {};
         test.data._ai.field_prompts[name] = prompt;
-        if(!test.data._ai.field_types) test.data._ai.field_types = {};
-        test.data._ai.field_types[name] = type;
-        test.modified = true;
+          if(!test.data._ai.field_types) test.data._ai.field_types = {};
+          test.data._ai.field_types[name] = type;
+          if(!test.data._ai.review_personalities || typeof test.data._ai.review_personalities !== "object"){
+            test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"));
+          }
+          for(const persona of Object.values(test.data._ai.review_personalities)){
+            if(!persona.field_comments || typeof persona.field_comments !== "object") persona.field_comments = {};
+            if(!(name in persona.field_comments)) persona.field_comments[name] = "";
+          }
+          test.modified = true;
         if(!test._dirtyFields) test._dirtyFields = {};
         test._dirtyFields[name] = true;
         state.focusField = name;
@@ -3470,11 +3567,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           if(k !== fieldKey) next[k] = data[k];
         }
         next._ai = data._ai || ensureAiMeta(null, Object.keys(next).filter(k => k !== "_ai"));
-        if(next._ai?.maturity) delete next._ai.maturity[fieldKey];
-        if(next._ai?.field_labels) delete next._ai.field_labels[fieldKey];
-        if(next._ai?.field_types) delete next._ai.field_types[fieldKey];
-        if(next._ai?.field_prompts) delete next._ai.field_prompts[fieldKey];
-        test.data = next;
+          if(next._ai?.maturity) delete next._ai.maturity[fieldKey];
+          if(next._ai?.field_labels) delete next._ai.field_labels[fieldKey];
+          if(next._ai?.field_types) delete next._ai.field_types[fieldKey];
+          if(next._ai?.field_prompts) delete next._ai.field_prompts[fieldKey];
+          if(next._ai?.review_personalities && typeof next._ai.review_personalities === "object"){
+            for(const persona of Object.values(next._ai.review_personalities)){
+              if(persona?.field_comments) delete persona.field_comments[fieldKey];
+            }
+          }
+          test.data = next;
         test.modified = true;
         if(test._dirtyFields) delete test._dirtyFields[fieldKey];
         hideModal();
@@ -3592,6 +3694,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!out._ai.field_prompts) out._ai.field_prompts = {};
         if(newPrompt) out._ai.field_prompts[newKey] = newPrompt;
         else delete out._ai.field_prompts[newKey];
+        if(out._ai.review_personalities && typeof out._ai.review_personalities === "object"){
+          for(const persona of Object.values(out._ai.review_personalities)){
+            if(!persona) continue;
+            if(!persona.field_comments || typeof persona.field_comments !== "object") persona.field_comments = {};
+            if(newKey !== fieldKey){
+              if(fieldKey in persona.field_comments){
+                persona.field_comments[newKey] = persona.field_comments[fieldKey];
+                delete persona.field_comments[fieldKey];
+              }else if(!(newKey in persona.field_comments)){
+                persona.field_comments[newKey] = "";
+              }
+            }else if(!(newKey in persona.field_comments)){
+              persona.field_comments[newKey] = "";
+            }
+          }
+        }
 
         if(out._ai?.maturity && out._ai.maturity[fieldKey] != null){
           out._ai.maturity[newKey] = out._ai.maturity[fieldKey];
