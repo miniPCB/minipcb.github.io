@@ -907,8 +907,18 @@
     oot_high_next_step: "Specify next action/step after high OOT."
   });
 
+  const TEXTAREA_FIELDS = Object.freeze([
+    "purpose","scope","setup","test_equipment","procedure","measurement","parameter",
+    "in_tol_conclusion","in_tol_next_step",
+    "oot_low_conclusion","oot_low_unable_adjust","oot_low_next_step",
+    "oot_high_conclusion","oot_high_unable_adjust","oot_high_next_step"
+  ]);
+
   const DEFAULT_FIELD_TYPES = Object.freeze(
-    Object.keys(TEST_SCHEMA_DEFAULT).reduce((acc, k) => (acc[k] = "text", acc), {})
+    Object.keys(TEST_SCHEMA_DEFAULT).reduce((acc, k) => {
+      acc[k] = TEXTAREA_FIELDS.includes(k) ? "textarea" : "text";
+      return acc;
+    }, {})
   );
 
   const REQUIRED_FIELDS = Object.freeze([
@@ -6399,6 +6409,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       markdown: "",
       userNotes: "Demo notes: add equipment list, safety notes, and lab setup here."
     };
+    for(const t of plan.tests){
+      if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
+      t.data._ai.field_types = { ...DEFAULT_FIELD_TYPES };
+    }
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
     logLine("Seeded demo plan.", "ok");
