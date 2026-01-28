@@ -4300,8 +4300,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       runAsync(async () => {
         const sel = $("newPlanTestTemplate");
         if(!sel) return;
-        let list = (state.templatesCache && state.templatesCache.length) ? state.templatesCache : await Templates.listTemplates();
-        logLine(`Create Plan: templates loaded = ${list.length}.`, "ok");
+        const hasRoot = !!state.planRootHandle;
+        logLine(`Create Plan: plan root ${hasRoot ? "set" : "not set"}.`, hasRoot ? "ok" : "warn");
+        let list = await Templates.listTemplates();
+        state.templatesCache = list;
+        logLine(`Create Plan: templates loaded = ${list.length}.`, list.length ? "ok" : "warn");
+        if(!list.length){
+          logLine("Create Plan: no plan templates found. Templates live in plan root /templates.", "warn");
+        }
         templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }, ...list.map(t => ({ ...t, type: "plan" }))];
         logLine(`Create Plan: dropdown options = ${templateList.length}.`, "ok");
         sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
