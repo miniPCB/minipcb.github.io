@@ -4253,15 +4253,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         </div>
         <div class="row" style="margin-top:8px;">
           <div>
-            <div class="label">Test Plan Template</div>
-            <select class="select" id="newPlanTestTemplate">
-              <option value="__blank__">Blank (full schema)</option>
-            </select>
-            <div class="hint" id="newPlanTemplateInfo"></div>
-          </div>
-        </div>
-        <div class="row" style="margin-top:8px;">
-          <div>
             <div class="label">Source Markdown (optional)</div>
             <input class="input" id="newPlanMdFile" type="file" accept=".md,.markdown,text/markdown" />
             <div class="hint" id="newPlanMdInfo">No markdown selected.</div>
@@ -4317,57 +4308,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         showEditor();
         renderEditor();
       };
-      let templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }];
-      runAsync(async () => {
-        const sel = $("newPlanTestTemplate");
-        if(!sel) return;
-        let loading = false;
-        const loadTemplatesIntoSelect = async () => {
-          if(loading) return;
-          loading = true;
-          const hasRoot = !!state.planRootHandle;
-          logLine(`Create Plan: plan root ${hasRoot ? "set" : "not set"}.`, hasRoot ? "ok" : "warn");
-          if(!state.planRootHandle){
-            promptPlanRootIfNeeded();
-            loading = false;
-            return;
-          }
-          const readRoot = await ensurePlanRootHandleRead();
-          logLine(`Create Plan: plan root read ${readRoot ? "granted" : "denied"}.`, readRoot ? "ok" : "warn");
-          if(!readRoot){
-            toast("Templates", "Read access denied. Re-select Plan Folder.", "warn");
-            promptPlanRootIfNeeded();
-            loading = false;
-            return;
-          }
-          let list = await fsListTemplates();
-          if(!list.length){
-            await sleep(200);
-            list = await fsListTemplates();
-          }
-          logLine(`Create Plan: templates loaded = ${list.length}.`, list.length ? "ok" : "warn");
-          if(!list.length){
-            logLine("Create Plan: no plan templates found in /templates.", "warn");
-          }else{
-            logLine(`Create Plan: templates = ${list.map(t => t.name || t.id).join(", ")}`, "ok");
-          }
-          const current = sel.value;
-          templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }, ...list.map(t => {
-            const mdMeta = extractPlanMetaFromMarkdown(t.markdown || "");
-            const name = mdMeta.planName || t.name || t.id;
-            return { ...t, name, type: "plan" };
-          })];
-          sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
-          sel.value = templateList.find(t => t.id === current)?.id || templateList[0]?.id || "__blank__";
-          logLine(`Create Plan: select options = ${sel.options.length}.`, sel.options.length > 1 ? "ok" : "warn");
-          const info = $("newPlanTemplateInfo");
-          if(info) info.textContent = `Templates loaded: ${templateList.length - 1}`;
-          toast("Templates", `Templates loaded: ${templateList.length - 1}`, templateList.length > 1 ? "ok" : "warn");
-          loading = false;
-        };
-        await loadTemplatesIntoSelect();
-        sel.addEventListener("click", () => runAsync(loadTemplatesIntoSelect()));
-      });
       const mdInput = $("newPlanMdFile");
       mdInfoEl = $("newPlanMdInfo");
       if(mdInput){
