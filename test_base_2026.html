@@ -2017,8 +2017,17 @@
 
   const Templates = {
     async listTemplates(){
-      if(useFileSystemStore()) return await fsListTemplates();
-      return loadTemplates().sort((a,b) => (b.updated||"").localeCompare(a.updated||""));
+      if(useFileSystemStore()){
+        return await fsListTemplates();
+      }
+      const browserList = loadTemplates().sort((a,b) => (b.updated||"").localeCompare(a.updated||""));
+      const fsList = await fsListTemplates().catch(() => []);
+      if(!fsList.length) return browserList;
+      const byId = new Map(browserList.map(p => [p.id, p]));
+      for(const p of fsList){
+        if(!byId.has(p.id)) byId.set(p.id, p);
+      }
+      return Array.from(byId.values()).sort((a,b) => (b.updated||"").localeCompare(a.updated||""));
     },
     async loadTemplate(id){
       if(useFileSystemStore()) return await fsLoadTemplate(id);
@@ -4292,20 +4301,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const sel = $("newPlanTestTemplate");
         if(!sel) return;
         let list = (state.templatesCache && state.templatesCache.length) ? state.templatesCache : await Templates.listTemplates();
-        logLine(`Create Plan: templates (cache/fs) = ${list.length}.`, "ok");
-        if(useFileSystemStore()){
-          const browserList = loadTemplates();
-          if(browserList?.length){
-            const byId = new Map(list.map(t => [t.id, t]));
-            for(const t of browserList){
-              if(!byId.has(t.id)) byId.set(t.id, t);
-            }
-            list = Array.from(byId.values());
-          }
-          logLine(`Create Plan: templates after browser merge = ${list.length}.`, "ok");
-        }else{
-          logLine("Create Plan: file system store not enabled; using browser templates.", "warn");
-        }
+        logLine(`Create Plan: templates loaded = ${list.length}.`, "ok");
         templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }, ...list.map(t => ({ ...t, type: "plan" }))];
         logLine(`Create Plan: dropdown options = ${templateList.length}.`, "ok");
         sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
