@@ -1621,6 +1621,18 @@
     }
   }
 
+  async function ensurePlanRootHandleRead(){
+    if(!state.planRootHandle) return null;
+    try{
+      const perm = await state.planRootHandle.queryPermission({ mode: "read" });
+      if(perm === "granted") return state.planRootHandle;
+      const req = await state.planRootHandle.requestPermission({ mode: "read" });
+      return req === "granted" ? state.planRootHandle : null;
+    }catch{
+      return null;
+    }
+  }
+
   function safeFilePart(value, fallback){
     const base = (value || fallback || "item").toString().trim();
     const cleaned = base.replace(/[<>:"/\\|?*]+/g, " ").replace(/\s+/g, " ").trim();
@@ -1669,10 +1681,10 @@
     try{ return JSON.parse(text); }catch{ return null; }
   }
 
-  async function fsEnsureTemplatesRoot(){
-    const root = await ensurePlanRootHandle();
+  async function fsEnsureTemplatesRoot(create=true){
+    const root = create ? await ensurePlanRootHandle() : await ensurePlanRootHandleRead();
     if(!root) return null;
-    return await root.getDirectoryHandle("templates", { create: true });
+    return await root.getDirectoryHandle("templates", { create: !!create });
   }
 
   async function fsListTestTemplates(plan){
@@ -1922,7 +1934,7 @@
   }
 
   async function fsListTemplates(){
-    const root = await fsEnsureTemplatesRoot();
+    const root = await fsEnsureTemplatesRoot(false);
     if(!root) return [];
     const templates = [];
     for await (const [name, handle] of root.entries()){
@@ -1934,7 +1946,7 @@
   }
 
   async function fsFindTemplateDirById(id){
-    const root = await fsEnsureTemplatesRoot();
+    const root = await fsEnsureTemplatesRoot(false);
     if(!root) return null;
     for await (const [name, handle] of root.entries()){
       if(handle.kind !== "directory") continue;
