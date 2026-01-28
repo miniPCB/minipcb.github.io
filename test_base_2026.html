@@ -3620,9 +3620,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
         if(tag === "input" || tag === "textarea" || tag === "select") return;
         const multi = e.ctrlKey || e.metaKey;
-        if(!multi) test._selectedFields.clear();
-        if(test._selectedFields.has(k)) test._selectedFields.delete(k);
-        else test._selectedFields.add(k);
+        const range = e.shiftKey;
+        const keysInOrder = getFieldKeys(test).filter(key => !["_ai","param1_label","param1_value","param2_label","param2_value"].includes(key));
+        if(!test._lastSelectedField) test._lastSelectedField = k;
+        if(range){
+          const a = keysInOrder.indexOf(test._lastSelectedField);
+          const b = keysInOrder.indexOf(k);
+          if(a >= 0 && b >= 0){
+            const [start, end] = a < b ? [a, b] : [b, a];
+            if(!multi) test._selectedFields.clear();
+            for(const key of keysInOrder.slice(start, end + 1)) test._selectedFields.add(key);
+          }
+        }else{
+          if(!multi) test._selectedFields.clear();
+          if(test._selectedFields.has(k)) test._selectedFields.delete(k);
+          else test._selectedFields.add(k);
+          test._lastSelectedField = k;
+        }
         renderForm();
       });
 
@@ -3641,6 +3655,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           label: "Add Field Before",
           onClick: () => runAsync(addFieldFlow(k, "before"))
         },
+        ...(selected.length ? [{
+          id: "clear_selected",
+          label: "Clear Selection",
+          onClick: () => { test._selectedFields.clear(); renderForm(); }
+        }] : []),
         ...(selected.length > 1 ? [{
           id: "delete_selected",
           label: `Delete Selected (${selected.length})`,
