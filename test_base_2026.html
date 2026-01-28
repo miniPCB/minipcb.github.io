@@ -1935,13 +1935,17 @@
 
   async function fsListTemplates(){
     const root = await fsEnsureTemplatesRoot(false);
-    if(!root) return [];
+    if(!root){
+      logLine("Templates: root not доступible (no read permission).", "warn");
+      return [];
+    }
     const templates = [];
     for await (const [name, handle] of root.entries()){
       if(handle.kind !== "directory") continue;
       const p = await fsLoadPlanFromDir(handle, name);
       if(p) templates.push(p);
     }
+    logLine(`Templates: found ${templates.length} folder(s) under /templates.`, templates.length ? "ok" : "warn");
     return templates.sort((a,b) => (b.updated||"").localeCompare(a.updated||""));
   }
 
@@ -4319,6 +4323,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         logLine(`Create Plan: templates loaded = ${list.length}.`, list.length ? "ok" : "warn");
         if(!list.length){
           logLine("Create Plan: no plan templates found. Templates live in plan root /templates.", "warn");
+        }else{
+          logLine(`Create Plan: templates = ${list.map(t => t.name || t.id).join(", ")}`, "ok");
         }
         templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }, ...list.map(t => ({ ...t, type: "plan" }))];
         logLine(`Create Plan: dropdown options = ${templateList.length}.`, "ok");
