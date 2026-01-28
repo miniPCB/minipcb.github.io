@@ -4327,10 +4327,20 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           loading = true;
           const hasRoot = !!state.planRootHandle;
           logLine(`Create Plan: plan root ${hasRoot ? "set" : "not set"}.`, hasRoot ? "ok" : "warn");
+          if(!state.planRootHandle){
+            promptPlanRootIfNeeded();
+            loading = false;
+            return;
+          }
           let readRoot = null;
           if(state.planRootHandle){
             readRoot = await ensurePlanRootHandleRead();
             logLine(`Create Plan: plan root read ${readRoot ? "granted" : "denied"}.`, readRoot ? "ok" : "warn");
+          }
+          if(!readRoot){
+            toast("Templates", "Read access denied. Re-select Plan Folder.", "warn");
+            loading = false;
+            return;
           }
           let list = await Templates.listTemplates();
           if(!list.length){
