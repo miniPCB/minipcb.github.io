@@ -4337,17 +4337,26 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("confirmNewPlanAi").onclick = async () => {
         const name = $("newPlanName").value.trim();
         if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+        const uutPn = $("newPlanUutPn")?.value?.trim() || "";
+        const deviceType = $("newPlanDeviceType")?.value?.trim() || "";
+        const count = Math.max(1, Number($("newPlanTestCount")?.value) || 1);
+        const goal = $("newPlanGoal")?.value?.trim() || "";
+        const scope = $("newPlanScope")?.value?.trim() || "";
+        const mdFileInput = $("newPlanMdFile");
+        const mdFile = mdFileInput?.files?.[0] || null;
+        if(mdFile){
+          const reader = new FileReader();
+          reader.onload = () => {
+            mdText = String(reader.result || "");
+            mdName = mdFile.name || "markdown";
+          };
+          reader.readAsText(mdFile);
+        }
         setCreateBusy(true, "Creating…");
         const progress = showAiCreateProgress("~30–90 seconds");
         logLine("AI Create: started. Please wait…", "ok");
         toast("AI Create", "Started. Please wait…", "ok");
         try{
-          const uutPn = $("newPlanUutPn").value.trim();
-          const deviceType = $("newPlanDeviceType").value.trim();
-          const count = Math.max(1, Number($("newPlanTestCount").value) || 1);
-          const goal = $("newPlanGoal").value.trim();
-          const scope = $("newPlanScope").value.trim();
-
           const plan = {
             id: uid(),
             name,
