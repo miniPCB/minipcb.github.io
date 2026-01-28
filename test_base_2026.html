@@ -4338,15 +4338,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const name = $("newPlanName").value.trim();
         if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
         setCreateBusy(true, "Creating…");
+        const progress = showAiCreateProgress("~30–90 seconds");
         logLine("AI Create: started. Please wait…", "ok");
         toast("AI Create", "Started. Please wait…", "ok");
         try{
           const uutPn = $("newPlanUutPn").value.trim();
           const deviceType = $("newPlanDeviceType").value.trim();
           const count = Math.max(1, Number($("newPlanTestCount").value) || 1);
-          const templateId = $("newPlanTestTemplate")?.value || "__blank__";
-          const selectedTemplate = templateList.find(t => t.id === templateId) || null;
-          const selectedTemplateAi = selectedTemplate?.tests?.[0]?.data?._ai || selectedTemplate?.data?._ai || null;
           const goal = $("newPlanGoal").value.trim();
           const scope = $("newPlanScope").value.trim();
 
@@ -4422,7 +4420,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                     if(testNo && !set.test_no) set.test_no = testNo;
                     const baseData = normalizeTestData(set);
                     if(uutPn && !baseData.uut_pn) baseData.uut_pn = uutPn;
-                    if(selectedTemplateAi) baseData._ai = mergeAiMeta(baseData._ai, selectedTemplateAi);
                     plan.tests.push({
                       id: uid(),
                       order: idx + 1,
@@ -4442,7 +4439,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             for(let i = 1; i <= count; i++){
               const testNo = String(i).padStart(3, "0");
               const baseData = normalizeTestData({});
-              if(selectedTemplateAi) baseData._ai = structuredClone(selectedTemplateAi);
               baseData.test_no = testNo;
               baseData.uut_pn = uutPn;
               plan.tests.push({
@@ -4457,7 +4453,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             for(let i = start; i <= count; i++){
               const testNo = String(i).padStart(3, "0");
               const baseData = normalizeTestData({});
-            if(selectedTemplateAi) baseData._ai = structuredClone(selectedTemplateAi);
               baseData.test_no = testNo;
               baseData.uut_pn = uutPn;
               plan.tests.push({
@@ -4481,6 +4476,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             await Store.savePlan(plan);
           }
 
+          progress.close();
           hideModal();
           const testMsg = `${plan.tests.length} test${plan.tests.length === 1 ? "" : "s"}`;
           logLine(`Created plan: ${plan.name}${usedAi ? " (AI assist)" : ""} — ${testMsg}.`, "ok");
@@ -4498,6 +4494,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           state.currentTestId = plan.tests[0]?.id || null;
           showEditor();
           renderEditor();
+        }catch(e){
+          progress.close();
+          logLine(`AI Create failed: ${e.message || e}`, "warn");
+          toast("AI Create", e.message || "Failed.", "warn");
         }finally{
           setCreateBusy(false);
         }
@@ -7232,6 +7232,36 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         setTimeout(() => $("aiReviewGuidance").focus(), 20);
       });
     });
+  }
+
+  function showAiCreateProgress(etaText){
+    let seconds = 0;
+    showModal("AI Create in Progress", (body, footer) => {
+      body.innerHTML = `
+        <div class="label">Estimated Time</div>
+        <div class="input" id="aiCreateEta" style="display:flex;align-items:center;">${escapeHtml(etaText || "Calculating…")}</div>
+        <div class="label" style="margin-top:10px;">Elapsed</div>
+        <div class="input" id="aiCreateTimer" style="display:flex;align-items:center;">00:00</div>
+      `;
+      footer.innerHTML = `<button class="btn" id="aiCreateClose" disabled>Working…</button>`;
+    });
+    const timerId = setInterval(() => {
+      seconds += 1;
+      const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+      const ss = String(seconds % 60).padStart(2, "0");
+      const el = $("aiCreateTimer");
+      if(el) el.textContent = `${mm}:${ss}`;
+    }, 1000);
+    return {
+      setEta(text){
+        const el = $("aiCreateEta");
+        if(el) el.textContent = text || "Calculating…";
+      },
+      close(){
+        clearInterval(timerId);
+        hideModal();
+      }
+    };
   }
 
   /* ---------- Init ---------- */
