@@ -1833,6 +1833,7 @@
       userNotes: meta.userNotes ?? extractUserNotes(md || meta.markdown || "")
     };
     const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
+    plan.name = meta.name || mdMeta.planName || plan.name;
     plan.goal = meta.goal ?? mdMeta.goal ?? "";
     plan.scope = meta.scope ?? mdMeta.scope ?? "";
     plan.ai_review_guidance = meta.ai_review_guidance ?? mdMeta.aiReviewGuidance ?? "";
@@ -2111,11 +2112,15 @@
 
   function extractPlanMetaFromMarkdown(md){
     const s = md || "";
+    let planName = "";
     let goal = "";
     let scope = "";
     let aiReviewGuidance = "";
     for(const rawLine of s.split(/\r?\n/)){
       const line = rawLine.trim();
+      if(line.toLowerCase().startsWith("- **plan name:**")){
+        planName = line.slice("- **Plan Name:**".length).trim();
+      }
       if(line.toLowerCase().startsWith("- **plan goal:**")){
         goal = line.slice("- **Plan Goal:**".length).trim();
       }
@@ -2126,7 +2131,7 @@
         aiReviewGuidance = line.slice("- **AI Review Guidance:**".length).trim();
       }
     }
-    return { goal, scope, aiReviewGuidance };
+    return { planName, goal, scope, aiReviewGuidance };
   }
 
   function generatePlanMarkdown(plan){
@@ -4340,7 +4345,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             logLine(`Create Plan: templates = ${list.map(t => t.name || t.id).join(", ")}`, "ok");
           }
           const current = sel.value;
-          templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }, ...list.map(t => ({ ...t, type: "plan" }))];
+          templateList = [{ id: "__blank__", name: "Blank (full schema)", type: "blank", data: {} }, ...list.map(t => {
+            const mdMeta = extractPlanMetaFromMarkdown(t.markdown || "");
+            const name = mdMeta.planName || t.name || t.id;
+            return { ...t, name, type: "plan" };
+          })];
           logLine(`Create Plan: dropdown options = ${templateList.length}.`, "ok");
           sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
           sel.value = templateList.find(t => t.id === current)?.id || templateList[0]?.id || "__blank__";
