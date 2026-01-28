@@ -4332,26 +4332,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             loading = false;
             return;
           }
-          let readRoot = null;
-          if(state.planRootHandle){
-            readRoot = await ensurePlanRootHandleRead();
-            logLine(`Create Plan: plan root read ${readRoot ? "granted" : "denied"}.`, readRoot ? "ok" : "warn");
-          }
+          const readRoot = await ensurePlanRootHandleRead();
+          logLine(`Create Plan: plan root read ${readRoot ? "granted" : "denied"}.`, readRoot ? "ok" : "warn");
           if(!readRoot){
             toast("Templates", "Read access denied. Re-select Plan Folder.", "warn");
             promptPlanRootIfNeeded();
             loading = false;
             return;
           }
-          let list = await Templates.listTemplates();
+          let list = await fsListTemplates();
           if(!list.length){
-            await sleep(350);
-            list = await Templates.listTemplates();
+            await sleep(200);
+            list = await fsListTemplates();
           }
-          state.templatesCache = list;
           logLine(`Create Plan: templates loaded = ${list.length}.`, list.length ? "ok" : "warn");
           if(!list.length){
-            logLine("Create Plan: no plan templates found. Templates live in plan root /templates.", "warn");
+            logLine("Create Plan: no plan templates found in /templates.", "warn");
           }else{
             logLine(`Create Plan: templates = ${list.map(t => t.name || t.id).join(", ")}`, "ok");
           }
@@ -4361,7 +4357,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             const name = mdMeta.planName || t.name || t.id;
             return { ...t, name, type: "plan" };
           })];
-          logLine(`Create Plan: dropdown options = ${templateList.length}.`, "ok");
           sel.innerHTML = templateList.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join("");
           sel.value = templateList.find(t => t.id === current)?.id || templateList[0]?.id || "__blank__";
           logLine(`Create Plan: select options = ${sel.options.length}.`, sel.options.length > 1 ? "ok" : "warn");
