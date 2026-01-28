@@ -1220,6 +1220,37 @@
     new_test_template_default: "__blank__"
   });
 
+  const DEFAULT_AI_PROMPTS = Object.freeze({
+    review_persona:
+      "You are a {{personaLabel}}. Provide a concise review comment for this field focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
+    review_field:
+      "Return ONLY the field value text. No JSON, no extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Use context_files (if provided) as source material. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
+    chat_edit:
+      "You edit a test plan. Permission level: {{permLabel}} ({{perm}}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+    create_plan:
+      "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} tests with 3-digit test_no values and meaningful test_name values. The set object should use full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.",
+    suggest_field:
+      "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+    suggest_field_strict:
+      "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+    suggest_limits_note:
+      "For ll/tv/ul/units, return measurement values only (e.g., numeric limits or a unit token). Do NOT return explanations or JSON fragments."
+  });
+
+  function applyPromptTemplate(template, vars){
+    const safe = String(template ?? "");
+    return safe.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key) => {
+      if(!vars) return "";
+      const val = vars[key];
+      return val == null ? "" : String(val);
+    });
+  }
+
+  function getAiPrompt(plan, key, vars){
+    const raw = plan?.ai_prompts?.[key] || DEFAULT_AI_PROMPTS[key] || "";
+    return applyPromptTemplate(raw, vars);
+  }
+
   function loadPrefs(){
     try{
       const raw = JSON.parse(localStorage.getItem("tb26_prefs") || "{}");
@@ -2133,8 +2164,8 @@
     let aiReviewGuidance = "";
     for(const rawLine of s.split(/\r?\n/)){
       const line = rawLine.trim();
-      if(line.toLowerCase().startsWith("- **plan name:**")){
-        planName = line.slice("- **Plan Name:**".length).trim();
+      if(line.toLowerCase().startsWith("- **name:**") || line.toLowerCase().startsWith("- **plan name:**")){
+        planName = line.slice(line.toLowerCase().startsWith("- **name:**") ? "- **Name:**".length : "- **Plan Name:**".length).trim();
       }
       if(line.toLowerCase().startsWith("- **goal:**") || line.toLowerCase().startsWith("- **plan goal:**")){
         goal = line.slice(line.toLowerCase().startsWith("- **goal:**") ? "- **Goal:**".length : "- **Plan Goal:**".length).trim();
@@ -2497,7 +2528,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   body: JSON.stringify({
                     model,
                     input: [
-                      { role:"system", content:`You are a ${persona?.label || personaId}. Provide a concise review comment for this field focused on ${focus}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.${guidanceLine}` },
+                    { role:"system", content:getAiPrompt(plan, "review_persona", { personaLabel: persona?.label || personaId, focus, guidanceLine }) },
                       { role:"user", content: JSON.stringify(prompt, null, 2) }
                     ],
                     max_output_tokens: 120
@@ -2695,7 +2726,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   body: JSON.stringify({
                     model,
                     input: [
-                      { role:"system", content:`Return ONLY the field value text. No JSON, no extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Use context_files (if provided) as source material. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.${guidanceLine}` },
+                    { role:"system", content:getAiPrompt(plan, "review_field", { guidanceLine }) },
                       { role:"user", content: JSON.stringify(payload, null, 2) }
                     ],
                     max_output_tokens: 120
@@ -2967,7 +2998,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         body: JSON.stringify({
           model,
           input: [
-            { role:"system", content:`You edit a test plan. Permission level: ${permLabel} (${perm}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.` },
+            { role:"system", content:getAiPrompt(plan, "chat_edit", { permLabel, perm }) },
             { role:"user", content: JSON.stringify(payload) }
           ],
           max_output_tokens: 600
@@ -4521,7 +4552,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 body: JSON.stringify({
                   model,
                   input: [
-                    { role:"system", content:`Return STRICT JSON: {"plan":{"goal":"","scope":""},"tests":[{"test_no":"001","test_name":"...","set":{...}}, ...]}. Provide exactly test_count tests with 3-digit test_no values and meaningful test_name values. The set object should use full schema keys: ${Object.keys(TEST_SCHEMA_DEFAULT).filter(k=>k!=="_ai").join(", ")}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.` },
+                    { role:"system", content:getAiPrompt(null, "create_plan", { testCount: count, schemaKeys: Object.keys(TEST_SCHEMA_DEFAULT).filter(k=>k!=="_ai").join(", ") }) },
                     { role:"user", content: JSON.stringify(payload) }
                   ],
                   max_output_tokens: 1400
@@ -5865,10 +5896,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       async function callSuggestion(forceDifferent){
         const isLimitField = ["ll","tv","ul","units"].includes(field);
         const system = forceDifferent
-          ? "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content."
-          : "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.";
+          ? getAiPrompt(plan, "suggest_field_strict")
+          : getAiPrompt(plan, "suggest_field");
         const limitsNote = isLimitField
-          ? "For ll/tv/ul/units, return measurement values only (e.g., numeric limits or a unit token). Do NOT return explanations or JSON fragments."
+          ? getAiPrompt(plan, "suggest_limits_note")
           : "";
         const resp = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
@@ -6158,6 +6189,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       goal: "Simple plan for board bring up.",
       scope: "Inspect and power on the UUT for the first time. Check voltage rails, ability to program, and signs of life.",
       ai_review_guidance: "Concise, professional, and technical-oriented. Use clear, test-lab language and avoid filler.",
+      ai_prompts: {
+        review_persona: DEFAULT_AI_PROMPTS.review_persona,
+        review_field: DEFAULT_AI_PROMPTS.review_field,
+        chat_edit: DEFAULT_AI_PROMPTS.chat_edit,
+        create_plan: DEFAULT_AI_PROMPTS.create_plan,
+        suggest_field: DEFAULT_AI_PROMPTS.suggest_field,
+        suggest_field_strict: DEFAULT_AI_PROMPTS.suggest_field_strict,
+        suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
+      },
       tests: [
         { id: uid(), order: 1, modified:false, data: normalizeTestData({
           test_name: "Visual Inspection",
@@ -7173,6 +7213,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       goal: "Capture and communicate the product specification.",
       scope: "Define requirements, interfaces, constraints, compliance targets, and verification approach.",
       ai_review_guidance: "Concise, professional, and specification-oriented. Use clear, unambiguous language.",
+      ai_prompts: {
+        review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
+        review_field: "Return ONLY the section field value text. No JSON, no extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
+        chat_edit: "You edit a specifications document. Permission level: {{permLabel}} ({{perm}}). Return STRICT JSON with keys: message (string), plan (optional: {name, goal, scope}), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        create_plan: DEFAULT_AI_PROMPTS.create_plan,
+        suggest_field: "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+        suggest_field_strict: "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+        suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
+      },
       tests,
       markdown: "",
       userNotes: "Add context, stakeholders, and review notes here."
