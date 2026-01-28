@@ -1467,10 +1467,11 @@
   async function sanitizePlanJson(planId){
     const plan = await Store.loadPlan(planId).catch(() => null);
     if(!plan) throw new Error("Plan not found");
-    plan.name = sanitizeAiText(plan.name || "");
-    plan.goal = sanitizeAiText(plan.goal || "");
-    plan.scope = sanitizeAiText(plan.scope || "");
-    if(plan.userNotes) plan.userNotes = sanitizeAiText(plan.userNotes);
+      plan.name = sanitizeAiText(plan.name || "");
+      plan.goal = sanitizeAiText(plan.goal || "");
+      plan.scope = sanitizeAiText(plan.scope || "");
+      if(plan.ai_review_guidance) plan.ai_review_guidance = sanitizeAiText(plan.ai_review_guidance);
+      if(plan.userNotes) plan.userNotes = sanitizeAiText(plan.userNotes);
     for(const t of (plan.tests || [])){
       sanitizeTestData(t);
       t.modified = true;
@@ -1815,6 +1816,7 @@
     const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
     plan.goal = meta.goal ?? mdMeta.goal ?? "";
     plan.scope = meta.scope ?? mdMeta.scope ?? "";
+    plan.ai_review_guidance = meta.ai_review_guidance ?? mdMeta.aiReviewGuidance ?? "";
     if(!plan.markdown) generatePlanMarkdown(plan);
     return plan;
   }
@@ -1889,19 +1891,20 @@
     }
     if(!plan.markdown) generatePlanMarkdown(plan);
     await fsWriteText(planDir, "plan.md", plan.markdown || "", "text/markdown");
-    const meta = {
-      id: plan.id,
-      name: plan.name,
-      slug: plan.slug,
-      folder: plan.folder,
-      created: plan.created || nowIsoDate(),
-      updated: plan.updated || nowIsoDate(),
-      goal: plan.goal || "",
-      scope: plan.scope || "",
-      userNotes: plan.userNotes || extractUserNotes(plan.markdown || ""),
-      markdownFile: "plan.md",
-      tests: testsMeta
-    };
+      const meta = {
+        id: plan.id,
+        name: plan.name,
+        slug: plan.slug,
+        folder: plan.folder,
+        created: plan.created || nowIsoDate(),
+        updated: plan.updated || nowIsoDate(),
+        goal: plan.goal || "",
+        scope: plan.scope || "",
+        ai_review_guidance: plan.ai_review_guidance || "",
+        userNotes: plan.userNotes || extractUserNotes(plan.markdown || ""),
+        markdownFile: "plan.md",
+        tests: testsMeta
+      };
     await fsWriteText(planDir, "plan.json", JSON.stringify(meta, null, 2), "application/json");
     return plan;
   }
@@ -2078,6 +2081,7 @@
     const s = md || "";
     let goal = "";
     let scope = "";
+    let aiReviewGuidance = "";
     for(const rawLine of s.split(/\r?\n/)){
       const line = rawLine.trim();
       if(line.toLowerCase().startsWith("- **plan goal:**")){
@@ -2086,8 +2090,11 @@
       if(line.toLowerCase().startsWith("- **plan scope:**")){
         scope = line.slice("- **Plan Scope:**".length).trim();
       }
+      if(line.toLowerCase().startsWith("- **ai review guidance:**")){
+        aiReviewGuidance = line.slice("- **AI Review Guidance:**".length).trim();
+      }
     }
-    return { goal, scope };
+    return { goal, scope, aiReviewGuidance };
   }
 
   function generatePlanMarkdown(plan){
@@ -2102,6 +2109,7 @@
 - **Plan Name:** ${plan.name}
 - **Plan Goal:** ${plan.goal || ""}
 - **Plan Scope:** ${plan.scope || ""}
+- **AI Review Guidance:** ${plan.ai_review_guidance || ""}
 - **Created:** ${created}
 - **Last Updated:** ${updated}
 - **Total Tests:** ${tests.length}
@@ -2358,10 +2366,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       updateAiReviewControls();
       return;
     }
-    if(!plan.goal || !plan.scope){
+    if(!plan.goal || !plan.scope || !plan.ai_review_guidance){
       const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
       if(!plan.goal) plan.goal = mdMeta.goal || "";
       if(!plan.scope) plan.scope = mdMeta.scope || "";
+      if(!plan.ai_review_guidance) plan.ai_review_guidance = mdMeta.aiReviewGuidance || "";
     }
 
     const tests = (plan.tests || []).slice().sort((a,b) => (a.order||0)-(b.order||0));
@@ -2871,10 +2880,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       appendChatMessage("ai", "AI is disabled. Enable it in Preferences.");
       return;
     }
-    if(!plan.goal || !plan.scope){
+    if(!plan.goal || !plan.scope || !plan.ai_review_guidance){
       const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
       if(!plan.goal) plan.goal = mdMeta.goal || "";
       if(!plan.scope) plan.scope = mdMeta.scope || "";
+      if(!plan.ai_review_guidance) plan.ai_review_guidance = mdMeta.aiReviewGuidance || "";
     }
     const model = state.prefs.ai_model || "gpt-4.1-mini";
     const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
@@ -5050,7 +5060,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!plan.markdown) generatePlanMarkdown(plan);
     const notes = $("notesArea");
     const preview = $("mdPreview");
+    const goal = $("mdPlanGoal");
+    const scope = $("mdPlanScope");
+    const guidance = $("mdAiReviewGuidance");
     if(!notes || !preview) return;
+    const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
+    if(!plan.goal && mdMeta.goal) plan.goal = mdMeta.goal;
+    if(!plan.scope && mdMeta.scope) plan.scope = mdMeta.scope;
+    if(!plan.ai_review_guidance && mdMeta.aiReviewGuidance) plan.ai_review_guidance = mdMeta.aiReviewGuidance;
+    if(goal) goal.value = plan.goal ?? "";
+    if(scope) scope.value = plan.scope ?? "";
+    if(guidance) guidance.value = plan.ai_review_guidance ?? "";
     notes.value = plan.userNotes ?? extractUserNotes(plan.markdown);
     preview.textContent = plan.markdown || "";
   }
@@ -5058,13 +5078,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   function showMarkdownModal(){
     const plan = state.currentPlan;
     if(!plan) return;
-      showModal("Plan Markdown", (body, footer) => {
-        body.innerHTML = `
-          <div class="mdWrap" style="display:flex; flex-direction:column; min-height:0;">
-            <div class="mdPreview" id="mdPreview"></div>
+    showModal("Plan Markdown", (body, footer) => {
+      body.innerHTML = `
+        <div class="mdWrap" style="display:flex; flex-direction:column; min-height:0;">
+          <div class="mdPreview" id="mdPreview"></div>
+          <div style="margin-top:10px;">
+            <div class="label">Plan Goal</div>
+            <input class="input" id="mdPlanGoal" placeholder="Single-line goal statement" />
+            <div class="label" style="margin-top:10px;">Plan Scope</div>
+            <textarea class="input" id="mdPlanScope" rows="3" spellcheck="false"></textarea>
+            <div class="label" style="margin-top:10px;">AI Review Guidance</div>
+            <textarea class="input" id="mdAiReviewGuidance" rows="3" spellcheck="false" placeholder="Style/tone/vibe guidance for AI Review"></textarea>
+            <div class="label" style="margin-top:10px;">Notes</div>
             <textarea class="mdArea" id="notesArea" spellcheck="false"></textarea>
           </div>
-        `;
+        </div>
+      `;
         footer.innerHTML = `
           <button class="btn" id="closeMdModal">Close</button>
           <button class="btn" id="btnRegenerateMd">Regenerate</button>
@@ -5081,7 +5110,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const plan = state.currentPlan;
     if(!plan) return;
     const notes = $("notesArea");
+    const goal = $("mdPlanGoal");
+    const scope = $("mdPlanScope");
+    const guidance = $("mdAiReviewGuidance");
     if(!notes) return;
+    if(goal) plan.goal = sanitizeAiText(goal.value.trim());
+    if(scope) plan.scope = sanitizeAiText(scope.value.trim());
+    if(guidance) plan.ai_review_guidance = sanitizeAiText(guidance.value.trim());
     plan.userNotes = notes.value || "";
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
@@ -5095,7 +5130,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!plan) return;
     // preserve notes explicitly
     const notes = $("notesArea");
+    const goal = $("mdPlanGoal");
+    const scope = $("mdPlanScope");
+    const guidance = $("mdAiReviewGuidance");
     if(notes) plan.userNotes = notes.value || plan.userNotes || "";
+    if(goal) plan.goal = sanitizeAiText(goal.value.trim());
+    if(scope) plan.scope = sanitizeAiText(scope.value.trim());
+    if(guidance) plan.ai_review_guidance = sanitizeAiText(guidance.value.trim());
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
     refreshMarkdownUI();
@@ -7113,18 +7154,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   function getAiReviewGuidance(){
     return new Promise(resolve => {
       showModal("AI Review Guidance", (body, footer) => {
+        const plan = state.currentPlan;
+        const current = plan?.ai_review_guidance || "";
         body.innerHTML = `
           <div class="label">Style / Tone / Vibe</div>
-          <textarea class="input" id="aiReviewGuidance" rows="4" spellcheck="false" placeholder="e.g., concise, formal, risk-focused, manufacturing-ready..."></textarea>
+          <textarea class="input" id="aiReviewGuidance" rows="4" spellcheck="false" placeholder="e.g., concise, formal, risk-focused, manufacturing-ready...">${escapeHtml(current)}</textarea>
           <div class="hint">Optional. This guidance is applied to AI Review output and personality comments.</div>
         `;
         footer.innerHTML = `
           <button class="btn" id="cancelGuidance">Skip</button>
           <button class="btn primary" id="confirmGuidance">Use Guidance</button>
         `;
-        $("cancelGuidance").onclick = () => { hideModal(); resolve(""); };
+        $("cancelGuidance").onclick = () => { hideModal(); resolve(current || ""); };
         $("confirmGuidance").onclick = () => {
           const val = $("aiReviewGuidance").value.trim();
+          if(plan){
+            plan.ai_review_guidance = val;
+          }
           hideModal();
           resolve(val);
         };
