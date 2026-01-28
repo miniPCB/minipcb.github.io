@@ -5717,12 +5717,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const cur = String(test.data[field] ?? "").trim().toUpperCase();
         if(cur === "N/A") return { noChange: true, rationale: "Left as N/A." };
       }
+      const plan = state.currentPlan || {};
+      const mdMeta = extractPlanMetaFromMarkdown(plan?.markdown || "");
+      const guidance = plan?.ai_review_guidance || mdMeta.aiReviewGuidance || "";
       const payload = {
+        plan: { name: plan.name || "", goal: plan.goal || mdMeta.goal || "", scope: plan.scope || mdMeta.scope || "", ai_review_guidance: guidance },
         test_no: test.data.test_no || "",
         test_name: test.data.test_name || "",
         field,
         current_value: test.data[field] || "",
         field_prompt: test.data?._ai?.field_prompts?.[field] || "",
+        field_label: test.data?._ai?.field_labels?.[field] || field,
         context: test.data
       };
       const model = state.prefs.ai_model || "gpt-4.1-mini";
@@ -5731,8 +5736,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       async function callSuggestion(forceDifferent){
         const isLimitField = ["ll","tv","ul","units"].includes(field);
         const system = forceDifferent
-          ? "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance. If current_value contains TODO or Auto-filled text, replace it with improved content."
-          : "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance. If current_value contains TODO or Auto-filled text, replace it with improved content.";
+          ? "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content."
+          : "Return STRICT JSON: {\"value\": \"...\", \"rationale\": \"...\"}. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.";
         const limitsNote = isLimitField
           ? "For ll/tv/ul/units, return measurement values only (e.g., numeric limits or a unit token). Do NOT return explanations or JSON fragments."
           : "";
