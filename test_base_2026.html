@@ -2378,6 +2378,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     showEditor();
 
     const model = state.prefs.ai_model || "gpt-4.1-mini";
+    const guidance = await getAiReviewGuidance();
+    const guidanceLine = guidance ? ` Style/Tone/Vibe: ${guidance}` : "";
     logLine(`AI Review: using model "${model}".`, "ok");
 
     async function reviewFieldComments(test, field){
@@ -2434,7 +2436,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   body: JSON.stringify({
                     model,
                     input: [
-                      { role:"system", content:`You are a ${persona?.label || personaId}. Provide a concise review comment for this field focused on ${focus}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.` },
+                      { role:"system", content:`You are a ${persona?.label || personaId}. Provide a concise review comment for this field focused on ${focus}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.${guidanceLine}` },
                       { role:"user", content: JSON.stringify(prompt, null, 2) }
                     ],
                     max_output_tokens: 120
@@ -2632,7 +2634,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   body: JSON.stringify({
                     model,
                     input: [
-                      { role:"system", content:"Return ONLY the field value text. No JSON, no extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Use context_files (if provided) as source material. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief." },
+                      { role:"system", content:`Return ONLY the field value text. No JSON, no extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Use context_files (if provided) as source material. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.${guidanceLine}` },
                       { role:"user", content: JSON.stringify(payload, null, 2) }
                     ],
                     max_output_tokens: 120
@@ -7105,6 +7107,29 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       `;
       footer.innerHTML = `<button class="btn" id="closePersonaDialog">Close</button>`;
       $("closePersonaDialog").onclick = hideModal;
+    });
+  }
+
+  function getAiReviewGuidance(){
+    return new Promise(resolve => {
+      showModal("AI Review Guidance", (body, footer) => {
+        body.innerHTML = `
+          <div class="label">Style / Tone / Vibe</div>
+          <textarea class="input" id="aiReviewGuidance" rows="4" spellcheck="false" placeholder="e.g., concise, formal, risk-focused, manufacturing-ready..."></textarea>
+          <div class="hint">Optional. This guidance is applied to AI Review output and personality comments.</div>
+        `;
+        footer.innerHTML = `
+          <button class="btn" id="cancelGuidance">Skip</button>
+          <button class="btn primary" id="confirmGuidance">Use Guidance</button>
+        `;
+        $("cancelGuidance").onclick = () => { hideModal(); resolve(""); };
+        $("confirmGuidance").onclick = () => {
+          const val = $("aiReviewGuidance").value.trim();
+          hideModal();
+          resolve(val);
+        };
+        setTimeout(() => $("aiReviewGuidance").focus(), 20);
+      });
     });
   }
 
