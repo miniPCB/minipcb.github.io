@@ -3624,9 +3624,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       cell.addEventListener("click", (e) => {
         const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
         if(tag === "input" || tag === "textarea" || tag === "select") return;
-        if(e.target && (e.target.closest("[data-maturity]") || e.target.closest("[data-field]"))) return;
         const multi = e.ctrlKey || e.metaKey;
         const range = e.shiftKey;
+        const onHeaderControl = e.target && (e.target.closest("[data-maturity]") || e.target.closest("[data-field]"));
+        if(onHeaderControl && !(multi || range)) return;
+        if(onHeaderControl && (multi || range)){
+          if(e.stopPropagation) e.stopPropagation();
+          if(e.preventDefault) e.preventDefault();
+        }
         const keysInOrder = getFieldKeys(test).filter(key => !["_ai","param1_label","param1_value","param2_label","param2_value"].includes(key));
         if(!test._lastSelectedField) test._lastSelectedField = k;
         if(range){
