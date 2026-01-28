@@ -7006,109 +7006,129 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   async function seedSpecificationsDocument(){
-    const data = normalizeTestData({
-      test_name: "Specifications Document",
-      test_no: "SPEC-001",
-      test_type: "Specification",
-      spec_id: "",
-      version: "",
-      status: "",
-      owner: "",
-      stakeholders: "",
-      date_created: "",
-      date_updated: "",
-      purpose: "",
-      scope: "",
-      definitions: "",
-      references: "",
-      functional_requirements: "",
-      performance_requirements: "",
-      environment_conditions: "",
-      interfaces: "",
-      inputs: "",
-      outputs: "",
-      constraints: "",
-      target_standards: "",
-      regulatory_requirements: "",
-      quality_requirements: "",
-      verification_method: "",
-      acceptance_criteria: "",
-      test_plan_reference: "",
-      assumptions: "",
-      risks: "",
-      open_issues: "",
-      change_log: ""
+    const sections = [
+      {
+        title: "Core metadata",
+        id: "SEC-001",
+        type: "Core metadata",
+        fields: [
+          { key: "spec_title", label: "Spec Title", type: "text" },
+          { key: "spec_id_number", label: "Spec ID / Number", type: "text" },
+          { key: "version", label: "Version", type: "text" },
+          { key: "status", label: "Status (Draft/Approved/Released)", type: "text" },
+          { key: "owner", label: "Owner / Author", type: "text" },
+          { key: "stakeholders", label: "Stakeholders", type: "textarea" },
+          { key: "date_created", label: "Date Created", type: "text" },
+          { key: "date_updated", label: "Date Updated", type: "text" }
+        ]
+      },
+      {
+        title: "Overview",
+        id: "SEC-002",
+        type: "Overview",
+        fields: [
+          { key: "purpose", label: "Purpose", type: "textarea" },
+          { key: "scope", label: "Scope", type: "textarea" },
+          { key: "definitions", label: "Definitions / Acronyms", type: "textarea" },
+          { key: "references", label: "References / Related docs", type: "textarea" }
+        ]
+      },
+      {
+        title: "Requirements",
+        id: "SEC-003",
+        type: "Requirements",
+        fields: [
+          { key: "functional_requirements", label: "Functional Requirements", type: "textarea" },
+          { key: "performance_requirements", label: "Performance Requirements", type: "textarea" },
+          { key: "environment_conditions", label: "Environmental / Operating Conditions", type: "textarea" },
+          { key: "interfaces", label: "Interfaces (mechanical/electrical/software)", type: "textarea" },
+          { key: "inputs_outputs", label: "Inputs / Outputs", type: "textarea" },
+          { key: "constraints", label: "Constraints / Limitations", type: "textarea" }
+        ]
+      },
+      {
+        title: "Compliance & Standards",
+        id: "SEC-004",
+        type: "Compliance & Standards",
+        fields: [
+          { key: "target_standards", label: "Target Standards", type: "textarea" },
+          { key: "regulatory_requirements", label: "Regulatory Requirements", type: "textarea" },
+          { key: "quality_requirements", label: "Quality / Safety Requirements", type: "textarea" }
+        ]
+      },
+      {
+        title: "Verification",
+        id: "SEC-005",
+        type: "Verification",
+        fields: [
+          { key: "verification_method", label: "Verification Method (test/analysis/inspection/demo)", type: "textarea" },
+          { key: "acceptance_criteria", label: "Acceptance Criteria", type: "textarea" },
+          { key: "test_plan_reference", label: "Test Plan Reference", type: "textarea" }
+        ]
+      },
+      {
+        title: "Assumptions & Risks",
+        id: "SEC-006",
+        type: "Assumptions & Risks",
+        fields: [
+          { key: "assumptions", label: "Assumptions", type: "textarea" },
+          { key: "risks", label: "Risks / Mitigations", type: "textarea" },
+          { key: "open_issues", label: "Open Issues", type: "textarea" }
+        ]
+      },
+      {
+        title: "Change Control",
+        id: "SEC-007",
+        type: "Change Control",
+        fields: [
+          { key: "change_log", label: "Change Log (entry list)", type: "textarea" }
+        ]
+      }
+    ];
+
+    const tests = sections.map((section, idx) => {
+      const data = {
+        test_name: section.title,
+        test_no: section.id,
+        test_type: section.type,
+        param1_label: "",
+        param1_value: "",
+        param2_label: "",
+        param2_value: ""
+      };
+
+      const fieldLabels = {
+        test_name: "Section Title",
+        test_no: "Section ID",
+        test_type: "Section Type",
+        param1_label: "Param 1 Label",
+        param1_value: "Param 1 Value",
+        param2_label: "Param 2 Label",
+        param2_value: "Param 2 Value"
+      };
+
+      const fieldTypes = {
+        test_name: "text",
+        test_no: "text",
+        test_type: "text",
+        param1_label: "text",
+        param1_value: "text",
+        param2_label: "text",
+        param2_value: "text"
+      };
+
+      for(const f of section.fields){
+        data[f.key] = "";
+        fieldLabels[f.key] = f.label;
+        fieldTypes[f.key] = f.type;
+      }
+
+      const normalized = normalizeTestData(data);
+      normalized._ai.field_labels = fieldLabels;
+      normalized._ai.field_types = fieldTypes;
+      normalized._ai.review_personalities = buildSeedReviewPersonalitiesForData(normalized);
+      return { id: uid(), order: idx + 1, modified: false, data: normalized };
     });
-
-    data._ai.field_labels = {
-      test_name: "Spec Title",
-      test_no: "Document No",
-      test_type: "Spec Type",
-      spec_id: "Spec ID",
-      version: "Version",
-      status: "Status",
-      owner: "Owner / Author",
-      stakeholders: "Stakeholders",
-      date_created: "Date Created",
-      date_updated: "Date Updated",
-      purpose: "Purpose",
-      scope: "Scope",
-      definitions: "Definitions / Acronyms",
-      references: "References",
-      functional_requirements: "Functional Requirements",
-      performance_requirements: "Performance Requirements",
-      environment_conditions: "Environmental / Operating Conditions",
-      interfaces: "Interfaces",
-      inputs: "Inputs",
-      outputs: "Outputs",
-      constraints: "Constraints / Limitations",
-      target_standards: "Target Standards",
-      regulatory_requirements: "Regulatory Requirements",
-      quality_requirements: "Quality / Safety Requirements",
-      verification_method: "Verification Method",
-      acceptance_criteria: "Acceptance Criteria",
-      test_plan_reference: "Test Plan Reference",
-      assumptions: "Assumptions",
-      risks: "Risks / Mitigations",
-      open_issues: "Open Issues",
-      change_log: "Change Log"
-    };
-
-    data._ai.field_types = {
-      test_name: "text",
-      test_no: "text",
-      test_type: "text",
-      spec_id: "text",
-      version: "text",
-      status: "text",
-      owner: "text",
-      stakeholders: "text",
-      date_created: "text",
-      date_updated: "text",
-      purpose: "textarea",
-      scope: "textarea",
-      definitions: "textarea",
-      references: "textarea",
-      functional_requirements: "textarea",
-      performance_requirements: "textarea",
-      environment_conditions: "textarea",
-      interfaces: "textarea",
-      inputs: "textarea",
-      outputs: "textarea",
-      constraints: "textarea",
-      target_standards: "textarea",
-      regulatory_requirements: "textarea",
-      quality_requirements: "textarea",
-      verification_method: "textarea",
-      acceptance_criteria: "textarea",
-      test_plan_reference: "textarea",
-      assumptions: "textarea",
-      risks: "textarea",
-      open_issues: "textarea",
-      change_log: "textarea"
-    };
-
-    data._ai.review_personalities = buildSeedReviewPersonalitiesForData(data);
 
     const plan = {
       id: uid(),
@@ -7119,9 +7139,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       goal: "Capture and communicate the product specification.",
       scope: "Define requirements, interfaces, constraints, compliance targets, and verification approach.",
       ai_review_guidance: "Concise, professional, and specification-oriented. Use clear, unambiguous language.",
-      tests: [
-        { id: uid(), order: 1, modified: false, data }
-      ],
+      tests,
       markdown: "",
       userNotes: "Add context, stakeholders, and review notes here."
     };
