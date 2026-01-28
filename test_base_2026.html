@@ -1936,7 +1936,7 @@
   async function fsListTemplates(){
     const root = await fsEnsureTemplatesRoot(false);
     if(!root){
-      logLine("Templates: root not доступible (no read permission).", "warn");
+      logLine("Templates: root not accessible (no read permission).", "warn");
       return [];
     }
     const templates = [];
@@ -4318,7 +4318,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!sel) return;
         const hasRoot = !!state.planRootHandle;
         logLine(`Create Plan: plan root ${hasRoot ? "set" : "not set"}.`, hasRoot ? "ok" : "warn");
+        if(state.planRootHandle){
+          await ensurePlanRootHandleRead();
+        }
         let list = await Templates.listTemplates();
+        if(!list.length){
+          await sleep(350);
+          list = await Templates.listTemplates();
+        }
         state.templatesCache = list;
         logLine(`Create Plan: templates loaded = ${list.length}.`, list.length ? "ok" : "warn");
         if(!list.length){
