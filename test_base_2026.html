@@ -5224,6 +5224,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const goal = $("mdPlanGoal");
     const scope = $("mdPlanScope");
     const guidance = $("mdAiReviewGuidance");
+    const promptsWrap = $("mdAiPromptsWrap");
     const prompts = $("mdAiPrompts");
     if(!notes || !preview) return;
     const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
@@ -5233,9 +5234,25 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(goal) goal.value = plan.goal ?? "";
     if(scope) scope.value = plan.scope ?? "";
     if(guidance) guidance.value = plan.ai_review_guidance ?? "";
-    if(prompts){
+    if(promptsWrap){
       const merged = { ...DEFAULT_AI_PROMPTS, ...(plan.ai_prompts || {}) };
-      prompts.value = JSON.stringify(merged, null, 2);
+      const entries = [
+        ["review_persona", "Review Persona Prompt"],
+        ["review_field", "Review Field Prompt"],
+        ["chat_edit", "AI Chat Edit Prompt"],
+        ["create_plan", "AI Create Plan Prompt"],
+        ["suggest_field", "Suggest Field Prompt"],
+        ["suggest_field_strict", "Suggest Field (Strict) Prompt"],
+        ["suggest_limits_note", "Suggest Limits Note"]
+      ];
+      promptsWrap.innerHTML = entries.map(([key,label]) => `
+        <div class="label" style="margin-top:10px;">${escapeHtml(label)}</div>
+        <textarea class="input" data-prompt-key="${escapeHtml(key)}" rows="3" spellcheck="false"></textarea>
+      `).join("");
+      promptsWrap.querySelectorAll("[data-prompt-key]").forEach(el => {
+        const key = el.getAttribute("data-prompt-key");
+        el.value = merged[key] ?? "";
+      });
     }
     notes.value = plan.userNotes ?? extractUserNotes(plan.markdown);
     preview.textContent = plan.markdown || "";
@@ -5255,8 +5272,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <textarea class="input" id="mdPlanScope" rows="3" spellcheck="false"></textarea>
             <div class="label" style="margin-top:10px;">AI Review Guidance</div>
             <textarea class="input" id="mdAiReviewGuidance" rows="3" spellcheck="false" placeholder="Style/tone/vibe guidance for AI Review"></textarea>
-            <div class="label" style="margin-top:10px;">AI Prompt Templates (JSON)</div>
-            <textarea class="input" id="mdAiPrompts" rows="10" spellcheck="false" placeholder='{"review_field":"...", "chat_edit":"...", ...}'></textarea>
+            <div class="label" style="margin-top:10px;">AI Prompt Templates</div>
+            <div id="mdAiPromptsWrap"></div>
             <div class="label" style="margin-top:10px;">Notes</div>
             <textarea class="mdArea" id="notesArea" spellcheck="false"></textarea>
           </div>
@@ -5279,21 +5296,18 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const goal = $("mdPlanGoal");
     const scope = $("mdPlanScope");
     const guidance = $("mdAiReviewGuidance");
-    const prompts = $("mdAiPrompts");
+    const promptsWrap = $("mdAiPromptsWrap");
     if(!notes) return;
     if(goal) plan.goal = sanitizeAiText(goal.value.trim());
     if(scope) plan.scope = sanitizeAiText(scope.value.trim());
     if(guidance) plan.ai_review_guidance = sanitizeAiText(guidance.value.trim());
-    if(prompts){
-      const raw = prompts.value.trim();
-      if(raw){
-        const parsed = safeParseJson(raw, "AI Prompt Templates");
-        if(parsed && typeof parsed === "object" && !Array.isArray(parsed)){
-          plan.ai_prompts = { ...(plan.ai_prompts || {}), ...parsed };
-        }else{
-          toast("AI Prompt Templates", "Invalid JSON. Changes not saved.", "warn");
-        }
-      }
+    if(promptsWrap){
+      const next = { ...(plan.ai_prompts || {}) };
+      promptsWrap.querySelectorAll("[data-prompt-key]").forEach(el => {
+        const key = el.getAttribute("data-prompt-key");
+        next[key] = String(el.value || "");
+      });
+      plan.ai_prompts = next;
     }
     plan.userNotes = notes.value || "";
     generatePlanMarkdown(plan);
