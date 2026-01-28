@@ -406,6 +406,7 @@
     .chatMsg.user{ align-self:flex-end; background: rgba(68,140,255,.18); border:1px solid rgba(68,140,255,.35); }
     .chatMsg.ai{ align-self:flex-start; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); }
     .chatInput{ min-height:90px; height:90px; resize:none; }
+    .fieldSelected{ outline:2px solid rgba(90,200,120,.7); box-shadow: inset 0 0 0 1px rgba(90,200,120,.35); }
 
     /* Log */
     .logbar{
@@ -3613,25 +3614,43 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           state.focusField = k;
         });
 
-        cell.addEventListener("contextmenu", (e) => {
-          e.preventDefault();
-          state.focusField = k;
-        const items = [
-          {
-            id: "add_after",
-            label: "Add Field After",
-            onClick: () => runAsync(addFieldFlow(k, "after"))
-          },
-          {
-            id: "add_before",
-            label: "Add Field Before",
-            onClick: () => runAsync(addFieldFlow(k, "before"))
-          },
-          {
-            id: "delete_field",
-            label: "Delete Field",
-            onClick: () => deleteFieldByKey(test, k)
-          },
+      if(!test._selectedFields) test._selectedFields = new Set();
+      if(test._selectedFields.has(k)) cell.classList.add("fieldSelected");
+      cell.addEventListener("click", (e) => {
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+        if(tag === "input" || tag === "textarea" || tag === "select") return;
+        const multi = e.ctrlKey || e.metaKey;
+        if(!multi) test._selectedFields.clear();
+        if(test._selectedFields.has(k)) test._selectedFields.delete(k);
+        else test._selectedFields.add(k);
+        renderForm();
+      });
+
+      cell.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        state.focusField = k;
+      const selected = test._selectedFields ? Array.from(test._selectedFields) : [];
+      const items = [
+        {
+          id: "add_after",
+          label: "Add Field After",
+          onClick: () => runAsync(addFieldFlow(k, "after"))
+        },
+        {
+          id: "add_before",
+          label: "Add Field Before",
+          onClick: () => runAsync(addFieldFlow(k, "before"))
+        },
+        ...(selected.length > 1 ? [{
+          id: "delete_selected",
+          label: `Delete Selected (${selected.length})`,
+          onClick: () => deleteFieldsByKeys(test, selected)
+        }] : []),
+        {
+          id: "delete_field",
+          label: "Delete Field",
+          onClick: () => deleteFieldByKey(test, k)
+        },
           {
             id: "save_test",
             label: "Save Test",
@@ -3871,6 +3890,56 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test.data = next;
         test.modified = true;
         if(test._dirtyFields) delete test._dirtyFields[fieldKey];
+        hideModal();
+        renderForm();
+        renderTestsList();
+      };
+    });
+  }
+
+  function deleteFieldsByKeys(test, fieldKeys){
+    if(!test || !Array.isArray(fieldKeys) || !fieldKeys.length) return;
+    const data = test.data || {};
+    const keys = fieldKeys.filter(k => k && k in data);
+    if(!keys.length) return;
+    showModal("Delete Fields", (body, footer) => {
+      body.innerHTML = `
+        <div class="muted" style="line-height:1.4;">
+          Delete ${keys.length} field(s)?
+          <div style="margin-top:8px; font-size:11px; color:var(--muted);">${escapeHtml(keys.join(", "))}</div>
+        </div>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cancelDeleteFields">Cancel</button>
+        <button class="btn danger" id="confirmDeleteFields">Delete</button>
+      `;
+      $("cancelDeleteFields").onclick = hideModal;
+      $("confirmDeleteFields").onclick = () => {
+        const next = {};
+        const all = Object.keys(data).filter(k => k !== "_ai");
+        for(const k of all){
+          if(!keys.includes(k)) next[k] = data[k];
+        }
+        next._ai = data._ai || ensureAiMeta(null, Object.keys(next).filter(k => k !== "_ai"));
+        for(const k of keys){
+          if(next._ai?.maturity) delete next._ai.maturity[k];
+          if(next._ai?.field_labels) delete next._ai.field_labels[k];
+          if(next._ai?.field_types) delete next._ai.field_types[k];
+          if(next._ai?.field_prompts) delete next._ai.field_prompts[k];
+          if(next._ai?.review_personalities && typeof next._ai.review_personalities === "object"){
+            for(const persona of Object.values(next._ai.review_personalities)){
+              if(persona?.field_comments) delete persona.field_comments[k];
+            }
+          }
+        }
+        test.data = next;
+        test.modified = true;
+        if(test._dirtyFields){
+          for(const k of keys) delete test._dirtyFields[k];
+        }
+        if(test._selectedFields){
+          for(const k of keys) test._selectedFields.delete(k);
+        }
         hideModal();
         renderForm();
         renderTestsList();
