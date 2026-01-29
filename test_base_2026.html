@@ -2715,6 +2715,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       let concurrency = prefConcurrency;
       let fetchFailCount = 0;
       let fetchFailLogged = false;
+      let postBlocked = false;
       const backoffSchedule = [250, 750, 1500];
       const queue = fields.filter(f => getFieldMaturity(t, f) < 3);
 
@@ -2810,15 +2811,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                     lastErr = err;
                     const msg = String(err?.message || err);
                     const isFetchFail = /Failed to fetch|NetworkError|ERR_|CORS/i.test(msg);
-                    if(isFetchFail){
-                      fetchFailCount++;
-                      if(concurrency > 1){
-                        concurrency = 1;
-                        if(!fetchFailLogged){
-                          logLine("AI Review: detected fetch failures. Reducing concurrency to 1 and retrying with backoff.", "warn");
-                          fetchFailLogged = true;
-                        }
-                      }
+                if(isFetchFail){
+                  fetchFailCount++;
+                  if(concurrency > 1){
+                    concurrency = 1;
+                    if(!fetchFailLogged){
+                      logLine("AI Review: detected fetch failures. Reducing concurrency to 1 and retrying with backoff.", "warn");
+                      fetchFailLogged = true;
+                    }
+                  }
                     }
                     if(attempt >= backoffSchedule.length || state.aiReviewControl?.cancelled){
                       throw err;
@@ -2839,7 +2840,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   if(testRes?.ok === false){
                     const extra = testRes.error ? (testRes.error.message || testRes.error) : `HTTP ${testRes.status}`;
                     logLine(`AI Review: self-test failed (${extra}).`, "warn");
-                    logLine("AI Review: GET /v1/models OK, POST /v1/responses blocked (network or policy).", "warn");
+                    if(!postBlocked){
+                      logLine("AI Review: GET /v1/models OK, POST /v1/responses blocked (network or policy). Stopping review.", "warn");
+                      postBlocked = true;
+                      state.aiReviewControl.cancelled = true;
+                    }
                   }else if(testRes?.ok){
                     logLine("AI Review: self-test OK (POST /responses).", "ok");
                   }
