@@ -1204,6 +1204,22 @@
     return missing;
   }
 
+  const AI_PROXY_BASE = (localStorage.getItem("tb26_api_base") || "https://www.minipcb.com/api").replace(/\/+$/,"");
+  const USE_PROXY = true;
+
+  function apiHeaders(){
+    const headers = { "Content-Type": "application/json" };
+    if(!USE_PROXY){
+      const key = getAiKey();
+      if(key) headers.Authorization = `Bearer ${key}`;
+    }
+    return headers;
+  }
+
+  function apiUrl(path){
+    return `${AI_PROXY_BASE}${path}`;
+  }
+
   /* ---------- Preferences (minimal) ---------- */
   const DEFAULT_PREFS = Object.freeze({
     ai_enabled: false,                // skeleton toggle (legacy)
@@ -2432,7 +2448,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   async function aiReviewPlan(planId){
     const key = getAiKey();
-    if(!key){
+    if(!USE_PROXY && !key){
       toast("AI Review", "Set an API key first.", "warn");
       logLine("AI Review: no API key available.", "warn");
       openAiKeyDialog();
@@ -2519,12 +2535,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               try{
                 if(!(await aiReviewWaitIfPaused())) return;
                 logLine(`AI Review: persona ${persona?.label || personaId} reviewing ${test.data.test_no || test.id.slice(0,6)}.${field}...`, "ok");
-                const resp = await fetch("https://api.openai.com/v1/responses", {
+                const resp = await fetch(apiUrl("/review"), {
                   method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${key}`
-                  },
+                  headers: apiHeaders(),
                   body: JSON.stringify({
                     model,
                     input: [
@@ -2717,12 +2730,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 if(state.prefs.ai_review_debug){
                   logLine(`AI Review debug payload: ${JSON.stringify(payload).slice(0, 800)}...`, "warn");
                 }
-                const resp = await fetch("https://api.openai.com/v1/responses", {
+                const resp = await fetch(apiUrl("/review"), {
                   method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${key}`
-                  },
+                  headers: apiHeaders(),
                   body: JSON.stringify({
                     model,
                     input: [
@@ -2955,7 +2965,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     state.prefs = loadPrefs();
     const key = getAiKey();
-    if(!key){
+    if(!USE_PROXY && !key){
       appendChatMessage("ai", "AI unavailable. Set a key in Preferences.");
       return;
     }
@@ -2989,12 +2999,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       request: text
     };
     try{
-      const resp = await fetch("https://api.openai.com/v1/responses", {
+      const resp = await fetch(apiUrl("/chat"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${key}`
-        },
+        headers: apiHeaders(),
         body: JSON.stringify({
           model,
           input: [
@@ -4524,7 +4531,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           const key = getAiKey();
           const model = state.prefs.ai_model || "gpt-4.1-mini";
           let usedAi = false;
-          if(key && state.prefs.ai_enabled){
+          if(state.prefs.ai_enabled && (USE_PROXY || key)){
             try{
               logLine(`AI Create: using model "${model}".`, "ok");
               const mdData = mdText ? extractSchematicMarkdownData(mdText) : null;
@@ -4543,13 +4550,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 partlist: mdData?.partlist || [],
                 circuit_identification: mdData?.circuitId || []
               };
-              const resp = await fetch("https://api.openai.com/v1/responses", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${key}`
-                },
-                body: JSON.stringify({
+                const resp = await fetch(apiUrl("/create"), {
+                  method: "POST",
+                  headers: apiHeaders(),
+                  body: JSON.stringify({
                   model,
                   input: [
                     { role:"system", content:getAiPrompt(null, "create_plan", { testCount: count, schemaKeys: Object.keys(TEST_SCHEMA_DEFAULT).filter(k=>k!=="_ai").join(", ") }) },
@@ -5353,7 +5357,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <div class="row">
             <div>
               <div class="label">AI Status</div>
-              <div class="input" style="display:flex;align-items:center;">${hasKey ? "Key set" : "Not set"}</div>
+              <div class="input" style="display:flex;align-items:center;">${USE_PROXY ? "Proxy" : (hasKey ? "Key set" : "Not set")}</div>
             </div>
           <div>
             <div class="label">Plan Storage</div>
@@ -5501,7 +5505,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("prefSetKey").onclick = () => { hideModal(); openAiKeyDialog(); };
       $("prefClearKey").onclick = () => { setAiKey("", false); toast("AI Key", "Cleared.", "warn"); };
       $("prefRefreshModels").onclick = () => {
-        if(!getAiKey()){
+        if(!USE_PROXY && !getAiKey()){
           toast("Models", "Set an API key first.", "warn");
           return;
         }
@@ -5806,12 +5810,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   async function refreshAvailableModels(){
     const key = getAiKey();
-    if(!key) throw new Error("No API key set");
-    const resp = await fetch("https://api.openai.com/v1/models", {
+    if(!USE_PROXY && !key) throw new Error("No API key set");
+    const resp = await fetch(apiUrl("/models"), {
       method: "GET",
-      headers: {
-        "Authorization": `Bearer ${key}`
-      }
+      headers: USE_PROXY ? {} : { "Authorization": `Bearer ${key}` }
     });
     if(!resp.ok){
       const t = await resp.text().catch(()=> "");
@@ -5826,21 +5828,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
     function updateAiBadge(){
-      const hasKey = !!getAiKey();
-      $("aiLed").className = "led " + (hasKey ? "ok" : "bad");
-      $("aiText").textContent = hasKey ? "Ready" : "Set key in Preferences";
+      const hasAccess = USE_PROXY || !!getAiKey();
+      $("aiLed").className = "led " + (hasAccess ? "ok" : "bad");
+      $("aiText").textContent = hasAccess ? "Ready" : "Set key in Preferences";
       updateAiUI();
     }
 
     function updateAiUI(){
-      const hasKey = !!getAiKey();
+      const hasAccess = USE_PROXY || !!getAiKey();
       const btn = $("btnAiSuggest");
       if(btn){
-        btn.disabled = !hasKey;
-        btn.title = hasKey ? "Suggest text for the focused field" : "Set AI key to enable";
+        btn.disabled = !hasAccess;
+        btn.title = hasAccess ? "Suggest text for the focused field" : "Set AI key to enable";
       }
       const keyText = $("aiKeyText");
-      if(keyText) keyText.textContent = hasKey ? "Set" : "Not set";
+      if(keyText) keyText.textContent = hasAccess ? "Set" : "Not set";
     }
 
     function extractResponseText(data){
@@ -5905,7 +5907,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     async function suggestForField(test, field){
       const key = getAiKey();
-      if(!key) throw new Error("No API key set");
+      if(!USE_PROXY && !key) throw new Error("No API key set");
       if(["ll","tv","ul","units"].includes(field)){
         const cur = String(test.data[field] ?? "").trim().toUpperCase();
         if(cur === "N/A") return { noChange: true, rationale: "Left as N/A." };
@@ -5934,12 +5936,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const limitsNote = isLimitField
           ? getAiPrompt(plan, "suggest_limits_note")
           : "";
-        const resp = await fetch("https://api.openai.com/v1/responses", {
+        const resp = await fetch(apiUrl("/suggest"), {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${key}`
-          },
+          headers: apiHeaders(),
           body: JSON.stringify({
             model,
             input: [
@@ -5995,7 +5994,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
       state.prefs = loadPrefs();
       const key = getAiKey();
-      if(!key){
+      if(!USE_PROXY && !key){
         toast("AI Suggest", "Set an API key first.", "warn");
         logLine("AI Suggest: no API key available.", "warn");
         openAiKeyDialog();
