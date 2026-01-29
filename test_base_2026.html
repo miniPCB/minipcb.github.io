@@ -5524,7 +5524,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
         <div class="toolbarRow" style="margin-top:6px;">
           <button class="btn mini" id="prefToggleAdvanced">Advanced</button>
-          <button class="btn mini" id="prefNetworkDiag">Network Diagnostics</button>
         </div>
 
         <div class="hr"></div>
@@ -5583,7 +5582,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       `;
       $("cancelPrefs").onclick = hideModal;
       $("prefSetKey").onclick = () => { hideModal(); openAiKeyDialog(); };
-      $("prefNetworkDiag").onclick = () => runAsync(runNetworkDiagnostics());
       $("prefClearKey").onclick = () => { setAiKey("", false); toast("AI Key", "Cleared.", "warn"); };
       $("prefRefreshModels").onclick = () => {
         if(!getAiKey()){
@@ -7643,56 +7641,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         runAsync(saveAll());
       }
     });
-  }
-
-  async function runNetworkDiagnostics(){
-    const key = getAiKey();
-    const protocol = location.protocol;
-    const online = navigator.onLine ? "online" : "offline";
-    logLine(`Network diagnostics: protocol=${protocol}, ${online}.`, "ok");
-    if(!key){
-      logLine("Network diagnostics: no API key set.", "warn");
-      toast("Network diagnostics", "No API key set.", "warn");
-      return;
-    }
-    try{
-      const ping = await fetch("https://api.openai.com/v1/models", {
-        method: "GET",
-        headers: { "Authorization": `Bearer ${key}` }
-      });
-      if(!ping.ok){
-        const txt = await ping.text().catch(()=> "");
-        logLine(`Network diagnostics: GET /v1/models failed (HTTP ${ping.status}). ${txt.slice(0,160)}`, "warn");
-      }else{
-        logLine("Network diagnostics: GET /v1/models OK.", "ok");
-      }
-    }catch(err){
-      logLine(`Network diagnostics: GET /v1/models failed (${err.message || err}).`, "warn");
-    }
-    try{
-      const resp = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${key}`
-        },
-        body: JSON.stringify({
-          model: state.prefs.ai_model || "gpt-4.1-mini",
-          input: [{ role:"user", content:"diagnostic ping" }],
-          max_output_tokens: 8
-        })
-      });
-      if(!resp.ok){
-        const txt = await resp.text().catch(()=> "");
-        logLine(`Network diagnostics: POST /v1/responses failed (HTTP ${resp.status}). ${txt.slice(0,160)}`, "warn");
-      }else{
-        logLine("Network diagnostics: POST /v1/responses OK.", "ok");
-      }
-    }catch(err){
-      logLine(`Network diagnostics: POST /v1/responses failed (${err.message || err}).`, "warn");
-      logLine("Network diagnostics: GET OK + POST failed suggests network/policy blocking POST.", "warn");
-    }
-    toast("Network diagnostics", "Finished. See log.", "ok");
   }
 
   function openPersonalityDialog(test, fieldKey){
