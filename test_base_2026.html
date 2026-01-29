@@ -2438,25 +2438,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       openAiKeyDialog();
       return;
     }
-    const selfTest = async () => {
-      try{
-        const resp = await fetch("https://api.openai.com/v1/responses", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${key}`
-          },
-          body: JSON.stringify({
-            model: state.prefs.ai_model || "gpt-4.1-mini",
-            input: [{ role:"user", content:"ping" }],
-            max_output_tokens: 8
-          })
-        });
-        return { ok: resp.ok, status: resp.status, text: await resp.text().catch(()=> "") };
-      }catch(err){
-        return { ok: false, error: err };
-      }
-    };
     try{
       const ping = await fetch("https://api.openai.com/v1/models", {
         method: "GET",
@@ -2711,11 +2692,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }));
 
       const pauseMs = Number(state.prefs.ai_review_pause_ms ?? 0);
-      const prefConcurrency = Math.max(1, Number(state.prefs.ai_review_concurrency ?? 1));
-      let concurrency = prefConcurrency;
-      let fetchFailCount = 0;
-      let fetchFailLogged = false;
-      const backoffSchedule = [250, 750, 1500];
+      const concurrency = Math.max(1, Number(state.prefs.ai_review_concurrency ?? 1));
       const queue = fields.filter(f => getFieldMaturity(t, f) < 3);
 
       let active = 0;
@@ -2754,98 +2731,56 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             (async () => {
               try{
                 if(!(await aiReviewWaitIfPaused())) return;
-                let attempt = 0;
-                let lastErr = null;
-                while(true){
-                  try{
-                    if(state.prefs.ai_review_debug){
-                      logLine(`AI Review debug payload: ${JSON.stringify(payload).slice(0, 800)}...`, "warn");
-                    }
-                    const resp = await fetch("https://api.openai.com/v1/responses", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${key}`
-                      },
-                      body: JSON.stringify({
-                        model,
-                        input: [
-                          { role:"system", content:getAiPrompt(plan, "review_field", { guidanceLine }) },
-                          { role:"user", content: JSON.stringify(payload, null, 2) }
-                        ],
-                        max_output_tokens: 120
-                      })
-                    });
-                    if(!resp.ok){
-                      const ttxt = await resp.text().catch(()=> "");
-                      throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
-                    }
-                    const data = await resp.json();
-                    const raw = extractResponseText(data);
-                    if(state.prefs.ai_review_debug){
-                      logLine(`AI Review debug response: ${String(raw).slice(0, 800)}...`, "warn");
-                      state.prefs.ai_review_debug = false;
-                      savePrefs();
-                    }
-                    let val = String(raw || "").trim();
-                    if(val.startsWith("{")){
-                      const parsed = safeParseJson(val, "AI Review");
-                      if(typeof parsed?.value === "string") val = parsed.value.trim();
-                    }
-                    if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
-                      val = val.slice(1, -1).trim();
-                    }
-                    val = sanitizeAiText(val);
-                    if(!state.aiReviewControl?.cancelled && val && val !== String(t.data[field] ?? "").trim()){
-                      t.data[field] = val;
-                      setFieldMaturity(t, field, 2);
-                      t.modified = true;
-                      if(!t._dirtyFields) t._dirtyFields = {};
-                      t._dirtyFields[field] = true;
-                      changedCount++;
-                    }
-                    setSuggestStatus(t.id, field, "accepted");
-                    break;
-                  }catch(err){
-                    lastErr = err;
-                    const msg = String(err?.message || err);
-                    const isFetchFail = /Failed to fetch|NetworkError|ERR_|CORS/i.test(msg);
-                    if(isFetchFail){
-                      fetchFailCount++;
-                      if(concurrency > 1){
-                        concurrency = 1;
-                        if(!fetchFailLogged){
-                          logLine("AI Review: detected fetch failures. Reducing concurrency to 1 and retrying with backoff.", "warn");
-                          fetchFailLogged = true;
-                        }
-                      }
-                    }
-                    if(attempt >= backoffSchedule.length || state.aiReviewControl?.cancelled){
-                      throw err;
-                    }
-                    await sleep(backoffSchedule[attempt]);
-                    attempt++;
-                  }
+                if(state.prefs.ai_review_debug){
+                  logLine(`AI Review debug payload: ${JSON.stringify(payload).slice(0, 800)}...`, "warn");
                 }
+                const resp = await fetch("https://api.openai.com/v1/responses", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${key}`
+                  },
+                  body: JSON.stringify({
+                    model,
+                    input: [
+                    { role:"system", content:getAiPrompt(plan, "review_field", { guidanceLine }) },
+                      { role:"user", content: JSON.stringify(payload, null, 2) }
+                    ],
+                    max_output_tokens: 120
+                  })
+                });
+                if(!resp.ok){
+                  const ttxt = await resp.text().catch(()=> "");
+                  throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
+                }
+                const data = await resp.json();
+                const raw = extractResponseText(data);
+                if(state.prefs.ai_review_debug){
+                  logLine(`AI Review debug response: ${String(raw).slice(0, 800)}...`, "warn");
+                  state.prefs.ai_review_debug = false;
+                  savePrefs();
+                }
+                let val = String(raw || "").trim();
+                if(val.startsWith("{")){
+                  const parsed = safeParseJson(val, "AI Review");
+                  if(typeof parsed?.value === "string") val = parsed.value.trim();
+                }
+                if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
+                  val = val.slice(1, -1).trim();
+                }
+                val = sanitizeAiText(val);
+                if(!state.aiReviewControl?.cancelled && val && val !== String(t.data[field] ?? "").trim()){
+                  t.data[field] = val;
+                  setFieldMaturity(t, field, 2);
+                  t.modified = true;
+                  if(!t._dirtyFields) t._dirtyFields = {};
+                  t._dirtyFields[field] = true;
+                  changedCount++;
+                }
+                setSuggestStatus(t.id, field, "accepted");
               }catch(err){
                 setSuggestStatus(t.id, field, "");
-                const msg = String(err?.message || err);
-                const isFetchFail = /Failed to fetch|NetworkError|ERR_|CORS/i.test(msg);
-                if(isFetchFail){
-                  const proto = location.protocol;
-                  const online = navigator.onLine ? "online" : "offline";
-                  const errName = err?.name || "Error";
-                  const testRes = await selfTest();
-                  if(testRes?.ok === false){
-                    const extra = testRes.error ? (testRes.error.message || testRes.error) : `HTTP ${testRes.status}`;
-                    logLine(`AI Review: self-test failed (${extra}).`, "warn");
-                  }else if(testRes?.ok){
-                    logLine("AI Review: self-test OK (POST /responses).", "ok");
-                  }
-                  logLine(`AI Review: failed ${t.data.test_no || t.id.slice(0,6)}.${field} (${errName}: ${msg}) [protocol=${proto}, ${online}, concurrency=${concurrency}]`, "warn");
-                }else{
-                  logLine(`AI Review: failed ${t.data.test_no || t.id.slice(0,6)}.${field} (${msg}).`, "warn");
-                }
+                logLine(`AI Review: failed ${t.data.test_no || t.id.slice(0,6)}.${field} (${err.message || err}).`, "warn");
               }finally{
                 active--;
                 if(pauseMs > 0) await sleep(pauseMs);
