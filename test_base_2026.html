@@ -2754,6 +2754,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
             (async () => {
               try{
+                if(state.aiReviewControl?.cancelled) return;
                 if(!(await aiReviewWaitIfPaused())) return;
                 let attempt = 0;
                 let lastErr = null;
@@ -2832,6 +2833,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 setSuggestStatus(t.id, field, "");
                 const msg = String(err?.message || err);
                 const isFetchFail = /Failed to fetch|NetworkError|ERR_|CORS/i.test(msg);
+                if(isFetchFail && postBlocked){
+                  return;
+                }
                 if(isFetchFail){
                   const proto = location.protocol;
                   const online = navigator.onLine ? "online" : "offline";
@@ -2844,6 +2848,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                       logLine("AI Review: GET /v1/models OK, POST /v1/responses blocked (network or policy). Stopping review.", "warn");
                       postBlocked = true;
                       state.aiReviewControl.cancelled = true;
+                      cancelled = true;
                     }
                   }else if(testRes?.ok){
                     logLine("AI Review: self-test OK (POST /responses).", "ok");
@@ -2863,7 +2868,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         launchNext();
         });
 
-        const commentFields = fieldsForPersonalityReview(t);
+        if(state.aiReviewControl?.cancelled) cancelled = true;
+        const commentFields = cancelled ? [] : fieldsForPersonalityReview(t);
         if(commentFields.length){
           logLine(`AI Review: generating review comments for ${t.data.test_no || t.id.slice(0,6)} (${commentFields.length} fields)...`, "ok");
           for(const field of commentFields){
