@@ -1207,7 +1207,7 @@
   /* ---------- Preferences (minimal) ---------- */
   const DEFAULT_PREFS = Object.freeze({
     ai_enabled: false,                // skeleton toggle (legacy)
-    ai_model: "gpt-4.1-mini",
+    ai_model: "codex-mini-latest",
     ai_suggest_maturity_max: 2,       // suggest for fields with maturity <= this
     ai_review_debug: false,           // log one AI Review payload + response
     ai_review_pause_ms: 300,          // pause between AI review field calls
@@ -1255,7 +1255,7 @@
     try{
       const raw = JSON.parse(localStorage.getItem("tb26_prefs") || "{}");
       const prefs = { ...DEFAULT_PREFS, ...(raw || {}) };
-      if(typeof prefs.ai_model !== "string" || !/^gpt-/i.test(prefs.ai_model)){
+      if(typeof prefs.ai_model !== "string" || !/^gpt-|^codex-/i.test(prefs.ai_model)){
         prefs.ai_model = DEFAULT_PREFS.ai_model;
       }
         prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
@@ -2447,7 +2447,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             "Authorization": `Bearer ${key}`
           },
           body: JSON.stringify({
-            model: state.prefs.ai_model || "gpt-4.1-mini",
+            model: state.prefs.ai_model || "codex-mini-latest",
             input: [{ role:"user", content:"ping" }],
             max_output_tokens: 8
           })
@@ -2505,7 +2505,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     state.currentTestId = tests[0]?.id || null;
     showEditor();
 
-    const model = state.prefs.ai_model || "gpt-4.1-mini";
+    const model = state.prefs.ai_model || "codex-mini-latest";
     const guidance = await getAiReviewGuidance();
     const guidanceLine = guidance ? ` Style/Tone/Vibe: ${guidance}` : "";
     logLine(`AI Review: using model "${model}".`, "ok");
@@ -3052,7 +3052,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(!plan.scope) plan.scope = mdMeta.scope || "";
       if(!plan.ai_review_guidance) plan.ai_review_guidance = mdMeta.aiReviewGuidance || "";
     }
-    const model = state.prefs.ai_model || "gpt-4.1-mini";
+    const model = state.prefs.ai_model || "codex-mini-latest";
     const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
     const permLabel = aiChatPermissionLabel(perm);
     const payload = {
@@ -3384,7 +3384,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     updateAiUI();
     const aiModelEl = $("aiChatModel");
-    if(aiModelEl) aiModelEl.textContent = state.prefs.ai_model || "gpt-4.1-mini";
+    if(aiModelEl) aiModelEl.textContent = state.prefs.ai_model || "codex-mini-latest";
     const permSlider = $("aiPermSlider");
     const permLabel = $("aiPermLabel");
     if(permSlider){
@@ -4492,7 +4492,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <div class="hint" id="newPlanMdInfo">No markdown selected.</div>
           </div>
         </div>
-        <div class="hint">AI model: ${escapeHtml(state.prefs.ai_model || "gpt-4.1-mini")}</div>
+        <div class="hint">AI model: ${escapeHtml(state.prefs.ai_model || "codex-mini-latest")}</div>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelNewPlan">Cancel</button>
@@ -4605,7 +4605,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           };
 
           const key = getAiKey();
-          const model = state.prefs.ai_model || "gpt-4.1-mini";
+          const model = state.prefs.ai_model || "codex-mini-latest";
           let usedAi = false;
           if(key && state.prefs.ai_enabled){
             try{
@@ -5538,13 +5538,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("prefAiEnabled").value = String(state.prefs.ai_enabled);
       const modelSelect = $("prefAiModel");
       const defaultModels = [
+        "codex-mini-latest",
         "gpt-5.2","gpt-5.2-pro","gpt-5-mini","gpt-5-nano",
         "gpt-4.1","gpt-4.1-mini","gpt-4.1-nano"
       ];
       const modelList = (cachedModels && cachedModels.length) ? cachedModels : defaultModels;
       modelSelect.innerHTML = modelList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join("");
-      let currentModel = state.prefs.ai_model || "gpt-4.1-mini";
-      if(!/^gpt-/i.test(currentModel)) currentModel = "gpt-4.1-mini";
+      let currentModel = state.prefs.ai_model || "codex-mini-latest";
+      if(!/^gpt-|^codex-/i.test(currentModel)) currentModel = "codex-mini-latest";
       if(modelSelect && !Array.from(modelSelect.options).some(o => o.value === currentModel)){
         const opt = document.createElement("option");
         opt.value = currentModel;
@@ -5605,7 +5606,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }));
       };
       $("prefAiModel").addEventListener("change", () => {
-        const val = $("prefAiModel").value.trim() || "gpt-4.1-mini";
+        const val = $("prefAiModel").value.trim() || "codex-mini-latest";
         state.prefs.ai_model = val;
         savePrefs();
         localStorage.setItem("tb26_prefs", JSON.stringify(state.prefs));
@@ -5622,7 +5623,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       });
       $("savePrefsBtn").onclick = () => {
         state.prefs.ai_enabled = $("prefAiEnabled").value === "true";
-        state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
+        state.prefs.ai_model = $("prefAiModel").value.trim() || "codex-mini-latest";
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
         const prefPersonalityDialog = $("prefPersonalityDialog");
@@ -6008,7 +6009,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         field_label: test.data?._ai?.field_labels?.[field] || field,
         context: test.data
       };
-      const model = state.prefs.ai_model || "gpt-4.1-mini";
+      const model = state.prefs.ai_model || "codex-mini-latest";
       const current = String(test.data[field] ?? "").trim();
 
       async function callSuggestion(forceDifferent){
@@ -6086,7 +6087,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         openAiKeyDialog();
         return;
       }
-      const model = state.prefs.ai_model || "gpt-4.1-mini";
+      const model = state.prefs.ai_model || "codex-mini-latest";
       logLine(`AI Suggest: using model "${model}".`, "ok");
       const targets = [];
       if(fieldOverride && Object.prototype.hasOwnProperty.call(test.data || {}, fieldOverride)){
@@ -7677,7 +7678,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           "Authorization": `Bearer ${key}`
         },
         body: JSON.stringify({
-          model: state.prefs.ai_model || "gpt-4.1-mini",
+          model: state.prefs.ai_model || "codex-mini-latest",
           input: [{ role:"user", content:"diagnostic ping" }],
           max_output_tokens: 8
         })
