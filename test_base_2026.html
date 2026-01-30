@@ -1204,14 +1204,18 @@
     return missing;
   }
 
-  const AI_PROXY_BASE = (localStorage.getItem("tb26_api_base") || "https://www.minipcb.com/api").replace(/\/+$/,"");
+  let AI_PROXY_BASE = (localStorage.getItem("tb26_api_base") || "https://minipcb-proxy.yourdomain.workers.dev").replace(/\/+$/,"");
   const USE_PROXY = true;
+  const PROXY_KEY_STORAGE = "tb26_proxy_key";
 
   function apiHeaders(){
     const headers = { "Content-Type": "application/json" };
     if(!USE_PROXY){
       const key = getAiKey();
       if(key) headers.Authorization = `Bearer ${key}`;
+    }else{
+      const proxyKey = localStorage.getItem(PROXY_KEY_STORAGE);
+      if(proxyKey) headers["X-Proxy-Key"] = proxyKey;
     }
     return headers;
   }
@@ -5381,6 +5385,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           </div>
         </div>
 
+        <div class="row" style="margin-top:10px;">
+          <div style="flex:2;">
+            <div class="label">API Base URL</div>
+            <input class="input" id="prefApiBase" placeholder="https://minipcb-proxy.yourdomain.workers.dev" />
+          </div>
+          <div style="flex:1;">
+            <div class="label">Proxy Key (optional)</div>
+            <input class="input" id="prefProxyKey" placeholder="X-Proxy-Key" />
+          </div>
+        </div>
+
           <div class="row" style="margin-top:10px;">
             <div>
               <div class="label">AI Suggest Maturity Max</div>
@@ -5472,6 +5487,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         modelSelect.appendChild(opt);
       }
       if(modelSelect) modelSelect.value = currentModel;
+      const apiBaseInput = $("prefApiBase");
+      if(apiBaseInput) apiBaseInput.value = AI_PROXY_BASE || "";
+      const proxyKeyInput = $("prefProxyKey");
+      if(proxyKeyInput) proxyKeyInput.value = localStorage.getItem(PROXY_KEY_STORAGE) || "";
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
       const prefPersonalityDialog = $("prefPersonalityDialog");
       if(prefPersonalityDialog) prefPersonalityDialog.value = state.prefs.ai_personality_dialog ? "true" : "false";
@@ -5542,6 +5561,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("savePrefsBtn").onclick = () => {
         state.prefs.ai_enabled = $("prefAiEnabled").value === "true";
         state.prefs.ai_model = $("prefAiModel").value.trim() || "gpt-4.1-mini";
+        const apiBaseVal = $("prefApiBase")?.value?.trim() || "";
+        if(apiBaseVal){
+          AI_PROXY_BASE = apiBaseVal.replace(/\/+$/,"");
+          localStorage.setItem("tb26_api_base", AI_PROXY_BASE);
+        }
+        const proxyKeyVal = $("prefProxyKey")?.value?.trim() || "";
+        if(proxyKeyVal) localStorage.setItem(PROXY_KEY_STORAGE, proxyKeyVal);
+        else localStorage.removeItem(PROXY_KEY_STORAGE);
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
         const prefPersonalityDialog = $("prefPersonalityDialog");
