@@ -3199,20 +3199,26 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             renderForm();
             const isMatrixCell = !!item.cellKey;
             let matrixContext = null;
-            if(isMatrixCell){
-              setMatrixCellStatus(t, field, item.cellKey, "working");
-              const { matrix } = ensureMatrixField(t, field);
-              const schema = t.data?._ai?.field_schema?.[field] || null;
-              matrixContext = {
-                cell_key: item.cellKey,
-                row_id: item.rowId,
-                col_id: item.colId,
-                row_label: matrix.row_labels?.[item.rowId] || item.rowId,
-                col_label: matrix.col_labels?.[item.colId] || item.colId,
-                cell_value: matrix.cells?.[item.cellKey] ?? "",
-                col_prompt: schema?.col_prompts?.[item.colId] || ""
-              };
-            }
+              if(isMatrixCell){
+                setMatrixCellStatus(t, field, item.cellKey, "working");
+                const { matrix } = ensureMatrixField(t, field);
+                const schema = t.data?._ai?.field_schema?.[field] || null;
+                matrixContext = {
+                  cell_key: item.cellKey,
+                  row_id: item.rowId,
+                  col_id: item.colId,
+                  row_label: matrix.row_labels?.[item.rowId] || item.rowId,
+                  col_label: matrix.col_labels?.[item.colId] || item.colId,
+                  cell_value: matrix.cells?.[item.cellKey] ?? "",
+                  col_prompt: schema?.col_prompts?.[item.colId] || ""
+                };
+                if(state.prefs.ai_review_debug){
+                  logLine(
+                    `AI Review: matrix cell start ${t.data.test_no || t.id.slice(0,6)}.${field} ${matrixContext.cell_key} [${matrixContext.row_label} × ${matrixContext.col_label}] current="${String(matrixContext.cell_value || "").slice(0,80)}"`,
+                    "warn"
+                  );
+                }
+              }
 
             const matrixPlanContext = isMatrixCell ? {
               test_no: t.data.test_no || "",
@@ -3269,6 +3275,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   logLine(`AI Review debug response: ${String(raw).slice(0, 800)}...`, "warn");
                   state.prefs.ai_review_debug = false;
                   savePrefs();
+                }
+                if(state.prefs.ai_review_debug && isMatrixCell){
+                  logLine(
+                    `AI Review: matrix cell raw ${t.data.test_no || t.id.slice(0,6)}.${field} ${matrixContext?.cell_key} => "${String(raw || "").slice(0,160)}"`,
+                    "warn"
+                  );
                 }
                 let val = String(raw || "").trim();
                 if(!isMatrixCell && val.startsWith("{")){
