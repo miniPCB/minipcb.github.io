@@ -674,6 +674,7 @@
                   <button class="btn danger" id="btnClearBrowser">Clear Browser Cache</button>
                   <button class="btn" id="btnSeedDemo">Electronics Test Plan</button>
                   <button class="btn" id="btnSeedSpec">Specifications Document</button>
+                  <button class="btn" id="btnSeedVerify">Verification Matrix</button>
                 </div>
               </div>
             </div>
@@ -7332,6 +7333,207 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     runAsync(renderLibrary());
   }
 
+  async function seedVerificationMatrix(){
+    const sections = [
+      {
+        title: "Core Metadata",
+        id: "VM-001",
+        type: "Core Metadata",
+        fields: [
+          { key: "doc_title", label: "Document Title", type: "text", value: "Verification Matrix" },
+          { key: "doc_id", label: "Document ID", type: "text", value: "VM-0001" },
+          { key: "version", label: "Version", type: "text", value: "1.0" },
+          { key: "owner", label: "Owner", type: "text", value: "Systems Engineering" },
+          { key: "date_created", label: "Date Created", type: "text", value: "" },
+          { key: "date_updated", label: "Date Updated", type: "text", value: "" }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          doc_title: 2,
+          doc_id: 2,
+          version: 2,
+          owner: 2,
+          date_created: 0,
+          date_updated: 0
+        }
+      },
+      {
+        title: "Requirements Table",
+        id: "VM-002",
+        type: "Requirements Table",
+        fields: [
+          { key: "requirements_table", label: "Requirements Table", type: "textarea", value: "REQ-001 | Provide regulated 5V output ±5%\nREQ-002 | Startup within 2 seconds\nREQ-003 | Operate from 9–15 VDC input" }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          requirements_table: 2
+        }
+      },
+      {
+        title: "Verification Mapping",
+        id: "VM-003",
+        type: "Verification Mapping",
+        fields: [
+          { key: "verification_mapping", label: "Verification Mapping", type: "textarea", value: "REQ-001 → Test 003 (Power Voltages), Method: Test, Status: Planned\nREQ-002 → Test 004 (Input Power), Method: Test, Status: Planned\nREQ-003 → Test 004 (Input Power), Method: Test, Status: Planned" }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          verification_mapping: 2
+        }
+      },
+      {
+        title: "Results Summary",
+        id: "VM-004",
+        type: "Results Summary",
+        fields: [
+          { key: "results_summary", label: "Results Summary", type: "textarea", value: "All mapped requirements are planned for verification. No results recorded yet." },
+          { key: "coverage_gaps", label: "Coverage Gaps", type: "textarea", value: "None identified at this time." }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          results_summary: 2,
+          coverage_gaps: 2
+        }
+      },
+      {
+        title: "Notes / Assumptions",
+        id: "VM-005",
+        type: "Notes / Assumptions",
+        fields: [
+          { key: "notes_assumptions", label: "Notes / Assumptions", type: "textarea", value: "Assumptions:\n- Requirements list is stable for this revision.\n- Verification methods will be test-based unless noted otherwise." }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          notes_assumptions: 2
+        }
+      }
+    ];
+
+    const tests = sections.map((section, idx) => {
+      const data = {
+        test_name: section.title,
+        test_no: section.id,
+        test_type: section.type,
+        param1_label: "",
+        param1_value: "",
+        param2_label: "",
+        param2_value: ""
+      };
+
+      const fieldLabels = {
+        test_name: "Section Title",
+        test_no: "Section ID",
+        test_type: "Section Type",
+        param1_label: "Param 1 Label",
+        param1_value: "Param 1 Value",
+        param2_label: "Param 2 Label",
+        param2_value: "Param 2 Value"
+      };
+
+      const fieldTypes = {
+        test_name: "text",
+        test_no: "text",
+        test_type: "text",
+        param1_label: "text",
+        param1_value: "text",
+        param2_label: "text",
+        param2_value: "text"
+      };
+      const fieldPrompts = {
+        test_name: "Enter the section title for this verification matrix.",
+        test_no: "Enter the section identifier (e.g., VM-001).",
+        test_type: "Describe the section type or category.",
+        param1_label: "Enter a label for parameter 1 (optional).",
+        param1_value: "Select which field should supply parameter 1's value.",
+        param2_label: "Enter a label for parameter 2 (optional).",
+        param2_value: "Select which field should supply parameter 2's value."
+      };
+
+      for(const f of section.fields){
+        data[f.key] = f.value != null ? f.value : "";
+        fieldLabels[f.key] = f.label;
+        fieldTypes[f.key] = f.type;
+        fieldPrompts[f.key] = `Provide the ${f.label.toLowerCase()} for this verification matrix section.`;
+      }
+
+      const normalized = normalizeTestData(data);
+      normalized._ai.field_labels = fieldLabels;
+      normalized._ai.field_types = fieldTypes;
+      normalized._ai.field_prompts = fieldPrompts;
+      normalized._ai.maturity = { ...(normalized._ai.maturity || {}) };
+      const maturityOverrides = section.maturity || {};
+      for(const key of Object.keys(data)){
+        if(key === "_ai") continue;
+        if(Object.prototype.hasOwnProperty.call(maturityOverrides, key)){
+          normalized._ai.maturity[key] = maturityOverrides[key];
+          continue;
+        }
+        if(String(data[key] ?? "").trim() !== "") normalized._ai.maturity[key] = 3;
+      }
+      normalized._ai.review_personalities = buildSeedReviewPersonalitiesForData(normalized);
+      return { id: uid(), order: idx + 1, modified: false, data: normalized };
+    });
+
+    const plan = {
+      id: uid(),
+      name: "Verification Matrix",
+      slug: slugifyPlanName("Verification Matrix"),
+      created: nowIsoDate(),
+      updated: nowIsoDate(),
+      goal: "Map requirements to verification methods and results.",
+      scope: "Define requirement IDs, verification methods, and coverage status in a single matrix.",
+      ai_review_guidance: "Concise, technical, verification-oriented. Use clear mappings and unambiguous labels.",
+      ai_prompts: {
+        review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
+        review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
+        chat_edit: "You edit a verification matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        create_plan: DEFAULT_AI_PROMPTS.create_plan,
+        suggest_field: DEFAULT_AI_PROMPTS.suggest_field,
+        suggest_field_strict: DEFAULT_AI_PROMPTS.suggest_field_strict,
+        suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
+      },
+      tests,
+      markdown: "",
+      userNotes: "Add context, assumptions, and review notes here."
+    };
+
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    logLine("Seeded Verification Matrix.", "ok");
+    toast("Seeded", "Verification Matrix created.", "ok");
+    runAsync(renderLibrary());
+  }
+
   function clearBrowserCacheOnly(){
     showModal("Clear Browser Cache", (body, footer) => {
       body.innerHTML = `
@@ -7486,6 +7688,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     // Wipe removed
     $("btnSeedDemo").addEventListener("click", () => runAsync(seedDemo()));
     $("btnSeedSpec").addEventListener("click", () => runAsync(seedSpecificationsDocument()));
+    $("btnSeedVerify").addEventListener("click", () => runAsync(seedVerificationMatrix()));
     $("btnClearBrowser").addEventListener("click", clearBrowserCacheOnly);
     $("btnSetPlanRoot").addEventListener("click", () => runAsync(setPlanRoot()));
     // Library details toggle removed
