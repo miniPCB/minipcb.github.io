@@ -351,6 +351,22 @@
     .tab.active{ border-color: rgba(124,196,255,.45); background: rgba(124,196,255,.10); }
     .tabContent{ display:none; }
     .tabContent.active{ display:flex; flex-direction:column; min-height:0; }
+    .miniTabs{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .miniTab{
+      display:inline-flex;
+      align-items:center;
+      height:27px;
+      padding:0 9px;
+      border-radius: 10px;
+      font-size:11px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.02);
+      cursor:pointer;
+      user-select:none;
+    }
+    .miniTab.active{ border-color: rgba(124,196,255,.45); background: rgba(124,196,255,.10); }
+    .miniTabContent{ display:none; }
+    .miniTabContent.active{ display:block; }
 
     .flowWrap, .mdWrap{
       border:1px solid var(--border);
@@ -5272,18 +5288,36 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!plan) return;
     showModal("Overview Editor", (body, footer) => {
       body.innerHTML = `
-        <div class="mdWrap" style="display:flex; flex-direction:column; min-height:0;">
-          <div class="mdPreview" id="mdPreview"></div>
-          <div style="margin-top:10px;">
+        <div class="miniTabs" style="margin-bottom:8px;">
+          <div class="miniTab active" data-tab="preview">Preview</div>
+          <div class="miniTab" data-tab="overview">Overview</div>
+          <div class="miniTab" data-tab="prompts">AI Prompts</div>
+          <div class="miniTab" data-tab="notes">Notes</div>
+        </div>
+        <div class="miniTabContent active" data-tab-panel="preview">
+          <div class="mdWrap" style="display:flex; flex-direction:column; min-height:0;">
+            <div class="mdPreview" id="mdPreview"></div>
+          </div>
+        </div>
+        <div class="miniTabContent" data-tab-panel="overview">
+          <div>
             <div class="label">Goal</div>
             <input class="input" id="mdPlanGoal" placeholder="Single-line goal statement" />
             <div class="label" style="margin-top:10px;">Scope</div>
             <textarea class="input" id="mdPlanScope" rows="3" spellcheck="false"></textarea>
             <div class="label" style="margin-top:10px;">AI Review Guidance</div>
             <textarea class="input" id="mdAiReviewGuidance" rows="3" spellcheck="false" placeholder="Style/tone/vibe guidance for AI Review"></textarea>
-            <div class="label" style="margin-top:10px;">AI Prompt Templates</div>
+          </div>
+        </div>
+        <div class="miniTabContent" data-tab-panel="prompts">
+          <div>
+            <div class="label">AI Prompt Templates</div>
             <div id="mdAiPromptsWrap"></div>
-            <div class="label" style="margin-top:10px;">Notes</div>
+          </div>
+        </div>
+        <div class="miniTabContent" data-tab-panel="notes">
+          <div>
+            <div class="label">Notes</div>
             <textarea class="mdArea" id="notesArea" spellcheck="false"></textarea>
           </div>
         </div>
@@ -5294,6 +5328,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         `;
       $("closeMdModal").onclick = hideModal;
       $("btnApplyNotes").onclick = applyNotes;
+      body.querySelectorAll(".miniTab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          body.querySelectorAll(".miniTab").forEach(t => t.classList.remove("active"));
+          tab.classList.add("active");
+          const id = tab.getAttribute("data-tab");
+          body.querySelectorAll(".miniTabContent").forEach(c => c.classList.remove("active"));
+          const panel = body.querySelector(`[data-tab-panel="${id}"]`);
+          if(panel) panel.classList.add("active");
+        });
+      });
       refreshMarkdownUI();
     });
   }
