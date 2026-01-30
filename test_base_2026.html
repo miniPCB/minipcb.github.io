@@ -778,7 +778,6 @@
                 <div class="hr"></div>
 
                 <div class="toolbarRow">
-                  <button class="btn attn" id="btnSetPlanRoot">Setup Document Folder</button>
                   <button class="btn" id="btnSeedDemo">Electronics Test Plan</button>
                   <button class="btn" id="btnSeedSpec">Specifications Document</button>
                   <button class="btn" id="btnSeedVerify">Verification Matrix</button>
@@ -5654,8 +5653,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           </div>
           <div>
             <div class="label">Document Storage</div>
-            <div class="input" style="display:flex;align-items:center;">${state.planRootHandle ? "File System" : "Browser Store"}</div>
+            <div class="input" id="prefStorageMode" style="display:flex;align-items:center;">${state.planRootHandle ? "File System" : "Browser Store"}</div>
           </div>
+        </div>
+        <div class="toolbarRow" style="margin-top:6px;">
+          <button class="btn" id="prefSetPlanRoot">Setup Document Folder</button>
         </div>
 
         <div class="hr"></div>
@@ -5800,6 +5802,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(pauseInput) pauseInput.value = String(state.prefs.ai_review_pause_ms ?? 300);
       const concInput = $("prefAiReviewConcurrency");
       if(concInput) concInput.value = String(state.prefs.ai_review_concurrency ?? 1);
+      const prefSetPlanRoot = $("prefSetPlanRoot");
+      if(prefSetPlanRoot){
+        if(!state.planRootHandle) prefSetPlanRoot.classList.add("attn");
+        else prefSetPlanRoot.classList.remove("attn");
+        prefSetPlanRoot.onclick = () => runAsync(setPlanRoot().then(() => {
+          const storageField = $("prefStorageMode");
+          if(storageField){
+            storageField.textContent = state.planRootHandle ? "File System" : "Browser Store";
+          }
+          if(!state.planRootHandle) prefSetPlanRoot.classList.add("attn");
+          else prefSetPlanRoot.classList.remove("attn");
+        }));
+      }
       footer.innerHTML = `
         <button class="btn" id="cancelPrefs">Cancel</button>
         <button class="btn primary" id="savePrefsBtn">Save</button>
@@ -8357,7 +8372,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("btnSeedDemo").addEventListener("click", () => runAsync(seedDemo()));
     $("btnSeedSpec").addEventListener("click", () => runAsync(seedSpecificationsDocument()));
     $("btnSeedVerify").addEventListener("click", () => runAsync(seedVerificationMatrix()));
-    $("btnSetPlanRoot").addEventListener("click", () => runAsync(setPlanRoot()));
     // Library details toggle removed
 
     $("switchPlanBtn").addEventListener("click", () => {
