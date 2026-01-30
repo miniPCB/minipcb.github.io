@@ -3071,7 +3071,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         setReviewStatus(t.id, "working");
         if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
         const fields = fieldsForAiReview(t, anchors);
-        const queue = buildAiReviewQueue(t, anchors);
+        const reviewQueue = buildAiReviewQueue(t, anchors);
         for(const f of fields) setSuggestStatus(t.id, f, "pending");
         renderEditor();
 
@@ -3120,7 +3120,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           continue;
         }
 
-      logLine(`AI Review: reviewing ${t.data.test_no || t.id.slice(0,6)} (${queue.length} items)...`, "ok");
+      logLine(`AI Review: reviewing ${t.data.test_no || t.id.slice(0,6)} (${reviewQueue.length} items)...`, "ok");
 
       let changedCount = 0;
       const allTestsPayload = tests.map(tt => ({
@@ -3139,7 +3139,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       const pauseMs = Number(state.prefs.ai_review_pause_ms ?? 0);
       const concurrency = Math.max(1, Number(state.prefs.ai_review_concurrency ?? 1));
-      const queue = buildAiReviewQueue(t, anchors).filter(item => getFieldMaturity(t, item.field) < 3);
+      const queue = reviewQueue.filter(item => getFieldMaturity(t, item.field) < 3);
 
       let active = 0;
       let index = 0;
