@@ -331,6 +331,87 @@
     .formGrid .full{ grid-column: 1 / -1; }
     .fieldHead{ display:flex; align-items:center; justify-content:flex-start; gap:6px; }
     .fieldHead .tag{ margin-bottom:4px; }
+    .matrixWrap{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,.02);
+      padding:8px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-height:220px;
+    }
+    .matrixToolbar{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .matrixToolbar .tag{
+      margin-left:auto;
+    }
+    .matrixViewport{
+      border:1px solid rgba(42,52,71,.6);
+      border-radius:10px;
+      background: rgba(15,20,30,.45);
+      overflow:auto;
+      height:320px;
+      position:relative;
+      cursor: grab;
+    }
+    .matrixViewport.dragging{ cursor: grabbing; }
+    .matrixCanvas{
+      transform-origin: 0 0;
+      min-width: 100%;
+    }
+    .matrixTable{
+      border-collapse: collapse;
+      width: max-content;
+      min-width: 100%;
+    }
+    .matrixTable th,
+    .matrixTable td{
+      border:1px solid rgba(42,52,71,.6);
+      padding:0;
+      background: rgba(255,255,255,.02);
+    }
+    .matrixTable th{
+      font-size:11px;
+      color: var(--muted);
+      background: rgba(42,52,71,.25);
+      padding:6px 8px;
+      text-align:left;
+      font-weight:600;
+      min-width:140px;
+    }
+    .matrixTable th.matrixCorner{
+      min-width:120px;
+    }
+    .matrixRowLabel{
+      font-size:11px;
+      color: var(--muted);
+      padding:6px 8px;
+      white-space:nowrap;
+      background: rgba(42,52,71,.18);
+      min-width:120px;
+    }
+    .matrixInput{
+      width:100%;
+      border:none;
+      background: transparent;
+      color: var(--text);
+      padding:8px;
+      font-size:12px;
+      outline:none;
+      min-width:140px;
+    }
+    .matrixInput:focus{
+      background: rgba(124,196,255,.08);
+    }
+    .matrixHint{
+      font-size:10px;
+      color: var(--muted);
+    }
     .req{ display:inline-flex; align-items:center; gap:6px; font-size:10px; color: rgba(255,211,124,.95); }
     .req::before{ content:"●"; font-size:10px; }
     .hint{ font-size:11px; color: var(--muted); margin-top:6px; line-height:1.35; }
@@ -771,6 +852,7 @@
                 <div class="toolbarRow" style="margin-top:8px;">
                   <button class="btn" id="btnSeedDemo">Electronics Test Plan</button>
                   <button class="btn" id="btnSeedSpec">Specifications Document</button>
+                  <button class="btn" id="btnSeedRtm">Requirements Traceability Matrix</button>
                   <button class="btn" id="btnSeedVerify">Verification Matrix</button>
                   <button class="btn" id="btnSeedDesignReview">Design Review Checklist</button>
                   <button class="btn" id="btnSeedIcd">Interface Control Document</button>
@@ -1278,7 +1360,8 @@
         field_labels: {},
         field_prompts: {},
         field_types: {},
-        field_options: {}
+        field_options: {},
+        field_schema: {}
       };
     if(ai && typeof ai === "object"){
       if(ai.maturity && typeof ai.maturity === "object"){
@@ -1311,6 +1394,11 @@
           out.field_options[k] = Array.isArray(v) ? v.map(x => safeStringify(x)) : [];
         }
       }
+      if(ai.field_schema && typeof ai.field_schema === "object"){
+        for(const [k,v] of Object.entries(ai.field_schema)){
+          out.field_schema[k] = cloneJsonValue(v);
+        }
+      }
     }
       const keys = Array.isArray(dataKeys) ? dataKeys : Object.keys(TEST_SCHEMA_DEFAULT);
       for(const k of keys){
@@ -1338,14 +1426,30 @@
   function normalizeTestData(obj){
     const out = {};
     const src = obj && typeof obj === "object" ? obj : {};
+    const aiMeta = src._ai && typeof src._ai === "object" ? src._ai : null;
+    const fieldTypes = aiMeta?.field_types || {};
     const dataKeys = Object.keys(src).filter(k => k !== "_ai");
     const keys = dataKeys.length ? dataKeys : Object.keys(TEST_SCHEMA_DEFAULT);
     for(const k of keys){
-      out[k] = safeStringify(src[k]);
+      const fieldType = String(fieldTypes[k] || "").toLowerCase();
+      const isMatrix = fieldType.includes("matrix");
+      if(isMatrix){
+        out[k] = (src[k] && typeof src[k] === "object") ? cloneJsonValue(src[k]) : {};
+      }else{
+        out[k] = safeStringify(src[k]);
+      }
       if(["ll","tv","ul","units"].includes(k) && out[k].trim() === "") out[k] = "N/A";
     }
     out._ai = ensureAiMeta(src._ai, keys);
     return out;
+  }
+
+  function cloneJsonValue(value){
+    try{
+      return JSON.parse(JSON.stringify(value));
+    }catch{
+      return value;
+    }
   }
 
   function emptyFields(data){
@@ -2466,6 +2570,7 @@
     const nameLower = name.toLowerCase();
     const docKind = nameLower.includes("electronics test plan") ? "test"
       : nameLower.includes("specifications document") ? "spec"
+      : nameLower.includes("requirements traceability matrix") ? "rtm"
       : nameLower.includes("verification matrix") ? "verification"
       : nameLower.includes("design review checklist") ? "designReview"
       : nameLower.includes("interface control document") ? "icd"
@@ -2474,6 +2579,7 @@
       : "document";
     const titlePrefix = docKind === "test" ? "Test Plan"
       : docKind === "spec" ? "Specifications Document"
+      : docKind === "rtm" ? "Requirements Traceability Matrix"
       : docKind === "verification" ? "Verification Matrix"
       : docKind === "designReview" ? "Design Review Checklist"
       : docKind === "icd" ? "Interface Control Document"
@@ -2534,6 +2640,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     flow: { x: 0, y: 0, scale: 1 },
     modelList: [],
     aiChatContextFiles: [],
+    matrixPanKey: false,
     aiReviewControl: { running: false, paused: false, cancelled: false }
   };
 
@@ -3817,6 +3924,237 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     renderEditor();
   }
 
+  function getMatrixSchema(test, fieldKey){
+    if(!test?.data?._ai) return null;
+    const schema = test.data._ai.field_schema?.[fieldKey];
+    return (schema && typeof schema === "object") ? schema : null;
+  }
+
+  function normalizeMatrixValue(value, schema){
+    const src = (value && typeof value === "object" && !Array.isArray(value)) ? value : {};
+    const schemaRows = Array.isArray(schema?.rows) ? schema.rows : [];
+    const schemaCols = Array.isArray(schema?.cols) ? schema.cols : [];
+    const rows = Array.isArray(src.rows) ? [...src.rows] : schemaRows.map(r => r.id);
+    const cols = Array.isArray(src.cols) ? [...src.cols] : schemaCols.map(c => c.id);
+    const rowLabels = (src.row_labels && typeof src.row_labels === "object") ? { ...src.row_labels } : {};
+    const colLabels = (src.col_labels && typeof src.col_labels === "object") ? { ...src.col_labels } : {};
+    const cells = (src.cells && typeof src.cells === "object") ? { ...src.cells } : {};
+    for(const r of schemaRows){
+      if(r?.id && !(r.id in rowLabels)) rowLabels[r.id] = r.label || r.id;
+      if(r?.id && !rows.includes(r.id)) rows.push(r.id);
+    }
+    for(const c of schemaCols){
+      if(c?.id && !(c.id in colLabels)) colLabels[c.id] = c.label || c.id;
+      if(c?.id && !cols.includes(c.id)) cols.push(c.id);
+    }
+    return { rows, cols, row_labels: rowLabels, col_labels: colLabels, cells };
+  }
+
+  function ensureMatrixField(test, fieldKey){
+    if(!test || !fieldKey) return { matrix: { rows: [], cols: [], row_labels: {}, col_labels: {}, cells: {} }, schema: null };
+    const schema = getMatrixSchema(test, fieldKey);
+    const normalized = normalizeMatrixValue(test.data?.[fieldKey], schema);
+    test.data[fieldKey] = normalized;
+    return { matrix: normalized, schema };
+  }
+
+  function matrixCellKey(rowId, colId){
+    return `${rowId}::${colId}`;
+  }
+
+  function makeMatrixId(label, existingIds){
+    const base = String(label || "row").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const existing = new Set(existingIds || []);
+    let id = base || "ROW";
+    let n = 2;
+    while(existing.has(id)){
+      id = `${base || "ROW"}_${n}`;
+      n += 1;
+    }
+    return id;
+  }
+
+  function buildMatrixWidget(test, fieldKey, locked){
+    const { matrix } = ensureMatrixField(test, fieldKey);
+    if(!test._matrixView) test._matrixView = {};
+    if(!test._matrixView[fieldKey]) test._matrixView[fieldKey] = { scale: 1 };
+    const view = test._matrixView[fieldKey];
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+    const wrap = document.createElement("div");
+    wrap.className = "matrixWrap";
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "matrixToolbar";
+    toolbar.innerHTML = `
+      <button class="btn" data-action="add-row">Add Row</button>
+      <button class="btn" data-action="add-col">Add Column</button>
+      <button class="btn" data-action="zoom-in">Zoom In</button>
+      <button class="btn" data-action="zoom-out">Zoom Out</button>
+      <button class="btn" data-action="zoom-reset">Reset</button>
+      <span class="tag">Zoom ${Math.round(view.scale * 100)}%</span>
+    `;
+    wrap.appendChild(toolbar);
+
+    const viewport = document.createElement("div");
+    viewport.className = "matrixViewport";
+    const canvas = document.createElement("div");
+    canvas.className = "matrixCanvas";
+    canvas.style.transform = `scale(${view.scale})`;
+
+    const table = document.createElement("table");
+    table.className = "matrixTable";
+    const headRow = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.className = "matrixCorner";
+    corner.textContent = "Row";
+    headRow.appendChild(corner);
+    for(const colId of matrix.cols){
+      const th = document.createElement("th");
+      th.textContent = matrix.col_labels?.[colId] || colId;
+      headRow.appendChild(th);
+    }
+    table.appendChild(headRow);
+
+    for(const rowId of matrix.rows){
+      const tr = document.createElement("tr");
+      const rowLabel = document.createElement("td");
+      rowLabel.className = "matrixRowLabel";
+      rowLabel.textContent = matrix.row_labels?.[rowId] || rowId;
+      tr.appendChild(rowLabel);
+      for(const colId of matrix.cols){
+        const td = document.createElement("td");
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "matrixInput";
+        if(locked) input.disabled = true;
+        const key = matrixCellKey(rowId, colId);
+        input.value = matrix.cells?.[key] ?? "";
+        input.addEventListener("input", () => {
+          if(locked) return;
+          matrix.cells[key] = input.value;
+          test.data[fieldKey] = matrix;
+          test.modified = true;
+          if(!test._dirtyFields) test._dirtyFields = {};
+          test._dirtyFields[fieldKey] = true;
+          $("dirtyHint").style.display = "";
+          updateSaveAllIndicator();
+        });
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+
+    canvas.appendChild(table);
+    viewport.appendChild(canvas);
+    wrap.appendChild(viewport);
+
+    const updateZoomTag = () => {
+      const tag = toolbar.querySelector(".tag");
+      if(tag) tag.textContent = `Zoom ${Math.round(view.scale * 100)}%`;
+      canvas.style.transform = `scale(${view.scale})`;
+    };
+
+    const requestRerender = () => {
+      test.modified = true;
+      if(!test._dirtyFields) test._dirtyFields = {};
+      test._dirtyFields[fieldKey] = true;
+      $("dirtyHint").style.display = "";
+      updateSaveAllIndicator();
+      renderForm();
+      renderTestsList();
+    };
+
+    toolbar.querySelectorAll("button").forEach(btn => {
+      const action = btn.getAttribute("data-action");
+      if(locked && (action === "add-row" || action === "add-col")) btn.disabled = true;
+      btn.addEventListener("click", () => {
+        if(action === "zoom-in"){
+          view.scale = clamp(view.scale * 1.1, 0.4, 2.5);
+          updateZoomTag();
+          return;
+        }
+        if(action === "zoom-out"){
+          view.scale = clamp(view.scale / 1.1, 0.4, 2.5);
+          updateZoomTag();
+          return;
+        }
+        if(action === "zoom-reset"){
+          view.scale = 1;
+          updateZoomTag();
+          return;
+        }
+        if(action === "add-row"){
+          const label = prompt("Row label");
+          if(!label) return;
+          const id = makeMatrixId(label, matrix.rows);
+          matrix.rows.push(id);
+          matrix.row_labels[id] = label;
+          for(const colId of matrix.cols){
+            const key = matrixCellKey(id, colId);
+            if(!(key in matrix.cells)) matrix.cells[key] = "";
+          }
+          requestRerender();
+          return;
+        }
+        if(action === "add-col"){
+          const label = prompt("Column label");
+          if(!label) return;
+          const id = makeMatrixId(label, matrix.cols);
+          matrix.cols.push(id);
+          matrix.col_labels[id] = label;
+          for(const rowId of matrix.rows){
+            const key = matrixCellKey(rowId, id);
+            if(!(key in matrix.cells)) matrix.cells[key] = "";
+          }
+          requestRerender();
+        }
+      });
+    });
+
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startScrollLeft = 0;
+    let startScrollTop = 0;
+    viewport.addEventListener("mousedown", (e) => {
+      const allowPan = e.button === 1 || (e.button === 0 && state.matrixPanKey);
+      if(!allowPan) return;
+      dragging = true;
+      viewport.classList.add("dragging");
+      startX = e.clientX;
+      startY = e.clientY;
+      startScrollLeft = viewport.scrollLeft;
+      startScrollTop = viewport.scrollTop;
+      e.preventDefault();
+    });
+    window.addEventListener("mousemove", (e) => {
+      if(!dragging) return;
+      viewport.scrollLeft = startScrollLeft - (e.clientX - startX);
+      viewport.scrollTop = startScrollTop - (e.clientY - startY);
+    });
+    window.addEventListener("mouseup", () => {
+      if(!dragging) return;
+      dragging = false;
+      viewport.classList.remove("dragging");
+    });
+    viewport.addEventListener("wheel", (e) => {
+      if(!e.ctrlKey) return;
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 1.1 : 0.9;
+      view.scale = clamp(view.scale * delta, 0.4, 2.5);
+      updateZoomTag();
+    }, { passive: false });
+
+    const hint = document.createElement("div");
+    hint.className = "matrixHint";
+    hint.textContent = "Tip: Ctrl + wheel to zoom, middle mouse or Space + drag to pan.";
+    wrap.appendChild(hint);
+
+    return wrap;
+  }
+
   function renderForm(){
     const test = currentTest();
     const plan = state.currentPlan;
@@ -3868,9 +4206,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(type.includes("textarea") || type.includes("multi")) type = "textarea";
         const isSelect = type.includes("select");
         const isComputed = type.includes("computed") || k === "rpn";
+        const isMatrix = type.includes("matrix");
         const isTextArea = type === "textarea";
-        if(!isSelect && !isComputed && !isTextArea) type = "text";
-      const full = isTextArea;
+        if(!isSelect && !isComputed && !isTextArea && !isMatrix) type = "text";
+      const full = isTextArea || isMatrix;
 
       const cell = document.createElement("div");
       cell.className = full ? "full" : "";
@@ -3912,10 +4251,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         `;
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
       if(test._dirtyFields?.[`_ai.maturity.${k}`]) maturityTag.classList.add("maturity-dirty");
+      const locked = Number(maturity) >= 4 || isComputed;
       const dragEnabled = isTestEditorUnlocked();
       if(dragEnabled){
         head.classList.add("drag-handle");
         head.setAttribute("draggable", "true");
+      }
+
+      if(isMatrix){
+        const matrixControl = buildMatrixWidget(test, k, locked);
+        cell.appendChild(head);
+        cell.appendChild(matrixControl);
+        grid.appendChild(cell);
+        continue;
       }
 
       const input = document.createElement(isTextArea ? "textarea" : "input");
@@ -3953,7 +4301,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const s = getSuggestStatus(test.id, k);
         if(s) input.classList.add(`ai-${s}`);
         if(test._dirtyFields?.[k]) control.classList.add("dirty-field");
-        const locked = Number(maturity) >= 4 || isComputed;
         if(locked){
           control.disabled = true;
           control.classList.add("locked-field");
@@ -4214,6 +4561,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <select class="select" id="newFieldType">
           <option value="text">Text (single line)</option>
           <option value="textarea">Text (multi-line)</option>
+          <option value="matrix">Matrix (table)</option>
         </select>
         <div class="hr"></div>
         <div class="label">Field Prompt (AI guidance)</div>
@@ -4235,8 +4583,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
         const type = $("newFieldType").value || "text";
         const anchor = anchorKey || state.focusField || "";
-        if(position === "before") test.data = insertFieldBefore(test, anchor, name, "");
-        else test.data = insertFieldAfter(test, anchor, name, "");
+        const value = type === "matrix"
+          ? { rows: [], cols: [], row_labels: {}, col_labels: {}, cells: {} }
+          : "";
+        if(position === "before") test.data = insertFieldBefore(test, anchor, name, value);
+        else test.data = insertFieldAfter(test, anchor, name, value);
         if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
         if(!test.data._ai.maturity) test.data._ai.maturity = {};
         test.data._ai.maturity[name] = 0;
@@ -4246,6 +4597,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         test.data._ai.field_prompts[name] = prompt;
           if(!test.data._ai.field_types) test.data._ai.field_types = {};
           test.data._ai.field_types[name] = type;
+          if(type === "matrix"){
+            if(!test.data._ai.field_schema) test.data._ai.field_schema = {};
+            if(!test.data._ai.field_schema[name]) test.data._ai.field_schema[name] = { rows: [], cols: [] };
+          }
           if(!test.data._ai.review_personalities || typeof test.data._ai.review_personalities !== "object"){
             test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"), getPlanReviewPersonas(state.currentPlan));
           }
@@ -4291,6 +4646,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           if(next._ai?.field_labels) delete next._ai.field_labels[fieldKey];
           if(next._ai?.field_types) delete next._ai.field_types[fieldKey];
           if(next._ai?.field_prompts) delete next._ai.field_prompts[fieldKey];
+          if(next._ai?.field_schema) delete next._ai.field_schema[fieldKey];
           if(next._ai?.review_personalities && typeof next._ai.review_personalities === "object"){
             for(const persona of Object.values(next._ai.review_personalities)){
               if(persona?.field_comments) delete persona.field_comments[fieldKey];
@@ -4335,6 +4691,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           if(next._ai?.field_labels) delete next._ai.field_labels[k];
           if(next._ai?.field_types) delete next._ai.field_types[k];
           if(next._ai?.field_prompts) delete next._ai.field_prompts[k];
+          if(next._ai?.field_schema) delete next._ai.field_schema[k];
           if(next._ai?.review_personalities && typeof next._ai.review_personalities === "object"){
             for(const persona of Object.values(next._ai.review_personalities)){
               if(persona?.field_comments) delete persona.field_comments[k];
@@ -4425,6 +4782,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <select class="select" id="editFieldType">
           <option value="text">Text (single line)</option>
           <option value="textarea">Text (multi-line)</option>
+          <option value="matrix">Matrix (table)</option>
         </select>
         <div class="hr"></div>
         <div class="label">Field Prompt (AI guidance)</div>
@@ -4494,6 +4852,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
         if(!out._ai.field_types) out._ai.field_types = {};
         out._ai.field_types[newKey] = newType;
+        if(out._ai?.field_schema && out._ai.field_schema[fieldKey] != null && newKey !== fieldKey){
+          out._ai.field_schema[newKey] = out._ai.field_schema[fieldKey];
+          delete out._ai.field_schema[fieldKey];
+        }
+        if(!out._ai.field_schema) out._ai.field_schema = {};
+        if(newType === "matrix"){
+          if(!out._ai.field_schema[newKey]) out._ai.field_schema[newKey] = { rows: [], cols: [] };
+          if(!(out[newKey] && typeof out[newKey] === "object" && !Array.isArray(out[newKey]))){
+            out[newKey] = { rows: [], cols: [], row_labels: {}, col_labels: {}, cells: {} };
+          }
+        }else if(out._ai.field_schema[newKey]){
+          delete out._ai.field_schema[newKey];
+        }
         if(out._ai?.field_prompts && out._ai.field_prompts[fieldKey] != null && newKey !== fieldKey){
           out._ai.field_prompts[newKey] = out._ai.field_prompts[fieldKey];
           delete out._ai.field_prompts[fieldKey];
@@ -8412,6 +8783,183 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     runAsync(renderLibrary());
   }
 
+  async function seedRequirementsTraceabilityMatrix(){
+    const matrixCols = [
+      { id: "req_id", label: "Requirement ID" },
+      { id: "requirement", label: "Requirement" },
+      { id: "verification_method", label: "Verification Method" },
+      { id: "test_case", label: "Test Case ID(s)" },
+      { id: "status", label: "Status" },
+      { id: "notes", label: "Notes" }
+    ];
+    const matrixRows = ["REQ-001","REQ-002","REQ-003","REQ-004","REQ-005"].map(id => ({ id, label: id }));
+    const matrixValue = {
+      rows: matrixRows.map(r => r.id),
+      cols: matrixCols.map(c => c.id),
+      row_labels: matrixRows.reduce((acc, r) => { acc[r.id] = r.label; return acc; }, {}),
+      col_labels: matrixCols.reduce((acc, c) => { acc[c.id] = c.label; return acc; }, {}),
+      cells: matrixRows.reduce((acc, r) => {
+        acc[matrixCellKey(r.id, "req_id")] = r.id;
+        return acc;
+      }, {})
+    };
+
+    const sections = [
+      {
+        title: "Core Metadata",
+        id: "RTM-001",
+        type: "Core Metadata",
+        fields: [
+          { key: "doc_title", label: "Document Title", type: "text", value: "Requirements Traceability Matrix" },
+          { key: "doc_id", label: "Document ID", type: "text", value: "RTM-0001" },
+          { key: "version", label: "Version", type: "text", value: "1.0" },
+          { key: "owner", label: "Owner", type: "text", value: "Systems Engineering" },
+          { key: "date_created", label: "Date Created", type: "text", value: "" },
+          { key: "date_updated", label: "Date Updated", type: "text", value: "" }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          doc_title: 2,
+          doc_id: 2,
+          version: 2,
+          owner: 2,
+          date_created: 0,
+          date_updated: 0
+        }
+      },
+      {
+        title: "Traceability Matrix",
+        id: "RTM-002",
+        type: "Traceability Matrix",
+        fields: [
+          { key: "rtm_matrix", label: "RTM Matrix", type: "matrix", value: matrixValue }
+        ],
+        schema: {
+          rtm_matrix: {
+            rows: matrixRows,
+            cols: matrixCols
+          }
+        },
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          rtm_matrix: 2
+        }
+      }
+    ];
+
+    const tests = sections.map((section, idx) => {
+      const data = {
+        test_name: section.title,
+        test_no: section.id,
+        test_type: section.type,
+        param1_label: "",
+        param1_value: "",
+        param2_label: "",
+        param2_value: ""
+      };
+
+      const fieldLabels = {
+        test_name: "Section Title",
+        test_no: "Section ID",
+        test_type: "Section Type",
+        param1_label: "Param 1 Label",
+        param1_value: "Param 1 Value",
+        param2_label: "Param 2 Label",
+        param2_value: "Param 2 Value"
+      };
+      const fieldTypes = {
+        test_name: "text",
+        test_no: "text",
+        test_type: "text",
+        param1_label: "text",
+        param1_value: "text",
+        param2_label: "text",
+        param2_value: "text"
+      };
+      const fieldPrompts = {
+        test_name: "Enter the section title for this requirements traceability matrix.",
+        test_no: "Enter the section identifier (e.g., RTM-001).",
+        test_type: "Describe the section type or category.",
+        param1_label: "Enter a label for parameter 1 (optional).",
+        param1_value: "Select which field should supply parameter 1's value.",
+        param2_label: "Enter a label for parameter 2 (optional).",
+        param2_value: "Select which field should supply parameter 2's value."
+      };
+
+      for(const f of section.fields){
+        data[f.key] = f.value != null ? f.value : "";
+        fieldLabels[f.key] = f.label;
+        fieldTypes[f.key] = f.type;
+        fieldPrompts[f.key] = f.type === "matrix"
+          ? "Provide the requirements traceability matrix with requirement IDs mapped to verification methods, test cases, and status."
+          : `Provide the ${f.label.toLowerCase()} for this requirements traceability matrix section.`;
+      }
+
+      const normalized = normalizeTestData(data);
+      normalized._ai.field_labels = fieldLabels;
+      normalized._ai.field_types = fieldTypes;
+      normalized._ai.field_prompts = fieldPrompts;
+      normalized._ai.maturity = { ...(normalized._ai.maturity || {}) };
+      if(section.schema && section.schema.rtm_matrix){
+        if(!normalized._ai.field_schema) normalized._ai.field_schema = {};
+        normalized._ai.field_schema.rtm_matrix = cloneJsonValue(section.schema.rtm_matrix);
+      }
+      const maturityOverrides = section.maturity || {};
+      for(const key of Object.keys(data)){
+        if(key === "_ai") continue;
+        if(Object.prototype.hasOwnProperty.call(maturityOverrides, key)){
+          normalized._ai.maturity[key] = maturityOverrides[key];
+          continue;
+        }
+        if(String(data[key] ?? "").trim() !== "") normalized._ai.maturity[key] = 3;
+      }
+      normalized._ai.review_personalities = buildSeedReviewPersonalitiesForData(normalized);
+      return { id: uid(), order: idx + 1, modified: false, data: normalized };
+    });
+
+    const plan = {
+      id: uid(),
+      name: "Requirements Traceability Matrix",
+      slug: slugifyPlanName("Requirements Traceability Matrix"),
+      created: nowIsoDate(),
+      updated: nowIsoDate(),
+      goal: "Trace requirements to verification methods and test cases.",
+      scope: "Track requirement IDs, verification methods, coverage, and status in a structured matrix.",
+      ai_review_guidance: "Concise, traceability-focused, and unambiguous. Use consistent requirement IDs and test references.",
+      review_personalities: getPlanReviewPersonas(null),
+      ai_prompts: {
+        review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
+        review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
+        chat_edit: "You edit a requirements traceability matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"RTM-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a requirements traceability matrix. The set object should use full schema keys: {{schemaKeys}}. Use concise, matrix-style language. No extra text.",
+        suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this requirements traceability matrix section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+        suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this requirements traceability matrix section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+        suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
+      },
+      tests,
+      markdown: "",
+      userNotes: "Add context, assumptions, and review notes here."
+    };
+
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    logLine("Seeded Requirements Traceability Matrix.", "ok");
+    toast("Seeded", "Requirements Traceability Matrix created.", "ok");
+    runAsync(renderLibrary());
+  }
+
   async function seedVerificationMatrix(){
     const sections = [
       {
@@ -9927,6 +10475,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     // Wipe removed
     $("btnSeedDemo").addEventListener("click", () => runAsync(seedDemo()));
     $("btnSeedSpec").addEventListener("click", () => runAsync(seedSpecificationsDocument()));
+    $("btnSeedRtm").addEventListener("click", () => runAsync(seedRequirementsTraceabilityMatrix()));
     $("btnSeedVerify").addEventListener("click", () => runAsync(seedVerificationMatrix()));
     $("btnSeedDesignReview").addEventListener("click", () => runAsync(seedDesignReviewChecklist()));
     $("btnSeedIcd").addEventListener("click", () => runAsync(seedInterfaceControlDocument()));
@@ -10053,10 +10602,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     // Top menus removed (small UI)
     document.addEventListener("keydown", (e) => {
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+      if(e.code === "Space" && tag !== "input" && tag !== "textarea" && tag !== "select"){
+        state.matrixPanKey = true;
+      }
       if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s"){
         e.preventDefault();
         runAsync(saveAll());
       }
+    });
+    document.addEventListener("keyup", (e) => {
+      if(e.code === "Space") state.matrixPanKey = false;
     });
   }
 
