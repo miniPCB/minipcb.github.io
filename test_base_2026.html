@@ -3664,7 +3664,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <div class="name">${escapeHtml(t.name || "(Unnamed Template)")}</div>
           <div class="meta">
             <span class="tag">${escapeHtml(t.slug || "template")}</span>
-            <span class="tag">Tests: ${escapeHtml(String((t.tests||[]).length))}</span>
+            <span class="tag">Items: ${escapeHtml(String((t.tests||[]).length))}</span>
             <span class="tag">Updated: ${escapeHtml(t.updated || "(unknown)")}</span>
           </div>
         </div>
@@ -3691,7 +3691,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <div class="name">${escapeHtml(p.name || "(Unnamed Plan)")}</div>
           <div class="meta">
             <span class="tag">${escapeHtml(p.slug || "plan")}</span>
-            <span class="tag">Tests: ${escapeHtml(String((p.tests||[]).length))}</span>
+            <span class="tag">Items: ${escapeHtml(String((p.tests||[]).length))}</span>
             <span class="tag">Updated: ${escapeHtml(p.updated || "(unknown)")}</span>
           </div>
         </div>
@@ -4408,11 +4408,20 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         `;
       const maturityTag = head.querySelector(`[data-maturity="${k}"]`);
       if(test._dirtyFields?.[`_ai.maturity.${k}`]) maturityTag.classList.add("maturity-dirty");
+      if(state.matrixExpanded) head.style.display = "none";
       const locked = Number(maturity) >= 4 || isComputed;
       const dragEnabled = isTestEditorUnlocked();
       if(dragEnabled){
         head.classList.add("drag-handle");
         head.setAttribute("draggable", "true");
+      }
+
+      const labelEl = head.querySelector(`[data-field]`);
+      if(labelEl){
+        labelEl.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+          runAsync(editFieldMetaFlow(k));
+        });
       }
 
       if(isMatrix){
@@ -4584,14 +4593,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             handlePersonalityClick(e);
           }
         });
-
-      const labelEl = head.querySelector(`[data-field]`);
-      if(labelEl){
-        labelEl.addEventListener("dblclick", (e) => {
-          e.preventDefault();
-          runAsync(editFieldMetaFlow(k));
-        });
-      }
 
       if(dragEnabled){
         head.addEventListener("dragstart", (e) => {
