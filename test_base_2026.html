@@ -616,6 +616,17 @@
     }
     .splashList{ margin:10px 0 0 16px; }
     .splashActions{ margin-top:16px; display:flex; gap:10px; }
+    .splashPath{
+      margin-top:10px;
+      padding:8px 10px;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:10px;
+      background: rgba(255,255,255,.04);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size:12px;
+      color: var(--text);
+      word-break: break-all;
+    }
   </style>
 </head>
 
@@ -638,6 +649,22 @@
       <button class="btn primary" id="splashStart">Get Started</button>
     </div>
     <div class="splashDisclaimer">Provided for educational use only.</div>
+  </div>
+</div>
+<div class="splash" id="splashFolder">
+  <div class="splashCard">
+    <div class="splashHeader">
+      <div class="splashTitle">Word Exports Setup</div>
+      <button class="btn mini" id="splashFolderClose">Close</button>
+    </div>
+    <div class="splashBody">
+      For Word Document exports to work, set the Library Folder using <strong>Setup Document Folder</strong> to:
+      <div class="splashPath">C:\Repos\test_base_2026</div>
+    </div>
+    <div class="splashActions">
+      <button class="btn primary" id="splashFolderPrefs">Open Preferences</button>
+      <button class="btn" id="splashFolderDone">Continue</button>
+    </div>
   </div>
 </div>
 <div class="app">
@@ -8556,15 +8583,32 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     updatePlanRootUI();
     updateAiBadge();
     const splash = $("splashScreen");
+    const splashFolder = $("splashFolder");
     if(splash){
       const hideSplash = () => {
         splash.style.display = "none";
       };
       splash.style.display = "flex";
+      if(splashFolder) splashFolder.style.display = "none";
       const closeBtn = $("splashClose");
       const startBtn = $("splashStart");
       if(closeBtn) closeBtn.onclick = hideSplash;
-      if(startBtn) startBtn.onclick = hideSplash;
+      if(startBtn) startBtn.onclick = () => {
+        hideSplash();
+        if(splashFolder) splashFolder.style.display = "flex";
+      };
+      if(splashFolder){
+        const closeFolderBtn = $("splashFolderClose");
+        const doneFolderBtn = $("splashFolderDone");
+        const prefsFolderBtn = $("splashFolderPrefs");
+        const hideFolder = () => { splashFolder.style.display = "none"; };
+        if(closeFolderBtn) closeFolderBtn.onclick = hideFolder;
+        if(doneFolderBtn) doneFolderBtn.onclick = hideFolder;
+        if(prefsFolderBtn) prefsFolderBtn.onclick = () => {
+          hideFolder();
+          openPreferences();
+        };
+      }
     }
     loadPlanRoot().then(() => {
       updatePlanRootUI();
