@@ -1312,6 +1312,10 @@
     }[c]));
   }
 
+  function cssEscape(val){
+    return String(val).replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
+  }
+
   function nowIsoDate(){
     const d = new Date();
     const y = d.getFullYear();
@@ -2865,6 +2869,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return queue;
   }
 
+  function setMatrixCellStatus(test, fieldKey, cellKey, status){
+    if(!test || !fieldKey || !cellKey) return;
+    if(!test._matrixCellStatus) test._matrixCellStatus = {};
+    if(!test._matrixCellStatus[fieldKey]) test._matrixCellStatus[fieldKey] = {};
+    if(status) test._matrixCellStatus[fieldKey][cellKey] = status;
+    else delete test._matrixCellStatus[fieldKey][cellKey];
+    const selector = `.matrixInput[data-matrix-field="${cssEscape(fieldKey)}"][data-matrix-cell="${cssEscape(cellKey)}"]`;
+    const input = document.querySelector(selector);
+    if(!input) return;
+    input.classList.remove("ai-pending","ai-working","ai-accepted");
+    if(status) input.classList.add(`ai-${status}`);
+  }
+
   function fieldsForPersonalityReview(test){
     const keys = getFieldKeys(test);
     return keys.filter(k => !["_ai","param1_label","param1_value","param2_label","param2_value"].includes(k));
@@ -3157,6 +3174,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             const isMatrixCell = !!item.cellKey;
             let matrixContext = null;
             if(isMatrixCell){
+              setMatrixCellStatus(t, field, item.cellKey, "working");
               const { matrix } = ensureMatrixField(t, field);
               matrixContext = {
                 cell_key: item.cellKey,
@@ -3219,7 +3237,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   savePrefs();
                 }
                 let val = String(raw || "").trim();
-                if(val.startsWith("{")){
+                if(isMatrixCell){
+                  if(val.startsWith("{")){
+                    const m = val.match(/"value"\s*:\s*"((?:\\.|[^"\\])*)"/);
+                    if(m && m[1]){
+                      val = m[1].replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\"/g, "\"");
+                    }
+                  }
+                }else if(val.startsWith("{")){
                   const parsed = safeParseJson(val, "AI Review");
                   if(typeof parsed?.value === "string") val = parsed.value.trim();
                 }
@@ -3248,9 +3273,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   if(!t._dirtyFields) t._dirtyFields = {};
                   t._dirtyFields[field] = true;
                 }
+                if(isMatrixCell){
+                  setMatrixCellStatus(t, field, item.cellKey, "accepted");
+                  const cellInput = document.querySelector(`.matrixInput[data-matrix-field="${cssEscape(field)}"][data-matrix-cell="${cssEscape(item.cellKey)}"]`);
+                  if(cellInput && val) cellInput.value = val;
+                }
                 setSuggestStatus(t.id, field, "accepted");
               }catch(err){
                 setSuggestStatus(t.id, field, "");
+                if(isMatrixCell) setMatrixCellStatus(t, field, item.cellKey, "");
                 logLine(`AI Review: failed ${t.data.test_no || t.id.slice(0,6)}.${field} (${err.message || err}).`, "warn");
               }finally{
                 active--;
@@ -4166,6 +4197,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(locked) input.disabled = true;
         const key = matrixCellKey(rowId, colId);
         input.value = matrix.cells?.[key] ?? "";
+        input.setAttribute("data-matrix-field", fieldKey);
+        input.setAttribute("data-matrix-cell", key);
+        const cellStatus = test._matrixCellStatus?.[fieldKey]?.[key] || "";
+        if(cellStatus) input.classList.add(`ai-${cellStatus}`);
         if(test._dirtyMatrixCells?.[fieldKey]?.has(key)) input.classList.add("matrixDirty");
         td.setAttribute("data-row", rowId);
         td.setAttribute("data-col", colId);
