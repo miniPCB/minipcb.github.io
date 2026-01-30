@@ -306,6 +306,15 @@
       min-height:0;
       height:100%;
     }
+    .gridEditor.matrixExpanded{
+      grid-template-columns: 0 1fr 520px;
+    }
+    .gridEditor.matrixExpanded .listPanel{
+      display:none;
+    }
+    .gridEditor.matrixExpanded .matrixViewport{
+      height:520px;
+    }
     .testRow{
       padding:10px 10px;
       border:1px solid rgba(42,52,71,.65);
@@ -869,7 +878,7 @@
       <div class="view editor" id="viewEditor" style="display:none;">
       <div class="gridEditor">
         <!-- Left -->
-        <div class="panel">
+        <div class="panel listPanel">
           <div class="panelHeader">
             <h3 id="testListTitle">List</h3>
             <div class="toolbarRow">
@@ -886,7 +895,7 @@
         </div>
 
         <!-- Center -->
-        <div class="panel">
+        <div class="panel editorPanel">
           <div class="panelHeader">
             <div style="min-width:0;">
               <h3 style="margin:0;">Editor</h3>
@@ -926,7 +935,7 @@
         </div>
 
         <!-- Right -->
-        <div class="panel">
+        <div class="panel aiPanel">
           <div class="panelHeader">
             <div>
               <h3 style="margin:0;">AI Interface</h3>
@@ -2641,6 +2650,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     modelList: [],
     aiChatContextFiles: [],
     matrixPanKey: false,
+    matrixExpanded: false,
     aiReviewControl: { running: false, paused: false, cancelled: false }
   };
 
@@ -4032,10 +4042,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const toolbar = document.createElement("div");
     toolbar.className = "matrixToolbar";
+    const expandLabel = state.matrixExpanded ? "Collapse" : "Expand";
     toolbar.innerHTML = `
       <button class="btn" data-action="add-row">Add Row</button>
       <button class="btn" data-action="add-col">Add Column</button>
       <button class="btn" data-action="import-csv">Import CSV</button>
+      <button class="btn" data-action="expand">${expandLabel}</button>
       <button class="btn" data-action="zoom-in">Zoom In</button>
       <button class="btn" data-action="zoom-out">Zoom Out</button>
       <button class="btn" data-action="zoom-reset">Reset</button>
@@ -4117,6 +4129,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const action = btn.getAttribute("data-action");
       if(locked && (action === "add-row" || action === "add-col")) btn.disabled = true;
       btn.addEventListener("click", () => {
+        if(action === "expand"){
+          state.matrixExpanded = !state.matrixExpanded;
+          const grid = document.querySelector(".gridEditor");
+          if(grid) grid.classList.toggle("matrixExpanded", state.matrixExpanded);
+          renderForm();
+          return;
+        }
         if(action === "import-csv"){
           if(locked) return;
           const input = document.createElement("input");
