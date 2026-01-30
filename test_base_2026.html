@@ -4377,7 +4377,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     showModal("Create New", (body, footer) => {
       body.innerHTML = `
         <div class="muted" style="line-height:1.45;">
-          Creates a new plan. If a Plan Folder is set, a folder is created with test JSON files and plan markdown.
+          Creates a new document.
         </div>
         <div class="hr"></div>
         <div class="label">Name</div>
@@ -4396,24 +4396,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         </div>
         <div class="hint">Slug rules: lowercase, spaces -> underscores, remove non [a-z0-9_], collapse underscores.</div>
         <div class="hr"></div>
-        <div class="label">AI Test Creation (optional)</div>
-        <div class="muted" style="line-height:1.45; margin-bottom:6px;">
-          Generates a test plan from your inputs. Uses your AI model if available.
-        </div>
-        <div class="row">
-          <div>
-            <div class="label">UUT P/N</div>
-            <input class="input" id="newPlanUutPn" placeholder="e.g., 21A-00" />
-          </div>
-          <div>
-            <div class="label">Device Type</div>
-            <input class="input" id="newPlanDeviceType" placeholder="e.g., Power Supply CCA" />
-          </div>
-          <div>
-            <div class="label"># of Tests</div>
-            <input class="input" id="newPlanTestCount" type="number" min="1" step="1" value="5" />
-          </div>
-        </div>
         <div class="row" style="margin-top:8px;">
           <div>
             <div class="label">Source Markdown (optional)</div>
@@ -4500,9 +4482,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("confirmNewPlanAi").onclick = async () => {
         const name = $("newPlanName").value.trim();
         if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
-        const uutPn = $("newPlanUutPn")?.value?.trim() || "";
-        const deviceType = $("newPlanDeviceType")?.value?.trim() || "";
-        const count = Math.max(1, Number($("newPlanTestCount")?.value) || 1);
+        const uutPn = $("newPlanUutPn") ? ($("newPlanUutPn").value || "").trim() : "";
+        const deviceType = $("newPlanDeviceType") ? ($("newPlanDeviceType").value || "").trim() : "";
+        const countInput = $("newPlanTestCount");
+        const count = Math.max(1, Number(countInput ? countInput.value : 5) || 5);
         const goal = $("newPlanGoal")?.value?.trim() || "";
         const scope = $("newPlanScope")?.value?.trim() || "";
         const mdFileInput = $("newPlanMdFile");
