@@ -745,7 +745,7 @@
                 <div class="hr"></div>
 
                 <div class="toolbarRow">
-                  <button class="btn attn" id="btnSetPlanRoot">Set Document Folder</button>
+                  <button class="btn attn" id="btnSetPlanRoot">Setup Document Folder</button>
                   <button class="btn" id="btnSeedDemo">Electronics Test Plan</button>
                   <button class="btn" id="btnSeedSpec">Specifications Document</button>
                   <button class="btn" id="btnSeedVerify">Verification Matrix</button>
@@ -1008,6 +1008,44 @@
     reliability_analyst: "robustness, failure modes, and long-term reliability risks"
   });
 
+  const DEFAULT_REVIEW_PERSONALITY_GUIDANCE = Object.freeze({
+    quality_assurance: "",
+    design_engineer: "",
+    reliability_analyst: ""
+  });
+
+  function getPlanReviewPersonas(plan){
+    const out = {};
+    for(const [id,label] of Object.entries(DEFAULT_REVIEW_PERSONALITIES)){
+      out[id] = {
+        label,
+        focus: DEFAULT_REVIEW_PERSONALITY_FOCUS[id] || "",
+        guidance: DEFAULT_REVIEW_PERSONALITY_GUIDANCE[id] || ""
+      };
+    }
+    const src = plan?.review_personalities;
+    if(src && typeof src === "object"){
+      for(const [id,p] of Object.entries(src)){
+        const key = String(id || "").trim();
+        if(!key) continue;
+        out[key] = {
+          label: safeStringify(p?.label) || key,
+          focus: safeStringify(p?.focus) || (out[key]?.focus || ""),
+          guidance: safeStringify(p?.guidance) || (out[key]?.guidance || "")
+        };
+      }
+    }
+    return out;
+  }
+
+  function normalizePersonaId(id){
+    return String(id || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "");
+  }
+
   function seedReviewComment(personaId, label, prompt){
     const lbl = label || "this field";
     const guide = prompt ? ` Guide: ${prompt}` : "";
@@ -1046,10 +1084,12 @@
     return out;
   }
 
-  function buildDefaultReviewPersonalities(keys){
+  function buildDefaultReviewPersonalities(keys, personaDefs){
     const fieldKeys = Array.isArray(keys) ? keys : Object.keys(TEST_SCHEMA_DEFAULT);
+    const defs = personaDefs && typeof personaDefs === "object" ? personaDefs : DEFAULT_REVIEW_PERSONALITIES;
     const out = {};
-    for(const [id,label] of Object.entries(DEFAULT_REVIEW_PERSONALITIES)){
+    for(const [id,p] of Object.entries(defs)){
+      const label = typeof p === "string" ? p : (p?.label || id);
       const field_comments = {};
       for(const k of fieldKeys) field_comments[k] = "";
       out[id] = {
@@ -1064,10 +1104,12 @@
     return out;
   }
 
-  function mergeReviewPersonalities(base, override, keys){
+  function mergeReviewPersonalities(base, override, keys, personaDefs){
     const fieldKeys = Array.isArray(keys) ? keys : Object.keys(TEST_SCHEMA_DEFAULT);
+    const defs = personaDefs && typeof personaDefs === "object" ? personaDefs : DEFAULT_REVIEW_PERSONALITIES;
     const out = structuredClone(base || {});
-    for(const [id,label] of Object.entries(DEFAULT_REVIEW_PERSONALITIES)){
+    for(const [id,p] of Object.entries(defs)){
+      const label = typeof p === "string" ? p : (p?.label || id);
       if(!out[id]) out[id] = { label, last_reviewed:"", model:"", summary:"", notes:"", field_comments:{} };
       if(!out[id].label) out[id].label = label;
     }
@@ -1091,6 +1133,9 @@
           }
         }
       }
+    }
+    for(const id of Object.keys(out)){
+      if(!(id in defs)) delete out[id];
     }
     for(const id of Object.keys(out)){
       const dest = out[id];
@@ -1342,6 +1387,31 @@
   function getAiPrompt(plan, key, vars){
     const raw = plan?.ai_prompts?.[key] || DEFAULT_AI_PROMPTS[key] || "";
     return applyPromptTemplate(raw, vars);
+  }
+
+  function syncPlanReviewPersonalities(plan){
+    if(!plan || !Array.isArray(plan.tests)) return;
+    const defs = getPlanReviewPersonas(plan);
+    plan.review_personalities = defs;
+    for(const t of plan.tests){
+      if(!t?.data) continue;
+      if(!t.data._ai) t.data._ai = ensureAiMeta(null, Object.keys(t.data).filter(k => k !== "_ai"));
+      const keys = Object.keys(t.data).filter(k => k !== "_ai");
+      const before = JSON.stringify(t.data._ai.review_personalities || {});
+      const merged = mergeReviewPersonalities(
+        buildDefaultReviewPersonalities(keys, defs),
+        t.data._ai.review_personalities || {},
+        keys,
+        defs
+      );
+      t.data._ai.review_personalities = merged;
+      const after = JSON.stringify(merged);
+      if(before !== after){
+        t.modified = true;
+        if(!t._dirtyFields) t._dirtyFields = {};
+        t._dirtyFields["_ai.review_personalities"] = true;
+      }
+    }
   }
 
   function loadPrefs(){
@@ -1678,12 +1748,20 @@
       return;
     }
     try{
-      const handle = await window.showDirectoryPicker({ mode: "readwrite" });
-      state.planRootHandle = handle;
-      await idbSet("planRoot", handle);
+      const baseHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+      let rootHandle = baseHandle;
+      if(baseHandle.name !== "test_base_2026"){
+        rootHandle = await baseHandle.getDirectoryHandle("test_base_2026", { create: true });
+      }
+      state.planRootHandle = rootHandle;
+      state.planRootPath = (baseHandle.name === "Repos" && rootHandle.name === "test_base_2026")
+        ? "C:\\Repos\\test_base_2026"
+        : rootHandle.name;
+      await idbSet("planRoot", rootHandle);
+      await idbSet("planRootPath", state.planRootPath);
       updatePlanRootUI();
       runAsync(renderLibrary());
-      toast("Document folder set", "Library root selected.", "ok");
+      toast("Document folder set", state.planRootPath || "Library root selected.", "ok");
     }catch(e){
       toast("Canceled", "Document folder not set.", "warn");
     }
@@ -2508,9 +2586,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   function setPersonalityComment(test, field, personaId, comment, model){
     if(!test || !field || !personaId) return;
     if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
-    if(!test.data._ai.review_personalities || typeof test.data._ai.review_personalities !== "object"){
-      test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"));
-    }
+          if(!test.data._ai.review_personalities || typeof test.data._ai.review_personalities !== "object"){
+            test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"), getPlanReviewPersonas(state.currentPlan));
+          }
     const persona = test.data._ai.review_personalities[personaId];
     if(!persona) return;
     if(!persona.field_comments || typeof persona.field_comments !== "object") persona.field_comments = {};
@@ -2546,6 +2624,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(!plan.scope) plan.scope = mdMeta.scope || "";
       if(!plan.ai_review_guidance) plan.ai_review_guidance = mdMeta.aiReviewGuidance || "";
     }
+    if(!plan.review_personalities || typeof plan.review_personalities !== "object"){
+      plan.review_personalities = getPlanReviewPersonas(plan);
+    }
+    syncPlanReviewPersonalities(plan);
 
     const tests = (plan.tests || []).slice().sort((a,b) => (a.order||0)-(b.order||0));
     if(!tests.length){
@@ -2563,13 +2645,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const model = state.prefs.ai_model || "gpt-4.1-mini";
     const guidance = await getAiReviewGuidance();
     const guidanceLine = guidance ? ` Style/Tone/Vibe: ${guidance}` : "";
+    const personaDefs = getPlanReviewPersonas(plan);
     logLine(`AI Review: using model "${model}".`, "ok");
 
     async function reviewFieldComments(test, field){
       if(!test?.data) return;
       if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
       if(!test.data._ai.review_personalities || typeof test.data._ai.review_personalities !== "object"){
-        test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"));
+        test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"), getPlanReviewPersonas(plan));
       }
       const personas = Object.entries(test.data._ai.review_personalities);
       const payloadBase = {
@@ -2601,7 +2684,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           while(active < concurrency && index < tasks.length){
             const { personaId, persona } = tasks[index++];
             active++;
-            const focus = DEFAULT_REVIEW_PERSONALITY_FOCUS[personaId] || "clarity and usefulness";
+            const focus = personaDefs?.[personaId]?.focus || DEFAULT_REVIEW_PERSONALITY_FOCUS[personaId] || "clarity and usefulness";
+            const personaGuidance = personaDefs?.[personaId]?.guidance
+              ? ` Persona guidance: ${personaDefs[personaId].guidance}`
+              : "";
             const prompt = {
               ...payloadBase,
               persona: { id: personaId, label: persona?.label || personaId, focus }
@@ -2616,7 +2702,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   body: JSON.stringify({
                     model,
                     input: [
-                    { role:"system", content:getAiPrompt(plan, "review_persona", { personaLabel: persona?.label || personaId, focus, guidanceLine }) },
+                    { role:"system", content:getAiPrompt(plan, "review_persona", { personaLabel: persona?.label || personaId, focus, guidanceLine: `${guidanceLine}${personaGuidance}` }) },
                       { role:"user", content: JSON.stringify(prompt, null, 2) }
                     ],
                     max_output_tokens: 120
@@ -4001,7 +4087,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           if(!test.data._ai.field_types) test.data._ai.field_types = {};
           test.data._ai.field_types[name] = type;
           if(!test.data._ai.review_personalities || typeof test.data._ai.review_personalities !== "object"){
-            test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"));
+            test.data._ai.review_personalities = buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"), getPlanReviewPersonas(state.currentPlan));
           }
           for(const persona of Object.values(test.data._ai.review_personalities)){
             if(!persona.field_comments || typeof persona.field_comments !== "object") persona.field_comments = {};
@@ -4514,6 +4600,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           markdown: "",
           goal: $("newPlanGoal").value.trim(),
           scope: $("newPlanScope").value.trim(),
+          review_personalities: getPlanReviewPersonas(null),
           userNotes: "Add plan-level notes here (equipment, safety, lab setup, etc.)."
         };
         generatePlanMarkdown(plan);
@@ -5296,6 +5383,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const guidance = $("mdAiReviewGuidance");
     const promptsWrap = $("mdAiPromptsWrap");
     const prompts = $("mdAiPrompts");
+    const personasWrap = $("mdPersonasWrap");
     if(!notes || !preview) return;
     const mdMeta = extractPlanMetaFromMarkdown(plan.markdown || "");
     if(!plan.goal && mdMeta.goal) plan.goal = mdMeta.goal;
@@ -5324,6 +5412,59 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         el.value = merged[key] ?? "";
       });
     }
+    if(personasWrap){
+      const defs = getPlanReviewPersonas(plan);
+      const rows = Object.entries(defs).map(([id,p]) => `
+        <div class="item" style="align-items:stretch;">
+          <div class="left" style="flex:1;">
+            <div class="label">ID</div>
+            <input class="input" data-persona-id value="${escapeHtml(id)}" />
+            <div class="label" style="margin-top:8px;">Label</div>
+            <input class="input" data-persona-label value="${escapeHtml(p.label || id)}" />
+          </div>
+          <div class="left" style="flex:1;">
+            <div class="label">Focus</div>
+            <textarea class="input" data-persona-focus rows="3" spellcheck="false">${escapeHtml(p.focus || "")}</textarea>
+            <div class="label" style="margin-top:8px;">Guidance</div>
+            <textarea class="input" data-persona-guidance rows="3" spellcheck="false">${escapeHtml(p.guidance || "")}</textarea>
+          </div>
+          <div class="actions">
+            <button class="btn mini danger" data-persona-delete>Delete</button>
+          </div>
+        </div>
+      `).join("");
+      personasWrap.innerHTML = rows || `<div class="muted">No personalities configured.</div>`;
+      const addBtn = $("mdAddPersona");
+      if(addBtn){
+        addBtn.onclick = () => {
+          const el = document.createElement("div");
+          el.className = "item";
+          el.style.alignItems = "stretch";
+          el.innerHTML = `
+            <div class="left" style="flex:1;">
+              <div class="label">ID</div>
+              <input class="input" data-persona-id placeholder="persona_id" />
+              <div class="label" style="margin-top:8px;">Label</div>
+              <input class="input" data-persona-label placeholder="Persona Label" />
+            </div>
+            <div class="left" style="flex:1;">
+              <div class="label">Focus</div>
+              <textarea class="input" data-persona-focus rows="3" spellcheck="false" placeholder="What this persona focuses on"></textarea>
+              <div class="label" style="margin-top:8px;">Guidance</div>
+              <textarea class="input" data-persona-guidance rows="3" spellcheck="false" placeholder="Tone/role guidance"></textarea>
+            </div>
+            <div class="actions">
+              <button class="btn mini danger" data-persona-delete>Delete</button>
+            </div>
+          `;
+          personasWrap.appendChild(el);
+          el.querySelector("[data-persona-delete]")?.addEventListener("click", () => el.remove());
+        };
+      }
+      personasWrap.querySelectorAll("[data-persona-delete]").forEach(btn => {
+        btn.addEventListener("click", () => btn.closest(".item")?.remove());
+      });
+    }
     notes.value = plan.userNotes ?? extractUserNotes(plan.markdown);
     preview.textContent = plan.markdown || "";
   }
@@ -5337,6 +5478,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <div class="miniTab active" data-tab="preview">Preview</div>
           <div class="miniTab" data-tab="overview">Overview</div>
           <div class="miniTab" data-tab="prompts">AI Prompts</div>
+          <div class="miniTab" data-tab="personalities">Personalities</div>
           <div class="miniTab" data-tab="notes">Notes</div>
         </div>
         <div class="miniTabContent active" data-tab-panel="preview">
@@ -5358,6 +5500,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <div>
             <div class="label">AI Prompt Templates</div>
             <div id="mdAiPromptsWrap"></div>
+          </div>
+        </div>
+        <div class="miniTabContent" data-tab-panel="personalities">
+          <div>
+            <div class="toolbarRow" style="margin-bottom:8px;">
+              <button class="btn mini" id="mdAddPersona">Add Personality</button>
+            </div>
+            <div id="mdPersonasWrap"></div>
           </div>
         </div>
         <div class="miniTabContent" data-tab-panel="notes">
@@ -5395,6 +5545,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const scope = $("mdPlanScope");
     const guidance = $("mdAiReviewGuidance");
     const promptsWrap = $("mdAiPromptsWrap");
+    const personasWrap = $("mdPersonasWrap");
     if(!notes) return;
     if(goal) plan.goal = sanitizeAiText(goal.value.trim());
     if(scope) plan.scope = sanitizeAiText(scope.value.trim());
@@ -5406,6 +5557,20 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         next[key] = String(el.value || "");
       });
       plan.ai_prompts = next;
+    }
+    if(personasWrap){
+      const next = {};
+      personasWrap.querySelectorAll(".item").forEach(row => {
+        const rawId = row.querySelector("[data-persona-id]")?.value || "";
+        const id = normalizePersonaId(rawId);
+        if(!id) return;
+        const label = sanitizeAiText(row.querySelector("[data-persona-label]")?.value || id);
+        const focus = sanitizeAiText(row.querySelector("[data-persona-focus]")?.value || "");
+        const guidanceLine = sanitizeAiText(row.querySelector("[data-persona-guidance]")?.value || "");
+        next[id] = { label, focus, guidance: guidanceLine };
+      });
+      plan.review_personalities = next;
+      syncPlanReviewPersonalities(plan);
     }
     plan.userNotes = notes.value || "";
     generatePlanMarkdown(plan);
@@ -6678,6 +6843,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       goal: "Simple plan for board bring up.",
       scope: "Inspect and power on the UUT for the first time. Check voltage rails, ability to program, and signs of life.",
       ai_review_guidance: "Concise, professional, and technical-oriented. Use clear, test-lab language and avoid filler.",
+      review_personalities: getPlanReviewPersonas(null),
       ai_prompts: {
         review_persona: DEFAULT_AI_PROMPTS.review_persona,
         review_field: DEFAULT_AI_PROMPTS.review_field,
@@ -7807,6 +7973,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       goal: "Capture and communicate the product specification.",
       scope: "Define requirements, interfaces, constraints, compliance targets, and verification approach.",
       ai_review_guidance: "Concise, professional, and specification-oriented. Use clear, unambiguous language.",
+      review_personalities: getPlanReviewPersonas(null),
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
@@ -8008,6 +8175,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       goal: "Map requirements to verification methods and results.",
       scope: "Define requirement IDs, verification methods, and coverage status in a single matrix.",
       ai_review_guidance: "Concise, technical, verification-oriented. Use clear mappings and unambiguous labels.",
+      review_personalities: getPlanReviewPersonas(null),
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
@@ -8289,13 +8457,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!test || !fieldKey) return;
     if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
     const personas = mergeReviewPersonalities(
-      buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai")),
+      buildDefaultReviewPersonalities(Object.keys(test.data).filter(k => k !== "_ai"), getPlanReviewPersonas(state.currentPlan)),
       test.data._ai.review_personalities || {},
-      Object.keys(test.data).filter(k => k !== "_ai")
+      Object.keys(test.data).filter(k => k !== "_ai"),
+      getPlanReviewPersonas(state.currentPlan)
     );
     const label = test.data?._ai?.field_labels?.[fieldKey] || fieldKey;
     showModal("Field Reviews", (body, footer) => {
-      const blocks = Object.keys(DEFAULT_REVIEW_PERSONALITIES).map(id => {
+      const blocks = Object.keys(personas).map(id => {
         const p = personas[id] || { label: id, field_comments: {} };
         const comment = p.field_comments?.[fieldKey] || "";
         const safeLabel = escapeHtml(p.label || id);
