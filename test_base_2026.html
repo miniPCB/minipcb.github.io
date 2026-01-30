@@ -3170,8 +3170,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const allItemsPayload = tests.map(tt => ({
         item_no: tt.data.test_no || "",
         item_name: tt.data.test_name || "",
-        item_type: tt.data.test_type || "",
-        data: tt.data
+        item_type: tt.data.test_type || ""
       }));
 
       const pauseMs = Number(state.prefs.ai_review_pause_ms ?? 0);
@@ -3228,6 +3227,18 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 }
               }
 
+            const contextData = (() => {
+              const out = {};
+              for(const k of Object.keys(t.data || {})){
+                if(k === "_ai") continue;
+                if(k === "test_name" || k === "test_no" || k === "test_type") continue;
+                const v = t.data[k];
+                if(typeof v === "string" || typeof v === "number" || typeof v === "boolean" || v === null){
+                  out[k] = v;
+                }
+              }
+              return out;
+            })();
             const matrixPlanContext = isMatrixCell ? {
               item_no: t.data.test_no || "",
               item_name: t.data.test_name || "",
@@ -3235,7 +3246,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               section_no: t.data.test_no || "",
               section_name: t.data.test_name || "",
               section_type: t.data.test_type || ""
-            } : t.data;
+            } : contextData;
 
             const payload = {
               document: { name: plan.name, created: plan.created, updated: plan.updated },
@@ -3323,7 +3334,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   const looksInstruction = /(?:\bshould\b|\benter\b|\bpopulate\b|\bfill\b|\buse\b|\binclude\b|\bprovide\b|\bset\b|\bcomplete\b)/i.test(val);
                   const looksSentence = /[.!?]/.test(val);
                   const startsWithBad = /^(value|tbd|to be completed|to be filled|complete per|per drawing|per schematic|\{|\[|```)/i.test(val);
-                  const allowRowMatch = (item.colId === "item" && rowLabel && val === rowLabel);
+                  const allowRowMatch = ((item.colId === "item" || item.colId === "req_id") && rowLabel && val === rowLabel);
                   const bad = /^value/i.test(val)
                     || /^n\/a$/i.test(val)
                     || (colLabel && val === colLabel)
