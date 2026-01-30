@@ -3279,18 +3279,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 }
                 val = sanitizeAiText(val);
                 if(isMatrixCell){
+                  if(!val){
+                    setMatrixCellStatus(t, field, item.cellKey, "");
+                    setSuggestStatus(t.id, field, "");
+                    return;
+                  }
                   const colLabel = String(matrixContext?.col_label || "").trim();
                   const rowLabel = String(matrixContext?.row_label || "").trim();
-                  const lowered = val.toLowerCase();
                   const tooLong = val.length > 120;
                   const looksInstruction = /(?:\bshould\b|\benter\b|\bpopulate\b|\bfill\b|\buse\b|\binclude\b|\bprovide\b|\bset\b|\bcomplete\b)/i.test(val);
                   const looksSentence = /[.!?]/.test(val);
                   const startsWithBad = /^(value|tbd|to be completed|to be filled|complete per|per drawing|per schematic|\{|\[|```)/i.test(val);
-                  const bad = !val
-                    || /^value/i.test(val)
+                  const allowRowMatch = (item.colId === "item" && rowLabel && val === rowLabel);
+                  const bad = /^value/i.test(val)
                     || /^n\/a$/i.test(val)
                     || (colLabel && val === colLabel)
-                    || (rowLabel && val === rowLabel)
+                    || (!allowRowMatch && rowLabel && val === rowLabel)
                     || startsWithBad
                     || (looksInstruction && looksSentence)
                     || tooLong;
