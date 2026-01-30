@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Test Base 2026 — Test Plan Management (Skeleton)</title>
+  <title>Test Base 2026 — Document Management (Skeleton)</title>
   <style>
     :root{
       --bg:#0f1218;
@@ -577,7 +577,7 @@
     </div>
 
     <div class="status">
-      <div class="pill" id="switchPlanBtn" title="Return to Plan Library" style="display:none;">Switch Plan</div>
+      <div class="pill" id="switchPlanBtn" title="Return to Document Library" style="display:none;">Switch Document</div>
       <div class="pill" id="saveAllBtn" style="display:none;">Save All</div>
       <div class="chip clickable" id="aiChip" title="AI is optional. Saving never depends on AI.">
         <span class="led bad" id="aiLed"></span>
@@ -594,12 +594,12 @@
             <div class="card" style="min-height:0;">
               <div class="cardHeader">
                 <div>
-                  <h2>Plans</h2>
-                  <div class="muted" id="plansSub">Using in-browser Plan Store (localStorage).</div>
+                  <h2>Documents</h2>
+                  <div class="muted" id="plansSub">Using in-browser Document Store (localStorage).</div>
                 </div>
                 <div class="toolbarRow">
                   <div style="width: 260px;">
-                    <input class="input" id="planSearch" placeholder="Search plans by name…" />
+                    <input class="input" id="planSearch" placeholder="Search documents by name…" />
                   </div>
                   <button class="btn primary" id="btnNewPlan">Create New</button>
                 </div>
@@ -616,7 +616,7 @@
                 <div class="hr"></div>
                 <div class="list" style="border:none; border-radius:0;">
                   <div class="listHeader">
-                    <div class="title">All Plans</div>
+                    <div class="title">All Documents</div>
                     <div class="muted" id="plansCount">0</div>
                   </div>
                   <div class="listBody" id="plansList"></div>
@@ -636,7 +636,7 @@
               <div class="cardBody" style="min-height:0;">
                 <div class="row">
                   <div>
-                    <div class="label">Total Plans</div>
+                    <div class="label">Total Documents</div>
                     <div class="input" style="display:flex;align-items:center;" id="wsPlanCount">0</div>
                   </div>
                   <div>
@@ -662,7 +662,7 @@
 
                 <div class="row">
                   <div>
-                    <div class="label">Plan Folder</div>
+                    <div class="label">Document Folder</div>
                     <div class="input" style="display:flex;align-items:center;" id="planRootText">Not set</div>
                   </div>
                 </div>
@@ -670,7 +670,7 @@
                 <div class="hr"></div>
 
                 <div class="toolbarRow">
-                  <button class="btn attn" id="btnSetPlanRoot">Set Plan Folder</button>
+                  <button class="btn attn" id="btnSetPlanRoot">Set Document Folder</button>
                   <button class="btn danger" id="btnClearBrowser">Clear Browser Cache</button>
                   <button class="btn" id="btnSeedDemo">Electronics Test Plan</button>
                   <button class="btn" id="btnSeedSpec">Specifications Document</button>
@@ -759,7 +759,7 @@
           <div class="panelBody chatPanelBody">
             <div class="chatWrap">
               <div class="chatLog" id="aiChatLog"></div>
-              <textarea class="input chatInput" id="aiChatInput" placeholder="Tell the AI what to change in the plan…"></textarea>
+              <textarea class="input chatInput" id="aiChatInput" placeholder="Tell the AI what to change in the document…"></textarea>
               <div class="row">
                 <button class="btn primary" id="btnAiChatSend">Send</button>
                 <button class="btn" id="btnAiChatClear">Clear</button>
@@ -814,8 +814,8 @@
 (() => {
   /* =========================================================
      Test Base 2026 — Skeleton
-      - File System plan folders when enabled (fallback to Browser Store)
-     - Plan Library + Plan Editor
+      - File System document folders when enabled (fallback to Browser Store)
+     - Document Library + Document Editor
      - Schema-driven form editor
      - Non-blocking save fallback
      - Markdown + Flowchart tabs
@@ -1610,9 +1610,9 @@
       await idbSet("planRoot", handle);
       updatePlanRootUI();
       runAsync(renderLibrary());
-      toast("Plan folder set", "Library root selected.", "ok");
+      toast("Document folder set", "Library root selected.", "ok");
     }catch(e){
-      toast("Canceled", "Plan folder not set.", "warn");
+      toast("Canceled", "Document folder not set.", "warn");
     }
   }
 
@@ -1631,8 +1631,8 @@
       else setBtn.classList.remove("attn");
     }
     $("plansSub").textContent = state.planRootHandle
-      ? "Using plan folder storage."
-      : "Using in-browser Plan Store (localStorage).";
+      ? "Using document folder storage."
+      : "Using in-browser Document Store (localStorage).";
     const storageText = $("storageModeText");
     if(storageText){
       storageText.textContent = state.planRootHandle ? "File System" : "Browser Store";
@@ -1640,18 +1640,18 @@
     const libSub = $("planLibrarySub");
     if(libSub){
       libSub.textContent = state.planRootHandle
-        ? "Create, browse, and open test plans (saved to folders + JSON + markdown)."
-        : "Create, browse, and open test plans (Browser Store skeleton).";
+        ? "Create, browse, and open test documents (saved to folders + JSON + markdown)."
+        : "Create, browse, and open test documents (Browser Store skeleton).";
     }
   }
 
   function promptPlanRootIfNeeded(){
     if(state.planRootHandle) return;
-    showModal("Select Plan Library Root", (body, footer) => {
+    showModal("Select Document Library Root", (body, footer) => {
       body.innerHTML = `
         <div class="muted" style="line-height:1.45;">
-          Select the folder that will contain plan folders (ideally the folder next to this HTML file).
-          Each plan will create its own folder containing test JSON files and a plan markdown file.
+          Select the folder that will contain document folders (ideally the folder next to this HTML file).
+          Each document will create its own folder containing test JSON files and a document markdown file.
         </div>
       `;
       footer.innerHTML = `
@@ -4425,7 +4425,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
       $("confirmNewPlanBlank").onclick = async () => {
         const name = $("newPlanName").value.trim();
-        if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+        if(!name){ toast("Missing name", "Enter a document name.", "warn"); return; }
 
         const plan = {
           id: uid(),
@@ -4482,7 +4482,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       $("confirmNewPlanAi").onclick = async () => {
         const name = $("newPlanName").value.trim();
-        if(!name){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+        if(!name){ toast("Missing name", "Enter a document name.", "warn"); return; }
         const uutPn = $("newPlanUutPn") ? ($("newPlanUutPn").value || "").trim() : "";
         const deviceType = $("newPlanDeviceType") ? ($("newPlanDeviceType").value || "").trim() : "";
         const countInput = $("newPlanTestCount");
@@ -4668,13 +4668,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const goalVal = plan?.goal ?? base.goal ?? mdMeta.goal ?? "";
     const scopeVal = plan?.scope ?? base.scope ?? mdMeta.scope ?? "";
 
-    showModal("Rename Plan", (body, footer) => {
+    showModal("Rename Document", (body, footer) => {
       body.innerHTML = `
         <div class="muted" style="line-height:1.45;">
-          Updates the plan name and regenerates markdown while preserving the notes block.
+          Updates the document name and regenerates markdown while preserving the notes block.
         </div>
         <div class="hr"></div>
-        <div class="label">New Plan Name</div>
+        <div class="label">New Document Name</div>
         <input class="input" id="renamePlanName" value="${escapeHtml(base.name)}" />
         <div class="row" style="margin-top:8px;">
           <div>
@@ -4696,7 +4696,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("cancelRename").onclick = hideModal;
       $("confirmRename").onclick = async () => {
         const newName = sanitizeAiText($("renamePlanName").value.trim());
-        if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+        if(!newName){ toast("Missing name", "Enter a document name.", "warn"); return; }
 
         const live = await Store.loadPlan(planId);
         const oldNotes = live.userNotes ?? extractUserNotes(live.markdown || "");
@@ -4758,14 +4758,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const base = state.plansCache.find(p => p.id === planId);
     if(!base) return;
 
-    showModal("Duplicate Plan", (body, footer) => {
+    showModal("Duplicate Document", (body, footer) => {
       body.innerHTML = `
         <div class="muted" style="line-height:1.45;">
-          Creates a new plan with a copy of all tests and notes. The duplicate gets a new ID and folder.
+          Creates a new document with a copy of all tests and notes. The duplicate gets a new ID and folder.
         </div>
         <div class="hr"></div>
-        <div class="label">New Plan Name</div>
-        <input class="input" id="duplicatePlanName" value="${escapeHtml(`Copy of ${base.name || "Plan"}`)}" />
+        <div class="label">New Document Name</div>
+        <input class="input" id="duplicatePlanName" value="${escapeHtml(`Copy of ${base.name || "Document"}`)}" />
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelDuplicate">Cancel</button>
@@ -4774,7 +4774,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("cancelDuplicate").onclick = hideModal;
       $("confirmDuplicate").onclick = async () => {
         const newName = $("duplicatePlanName").value.trim();
-        if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+        if(!newName){ toast("Missing name", "Enter a document name.", "warn"); return; }
 
         const plan = await Store.loadPlan(planId);
         const copy = structuredClone(plan);
@@ -4856,14 +4856,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const base = state.templatesCache.find(t => t.id === templateId);
     if(!base) return;
 
-    showModal("Create Plan from Template", (body, footer) => {
+    showModal("Create Document from Template", (body, footer) => {
       body.innerHTML = `
         <div class="muted" style="line-height:1.45;">
-          Creates a new plan from the selected template.
+          Creates a new document from the selected template.
         </div>
         <div class="hr"></div>
-        <div class="label">New Plan Name</div>
-        <input class="input" id="createFromTemplateName" value="${escapeHtml(base.name || "New Plan")}" />
+        <div class="label">New Document Name</div>
+        <input class="input" id="createFromTemplateName" value="${escapeHtml(base.name || "New Document")}" />
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelCreateFromTemplate">Cancel</button>
@@ -4966,10 +4966,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const base = state.plansCache.find(p => p.id === planId);
     if(!base) return;
 
-    showModal("Delete Plan", (body, footer) => {
+    showModal("Delete Document", (body, footer) => {
       body.innerHTML = `
         <div class="muted" style="line-height:1.45;">
-          <strong>Warning:</strong> This permanently deletes the plan (folder + files if File System is enabled).
+          <strong>Warning:</strong> This permanently deletes the document (folder + files if File System is enabled).
         </div>
         <div class="hr"></div>
         <div class="row">
@@ -4978,7 +4978,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <input class="input" id="delConfirm" placeholder="DELETE" />
           </div>
         </div>
-        <div class="hint">Plan: <span class="tag">${escapeHtml(base.name)}</span></div>
+        <div class="hint">Document: <span class="tag">${escapeHtml(base.name)}</span></div>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelDel">Cancel</button>
@@ -5131,7 +5131,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
       const templatesDir = await fsEnsureTestTemplatesDir(basePlan, true);
       if(!templatesDir){
-        toast("Templates", "Plan folder not set or unavailable.", "warn");
+        toast("Templates", "Document folder not set or unavailable.", "warn");
         return;
       }
       const payload = { data: normalizeTestData(test.data) };
@@ -5233,7 +5233,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         ["review_persona", "Review Persona Prompt"],
         ["review_field", "Review Field Prompt"],
         ["chat_edit", "AI Chat Edit Prompt"],
-        ["create_plan", "AI Create Plan Prompt"],
+        ["create_plan", "AI Create Document Prompt"],
         ["suggest_field", "Suggest Field Prompt"],
         ["suggest_field_strict", "Suggest Field (Strict) Prompt"],
         ["suggest_limits_note", "Suggest Limits Note"]
@@ -5349,7 +5349,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <div class="input" style="display:flex;align-items:center;">${USE_PROXY ? "Proxy" : (hasKey ? "Key set" : "Not set")}</div>
             </div>
           <div>
-            <div class="label">Plan Storage</div>
+            <div class="label">Document Storage</div>
             <div class="input" style="display:flex;align-items:center;">${state.planRootHandle ? "File System" : "Browser Store"}</div>
           </div>
         </div>
@@ -5621,7 +5621,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
     const templatesDir = await fsEnsureTestTemplatesDir(plan, true);
     if(!templatesDir){
-      toast("Templates", "Plan folder not set or unavailable.", "warn");
+      toast("Templates", "Document folder not set or unavailable.", "warn");
       return false;
     }
     let baseName = (name || "template").trim();
@@ -7695,7 +7695,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     $("switchPlanBtn").addEventListener("click", () => {
       const dirty = state.currentPlan?.tests?.some(t => t.modified);
-      if(dirty && !confirm("You have unsaved changes. Switch plans anyway?")) return;
+      if(dirty && !confirm("You have unsaved changes. Switch documents anyway?")) return;
       showLibrary();
     });
 
