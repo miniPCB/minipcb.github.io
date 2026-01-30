@@ -423,6 +423,10 @@
     .matrixInput:focus{
       background: rgba(124,196,255,.08);
     }
+    .matrixInput.matrixDirty{
+      background: rgba(124,255,176,.12);
+      box-shadow: 0 0 0 1px rgba(124,255,176,.35) inset;
+    }
     .matrixHint{
       font-size:10px;
       color: var(--muted);
@@ -4098,11 +4102,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(locked) input.disabled = true;
         const key = matrixCellKey(rowId, colId);
         input.value = matrix.cells?.[key] ?? "";
+        if(test._dirtyMatrixCells?.[fieldKey]?.has(key)) input.classList.add("matrixDirty");
         td.setAttribute("data-row", rowId);
         td.setAttribute("data-col", colId);
         input.addEventListener("input", () => {
           if(locked) return;
           matrix.cells[key] = input.value;
+          if(!test._dirtyMatrixCells) test._dirtyMatrixCells = {};
+          if(!test._dirtyMatrixCells[fieldKey]) test._dirtyMatrixCells[fieldKey] = new Set();
+          test._dirtyMatrixCells[fieldKey].add(key);
+          input.classList.add("matrixDirty");
           test.data[fieldKey] = matrix;
           test.modified = true;
           if(!test._dirtyFields) test._dirtyFields = {};
@@ -6079,6 +6088,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       await fsWriteText(templatesDir, state.currentTestTemplate.file, JSON.stringify(payload, null, 2), "application/json");
       test.modified = false;
       test._dirtyFields = {};
+      test._dirtyMatrixCells = {};
       $("dirtyHint").style.display = "none";
       renderEditor();
       logLine(`Saved test template: ${state.currentTestTemplate.file}`, "ok");
@@ -6088,6 +6098,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     test.modified = false;
     test._dirtyFields = {};
+    test._dirtyMatrixCells = {};
     plan.updated = nowIsoDate();
     generatePlanMarkdown(plan);
     if(state.currentTemplateId){
@@ -6118,6 +6129,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       t.data._ai.last_human_reviewed = nowIsoTimestamp();
       t.modified = false;
       t._dirtyFields = {};
+      t._dirtyMatrixCells = {};
     }
 
     plan.updated = nowIsoDate();
