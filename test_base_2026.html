@@ -868,6 +868,7 @@
                   <button class="btn" id="btnSeedDemo">Electronics Test Plan</button>
                   <button class="btn" id="btnSeedSpec">Specifications Document</button>
                   <button class="btn" id="btnSeedRtm">Requirements Traceability Matrix</button>
+                  <button class="btn" id="btnSeedBom">Bill of Materials</button>
                   <button class="btn" id="btnSeedVerify">Verification Matrix</button>
                   <button class="btn" id="btnSeedDesignReview">Design Review Checklist</button>
                   <button class="btn" id="btnSeedIcd">Interface Control Document</button>
@@ -2586,6 +2587,7 @@
     const docKind = nameLower.includes("electronics test plan") ? "test"
       : nameLower.includes("specifications document") ? "spec"
       : nameLower.includes("requirements traceability matrix") ? "rtm"
+      : nameLower.includes("bill of materials") ? "bom"
       : nameLower.includes("verification matrix") ? "verification"
       : nameLower.includes("design review checklist") ? "designReview"
       : nameLower.includes("interface control document") ? "icd"
@@ -2595,6 +2597,7 @@
     const titlePrefix = docKind === "test" ? "Test Plan"
       : docKind === "spec" ? "Specifications Document"
       : docKind === "rtm" ? "Requirements Traceability Matrix"
+      : docKind === "bom" ? "Bill of Materials"
       : docKind === "verification" ? "Verification Matrix"
       : docKind === "designReview" ? "Design Review Checklist"
       : docKind === "icd" ? "Interface Control Document"
@@ -9114,6 +9117,186 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     runAsync(renderLibrary());
   }
 
+  async function seedBillOfMaterials(){
+    const matrixCols = [
+      { id: "item", label: "Item" },
+      { id: "refdes", label: "RefDes" },
+      { id: "qty", label: "Qty" },
+      { id: "description", label: "Description" },
+      { id: "value", label: "Value" },
+      { id: "package", label: "Package" },
+      { id: "mfr", label: "Manufacturer" },
+      { id: "mpn", label: "MPN" },
+      { id: "notes", label: "Notes" }
+    ];
+    const matrixRows = ["001","002","003","004","005"].map(id => ({ id, label: id }));
+    const matrixValue = {
+      rows: matrixRows.map(r => r.id),
+      cols: matrixCols.map(c => c.id),
+      row_labels: matrixRows.reduce((acc, r) => { acc[r.id] = r.label; return acc; }, {}),
+      col_labels: matrixCols.reduce((acc, c) => { acc[c.id] = c.label; return acc; }, {}),
+      cells: matrixRows.reduce((acc, r) => {
+        acc[matrixCellKey(r.id, "item")] = r.id;
+        return acc;
+      }, {})
+    };
+
+    const sections = [
+      {
+        title: "Core Metadata",
+        id: "BOM-001",
+        type: "Core Metadata",
+        fields: [
+          { key: "doc_title", label: "Document Title", type: "text", value: "Bill of Materials" },
+          { key: "doc_id", label: "Document ID", type: "text", value: "BOM-0001" },
+          { key: "version", label: "Version", type: "text", value: "1.0" },
+          { key: "owner", label: "Owner", type: "text", value: "Manufacturing Engineering" },
+          { key: "date_created", label: "Date Created", type: "text", value: "" },
+          { key: "date_updated", label: "Date Updated", type: "text", value: "" }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          doc_title: 2,
+          doc_id: 2,
+          version: 2,
+          owner: 2,
+          date_created: 0,
+          date_updated: 0
+        }
+      },
+      {
+        title: "BOM Table",
+        id: "BOM-002",
+        type: "BOM Table",
+        fields: [
+          { key: "bom_matrix", label: "BOM Matrix", type: "matrix", value: matrixValue }
+        ],
+        schema: {
+          bom_matrix: {
+            rows: matrixRows,
+            cols: matrixCols
+          }
+        },
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          bom_matrix: 2
+        }
+      }
+    ];
+
+    const tests = sections.map((section, idx) => {
+      const data = {
+        test_name: section.title,
+        test_no: section.id,
+        test_type: section.type,
+        param1_label: "",
+        param1_value: "",
+        param2_label: "",
+        param2_value: ""
+      };
+
+      const fieldLabels = {
+        test_name: "Section Title",
+        test_no: "Section ID",
+        test_type: "Section Type",
+        param1_label: "Param 1 Label",
+        param1_value: "Param 1 Value",
+        param2_label: "Param 2 Label",
+        param2_value: "Param 2 Value"
+      };
+      const fieldTypes = {
+        test_name: "text",
+        test_no: "text",
+        test_type: "text",
+        param1_label: "text",
+        param1_value: "text",
+        param2_label: "text",
+        param2_value: "text"
+      };
+      const fieldPrompts = {
+        test_name: "Enter the section title for this bill of materials.",
+        test_no: "Enter the section identifier (e.g., BOM-001).",
+        test_type: "Describe the section type or category.",
+        param1_label: "Enter a label for parameter 1 (optional).",
+        param1_value: "Select which field should supply parameter 1's value.",
+        param2_label: "Enter a label for parameter 2 (optional).",
+        param2_value: "Select which field should supply parameter 2's value."
+      };
+
+      for(const f of section.fields){
+        data[f.key] = f.value != null ? f.value : "";
+        fieldLabels[f.key] = f.label;
+        fieldTypes[f.key] = f.type;
+        fieldPrompts[f.key] = f.type === "matrix"
+          ? "Provide the bill of materials table with items, quantities, and manufacturer details."
+          : `Provide the ${f.label.toLowerCase()} for this bill of materials section.`;
+      }
+
+      const normalized = normalizeTestData(data);
+      normalized._ai.field_labels = fieldLabels;
+      normalized._ai.field_types = fieldTypes;
+      normalized._ai.field_prompts = fieldPrompts;
+      normalized._ai.maturity = { ...(normalized._ai.maturity || {}) };
+      if(section.schema && section.schema.bom_matrix){
+        if(!normalized._ai.field_schema) normalized._ai.field_schema = {};
+        normalized._ai.field_schema.bom_matrix = cloneJsonValue(section.schema.bom_matrix);
+      }
+      const maturityOverrides = section.maturity || {};
+      for(const key of Object.keys(data)){
+        if(key === "_ai") continue;
+        if(Object.prototype.hasOwnProperty.call(maturityOverrides, key)){
+          normalized._ai.maturity[key] = maturityOverrides[key];
+          continue;
+        }
+        if(String(data[key] ?? "").trim() !== "") normalized._ai.maturity[key] = 3;
+      }
+      normalized._ai.review_personalities = buildSeedReviewPersonalitiesForData(normalized);
+      return { id: uid(), order: idx + 1, modified: false, data: normalized };
+    });
+
+    const plan = {
+      id: uid(),
+      name: "Bill of Materials",
+      slug: slugifyPlanName("Bill of Materials"),
+      created: nowIsoDate(),
+      updated: nowIsoDate(),
+      goal: "Capture a structured bill of materials for the design.",
+      scope: "List items, quantities, reference designators, and sourcing details in a structured matrix.",
+      ai_review_guidance: "Concise, manufacturing-oriented. Use clear part identifiers and consistent formatting.",
+      review_personalities: getPlanReviewPersonas(null),
+      ai_prompts: {
+        review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
+        review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
+        chat_edit: "You edit a bill of materials document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"BOM-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a bill of materials. The set object should use full schema keys: {{schemaKeys}}. Use concise, manufacturing-style language. No extra text.",
+        suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this bill of materials section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+        suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this bill of materials section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+        suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
+      },
+      tests,
+      markdown: "",
+      userNotes: "Add sourcing notes, alternates, and revision notes here."
+    };
+
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    logLine("Seeded Bill of Materials.", "ok");
+    toast("Seeded", "Bill of Materials created.", "ok");
+    runAsync(renderLibrary());
+  }
+
   async function seedVerificationMatrix(){
     const sections = [
       {
@@ -10630,6 +10813,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("btnSeedDemo").addEventListener("click", () => runAsync(seedDemo()));
     $("btnSeedSpec").addEventListener("click", () => runAsync(seedSpecificationsDocument()));
     $("btnSeedRtm").addEventListener("click", () => runAsync(seedRequirementsTraceabilityMatrix()));
+    $("btnSeedBom").addEventListener("click", () => runAsync(seedBillOfMaterials()));
     $("btnSeedVerify").addEventListener("click", () => runAsync(seedVerificationMatrix()));
     $("btnSeedDesignReview").addEventListener("click", () => runAsync(seedDesignReviewChecklist()));
     $("btnSeedIcd").addEventListener("click", () => runAsync(seedInterfaceControlDocument()));
