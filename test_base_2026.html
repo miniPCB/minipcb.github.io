@@ -3259,7 +3259,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
     if(perm <= 0) return false;
     let changed = false;
-    const schemaKeys = new Set(Object.keys(TEST_SCHEMA_DEFAULT));
+    const baseSchemaKeys = new Set(Object.keys(TEST_SCHEMA_DEFAULT));
+    const defaultPlanKeys = new Set((plan?.tests?.[0]?.data ? Object.keys(plan.tests[0].data) : []).filter(k => k !== "_ai"));
     const deleteSet = new Set();
     if(perm >= 2){
       if(payload?.delete_all === true){
@@ -3307,20 +3308,65 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           if(perm < 2) continue;
           const newNo = testNo || nextTestNo(plan);
           const safeSet = {};
+          const allowedKeys = defaultPlanKeys.size ? defaultPlanKeys : baseSchemaKeys;
           for(const [k, v] of Object.entries(set)){
-            if(!schemaKeys.has(k)) continue;
+            if(!allowedKeys.has(k)) continue;
             safeSet[k] = sanitizeAiText(v);
           }
           test = createTestFromSet(plan, safeSet, newNo);
           changed = true;
         }
+        const allowedKeys = new Set(Object.keys(test.data || {}).filter(k => k !== "_ai"));
         for(const [k, v] of Object.entries(set)){
-          if(!schemaKeys.has(k)) continue;
+          if(!allowedKeys.has(k)) continue;
           const curM = getFieldMaturity(test, k);
           if(curM >= 3) continue;
-          const val = sanitizeAiText(v);
-          if(String(test.data?.[k] ?? "") === val) continue;
-          test.data[k] = val;
+          const fieldType = String(test.data?._ai?.field_types?.[k] || "text").toLowerCase();
+          if(fieldType.includes("matrix")){
+            let nextVal = v;
+            if(typeof nextVal === "string"){
+              const raw = nextVal.trim();
+              if(raw.startsWith("{") || raw.startsWith("[")){
+                try{
+                  nextVal = JSON.parse(raw);
+                }catch{
+                  logLine(`AI Chat: matrix update ignored for ${test.data?.test_no || "?"}.${k} (invalid JSON).`, "warn");
+                  continue;
+                }
+              }else{
+                logLine(`AI Chat: matrix update ignored for ${test.data?.test_no || "?"}.${k} (expected JSON object).`, "warn");
+                continue;
+              }
+            }
+            const schema = getMatrixSchema(test, k);
+            const currentMatrix = normalizeMatrixValue(test.data?.[k], schema);
+            const nextObj = (nextVal && typeof nextVal === "object" && !Array.isArray(nextVal)) ? nextVal : {};
+            const hasStructure = ("rows" in nextObj) || ("cols" in nextObj) || ("row_labels" in nextObj) || ("col_labels" in nextObj);
+            let merged;
+            if(nextObj.cells && !hasStructure){
+              merged = currentMatrix;
+              for(const [cellKey, cellVal] of Object.entries(nextObj.cells || {})){
+                merged.cells[cellKey] = sanitizeAiText(cellVal);
+              }
+            }else{
+              const base = {
+                rows: Array.isArray(nextObj.rows) ? nextObj.rows : currentMatrix.rows,
+                cols: Array.isArray(nextObj.cols) ? nextObj.cols : currentMatrix.cols,
+                row_labels: { ...currentMatrix.row_labels, ...(nextObj.row_labels || {}) },
+                col_labels: { ...currentMatrix.col_labels, ...(nextObj.col_labels || {}) },
+                cells: { ...currentMatrix.cells, ...(nextObj.cells || {}) }
+              };
+              merged = normalizeMatrixValue(base, schema);
+              for(const [cellKey, cellVal] of Object.entries(merged.cells || {})){
+                merged.cells[cellKey] = sanitizeAiText(cellVal);
+              }
+            }
+            test.data[k] = merged;
+          }else{
+            const val = sanitizeAiText(v);
+            if(String(test.data?.[k] ?? "") === val) continue;
+            test.data[k] = val;
+          }
           setFieldMaturity(test, k, 2);
           test.modified = true;
           if(!test._dirtyFields) test._dirtyFields = {};
@@ -3989,6 +4035,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     toolbar.innerHTML = `
       <button class="btn" data-action="add-row">Add Row</button>
       <button class="btn" data-action="add-col">Add Column</button>
+      <button class="btn" data-action="import-csv">Import CSV</button>
       <button class="btn" data-action="zoom-in">Zoom In</button>
       <button class="btn" data-action="zoom-out">Zoom Out</button>
       <button class="btn" data-action="zoom-reset">Reset</button>
@@ -4070,6 +4117,49 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const action = btn.getAttribute("data-action");
       if(locked && (action === "add-row" || action === "add-col")) btn.disabled = true;
       btn.addEventListener("click", () => {
+        if(action === "import-csv"){
+          if(locked) return;
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = ".csv,.tsv,text/csv,text/tab-separated-values";
+          input.onchange = async () => {
+            const file = input.files?.[0];
+            if(!file) return;
+            try{
+              const text = await file.text();
+              const parsed = parseDelimitedTable(text);
+              if(parsed.headers.length < 1 || parsed.rows.length < 1){
+                toast("Matrix CSV", "CSV must include a header row and at least one data row.", "warn");
+                return;
+              }
+              const cols = parsed.headers.map(h => ({ id: makeMatrixId(h, []), label: h }));
+              const rows = parsed.rows.map(r => ({ id: makeMatrixId(r.label, []), label: r.label }));
+              const rowLabels = rows.reduce((acc, r) => { acc[r.id] = r.label; return acc; }, {});
+              const colLabels = cols.reduce((acc, c) => { acc[c.id] = c.label; return acc; }, {});
+              const cells = {};
+              parsed.rows.forEach((r, rIdx) => {
+                cols.forEach((c, cIdx) => {
+                  const value = r.values[cIdx] ?? "";
+                  const key = matrixCellKey(rows[rIdx].id, c.id);
+                  cells[key] = value;
+                });
+              });
+              matrix.rows = rows.map(r => r.id);
+              matrix.cols = cols.map(c => c.id);
+              matrix.row_labels = rowLabels;
+              matrix.col_labels = colLabels;
+              matrix.cells = cells;
+              if(!test.data._ai.field_schema) test.data._ai.field_schema = {};
+              test.data._ai.field_schema[fieldKey] = { rows, cols };
+              requestRerender();
+              toast("Matrix CSV", `Imported ${rows.length} row(s) × ${cols.length} column(s).`, "ok");
+            }catch(err){
+              toast("Matrix CSV", err.message || "Failed to import CSV.", "warn");
+            }
+          };
+          input.click();
+          return;
+        }
         if(action === "zoom-in"){
           view.scale = clamp(view.scale * 1.1, 0.4, 2.5);
           updateZoomTag();
@@ -4153,6 +4243,44 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     wrap.appendChild(hint);
 
     return wrap;
+  }
+
+  function parseDelimitedTable(raw){
+    const text = String(raw || "").trim();
+    if(!text) return { headers: [], rows: [] };
+    const lines = text.split(/\r?\n/).filter(line => line.trim().length);
+    if(!lines.length) return { headers: [], rows: [] };
+    const sample = lines.slice(0, 3).join("\n");
+    const commaCount = (sample.match(/,/g) || []).length;
+    const tabCount = (sample.match(/\t/g) || []).length;
+    const delim = tabCount > commaCount ? "\t" : ",";
+    const parseLine = (line) => {
+      const out = [];
+      let cur = "";
+      let inQuotes = false;
+      for(let i = 0; i < line.length; i += 1){
+        const ch = line[i];
+        if(ch === "\""){
+          if(inQuotes && line[i + 1] === "\""){ cur += "\""; i += 1; }
+          else inQuotes = !inQuotes;
+        }else if(ch === delim && !inQuotes){
+          out.push(cur.trim());
+          cur = "";
+        }else{
+          cur += ch;
+        }
+      }
+      out.push(cur.trim());
+      return out;
+    };
+    const headerCells = parseLine(lines[0]).slice(1);
+    const headers = headerCells.map(h => h || "Column");
+    const rows = lines.slice(1).map(line => {
+      const cells = parseLine(line);
+      const label = cells[0] || "Row";
+      return { label, values: cells.slice(1) };
+    });
+    return { headers, rows };
   }
 
   function renderForm(){
