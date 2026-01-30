@@ -1215,7 +1215,6 @@
 
   let AI_PROXY_BASE = (localStorage.getItem("tb26_api_base") || "https://minipcb-github-io.vercel.app/api").replace(/\/+$/,"");
   const USE_PROXY = true;
-  const PROXY_KEY_STORAGE = "tb26_proxy_key";
 
   function apiHeaders(){
     const headers = { "Content-Type": "application/json" };
@@ -1223,8 +1222,7 @@
       const key = getAiKey();
       if(key) headers.Authorization = `Bearer ${key}`;
     }else{
-      const proxyKey = localStorage.getItem(PROXY_KEY_STORAGE);
-      if(proxyKey) headers["X-Proxy-Key"] = proxyKey;
+    // Proxy key removed
     }
     return headers;
   }
@@ -5391,10 +5389,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <div class="label">API Base URL</div>
             <input class="input" id="prefApiBase" placeholder="https://minipcb-proxy.yourdomain.workers.dev" />
           </div>
-          <div style="flex:1;">
-            <div class="label">Proxy Key (optional)</div>
-            <input class="input" id="prefProxyKey" placeholder="X-Proxy-Key" />
-          </div>
+          <div style="flex:1;"></div>
         </div>
 
           <div class="row" style="margin-top:10px;">
@@ -5488,8 +5483,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(modelSelect) modelSelect.value = currentModel;
       const apiBaseInput = $("prefApiBase");
       if(apiBaseInput) apiBaseInput.value = AI_PROXY_BASE || "";
-      const proxyKeyInput = $("prefProxyKey");
-      if(proxyKeyInput) proxyKeyInput.value = localStorage.getItem(PROXY_KEY_STORAGE) || "";
       $("prefSuggestMax").value = String(state.prefs.ai_suggest_maturity_max ?? 2);
       const prefPersonalityDialog = $("prefPersonalityDialog");
       if(prefPersonalityDialog) prefPersonalityDialog.value = state.prefs.ai_personality_dialog ? "true" : "false";
@@ -5563,9 +5556,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           AI_PROXY_BASE = apiBaseVal.replace(/\/+$/,"");
           localStorage.setItem("tb26_api_base", AI_PROXY_BASE);
         }
-        const proxyKeyVal = $("prefProxyKey")?.value?.trim() || "";
-        if(proxyKeyVal) localStorage.setItem(PROXY_KEY_STORAGE, proxyKeyVal);
-        else localStorage.removeItem(PROXY_KEY_STORAGE);
+        // proxy key removed
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
         const prefPersonalityDialog = $("prefPersonalityDialog");
