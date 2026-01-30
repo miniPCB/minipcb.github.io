@@ -774,6 +774,7 @@
                   <button class="btn" id="btnSeedVerify">Verification Matrix</button>
                   <button class="btn" id="btnSeedDesignReview">Design Review Checklist</button>
                   <button class="btn" id="btnSeedIcd">Interface Control Document</button>
+                  <button class="btn" id="btnSeedFmea">FMEA</button>
                 </div>
               </div>
             </div>
@@ -1275,7 +1276,8 @@
         review_personalities: {},
         field_labels: {},
         field_prompts: {},
-        field_types: {}
+        field_types: {},
+        field_options: {}
       };
     if(ai && typeof ai === "object"){
       if(ai.maturity && typeof ai.maturity === "object"){
@@ -1301,6 +1303,11 @@
       if(ai.field_types && typeof ai.field_types === "object"){
         for(const [k,v] of Object.entries(ai.field_types)){
           out.field_types[k] = safeStringify(v);
+        }
+      }
+      if(ai.field_options && typeof ai.field_options === "object"){
+        for(const [k,v] of Object.entries(ai.field_options)){
+          out.field_options[k] = Array.isArray(v) ? v.map(x => safeStringify(x)) : [];
         }
       }
     }
@@ -1748,6 +1755,12 @@
     if(out.field_types && typeof out.field_types === "object"){
       for(const k of Object.keys(out.field_types)){
         out.field_types[k] = sanitizeAiText(out.field_types[k]);
+      }
+    }
+    if(out.field_options && typeof out.field_options === "object"){
+      for(const k of Object.keys(out.field_options)){
+        const arr = Array.isArray(out.field_options[k]) ? out.field_options[k] : [];
+        out.field_options[k] = arr.map(v => sanitizeAiText(v));
       }
     }
     if(out.last_ai_reviewed != null) out.last_ai_reviewed = sanitizeAiText(out.last_ai_reviewed);
@@ -2455,12 +2468,14 @@
       : nameLower.includes("verification matrix") ? "verification"
       : nameLower.includes("design review checklist") ? "designReview"
       : nameLower.includes("interface control document") ? "icd"
+      : nameLower.includes("fmea") ? "fmea"
       : "document";
     const titlePrefix = docKind === "test" ? "Test Plan"
       : docKind === "spec" ? "Specifications Document"
       : docKind === "verification" ? "Verification Matrix"
       : docKind === "designReview" ? "Design Review Checklist"
       : docKind === "icd" ? "Interface Control Document"
+      : docKind === "fmea" ? "FMEA"
       : "Document";
     const listLabel = docKind === "test" ? "List" : "Sections";
     const totalLabel = docKind === "test" ? "Total Tests" : "Total Sections";
@@ -3836,11 +3851,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     updateSaveAllIndicator();
 
     const fields = getFieldKeys(test);
+    const computeRpn = () => {
+      const s = Number(test.data.severity || "");
+      const o = Number(test.data.occurrence || "");
+      const d = Number(test.data.detection || "");
+      if(!Number.isFinite(s) || !Number.isFinite(o) || !Number.isFinite(d)) return "";
+      if(s <= 0 || o <= 0 || d <= 0) return "";
+      return String(Math.round(s * o * d));
+    };
     for(const k of fields){
       if(["param1_label","param1_value","param2_label","param2_value"].includes(k)) continue;
       let type = String(test.data?._ai?.field_types?.[k] || "text").toLowerCase();
       if(type.includes("textarea") || type.includes("multi")) type = "textarea";
-      else type = "text";
+      const isSelect = type.includes("select");
+      const isComputed = type.includes("computed") || k === "rpn";
+      if(!isSelect && !isComputed) type = "text";
       const isTextArea = type === "textarea";
       const full = isTextArea;
 
@@ -3904,24 +3929,35 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           return `<option value="${escapeHtml(key)}">${escapeHtml(lbl)}</option>`;
         }).join("");
         control = select;
+      }else if(isSelect){
+        const select = document.createElement("select");
+        select.className = "select";
+        const options = Array.isArray(test.data?._ai?.field_options?.[k]) && test.data._ai.field_options[k].length
+          ? test.data._ai.field_options[k]
+          : (["severity","occurrence","detection"].includes(k) ? ["1","2","3","4","5","6","7","8","9","10"] : []);
+        const optionHtml = [`<option value="">—</option>`].concat(
+          options.map(v => `<option value="${escapeHtml(String(v))}">${escapeHtml(String(v))}</option>`)
+        ).join("");
+        select.innerHTML = optionHtml;
+        control = select;
       }else{
         control.className = "input";
         if(!isTextArea) control.type = "text";
       }
-      control.value = (test.data[k] ?? "");
+      control.value = isComputed ? computeRpn() : (test.data[k] ?? "");
       control.setAttribute("data-field", k);
 
         const s = getSuggestStatus(test.id, k);
         if(s) input.classList.add(`ai-${s}`);
         if(test._dirtyFields?.[k]) control.classList.add("dirty-field");
-        const locked = Number(maturity) >= 4;
+        const locked = Number(maturity) >= 4 || isComputed;
         if(locked){
           control.disabled = true;
           control.classList.add("locked-field");
-          control.title = "Locked (M4)";
+          control.title = isComputed ? "Auto-computed" : "Locked (M4)";
         }
 
-        if(!locked) control.addEventListener("input", () => {
+        const handleChange = () => {
           test.data[k] = control.value;
           test.modified = true;
           if(!test._dirtyFields) test._dirtyFields = {};
@@ -3932,8 +3968,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           setSuggestStatus(test.id, k, "");
           setFieldMaturity(test, k, 3);
           if(maturityTag) maturityTag.textContent = "M3";
+          if(["severity","occurrence","detection"].includes(k)){
+            const nextRpn = computeRpn();
+            if("rpn" in test.data){
+              test.data.rpn = nextRpn;
+              test.modified = true;
+              test._dirtyFields["rpn"] = true;
+              setFieldMaturity(test, "rpn", 4);
+            }
+          }
           renderTestsList();
-        });
+          renderForm();
+        };
+        if(!locked){
+          control.addEventListener("input", handleChange);
+          control.addEventListener("change", handleChange);
+        }
         const handlePersonalityClick = (e) => {
           if(!state.prefs.ai_personality_dialog) return;
           if(e && typeof e.preventDefault === "function") e.preventDefault();
@@ -8917,6 +8967,222 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     runAsync(renderLibrary());
   }
 
+  async function seedFmea(){
+    const scaleOptions = ["1","2","3","4","5","6","7","8","9","10"];
+    const sections = [
+      {
+        title: "Core Metadata",
+        id: "FMEA-001",
+        type: "Core Metadata",
+        fields: [
+          { key: "doc_title", label: "Document Title", type: "text", value: "FMEA" },
+          { key: "doc_id", label: "Document ID", type: "text", value: "FMEA-001" },
+          { key: "version", label: "Version", type: "text", value: "1.0" },
+          { key: "status", label: "Status", type: "text", value: "Draft" },
+          { key: "owner", label: "Owner / Author", type: "text", value: "Reliability Engineering" },
+          { key: "stakeholders", label: "Stakeholders", type: "textarea", value: "" },
+          { key: "date_created", label: "Date Created", type: "text", value: "" },
+          { key: "date_updated", label: "Date Updated", type: "text", value: "" }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          doc_title: 2,
+          doc_id: 2,
+          version: 2,
+          status: 2,
+          owner: 2,
+          stakeholders: 0,
+          date_created: 0,
+          date_updated: 0
+        }
+      },
+      {
+        title: "System / Scope",
+        id: "FMEA-002",
+        type: "System / Scope",
+        fields: [
+          { key: "system_description", label: "System Description", type: "textarea", value: "" },
+          { key: "scope", label: "Scope / Boundaries", type: "textarea", value: "" },
+          { key: "assumptions", label: "Assumptions", type: "textarea", value: "" },
+          { key: "operating_environment", label: "Operating Environment", type: "textarea", value: "" }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          system_description: 0,
+          scope: 0,
+          assumptions: 0,
+          operating_environment: 0
+        }
+      }
+    ];
+
+    for(let i = 1; i <= 5; i++){
+      sections.push({
+        title: `Failure Mode ${i}`,
+        id: `FMEA-00${i + 2}`,
+        type: "Failure Mode",
+        fields: [
+          { key: "item_function", label: "Item / Function", type: "text", value: "" },
+          { key: "failure_mode", label: "Failure Mode", type: "text", value: "" },
+          { key: "effect", label: "Effect", type: "textarea", value: "" },
+          { key: "cause", label: "Cause", type: "textarea", value: "" },
+          { key: "severity", label: "Severity", type: "select", value: "" },
+          { key: "occurrence", label: "Occurrence", type: "select", value: "" },
+          { key: "detection", label: "Detection", type: "select", value: "" },
+          { key: "rpn", label: "RPN", type: "computed", value: "" },
+          { key: "current_controls", label: "Current Controls", type: "textarea", value: "" },
+          { key: "recommended_actions", label: "Recommended Actions", type: "textarea", value: "" },
+          { key: "action_owner_due", label: "Action Owner / Due Date", type: "text", value: "" },
+          { key: "action_status", label: "Action Status", type: "text", value: "" },
+          { key: "verification_method", label: "Verification Method", type: "textarea", value: "" },
+          { key: "acceptance_criteria", label: "Acceptance Criteria", type: "textarea", value: "" },
+          { key: "test_plan_reference", label: "Test Plan Reference", type: "textarea", value: "" }
+        ],
+        maturity: {
+          test_name: 3,
+          test_no: 3,
+          test_type: 3,
+          param1_label: 3,
+          param1_value: 3,
+          param2_label: 3,
+          param2_value: 3,
+          item_function: 0,
+          failure_mode: 0,
+          effect: 0,
+          cause: 0,
+          severity: 2,
+          occurrence: 2,
+          detection: 2,
+          rpn: 4,
+          current_controls: 0,
+          recommended_actions: 0,
+          action_owner_due: 0,
+          action_status: 0,
+          verification_method: 0,
+          acceptance_criteria: 0,
+          test_plan_reference: 0
+        }
+      });
+    }
+
+    const tests = sections.map((section, idx) => {
+      const data = {
+        test_name: section.title,
+        test_no: section.id,
+        test_type: section.type,
+        param1_label: "",
+        param1_value: "",
+        param2_label: "",
+        param2_value: ""
+      };
+
+      const fieldLabels = {
+        test_name: "Section Title",
+        test_no: "Section ID",
+        test_type: "Section Type",
+        param1_label: "Param 1 Label",
+        param1_value: "Param 1 Value",
+        param2_label: "Param 2 Label",
+        param2_value: "Param 2 Value"
+      };
+
+      const fieldTypes = {
+        test_name: "text",
+        test_no: "text",
+        test_type: "text",
+        param1_label: "text",
+        param1_value: "text",
+        param2_label: "text",
+        param2_value: "text"
+      };
+
+      const fieldOptions = {};
+      const fieldPrompts = {
+        test_name: "Enter the section title for this FMEA document.",
+        test_no: "Enter the section identifier (e.g., FMEA-003).",
+        test_type: "Describe the section type or category.",
+        param1_label: "Enter a label for parameter 1 (optional).",
+        param1_value: "Select which field should supply parameter 1's value.",
+        param2_label: "Enter a label for parameter 2 (optional).",
+        param2_value: "Select which field should supply parameter 2's value."
+      };
+
+      for(const f of section.fields){
+        data[f.key] = f.value != null ? f.value : "";
+        fieldLabels[f.key] = f.label;
+        fieldTypes[f.key] = f.type;
+        if(["severity","occurrence","detection"].includes(f.key)){
+          fieldOptions[f.key] = scaleOptions;
+          fieldPrompts[f.key] = "Select a value from 1–10.";
+        }else if(f.key === "rpn"){
+          fieldPrompts[f.key] = "Auto-computed from Severity × Occurrence × Detection.";
+        }else{
+          fieldPrompts[f.key] = `Provide the ${f.label.toLowerCase()} for this failure mode.`;
+        }
+      }
+
+      const normalized = normalizeTestData(data);
+      normalized._ai.field_labels = fieldLabels;
+      normalized._ai.field_types = fieldTypes;
+      normalized._ai.field_prompts = fieldPrompts;
+      normalized._ai.field_options = fieldOptions;
+      normalized._ai.maturity = { ...(normalized._ai.maturity || {}) };
+      const maturityOverrides = section.maturity || {};
+      for(const key of Object.keys(data)){
+        if(key === "_ai") continue;
+        if(Object.prototype.hasOwnProperty.call(maturityOverrides, key)){
+          normalized._ai.maturity[key] = maturityOverrides[key];
+          continue;
+        }
+        if(String(data[key] ?? "").trim() !== "") normalized._ai.maturity[key] = 3;
+      }
+      normalized._ai.review_personalities = buildSeedReviewPersonalitiesForData(normalized);
+      return { id: uid(), order: idx + 1, modified: false, data: normalized };
+    });
+
+    const plan = {
+      id: uid(),
+      name: "FMEA",
+      slug: slugifyPlanName("FMEA"),
+      created: nowIsoDate(),
+      updated: nowIsoDate(),
+      goal: "Identify and mitigate potential failure modes and their effects.",
+      scope: "Capture failure modes, causes, effects, and mitigations with severity, occurrence, and detection scoring.",
+      ai_review_guidance: "Concise, risk-focused, and technical. Use FMEA terminology and avoid vague language.",
+      review_personalities: getPlanReviewPersonas(null),
+      ai_prompts: {
+        review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
+        review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
+        chat_edit: "You edit an FMEA document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"FMEA-003\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for an FMEA document. The set object should use full schema keys: {{schemaKeys}}. Use standard FMEA terminology. No extra text.",
+        suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this FMEA section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+        suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this FMEA section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
+        suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
+      },
+      tests,
+      markdown: "",
+      userNotes: "Add scope details, assumptions, and review notes here."
+    };
+
+    generatePlanMarkdown(plan);
+    await Store.savePlan(plan);
+    logLine("Seeded FMEA.", "ok");
+    toast("Seeded", "FMEA created.", "ok");
+    runAsync(renderLibrary());
+  }
+
   /* ---------- Tabs ---------- */
   function setupTabs(){
     document.querySelectorAll(".tab").forEach(tab => {
@@ -9046,6 +9312,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("btnSeedVerify").addEventListener("click", () => runAsync(seedVerificationMatrix()));
     $("btnSeedDesignReview").addEventListener("click", () => runAsync(seedDesignReviewChecklist()));
     $("btnSeedIcd").addEventListener("click", () => runAsync(seedInterfaceControlDocument()));
+    $("btnSeedFmea").addEventListener("click", () => runAsync(seedFmea()));
     // Library details toggle removed
 
     $("switchPlanBtn").addEventListener("click", () => {
