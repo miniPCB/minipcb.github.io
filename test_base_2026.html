@@ -679,7 +679,6 @@
 
                 <div class="toolbarRow">
                   <button class="btn attn" id="btnSetPlanRoot">Set Document Folder</button>
-                  <button class="btn danger" id="btnClearBrowser">Clear Browser Cache</button>
                   <button class="btn" id="btnSeedDemo">Electronics Test Plan</button>
                   <button class="btn" id="btnSeedSpec">Specifications Document</button>
                   <button class="btn" id="btnSeedVerify">Verification Matrix</button>
@@ -7820,34 +7819,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     runAsync(renderLibrary());
   }
 
-  function clearBrowserCacheOnly(){
-    showModal("Clear Browser Cache", (body, footer) => {
-      body.innerHTML = `
-        <div class="muted" style="line-height:1.45;">
-          This clears only browser-stored plans (localStorage). It will NOT touch your plan folders.
-        </div>
-        <div class="hr"></div>
-        <div class="label">Type CLEAR to confirm</div>
-        <input class="input" id="clearConfirm" placeholder="CLEAR" />
-      `;
-      footer.innerHTML = `
-        <button class="btn" id="cancelClear">Cancel</button>
-        <button class="btn danger" id="confirmClear" disabled>Clear</button>
-      `;
-      $("cancelClear").onclick = hideModal;
-      $("clearConfirm").addEventListener("input", () => {
-        $("confirmClear").disabled = $("clearConfirm").value.trim().toUpperCase() !== "CLEAR";
-      });
-      $("confirmClear").onclick = () => {
-        localStorage.removeItem(Store.key);
-        hideModal();
-        logLine("Cleared browser cache (localStorage).", "warn");
-        toast("Cleared", "Browser cache removed. File system plans untouched.", "warn");
-        runAsync(renderLibrary());
-      };
-    });
-  }
-
   /* ---------- Tabs ---------- */
   function setupTabs(){
     document.querySelectorAll(".tab").forEach(tab => {
@@ -7975,7 +7946,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("btnSeedDemo").addEventListener("click", () => runAsync(seedDemo()));
     $("btnSeedSpec").addEventListener("click", () => runAsync(seedSpecificationsDocument()));
     $("btnSeedVerify").addEventListener("click", () => runAsync(seedVerificationMatrix()));
-    $("btnClearBrowser").addEventListener("click", clearBrowserCacheOnly);
     $("btnSetPlanRoot").addEventListener("click", () => runAsync(setPlanRoot()));
     // Library details toggle removed
 
