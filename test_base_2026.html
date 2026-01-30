@@ -3024,11 +3024,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 if(isMatrixCell){
                   const colLabel = String(matrixContext?.col_label || "").trim();
                   const rowLabel = String(matrixContext?.row_label || "").trim();
+                  const lowered = val.toLowerCase();
+                  const tooLong = val.length > 120;
+                  const looksInstruction = /(?:\bshould\b|\benter\b|\bpopulate\b|\bfill\b|\buse\b|\binclude\b|\bprovide\b|\bset\b|\bcomplete\b)/i.test(val);
+                  const looksSentence = /[.!?]/.test(val);
+                  const startsWithBad = /^(value|tbd|to be completed|to be filled|complete per|per drawing|per schematic)/i.test(val);
                   const bad = !val
                     || /^value/i.test(val)
                     || /^n\/a$/i.test(val)
                     || (colLabel && val === colLabel)
-                    || (rowLabel && val === rowLabel);
+                    || (rowLabel && val === rowLabel)
+                    || startsWithBad
+                    || (looksInstruction && looksSentence)
+                    || tooLong;
                   if(bad){
                     logLine(`AI Review: matrix cell rejected "${val}" for ${t.data.test_no || t.id.slice(0,6)}.${field} ${item.cellKey}.`, "warn");
                     setMatrixCellStatus(t, field, item.cellKey, "");
@@ -9314,7 +9322,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       review_personalities: getPlanReviewPersonas(null),
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
-        review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief. If matrix_cell is present, you are editing a single matrix cell. Use matrix_cell.row_label and matrix_cell.col_label to determine what belongs in that cell, and use matrix_cell.cell_value as the current value. Never return placeholders like \"Value\" or repeat the column label.{{guidanceLine}}",
+        review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief. If matrix_cell is present, you are editing a single matrix cell. Use matrix_cell.row_label and matrix_cell.col_label to determine what belongs in that cell, and use matrix_cell.cell_value as the current value. Return ONLY the cell value (no explanations). If unknown, return an empty string. Never return placeholders like \"Value\", \"TBD\", or repeat the column label.{{guidanceLine}}",
         chat_edit: "You edit a requirements traceability matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
         create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"RTM-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a requirements traceability matrix. The set object should use full schema keys: {{schemaKeys}}. Use concise, matrix-style language. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this requirements traceability matrix section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
