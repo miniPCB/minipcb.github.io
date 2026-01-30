@@ -1525,7 +1525,7 @@
     review_field:
       "Return ONLY the field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
     review_matrix_cell:
-      "Return ONLY the cell value text. No extra words, no markdown. Use matrix_cell.row_label and matrix_cell.col_label to decide what belongs in the cell. Use matrix_cell.col_prompt if provided. Use matrix_cell.cell_value as the current value. If unknown, return an empty string. Never return placeholders like \"Value\" or \"TBD\", and never repeat the column label.{{guidanceLine}}",
+      "Return ONLY the cell value text. No extra words, no markdown. Use matrix_cell.row_label and matrix_cell.col_label to decide what belongs in the cell. Use matrix_cell.col_prompt if provided. Use matrix_cell.cell_value as the current value. If provided, matrix_full is the initial full matrix and matrix_changes is the list of accepted changes so far. If unknown, return an empty string. Never return placeholders like \"Value\" or \"TBD\", and never repeat the column label.{{guidanceLine}}",
     chat_edit:
       "You edit a document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
     create_plan:
@@ -3166,6 +3166,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       logLine(`AI Review: reviewing ${t.data.test_no || t.id.slice(0,6)} (${reviewQueue.length} items)...`, "ok");
 
       let changedCount = 0;
+      const matrixReviewState = new Map();
       const allItemsPayload = tests.map(tt => ({
         item_no: tt.data.test_no || "",
         item_name: tt.data.test_name || "",
@@ -3196,6 +3197,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 setMatrixCellStatus(t, field, item.cellKey, "working");
                 const { matrix } = ensureMatrixField(t, field);
                 const schema = t.data?._ai?.field_schema?.[field] || null;
+                const matrixStateKey = `${t.id}:${field}`;
+                if(!matrixReviewState.has(matrixStateKey)){
+                  matrixReviewState.set(matrixStateKey, { sentFull: false, changes: [] });
+                }
+                const matrixState = matrixReviewState.get(matrixStateKey);
                 matrixContext = {
                   cell_key: item.cellKey,
                   row_id: item.rowId,
@@ -3205,6 +3211,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   cell_value: matrix.cells?.[item.cellKey] ?? "",
                   col_prompt: schema?.col_prompts?.[item.colId] || ""
                 };
+                if(matrixState){
+                  if(!matrixState.sentFull){
+                    matrixContext.matrix_full = cloneJsonValue(matrix);
+                    matrixContext.matrix_changes = [];
+                    matrixState.sentFull = true;
+                  }else{
+                    matrixContext.matrix_changes = matrixState.changes.slice(-200);
+                  }
+                }
                 if(state.prefs.ai_review_debug){
                   logLine(
                     `AI Review: matrix cell start ${t.data.test_no || t.id.slice(0,6)}.${field} ${matrixContext.cell_key} [${matrixContext.row_label} × ${matrixContext.col_label}] current="${String(matrixContext.cell_value || "").slice(0,80)}"`,
@@ -3333,6 +3348,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                       if(!t._dirtyMatrixCells) t._dirtyMatrixCells = {};
                       if(!t._dirtyMatrixCells[field]) t._dirtyMatrixCells[field] = new Set();
                       t._dirtyMatrixCells[field].add(item.cellKey);
+                      const matrixStateKey = `${t.id}:${field}`;
+                      const matrixState = matrixReviewState.get(matrixStateKey);
+                      if(matrixState){
+                        matrixState.changes.push({
+                          cell_key: item.cellKey,
+                          row_id: item.rowId,
+                          col_id: item.colId,
+                          value: val
+                        });
+                      }
                       changedCount++;
                     }
                   }else if(val !== String(t.data[field] ?? "").trim()){
