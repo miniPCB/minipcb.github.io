@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -1523,13 +1523,13 @@
     review_persona:
       "You are a {{personaLabel}}. Provide a concise review comment for this field focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
     review_field:
-      "Return ONLY the field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
+      "Return ONLY the field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
     review_matrix_cell:
       "Return ONLY the cell value text. No extra words, no markdown. Use matrix_cell.row_label and matrix_cell.col_label to decide what belongs in the cell. Use matrix_cell.col_prompt if provided. Use matrix_cell.cell_value as the current value. If unknown, return an empty string. Never return placeholders like \"Value\" or \"TBD\", and never repeat the column label.{{guidanceLine}}",
     chat_edit:
-      "You edit a test plan. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single test by including all desired keys inside set. To fully update a test, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+      "You edit a document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
     create_plan:
-      "Respond with strict JSON containing: plan (goal, scope) and tests (array). Provide exactly {{testCount}} tests with 3-digit test_no values and meaningful test_name values. Each test must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.",
+      "Respond with strict JSON containing: plan (goal, scope) and tests (array of sections). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful test_name values. Each section must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive content. No extra text.",
     suggest_field:
       "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.",
     suggest_field_strict:
@@ -1541,9 +1541,9 @@
   const DOC_PROMPT_OVERRIDES = Object.freeze({
     specifications: Object.freeze({
       create_plan:
-        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"SEC-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections with meaningful section titles and IDs. The set object should use full schema keys: {{schemaKeys}}. Write as a specifications document, not a test plan. No extra text.",
+        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"SEC-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections with meaningful section titles and IDs. The set object should use full schema keys: {{schemaKeys}}. Write as a specifications document, not a test procedure. No extra text.",
       chat_edit:
-        "You edit a specifications document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        "You edit a specifications document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
       suggest_field:
         "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this specification section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
       suggest_field_strict:
@@ -1553,7 +1553,7 @@
       create_plan:
         "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"VM-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a verification matrix. The set object should use full schema keys: {{schemaKeys}}. Use concise, matrix-style language. No extra text.",
       chat_edit:
-        "You edit a verification matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        "You edit a verification matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
       suggest_field:
         "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this verification matrix section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
       suggest_field_strict:
@@ -1563,7 +1563,7 @@
       create_plan:
         "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"DR-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a design review checklist. The set object should use full schema keys: {{schemaKeys}}. Use checklist-style, review-oriented language. No extra text.",
       chat_edit:
-        "You edit a design review checklist. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        "You edit a design review checklist. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
       suggest_field:
         "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this design review section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
       suggest_field_strict:
@@ -1573,7 +1573,7 @@
       create_plan:
         "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"ICD-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for an interface control document. The set object should use full schema keys: {{schemaKeys}}. Use precise interface terminology. No extra text.",
       chat_edit:
-        "You edit an interface control document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        "You edit an interface control document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
       suggest_field:
         "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this interface control document section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
       suggest_field_strict:
@@ -1597,7 +1597,7 @@
     let changed = false;
     for(const [key, val] of Object.entries(overrides)){
       const current = plan.ai_prompts[key];
-      if(!current || current === DEFAULT_AI_PROMPTS[key] || String(current).includes("You edit a test plan")){
+      if(!current || current === DEFAULT_AI_PROMPTS[key] || String(current).includes("You edit a document") || String(current).includes("You edit a test plan")){
         plan.ai_prompts[key] = val;
         changed = true;
       }
@@ -1997,9 +1997,9 @@
       await idbSet("planRootPath", state.planRootPath);
       updatePlanRootUI();
       runAsync(renderLibrary());
-      toast("Document folder set", state.planRootPath || "Library root selected.", "ok");
+      toast("Library folder set", state.planRootPath || "Library root selected.", "ok");
     }catch(e){
-      toast("Canceled", "Document folder not set.", "warn");
+      toast("Canceled", "Library folder not set.", "warn");
     }
   }
 
@@ -2920,7 +2920,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     try{
       plan = await Store.loadPlan(planId);
     }catch(e){
-      toast("AI Review", e.message || "Plan not found.", "bad");
+      toast("AI Review", e.message || "Document not found.", "bad");
       state.aiReviewControl.running = false;
       updateAiReviewControls();
       return;
@@ -2938,7 +2938,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = (plan.tests || []).slice().sort((a,b) => (a.order||0)-(b.order||0));
     if(!tests.length){
-      toast("AI Review", "No tests to review.", "warn");
+      toast("AI Review", "No list items to review.", "warn");
       state.aiReviewControl.running = false;
       updateAiReviewControls();
       return;
@@ -3229,8 +3229,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             const payload = {
               plan: { name: plan.name, created: plan.created, updated: plan.updated },
               all_tests: allTestsPayload,
+              document: { name: plan.name, created: plan.created, updated: plan.updated },
+              sections: allTestsPayload.map(x => ({
+                section_no: x.test_no,
+                section_name: x.test_name,
+                section_type: x.test_type
+              })),
               test_no: t.data.test_no || "",
               test_name: t.data.test_name || "",
+              section_no: t.data.test_no || "",
+              section_name: t.data.test_name || "",
+              section_type: t.data.test_type || "",
               field,
               current_value: isMatrixCell ? (matrixContext?.cell_value ?? "") : (t.data[field] ?? ""),
               field_prompt: t.data?._ai?.field_prompts?.[field] || "",
@@ -3410,8 +3419,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     plan.updated = nowIsoDate();
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
-    logLine("AI Review: plan saved with improvements.", "ok");
-    toast("AI Review", "Plan updated.", "ok");
+    logLine("AI Review: document saved with improvements.", "ok");
+    toast("AI Review", "Document updated.", "ok");
     if(state.currentPlan && state.currentPlan.id === plan.id){
       state.currentPlan = plan;
       renderEditor();
@@ -3580,7 +3589,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   async function aiChatSend(){
     const plan = state.currentPlan;
-    if(!plan){ toast("AI Chat", "Open a plan first.", "warn"); return; }
+    if(!plan){ toast("AI Chat", "Open a document first.", "warn"); return; }
     const input = $("aiChatInput");
     if(!input) return;
     const text = input.value.trim();
@@ -3613,6 +3622,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         test_no: t.data?.test_no || "",
         test_name: t.data?.test_name || "",
         test_type: t.data?.test_type || ""
+      })),
+      document: { name: plan.name || "", goal: plan.goal || "", scope: plan.scope || "" },
+      sections: (plan.tests || []).map(t => ({
+        section_no: t.data?.test_no || "",
+        section_name: t.data?.test_name || "",
+        section_type: t.data?.test_type || ""
       })),
       permission: { level: perm, label: permLabel },
       context_files: (state.aiChatContextFiles || []).map(f => ({
@@ -3876,7 +3891,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               try{
                 await sanitizePlanJson(p.id);
                 logLine("JSON Sanitize: completed.", "ok");
-                toast("JSON Sanitize", "Plan JSON sanitized.", "ok");
+                toast("JSON Sanitize", "Document JSON sanitized.", "ok");
                 runAsync(renderLibrary());
               }catch(err){
                 logLine(`JSON Sanitize failed: ${err.message || err}`, "warn");
@@ -4090,7 +4105,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             label: "Save as Test Template",
             onClick: async () => {
               if(!state.planRootHandle){
-                toast("Templates", "Set a Plan Folder to use test templates.", "warn");
+                toast("Templates", "Set a Library Folder to use list item templates.", "warn");
                 return;
               }
               const name = prompt("Template name:", t.data?.test_name || "New Test Template");
@@ -4145,10 +4160,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     generatePlanMarkdown(plan);
     if(state.currentTemplateId){
       await Templates.saveTemplate(plan);
-      logLine("Reordered tests (template).", "ok");
+      logLine("Reordered list items (template).", "ok");
     }else{
       await Store.savePlan(plan);
-      logLine("Reordered tests.", "ok");
+      logLine("Reordered list items.", "ok");
     }
     renderTestsList();
     renderEditor();
@@ -5476,8 +5491,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       state.templateEditReturnPlanId = null;
       state.currentTestId = plan.tests[0]?.id || null;
 
-      logLine(`Opened plan: ${plan.name}`, "ok");
-      toast("Plan opened", plan.name, "ok");
+      logLine(`Opened document: ${plan.name}`, "ok");
+      toast("Document opened", plan.name, "ok");
       showEditor();
     }catch(e){
       logLine(`Open failed: ${e.message || e}`, "bad");
@@ -5558,8 +5573,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         await Store.savePlan(plan);
 
         hideModal();
-        logLine(`Created plan: ${plan.name}`, "ok");
-        toast("Plan created", plan.name, "ok");
+        logLine(`Created document: ${plan.name}`, "ok");
+        toast("Document created", plan.name, "ok");
         runAsync(renderLibrary());
         state.currentPlan = plan;
         state.currentTemplateId = null;
@@ -5746,13 +5761,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
           progress.close();
           hideModal();
-          const testMsg = `${plan.tests.length} test${plan.tests.length === 1 ? "" : "s"}`;
-          logLine(`Created plan: ${plan.name}${usedAi ? " (AI assist)" : ""} — ${testMsg}.`, "ok");
+          const testMsg = `${plan.tests.length} item${plan.tests.length === 1 ? "" : "s"}`;
+          logLine(`Created document: ${plan.name}${usedAi ? " (AI assist)" : ""} — ${testMsg}.`, "ok");
           if(!aiAvailable){
             logLine("AI unavailable. Saved to browser store.", "warn");
-            toast("Plan created", `${plan.name} (${testMsg}) — saved to browser store`, "warn");
+            toast("Document created", `${plan.name} (${testMsg}) — saved to browser store`, "warn");
           }else{
-            toast("Plan created", usedAi ? `${plan.name} (${testMsg}) — AI assist` : `${plan.name} (${testMsg})`, "ok");
+            toast("Document created", usedAi ? `${plan.name} (${testMsg}) — AI assist` : `${plan.name} (${testMsg})`, "ok");
           }
           runAsync(renderLibrary());
           state.currentPlan = plan;
@@ -5833,8 +5848,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         await Store.savePlan(live);
 
         hideModal();
-        logLine(`Renamed plan: ${newName}`, "ok");
-        toast("Plan renamed", newName, "ok");
+        logLine(`Renamed document: ${newName}`, "ok");
+        toast("Document renamed", newName, "ok");
         runAsync(renderLibrary());
       };
       setTimeout(() => $("renamePlanName").focus(), 20);
@@ -5910,8 +5925,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         await Store.savePlan(copy);
 
         hideModal();
-        logLine(`Duplicated plan: ${newName}`, "ok");
-        toast("Plan duplicated", newName, "ok");
+        logLine(`Duplicated document: ${newName}`, "ok");
+        toast("Document duplicated", newName, "ok");
         runAsync(renderLibrary());
       };
       setTimeout(() => $("duplicatePlanName").focus(), 20);
@@ -5987,7 +6002,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("cancelCreateFromTemplate").onclick = hideModal;
       $("confirmCreateFromTemplate").onclick = async () => {
         const newName = $("createFromTemplateName").value.trim();
-        if(!newName){ toast("Missing name", "Enter a plan name.", "warn"); return; }
+        if(!newName){ toast("Missing name", "Enter a document name.", "warn"); return; }
 
         const tpl = await Templates.loadTemplate(templateId);
         const copy = structuredClone(tpl);
@@ -6008,8 +6023,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         await Store.savePlan(copy);
 
         hideModal();
-        logLine(`Created plan from template: ${newName}`, "ok");
-        toast("Plan created", newName, "ok");
+        logLine(`Created document from template: ${newName}`, "ok");
+        toast("Document created", newName, "ok");
         await openPlanById(copy.id);
       };
       setTimeout(() => $("createFromTemplateName").focus(), 20);
@@ -6108,8 +6123,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("confirmDel").onclick = async () => {
         await Store.deletePlan(planId);
         hideModal();
-        logLine(`Deleted plan: ${base.name}`, "warn");
-        toast("Plan deleted", base.name, "warn");
+        logLine(`Deleted document: ${base.name}`, "warn");
+        toast("Document deleted", base.name, "warn");
         runAsync(renderLibrary());
       };
     });
@@ -6141,8 +6156,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     plan.tests.push(t);
     state.currentTestId = t.id;
 
-    logLine(`Created new test (unsaved)${chosen?.name ? ` from "${chosen.name}"` : ""}.`, "ok");
-    toast("New test", chosen?.name ? `Test created from "${chosen.name}".` : "Test created (unsaved).", "ok");
+    logLine(`Created new list item (unsaved)${chosen?.name ? ` from "${chosen.name}"` : ""}.`, "ok");
+    toast("New list item", chosen?.name ? `List item created from "${chosen.name}".` : "List item created (unsaved).", "ok");
     renderEditor();
   }
 
@@ -6152,12 +6167,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const test = (plan.tests || []).find(t => t.id === testId);
     if(!test) return;
 
-    showModal("Delete Test", (body, footer) => {
+    showModal("Delete List Item", (body, footer) => {
       const d = test.data || {};
       body.innerHTML = `
-        <div class="muted">Deletes the selected test from this plan.</div>
+        <div class="muted">Deletes the selected list item from this document.</div>
         <div class="hr"></div>
-        <div class="muted">Test: <span class="tag">${escapeHtml(d.test_no || "(no test_no)")}</span> ${escapeHtml(d.test_name || "(no test_name)")}</div>
+        <div class="muted">Item: <span class="tag">${escapeHtml(d.test_no || "(no id)")}</span> ${escapeHtml(d.test_name || "(no name)")}</div>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelDelTest">Cancel</button>
@@ -6168,8 +6183,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         plan.tests = plan.tests.filter(x => x.id !== test.id);
         state.currentTestId = plan.tests[0]?.id || null;
         hideModal();
-        logLine("Deleted test.", "warn");
-        toast("Test deleted", "Removed from plan.", "warn");
+        logLine("Deleted list item.", "warn");
+        toast("List item deleted", "Removed from document.", "warn");
         renderEditor();
       };
     });
@@ -6198,7 +6213,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     ordered.forEach((t, i) => { t.order = i + 1; });
     plan.tests = ordered;
     state.currentTestId = clone.id;
-    logLine(`Duplicated test ${source.data?.test_no || source.id.slice(0,6)}.`, "ok");
+    logLine(`Duplicated list item ${source.data?.test_no || source.id.slice(0,6)}.`, "ok");
     toast("Duplicate", "Inserted copy below.", "ok");
     renderEditor();
   }
@@ -6211,7 +6226,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("dirtyHint").style.display = "";
     renderForm();
     renderTestsList();
-    logLine("Normalized test schema.", "ok");
+    logLine("Normalized list item schema.", "ok");
     toast("Normalized", "Schema keys ensured + values coerced.", "ok");
   }
 
@@ -6241,12 +6256,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(state.currentTestTemplate){
       const basePlan = await Store.loadPlan(state.currentTestTemplate.basePlanId).catch(() => null);
       if(!basePlan){
-        toast("Templates", "Base plan not found.", "warn");
+        toast("Templates", "Base document not found.", "warn");
         return;
       }
       const templatesDir = await fsEnsureTestTemplatesDir(basePlan, true);
       if(!templatesDir){
-        toast("Templates", "Document folder not set or unavailable.", "warn");
+        toast("Templates", "Library folder not set or unavailable.", "warn");
         return;
       }
       const payload = { data: normalizeTestData(test.data) };
@@ -6256,7 +6271,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       test._dirtyMatrixCells = {};
       $("dirtyHint").style.display = "none";
       renderEditor();
-      logLine(`Saved test template: ${state.currentTestTemplate.file}`, "ok");
+      logLine(`Saved list item template: ${state.currentTestTemplate.file}`, "ok");
       toast("Templates", "Template saved.", "ok");
       return;
     }
@@ -6273,8 +6288,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       runAsync(renderLibrary());
     }else{
       await Store.savePlan(plan);
-      logLine("Saved test + plan.", "ok");
-      toast("Saved", "Test saved (and plan markdown regenerated).", "ok");
+      logLine("Saved item + document.", "ok");
+      toast("Saved", "List item saved (and document markdown regenerated).", "ok");
     }
 
     if(state.aiReviewStatus) delete state.aiReviewStatus[test.id];
@@ -6323,7 +6338,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!test) return;
     const fn = `${(test.data.test_no || "test").replace(/[^a-zA-Z0-9_-]/g,"_")}.json`;
     downloadText(fn, JSON.stringify(normalizeTestData(test.data), null, 2), "application/json");
-    logLine(`Downloaded test JSON: ${fn}`, "ok");
+    logLine(`Downloaded item JSON: ${fn}`, "ok");
   }
 
   function refreshMarkdownUI(){
@@ -6530,7 +6545,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
     refreshMarkdownUI();
-    logLine("Applied plan notes and regenerated markdown.", "ok");
+    logLine("Applied document notes and regenerated markdown.", "ok");
     toast("Notes applied", "Notes preserved and markdown regenerated.", "ok");
   }
 
@@ -6549,7 +6564,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     generatePlanMarkdown(plan);
     await Store.savePlan(plan);
     refreshMarkdownUI();
-    logLine("Regenerated plan markdown.", "ok");
+    logLine("Regenerated document markdown.", "ok");
     toast("Markdown regenerated", "Generated sections refreshed. Notes preserved.", "ok");
   }
 
@@ -6558,7 +6573,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!plan) return;
     generatePlanMarkdown(plan);
     downloadText(`test_plan_${plan.slug || slugifyPlanName(plan.name)}.md`, plan.markdown || "", "text/markdown");
-    logLine("Downloaded plan markdown.", "ok");
+    logLine("Downloaded document markdown.", "ok");
   }
 
   /* ---------- Preferences ---------- */
@@ -7643,7 +7658,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   function pickTestTemplate(templates){
     return new Promise(resolve => {
       if(!templates || !templates.length){
-        toast("Templates", "No test templates found.", "warn");
+        toast("Templates", "No list item templates found.", "warn");
         return resolve(null);
       }
       const options = templates.map(t =>
@@ -7678,7 +7693,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
     const templatesDir = await fsEnsureTestTemplatesDir(plan, true);
     if(!templatesDir){
-      toast("Templates", "Document folder not set or unavailable.", "warn");
+      toast("Templates", "Library folder not set or unavailable.", "warn");
       return false;
     }
     let baseName = (name || "template").trim();
@@ -7728,11 +7743,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   async function openManageTestTemplates(){
     const plan = state.currentPlan;
     if(!plan){
-      toast("Templates", "Open a plan first.", "warn");
+      toast("Templates", "Open a document first.", "warn");
       return;
     }
     if(!state.planRootHandle){
-      toast("Templates", "Set a Plan Folder to use test templates.", "warn");
+      toast("Templates", "Set a Library Folder to use list item templates.", "warn");
       return;
     }
     const templates = await getAvailableTestTemplates(plan);
@@ -7767,7 +7782,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       $("tmplCreateFromCurrent").onclick = async () => {
         const test = currentTest();
         if(!test){
-          toast("Templates", "Select a test first.", "warn");
+          toast("Templates", "Select a list item first.", "warn");
           return;
         }
         const name = prompt("Template name:", test.data?.test_name || "New Test Template");
@@ -7821,7 +7836,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   async function openTestTemplateEditor(template, basePlanId){
     const basePlan = basePlanId ? await Store.loadPlan(basePlanId).catch(() => null) : null;
     if(!basePlan){
-      toast("Templates", "Base plan not found.", "warn");
+      toast("Templates", "Base document not found.", "warn");
       return;
     }
     state.templateEditReturnPlanId = basePlan.id;
@@ -8036,8 +8051,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     async function aiSuggestFocusedField(fieldOverride){
       const test = currentTest();
       if(!test){
-        toast("AI Suggest", "Select a test first.", "warn");
-        logLine("AI Suggest: no test selected.", "warn");
+      toast("AI Suggest", "Select a list item first.", "warn");
+        logLine("AI Suggest: no list item selected.", "warn");
         return;
       }
       state.prefs = loadPrefs();
@@ -8183,8 +8198,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   async function exportAllPlans(){
     const all = await Store.listPlans();
     downloadText(`test_base_2026_export_${nowIsoDate()}.json`, JSON.stringify(all, null, 2), "application/json");
-    logLine("Exported all plans.", "ok");
-    toast("Export", "All plans exported as JSON.", "ok");
+    logLine("Exported all documents.", "ok");
+    toast("Export", "All documents exported as JSON.", "ok");
   }
 
   function importPlanJson(){
@@ -8219,8 +8234,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           if(!plan.markdown) generatePlanMarkdown(plan);
           await Store.savePlan(plan);
         }
-        logLine(`Imported ${plans.length} plan(s).`, "ok");
-        toast("Import", `Imported ${plans.length} plan(s).`, "ok");
+        logLine(`Imported ${plans.length} document(s).`, "ok");
+        toast("Import", `Imported ${plans.length} document(s).`, "ok");
         runAsync(renderLibrary());
       }catch(e){
         logLine(`Import failed: ${e.message || e}`, "bad");
@@ -8244,8 +8259,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: DEFAULT_AI_PROMPTS.review_persona,
         review_field: DEFAULT_AI_PROMPTS.review_field,
-        chat_edit: "You edit a test plan. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single test by including all desired keys inside set. To fully update a test, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
-        create_plan: "Respond with strict JSON containing: plan (goal, scope) and tests (array). Provide exactly {{testCount}} tests with 3-digit test_no values and meaningful test_name values. Each test must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.",
+        chat_edit: "You edit a document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        create_plan: "Respond with strict JSON containing: plan (goal, scope) and tests (array). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful test_name values. Each test must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.",
         suggest_field: DEFAULT_AI_PROMPTS.suggest_field,
         suggest_field_strict: DEFAULT_AI_PROMPTS.suggest_field_strict,
         suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
@@ -9374,8 +9389,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
-        chat_edit: "You edit a specifications document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
-        create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"SEC-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections with meaningful section titles and IDs. The set object should use full schema keys: {{schemaKeys}}. Write as a specifications document, not a test plan. No extra text.",
+        chat_edit: "You edit a specifications document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"SEC-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections with meaningful section titles and IDs. The set object should use full schema keys: {{schemaKeys}}. Write as a specifications document, not a test procedure. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this specification section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this specification section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
@@ -9561,7 +9576,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief. If matrix_cell is present, you are editing a single matrix cell. Use matrix_cell.row_label and matrix_cell.col_label to determine what belongs in that cell, and use matrix_cell.cell_value as the current value. Return ONLY the cell value (no explanations). If unknown, return an empty string. Never return placeholders like \"Value\", \"TBD\", or repeat the column label.{{guidanceLine}}",
-        chat_edit: "You edit a requirements traceability matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        chat_edit: "You edit a requirements traceability matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
         create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"RTM-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a requirements traceability matrix. The set object should use full schema keys: {{schemaKeys}}. Use concise, matrix-style language. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this requirements traceability matrix section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this requirements traceability matrix section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
@@ -9768,7 +9783,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
-        chat_edit: "You edit a bill of materials document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        chat_edit: "You edit a bill of materials document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
         create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"BOM-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a bill of materials. The set object should use full schema keys: {{schemaKeys}}. Use concise, manufacturing-style language. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this bill of materials section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this bill of materials section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
@@ -9970,7 +9985,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
-        chat_edit: "You edit a verification matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        chat_edit: "You edit a verification matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
         create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"VM-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a verification matrix. The set object should use full schema keys: {{schemaKeys}}. Use concise, matrix-style language. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this verification matrix section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this verification matrix section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
@@ -10262,7 +10277,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
-        chat_edit: "You edit a design review checklist. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        chat_edit: "You edit a design review checklist. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
         create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"DR-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a design review checklist. The set object should use full schema keys: {{schemaKeys}}. Use checklist-style, review-oriented language. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this design review section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this design review section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
@@ -10558,7 +10573,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
-        chat_edit: "You edit an interface control document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        chat_edit: "You edit an interface control document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
         create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"ICD-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for an interface control document. The set object should use full schema keys: {{schemaKeys}}. Use precise interface terminology. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this interface control document section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this interface control document section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
@@ -10955,7 +10970,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
-        chat_edit: "You edit an EMC/EMI compliance plan. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        chat_edit: "You edit an EMC/EMI compliance plan. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
         create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"EMC-001\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for an EMC/EMI compliance plan. The set object should use full schema keys: {{schemaKeys}}. Use standard EMC terminology. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this EMC/EMI compliance plan. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this EMC/EMI compliance plan. If current_value contains TODO or Auto-filled text, replace it with improved content.",
@@ -11171,7 +11186,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       ai_prompts: {
         review_persona: "You are a {{personaLabel}}. Provide a concise review comment for this section focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
         review_field: "Return ONLY the section field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
-        chat_edit: "You edit an FMEA document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+        chat_edit: "You edit an FMEA document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
         create_plan: "Return STRICT JSON: {\"document\":{\"goal\":\"\",\"scope\":\"\"},\"items\":[{\"item_no\":\"FMEA-003\",\"item_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for an FMEA document. The set object should use full schema keys: {{schemaKeys}}. Use standard FMEA terminology. No extra text.",
         suggest_field: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this FMEA section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
         suggest_field_strict: "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique), must be meaningfully different from the current value, and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context for this FMEA section. If current_value contains TODO or Auto-filled text, replace it with improved content.",
