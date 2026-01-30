@@ -4053,8 +4053,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     toolbar.className = "matrixToolbar";
     const expandLabel = state.matrixExpanded ? "Collapse" : "Expand";
     toolbar.innerHTML = `
-      <button class="btn" data-action="add-row">Add Row</button>
-      <button class="btn" data-action="add-col">Add Column</button>
       <button class="btn" data-action="import-csv">Import CSV</button>
       <button class="btn" data-action="expand">${expandLabel}</button>
       <button class="btn" data-action="zoom-in">Zoom In</button>
@@ -4079,6 +4077,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     headRow.appendChild(corner);
     for(const colId of matrix.cols){
       const th = document.createElement("th");
+      th.setAttribute("data-col", colId);
       th.textContent = matrix.col_labels?.[colId] || colId;
       headRow.appendChild(th);
     }
@@ -4088,6 +4087,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const tr = document.createElement("tr");
       const rowLabel = document.createElement("td");
       rowLabel.className = "matrixRowLabel";
+      rowLabel.setAttribute("data-row", rowId);
       rowLabel.textContent = matrix.row_labels?.[rowId] || rowId;
       tr.appendChild(rowLabel);
       for(const colId of matrix.cols){
@@ -4098,6 +4098,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(locked) input.disabled = true;
         const key = matrixCellKey(rowId, colId);
         input.value = matrix.cells?.[key] ?? "";
+        td.setAttribute("data-row", rowId);
+        td.setAttribute("data-col", colId);
         input.addEventListener("input", () => {
           if(locked) return;
           matrix.cells[key] = input.value;
@@ -4134,9 +4136,43 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       renderTestsList();
     };
 
+    const insertRowAt = (idx, label) => {
+      const id = makeMatrixId(label, matrix.rows);
+      matrix.rows.splice(idx, 0, id);
+      matrix.row_labels[id] = label;
+      for(const colId of matrix.cols){
+        const key = matrixCellKey(id, colId);
+        if(!(key in matrix.cells)) matrix.cells[key] = "";
+      }
+    };
+    const insertColAt = (idx, label) => {
+      const id = makeMatrixId(label, matrix.cols);
+      matrix.cols.splice(idx, 0, id);
+      matrix.col_labels[id] = label;
+      for(const rowId of matrix.rows){
+        const key = matrixCellKey(rowId, id);
+        if(!(key in matrix.cells)) matrix.cells[key] = "";
+      }
+    };
+    const deleteRow = (rowId) => {
+      matrix.rows = matrix.rows.filter(r => r !== rowId);
+      if(matrix.row_labels) delete matrix.row_labels[rowId];
+      for(const colId of matrix.cols){
+        const key = matrixCellKey(rowId, colId);
+        if(matrix.cells) delete matrix.cells[key];
+      }
+    };
+    const deleteCol = (colId) => {
+      matrix.cols = matrix.cols.filter(c => c !== colId);
+      if(matrix.col_labels) delete matrix.col_labels[colId];
+      for(const rowId of matrix.rows){
+        const key = matrixCellKey(rowId, colId);
+        if(matrix.cells) delete matrix.cells[key];
+      }
+    };
+
     toolbar.querySelectorAll("button").forEach(btn => {
       const action = btn.getAttribute("data-action");
-      if(locked && (action === "add-row" || action === "add-col")) btn.disabled = true;
       btn.addEventListener("click", () => {
         if(action === "expand"){
           state.matrixExpanded = !state.matrixExpanded;
@@ -4203,32 +4239,85 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           updateZoomTag();
           return;
         }
-        if(action === "add-row"){
-          const label = prompt("Row label");
-          if(!label) return;
-          const id = makeMatrixId(label, matrix.rows);
-          matrix.rows.push(id);
-          matrix.row_labels[id] = label;
-          for(const colId of matrix.cols){
-            const key = matrixCellKey(id, colId);
-            if(!(key in matrix.cells)) matrix.cells[key] = "";
-          }
-          requestRerender();
-          return;
-        }
-        if(action === "add-col"){
-          const label = prompt("Column label");
-          if(!label) return;
-          const id = makeMatrixId(label, matrix.cols);
-          matrix.cols.push(id);
-          matrix.col_labels[id] = label;
-          for(const rowId of matrix.rows){
-            const key = matrixCellKey(rowId, id);
-            if(!(key in matrix.cells)) matrix.cells[key] = "";
-          }
-          requestRerender();
-        }
       });
+    });
+
+    viewport.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      if(locked) return;
+      const rowEl = e.target.closest("[data-row]");
+      const colEl = e.target.closest("[data-col]");
+      const rowId = rowEl?.getAttribute("data-row") || "";
+      const colId = colEl?.getAttribute("data-col") || "";
+      const rowIdx = rowId ? matrix.rows.indexOf(rowId) : -1;
+      const colIdx = colId ? matrix.cols.indexOf(colId) : -1;
+      const items = [
+        {
+          id: "insert_row_before",
+          label: "Insert Row Before",
+          onClick: () => {
+            if(rowIdx < 0) return;
+            const label = prompt("Row label");
+            if(!label) return;
+            insertRowAt(rowIdx, label);
+            requestRerender();
+          }
+        },
+        {
+          id: "insert_row_after",
+          label: "Insert Row After",
+          onClick: () => {
+            if(rowIdx < 0) return;
+            const label = prompt("Row label");
+            if(!label) return;
+            insertRowAt(rowIdx + 1, label);
+            requestRerender();
+          }
+        },
+        {
+          id: "insert_col_before",
+          label: "Insert Column Before",
+          onClick: () => {
+            if(colIdx < 0) return;
+            const label = prompt("Column label");
+            if(!label) return;
+            insertColAt(colIdx, label);
+            requestRerender();
+          }
+        },
+        {
+          id: "insert_col_after",
+          label: "Insert Column After",
+          onClick: () => {
+            if(colIdx < 0) return;
+            const label = prompt("Column label");
+            if(!label) return;
+            insertColAt(colIdx + 1, label);
+            requestRerender();
+          }
+        },
+        {
+          id: "delete_row",
+          label: "Delete Row",
+          onClick: () => {
+            if(rowIdx < 0) return;
+            if(!confirm(`Delete row "${matrix.row_labels?.[rowId] || rowId}"?`)) return;
+            deleteRow(rowId);
+            requestRerender();
+          }
+        },
+        {
+          id: "delete_col",
+          label: "Delete Column",
+          onClick: () => {
+            if(colIdx < 0) return;
+            if(!confirm(`Delete column "${matrix.col_labels?.[colId] || colId}"?`)) return;
+            deleteCol(colId);
+            requestRerender();
+          }
+        }
+      ];
+      showContextMenu(e.clientX, e.clientY, items);
     });
 
     let dragging = false;
