@@ -1524,6 +1524,8 @@
       "You are a {{personaLabel}}. Provide a concise review comment for this field focused on {{focus}}. Use field_prompt as gospel guidance and follow it exactly. Return ONLY the comment text.{{guidanceLine}}",
     review_field:
       "Return ONLY the field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across tests. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
+    review_matrix_cell:
+      "Return ONLY the cell value text. No extra words, no markdown. Use matrix_cell.row_label and matrix_cell.col_label to decide what belongs in the cell. Use matrix_cell.col_prompt if provided. Use matrix_cell.cell_value as the current value. If unknown, return an empty string. Never return placeholders like \"Value\" or \"TBD\", and never repeat the column label.{{guidanceLine}}",
     chat_edit:
       "You edit a test plan. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single test by including all desired keys inside set. To fully update a test, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new test by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
     create_plan:
@@ -3199,15 +3201,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             if(isMatrixCell){
               setMatrixCellStatus(t, field, item.cellKey, "working");
               const { matrix } = ensureMatrixField(t, field);
+              const schema = t.data?._ai?.field_schema?.[field] || null;
               matrixContext = {
                 cell_key: item.cellKey,
                 row_id: item.rowId,
                 col_id: item.colId,
                 row_label: matrix.row_labels?.[item.rowId] || item.rowId,
                 col_label: matrix.col_labels?.[item.colId] || item.colId,
-                cell_value: matrix.cells?.[item.cellKey] ?? ""
+                cell_value: matrix.cells?.[item.cellKey] ?? "",
+                col_prompt: schema?.col_prompts?.[item.colId] || ""
               };
             }
+
+            const matrixPlanContext = isMatrixCell ? {
+              test_no: t.data.test_no || "",
+              test_name: t.data.test_name || "",
+              test_type: t.data.test_type || ""
+            } : t.data;
 
             const payload = {
               plan: { name: plan.name, created: plan.created, updated: plan.updated },
@@ -3220,7 +3230,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               field_label: t.data?._ai?.field_labels?.[field] || field,
               maturity: getFieldMaturity(t, field),
               authoritative_values: Object.keys(anchors).reduce((acc, k) => (acc[k] = anchors[k].value, acc), {}),
-              context: t.data,
+              context: matrixPlanContext,
               matrix_cell: matrixContext || undefined,
               context_files: (state.aiChatContextFiles || []).slice(0, 1).map(f => ({
                 name: f.name,
@@ -3242,7 +3252,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   body: JSON.stringify({
                     model,
                     input: [
-                    { role:"system", content:getAiPrompt(plan, "review_field", { guidanceLine }) },
+                    { role:"system", content:getAiPrompt(plan, isMatrixCell ? "review_matrix_cell" : "review_field", { guidanceLine }) },
                       { role:"user", content: JSON.stringify(payload, null, 2) }
                     ],
                     max_output_tokens: 120
@@ -3260,14 +3270,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   savePrefs();
                 }
                 let val = String(raw || "").trim();
-                if(isMatrixCell){
-                  if(val.startsWith("{")){
-                    const m = val.match(/"value"\s*:\s*"((?:\\.|[^"\\])*)"/);
-                    if(m && m[1]){
-                      val = m[1].replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\"/g, "\"");
-                    }
-                  }
-                }else if(val.startsWith("{")){
+                if(!isMatrixCell && val.startsWith("{")){
                   const parsed = safeParseJson(val, "AI Review");
                   if(typeof parsed?.value === "string") val = parsed.value.trim();
                 }
@@ -3275,6 +3278,29 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   val = val.slice(1, -1).trim();
                 }
                 val = sanitizeAiText(val);
+                if(isMatrixCell){
+                  const colLabel = String(matrixContext?.col_label || "").trim();
+                  const rowLabel = String(matrixContext?.row_label || "").trim();
+                  const lowered = val.toLowerCase();
+                  const tooLong = val.length > 120;
+                  const looksInstruction = /(?:\bshould\b|\benter\b|\bpopulate\b|\bfill\b|\buse\b|\binclude\b|\bprovide\b|\bset\b|\bcomplete\b)/i.test(val);
+                  const looksSentence = /[.!?]/.test(val);
+                  const startsWithBad = /^(value|tbd|to be completed|to be filled|complete per|per drawing|per schematic|\{|\[|```)/i.test(val);
+                  const bad = !val
+                    || /^value/i.test(val)
+                    || /^n\/a$/i.test(val)
+                    || (colLabel && val === colLabel)
+                    || (rowLabel && val === rowLabel)
+                    || startsWithBad
+                    || (looksInstruction && looksSentence)
+                    || tooLong;
+                  if(bad){
+                    logLine(`AI Review: matrix cell rejected "${val}" for ${t.data.test_no || t.id.slice(0,6)}.${field} ${item.cellKey}.`, "warn");
+                    setMatrixCellStatus(t, field, item.cellKey, "");
+                    setSuggestStatus(t.id, field, "");
+                    return;
+                  }
+                }
                 if(!state.aiReviewControl?.cancelled && val){
                   if(isMatrixCell){
                     const { matrix } = ensureMatrixField(t, field);
@@ -7568,7 +7594,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   { id: "mfr_3", label: "Manufacturer 3" },
                   { id: "mpn_3", label: "Manufacturer P/N 3" },
                   { id: "notes", label: "Notes" }
-                ]
+                ],
+                col_prompts: {
+                  item: "Item number.",
+                  refdes: "Reference designators (e.g., R1,R2,C5).",
+                  qty: "Quantity.",
+                  description: "Part description.",
+                  value: "Part value.",
+                  package: "Package or footprint.",
+                  mfr_1: "Primary manufacturer.",
+                  mpn_1: "Primary manufacturer part number.",
+                  mfr_2: "Alternate manufacturer.",
+                  mpn_2: "Alternate manufacturer part number.",
+                  mfr_3: "Second alternate manufacturer.",
+                  mpn_3: "Second alternate manufacturer part number.",
+                  notes: "Notes (e.g., DNP, orientation, assembly notes)."
+                }
               }
             }
           }
@@ -9467,6 +9508,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!normalized._ai.field_schema) normalized._ai.field_schema = {};
         normalized._ai.field_schema.rtm_matrix = cloneJsonValue(section.schema.rtm_matrix);
       }
+      if(!normalized._ai.field_schema) normalized._ai.field_schema = {};
+      if(!normalized._ai.field_schema.rtm_matrix) normalized._ai.field_schema.rtm_matrix = {};
+      normalized._ai.field_schema.rtm_matrix.col_prompts = {
+        req_id: "Requirement ID (e.g., REQ-001).",
+        requirement: "Requirement text summary.",
+        method: "Verification method (Test, Analysis, Inspection, Demo).",
+        test_case: "Test case ID or name.",
+        status: "Status (Planned/In Progress/Complete).",
+        notes: "Notes or rationale."
+      };
       const maturityOverrides = section.maturity || {};
       for(const key of Object.keys(data)){
         if(key === "_ai") continue;
@@ -9657,6 +9708,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!normalized._ai.field_schema) normalized._ai.field_schema = {};
         normalized._ai.field_schema.bom_matrix = cloneJsonValue(section.schema.bom_matrix);
       }
+      if(!normalized._ai.field_schema) normalized._ai.field_schema = {};
+      if(!normalized._ai.field_schema.bom_matrix) normalized._ai.field_schema.bom_matrix = {};
+      normalized._ai.field_schema.bom_matrix.col_prompts = {
+        item: "Item number.",
+        refdes: "Reference designators (e.g., R1,R2,C5).",
+        qty: "Quantity.",
+        description: "Part description.",
+        value: "Part value.",
+        package: "Package or footprint.",
+        mfr_1: "Primary manufacturer.",
+        mpn_1: "Primary manufacturer part number.",
+        mfr_2: "Alternate manufacturer.",
+        mpn_2: "Alternate manufacturer part number.",
+        mfr_3: "Second alternate manufacturer.",
+        mpn_3: "Second alternate manufacturer part number.",
+        notes: "Notes (e.g., DNP, orientation, assembly notes)."
+      };
       const maturityOverrides = section.maturity || {};
       for(const key of Object.keys(data)){
         if(key === "_ai") continue;
@@ -10830,6 +10898,20 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       normalized._ai.field_types = fieldTypes;
       normalized._ai.field_prompts = fieldPrompts;
       normalized._ai.maturity = { ...(normalized._ai.maturity || {}) };
+      if(section.schema && section.schema.verification_matrix){
+        if(!normalized._ai.field_schema) normalized._ai.field_schema = {};
+        normalized._ai.field_schema.verification_matrix = cloneJsonValue(section.schema.verification_matrix);
+      }
+      if(!normalized._ai.field_schema) normalized._ai.field_schema = {};
+      if(!normalized._ai.field_schema.verification_matrix) normalized._ai.field_schema.verification_matrix = {};
+      normalized._ai.field_schema.verification_matrix.col_prompts = {
+        req_id: "Requirement ID (e.g., REQ-001).",
+        requirement: "Requirement text summary.",
+        method: "Verification method (Test, Analysis, Inspection, Demo).",
+        test_case: "Test case ID or name.",
+        status: "Status (Planned/In Progress/Complete).",
+        notes: "Notes or rationale."
+      };
       const maturityOverrides = section.maturity || {};
       for(const key of Object.keys(data)){
         if(key === "_ai") continue;
