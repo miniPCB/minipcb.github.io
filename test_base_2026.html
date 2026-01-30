@@ -581,7 +581,7 @@
       <div class="pill" id="saveAllBtn" style="display:none;">Save All</div>
       <div class="chip clickable" id="aiChip" title="AI is optional. Saving never depends on AI.">
         <span class="led bad" id="aiLed"></span>
-        <span><strong>AI</strong> <span id="aiText">Set key in Preferences</span></span>
+        <span><strong>AI</strong> <span id="aiText">Proxy</span></span>
       </div>
     </div>
   </div>
@@ -2455,7 +2455,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!USE_PROXY && !key){
       toast("AI Review", "Set an API key first.", "warn");
       logLine("AI Review: no API key available.", "warn");
-      openAiKeyDialog();
       return;
     }
     state.aiReviewControl = { running: true, paused: false, cancelled: false };
@@ -5464,8 +5463,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
         <div class="hr"></div>
         <div class="toolbarRow">
-          <button class="btn" id="prefSetKey">Set API Key</button>
-          <button class="btn" id="prefClearKey">Clear API Key</button>
           <button class="btn" id="prefRefreshModels">Refresh Models</button>
         </div>
       `;
@@ -5521,8 +5518,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <button class="btn primary" id="savePrefsBtn">Save</button>
       `;
       $("cancelPrefs").onclick = hideModal;
-      $("prefSetKey").onclick = () => { hideModal(); openAiKeyDialog(); };
-      $("prefClearKey").onclick = () => { setAiKey("", false); toast("AI Key", "Cleared.", "warn"); };
       $("prefRefreshModels").onclick = () => {
         if(!USE_PROXY && !getAiKey()){
           toast("Models", "Set an API key first.", "warn");
@@ -5812,27 +5807,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     toast("Template edit", `Editing ${template.name}`, "ok");
   }
 
-  /* ---------- AI Key Dialog ---------- */
+  /* ---------- API Key (proxy-only UI removed) ---------- */
   const AI_SESSION_KEY = "tb26_ai_key_session";
   const AI_LOCAL_KEY = "tb26_ai_key_local";
 
   function getAiKey(){
     return sessionStorage.getItem(AI_SESSION_KEY) || localStorage.getItem(AI_LOCAL_KEY) || "";
-  }
-
-  function setAiKey(key, remember){
-    const val = String(key || "").trim();
-    if(val){
-      sessionStorage.setItem(AI_SESSION_KEY, val);
-      if(remember) localStorage.setItem(AI_LOCAL_KEY, val);
-      else localStorage.removeItem(AI_LOCAL_KEY);
-    }else{
-      sessionStorage.removeItem(AI_SESSION_KEY);
-      localStorage.removeItem(AI_LOCAL_KEY);
-    }
-    updateAiBadge();
-    const keyText = $("aiKeyText");
-    if(keyText) keyText.textContent = val ? "Set" : "Not set";
   }
 
   async function refreshAvailableModels(){
@@ -5855,21 +5835,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
     function updateAiBadge(){
-      const hasAccess = USE_PROXY || !!getAiKey();
-      $("aiLed").className = "led " + (hasAccess ? "ok" : "bad");
-      $("aiText").textContent = hasAccess ? "Ready" : "Set key in Preferences";
+      $("aiLed").className = "led ok";
+      $("aiText").textContent = "Proxy";
       updateAiUI();
     }
 
     function updateAiUI(){
-      const hasAccess = USE_PROXY || !!getAiKey();
       const btn = $("btnAiSuggest");
       if(btn){
-        btn.disabled = !hasAccess;
-        btn.title = hasAccess ? "Suggest text for the focused field" : "Set AI key to enable";
+        btn.disabled = false;
+        btn.title = "Suggest text for the focused field";
       }
       const keyText = $("aiKeyText");
-      if(keyText) keyText.textContent = hasAccess ? "Set" : "Not set";
+      if(keyText) keyText.textContent = "Proxy";
     }
 
     function extractResponseText(data){
@@ -6024,7 +6002,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(!USE_PROXY && !key){
         toast("AI Suggest", "Set an API key first.", "warn");
         logLine("AI Suggest: no API key available.", "warn");
-        openAiKeyDialog();
         return;
       }
       const model = state.prefs.ai_model || "gpt-4.1-mini";
@@ -6158,34 +6135,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         logLine(`AI Suggest failed: ${e.message || e}`, "bad");
       }
     }
-
-  function openAiKeyDialog(){
-    showModal("AI Key", (body, footer) => {
-      const remembered = !!localStorage.getItem(AI_LOCAL_KEY);
-      body.innerHTML = `
-        <div class="muted">Paste an API key. Default storage is session-only (cleared when the tab closes).</div>
-        <div class="hr"></div>
-        <div class="label">API Key</div>
-        <input class="input" id="aiKeyInput" type="password" placeholder="sk-..." />
-        <label class="small" style="display:block; margin-top:8px;">
-          <input type="checkbox" id="aiRemember" ${remembered ? "checked" : ""}/> Remember on this device (localStorage)
-        </label>
-      `;
-      footer.innerHTML = `
-        <button class="btn" id="aiCancel">Cancel</button>
-        <button class="btn" id="aiClear">Forget</button>
-        <button class="btn primary" id="aiSave">Save</button>
-      `;
-      $("aiCancel").onclick = hideModal;
-      $("aiClear").onclick = () => { setAiKey("", false); hideModal(); };
-      $("aiSave").onclick = () => {
-        const key = $("aiKeyInput").value.trim();
-        const remember = $("aiRemember").checked;
-        setAiKey(key, remember);
-        hideModal();
-      };
-    });
-  }
 
   /* ---------- Import / Export ---------- */
   async function exportAllPlans(){
