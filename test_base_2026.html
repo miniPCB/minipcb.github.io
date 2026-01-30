@@ -3287,7 +3287,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         </div>
         <div class="actions">
           <button class="btn mini primary" data-act="create" data-id="${escapeHtml(t.id)}">Create New</button>
-          <button class="btn mini" data-act="edit-template" data-id="${escapeHtml(t.id)}">Edit</button>
           <button class="btn mini" data-act="rename-template" data-id="${escapeHtml(t.id)}">Rename</button>
           <button class="btn mini danger" data-act="delete-template" data-id="${escapeHtml(t.id)}">Delete</button>
         </div>
@@ -3353,7 +3352,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const act = btn.getAttribute("data-act");
         const id = btn.getAttribute("data-id");
         if(act === "create") runAsync(createFromTemplateFlow(id));
-        if(act === "edit-template") runAsync(openTemplateById(id));
         if(act === "rename-template") runAsync(renameTemplateFlow(id));
         if(act === "delete-template") runAsync(deleteTemplateFlow(id));
       });
@@ -6179,13 +6177,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     showModal("Manage Test Templates", (body, footer) => {
       const list = templates.filter(t => t.id !== "__blank__");
       const rows = list.map(t => `
-        <div class="item">
+        <div class="item" data-file="${escapeHtml(t.file)}">
           <div class="left">
             <div class="name">${escapeHtml(t.name)}</div>
             <div class="meta"><span class="tag">${escapeHtml(t.file)}</span></div>
           </div>
           <div class="actions">
-            <button class="btn mini" data-edit="${escapeHtml(t.file)}">Edit</button>
             <button class="btn mini danger" data-del="${escapeHtml(t.file)}">Delete</button>
           </div>
         </div>
@@ -6245,9 +6242,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         });
       });
-      body.querySelectorAll("[data-edit]").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          const file = btn.getAttribute("data-edit");
+      body.querySelectorAll(".item[data-file]").forEach(row => {
+        row.addEventListener("click", async (e) => {
+          if(e.target.closest("button")) return;
+          const file = row.getAttribute("data-file");
           if(!file) return;
           const chosen = list.find(t => t.file === file);
           if(!chosen) return;
