@@ -5356,12 +5356,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     showModal("Preferences", (body, footer) => {
       const hasKey = !!getAiKey();
       const cachedModels = state.modelList.length ? state.modelList : loadModelCache();
-        body.innerHTML = `
-          <div class="row">
-            <div>
-              <div class="label">AI Status</div>
-              <div class="input" style="display:flex;align-items:center;">${USE_PROXY ? "Proxy" : (hasKey ? "Key set" : "Not set")}</div>
-            </div>
+      body.innerHTML = `
+        <div class="label">System</div>
+        <div class="row">
+          <div>
+            <div class="label">AI Status</div>
+            <div class="input" style="display:flex;align-items:center;">${USE_PROXY ? "Proxy" : (hasKey ? "Key set" : "Not set")}</div>
+          </div>
           <div>
             <div class="label">Document Storage</div>
             <div class="input" style="display:flex;align-items:center;">${state.planRootHandle ? "File System" : "Browser Store"}</div>
@@ -5370,6 +5371,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
         <div class="hr"></div>
 
+        <div class="label">AI</div>
         <div class="row">
           <div>
             <div class="label">AI Enabled</div>
@@ -5383,7 +5385,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <select class="select" id="prefAiModel"></select>
           </div>
         </div>
-
         <div class="row" style="margin-top:10px;">
           <div style="flex:2;">
             <div class="label">API Base URL</div>
@@ -5391,43 +5392,57 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           </div>
           <div style="flex:1;"></div>
         </div>
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="label">AI Suggest Maturity Max</div>
+            <select class="select" id="prefSuggestMax">
+              <option value="0">M0</option>
+              <option value="1">M1</option>
+              <option value="2">M2</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">AI Maturity Level Process</div>
+            <select class="select" id="prefMaturityClicks">
+              <option value="2">2 Click</option>
+              <option value="4">4 Click</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Personalities Dialog</div>
+            <select class="select" id="prefPersonalityDialog">
+              <option value="false">Disabled</option>
+              <option value="true">Enabled</option>
+            </select>
+          </div>
+        </div>
 
-          <div class="row" style="margin-top:10px;">
-            <div>
-              <div class="label">AI Suggest Maturity Max</div>
-              <select class="select" id="prefSuggestMax">
-                <option value="0">M0</option>
-                <option value="1">M1</option>
-                <option value="2">M2</option>
-              </select>
-            </div>
-            <div>
-              <div class="label">AI Maturity Level Process</div>
-              <select class="select" id="prefMaturityClicks">
-                <option value="2">2 Click</option>
-                <option value="4">4 Click</option>
-              </select>
-            </div>
-            <div>
-              <div class="label">Personalities Dialog</div>
-              <select class="select" id="prefPersonalityDialog">
-                <option value="false">Disabled</option>
-                <option value="true">Enabled</option>
-              </select>
-            </div>
-            <div id="prefAdvanced" style="display:none;">
-              <div class="label">AI Review Debug</div>
-              <select class="select" id="prefAiReviewDebug">
-                <option value="false">Off</option>
-                <option value="true">On (next test only)</option>
-              </select>
-            <div class="label" style="margin-top:10px;">AI Review Pause (ms)</div>
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="label">AI Review Debug</div>
+            <select class="select" id="prefAiReviewDebug">
+              <option value="false">Off</option>
+              <option value="true">On (next test only)</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">AI Review Pause (ms)</div>
             <input class="input" id="prefAiReviewPause" type="number" min="0" step="50" />
-            <div class="label" style="margin-top:10px;">AI Review Concurrency</div>
+          </div>
+          <div>
+            <div class="label">AI Review Concurrency</div>
             <input class="input" id="prefAiReviewConcurrency" type="number" min="1" step="1" />
           </div>
         </div>
-        <div class="row" style="margin-top:10px;">
+
+        <div class="toolbarRow" style="margin-top:6px;">
+          <button class="btn" id="prefRefreshModels">Refresh Models</button>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="label">Editor</div>
+        <div class="row">
           <div>
             <div class="label">Editor</div>
             <select class="select" id="prefTestEditorLock">
@@ -5437,7 +5452,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           </div>
         </div>
 
-        <div class="row" style="margin-top:10px;">
+        <div class="hr"></div>
+
+        <div class="label">Templates</div>
+        <div class="row">
           <div>
             <div class="label">New Test Template Mode</div>
             <select class="select" id="prefNewTestTemplateMode">
@@ -5450,17 +5468,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             <select class="select" id="prefNewTestTemplateDefault">
               <option value="__blank__">Electronics Test</option>
             </select>
-            <div class="hint">Templates are read from the current plan's tests/templates folder.</div>
+            <div class="hint">Templates are read from the current document's tests/templates folder.</div>
           </div>
-        </div>
-
-        <div class="toolbarRow" style="margin-top:6px;">
-          <button class="btn mini" id="prefToggleAdvanced">Advanced</button>
-        </div>
-
-        <div class="hr"></div>
-        <div class="toolbarRow">
-          <button class="btn" id="prefRefreshModels">Refresh Models</button>
         </div>
       `;
 
@@ -5499,15 +5508,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(pauseInput) pauseInput.value = String(state.prefs.ai_review_pause_ms ?? 300);
       const concInput = $("prefAiReviewConcurrency");
       if(concInput) concInput.value = String(state.prefs.ai_review_concurrency ?? 1);
-      const advBtn = $("prefToggleAdvanced");
-      if(advBtn){
-        advBtn.onclick = () => {
-          const adv = $("prefAdvanced");
-          if(!adv) return;
-          adv.style.display = adv.style.display === "none" ? "" : "none";
-        };
-      }
-
       footer.innerHTML = `
         <button class="btn" id="cancelPrefs">Cancel</button>
         <button class="btn primary" id="savePrefsBtn">Save</button>
