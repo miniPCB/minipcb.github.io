@@ -3023,7 +3023,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 val = sanitizeAiText(val);
                 if(isMatrixCell){
                   const colLabel = String(matrixContext?.col_label || "").trim();
-                  if(!val || /^value$/i.test(val) || (colLabel && val === colLabel)){
+                  const rowLabel = String(matrixContext?.row_label || "").trim();
+                  const bad = !val
+                    || /^value\b/i.test(val)
+                    || /^n\/a$/i.test(val)
+                    || (colLabel && val === colLabel)
+                    || (rowLabel && val === rowLabel);
+                  if(bad){
                     setMatrixCellStatus(t, field, item.cellKey, "");
                     setSuggestStatus(t.id, field, "");
                     return;
