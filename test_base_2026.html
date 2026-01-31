@@ -362,9 +362,8 @@
       flex-wrap:wrap;
       align-items:center;
     }
-    .matrixToolbar .tag{
-      margin-left:auto;
-    }
+    .matrixToolbar .tag{ margin-left:0; }
+    .matrixZoomControls{ display:inline-flex; gap:6px; align-items:center; }
     .matrixViewport{
       border:1px solid rgba(42,52,71,.6);
       border-radius:10px;
@@ -437,7 +436,8 @@
     }
     .matrixSearch{
       height:26px;
-      min-width:160px;
+      min-width:120px;
+      width:140px;
       font-size:11px;
       padding:0 8px;
       border-radius: 10px;
@@ -4851,12 +4851,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       <button class="btn" data-action="import-csv">Import CSV</button>
       <button class="btn" data-action="expand">${expandLabel}</button>
       <span class="matrixZoomControls">
-        <button class="btn" data-action="zoom-in">Zoom In</button>
-        <button class="btn" data-action="zoom-out">Zoom Out</button>
-        <button class="btn" data-action="zoom-reset">Reset</button>
-        <span class="tag">Zoom ${Math.round(view.scale * 100)}%</span>
+      <button class="btn" data-action="zoom-in">Zoom In</button>
+      <button class="btn" data-action="zoom-out">Zoom Out</button>
+      <button class="btn" data-action="zoom-reset">Reset</button>
+      <span class="tag">Zoom ${Math.round(view.scale * 100)}%</span>
       </span>
       <input class="input matrixSearch" type="search" placeholder="Search BOM…" aria-label="Search matrix" />
+      <button class="btn" data-action="search-zoom">Zoom to Matches</button>
     `;
     wrap.appendChild(toolbar);
 
@@ -4946,8 +4947,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const inputs = table.querySelectorAll(".matrixInput");
       if(!term){
         inputs.forEach(input => input.classList.remove("matrixMatch"));
+        view.searchBounds = null;
         return;
       }
+      const matches = [];
       inputs.forEach(input => {
         const cellKey = input.getAttribute("data-matrix-cell") || "";
         const [rowId, colId] = cellKey.split("::");
@@ -4956,7 +4959,26 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const val = String(input.value || "").toLowerCase();
         const hit = val.includes(term) || rowLabel.includes(term) || colLabel.includes(term);
         input.classList.toggle("matrixMatch", !!hit);
+        if(hit) matches.push(input);
       });
+      if(!matches.length){
+        view.searchBounds = null;
+        return;
+      }
+      const canvasRect = canvas.getBoundingClientRect();
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      matches.forEach(input => {
+        const r = input.getBoundingClientRect();
+        const x = (r.left - canvasRect.left) / view.scale;
+        const y = (r.top - canvasRect.top) / view.scale;
+        const w = r.width / view.scale;
+        const h = r.height / view.scale;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w);
+        maxY = Math.max(maxY, y + h);
+      });
+      view.searchBounds = { minX, minY, maxX, maxY };
     };
 
     const requestRerender = () => {
@@ -5074,6 +5096,29 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(action === "zoom-reset"){
           view.scale = 1;
           updateZoomTag();
+          return;
+        }
+        if(action === "search-zoom"){
+          if(!view.searchBounds){
+            toast("Matrix Search", "No matches to zoom.", "warn");
+            return;
+          }
+          const pad = 24;
+          const { minX, minY, maxX, maxY } = view.searchBounds;
+          const boundsW = Math.max(1, maxX - minX);
+          const boundsH = Math.max(1, maxY - minY);
+          const viewportW = viewport.clientWidth;
+          const viewportH = viewport.clientHeight;
+          const scale = clamp(Math.min(
+            (viewportW - pad * 2) / boundsW,
+            (viewportH - pad * 2) / boundsH
+          ), 0.4, 2.5);
+          view.scale = scale;
+          updateZoomTag();
+          const centerX = (minX + maxX) / 2;
+          const centerY = (minY + maxY) / 2;
+          viewport.scrollLeft = Math.max(0, centerX * view.scale - viewportW / 2);
+          viewport.scrollTop = Math.max(0, centerY * view.scale - viewportH / 2);
           return;
         }
       });
