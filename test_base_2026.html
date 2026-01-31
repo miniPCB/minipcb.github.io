@@ -397,6 +397,7 @@
       text-align:left;
       font-weight:600;
       min-width:140px;
+      position:relative;
     }
     .matrixTable th.matrixCorner{
       min-width:120px;
@@ -418,6 +419,19 @@
       font-size:12px;
       outline:none;
       min-width:140px;
+    }
+    .matrixColResizer{
+      position:absolute;
+      right:2px;
+      top:4px;
+      bottom:4px;
+      width:6px;
+      cursor: col-resize;
+      border-radius: 6px;
+      background: transparent;
+    }
+    .matrixColResizer:hover{
+      background: rgba(124,196,255,.25);
     }
     .matrixInput:focus{
       background: rgba(124,196,255,.08);
@@ -4451,7 +4465,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(c?.id && !(c.id in colLabels)) colLabels[c.id] = c.label || c.id;
       if(c?.id && !cols.includes(c.id)) cols.push(c.id);
     }
-    return { rows, cols, row_labels: rowLabels, col_labels: colLabels, cells, cell_prompts: cellPrompts };
+    const colWidths = (src.col_widths && typeof src.col_widths === "object") ? { ...src.col_widths } : {};
+    return { rows, cols, row_labels: rowLabels, col_labels: colLabels, cells, cell_prompts: cellPrompts, col_widths: colWidths };
   }
 
   function applyMatrixCellUpdates(matrix, schema, cells){
@@ -4738,6 +4753,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     for(const [k, v] of Object.entries(matrix.col_labels || {})){
       if(cols.has(k)) prunedColLabels[k] = v;
     }
+    const prunedColWidths = {};
+    for(const [k, v] of Object.entries(matrix.col_widths || {})){
+      if(cols.has(k)) prunedColWidths[k] = v;
+    }
     const prunedPrompts = {};
     for(const [k, v] of Object.entries(matrix.cell_prompts || {})){
       const [r, c] = String(k).split("::");
@@ -4746,6 +4765,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     matrix.cells = prunedCells;
     matrix.row_labels = prunedRowLabels;
     matrix.col_labels = prunedColLabels;
+    if(matrix.col_widths) matrix.col_widths = prunedColWidths;
     if(matrix.cell_prompts) matrix.cell_prompts = prunedPrompts;
   }
 
@@ -4840,6 +4860,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!test._matrixView[fieldKey]) test._matrixView[fieldKey] = { scale: 1 };
     const view = test._matrixView[fieldKey];
     const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const minColWidth = 80;
+    if(!matrix.col_widths || typeof matrix.col_widths !== "object") matrix.col_widths = {};
 
     const wrap = document.createElement("div");
     wrap.className = "matrixWrap";
@@ -4870,6 +4892,25 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const table = document.createElement("table");
     table.className = "matrixTable";
+    const applyColumnWidths = () => {
+      for(const colId of matrix.cols){
+        const width = Number(matrix.col_widths?.[colId]);
+        if(!width || Number.isNaN(width)) continue;
+        const safe = Math.max(minColWidth, Math.round(width));
+        const th = table.querySelector(`th[data-col="${cssEscape(colId)}"]`);
+        if(th){
+          th.style.width = `${safe}px`;
+          th.style.minWidth = `${safe}px`;
+        }
+        table.querySelectorAll(`td[data-col="${cssEscape(colId)}"]`).forEach(td => {
+          td.style.width = `${safe}px`;
+          td.style.minWidth = `${safe}px`;
+        });
+        table.querySelectorAll(`input[data-matrix-col="${cssEscape(colId)}"]`).forEach(input => {
+          input.style.minWidth = `${safe}px`;
+        });
+      }
+    };
     const headRow = document.createElement("tr");
     const corner = document.createElement("th");
     corner.className = "matrixCorner";
@@ -4879,6 +4920,34 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const th = document.createElement("th");
       th.setAttribute("data-col", colId);
       th.textContent = matrix.col_labels?.[colId] || colId;
+      if(matrix.col_widths?.[colId]){
+        const safe = Math.max(minColWidth, Math.round(Number(matrix.col_widths[colId])));
+        if(Number.isFinite(safe)){
+          th.style.width = `${safe}px`;
+          th.style.minWidth = `${safe}px`;
+        }
+      }
+      const resizer = document.createElement("div");
+      resizer.className = "matrixColResizer";
+      resizer.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startWidth = th.getBoundingClientRect().width || minColWidth;
+        const onMove = (evt) => {
+          const next = Math.max(minColWidth, Math.round(startWidth + (evt.clientX - startX)));
+          matrix.col_widths[colId] = next;
+          applyColumnWidths();
+        };
+        const onUp = () => {
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          requestRerender();
+        };
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+      });
+      th.appendChild(resizer);
       headRow.appendChild(th);
     }
     table.appendChild(headRow);
@@ -4900,6 +4969,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         input.value = matrix.cells?.[key] ?? "";
         input.setAttribute("data-matrix-field", fieldKey);
         input.setAttribute("data-matrix-cell", key);
+        input.setAttribute("data-matrix-col", colId);
         const cellStatus = test._matrixCellStatus?.[fieldKey]?.[key] || "";
         if(cellStatus) input.classList.add(`ai-${cellStatus}`);
         if(test._dirtyMatrixCells?.[fieldKey]?.has(key)) input.classList.add("matrixDirty");
@@ -4933,6 +5003,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       table.appendChild(tr);
     }
 
+    applyColumnWidths();
     canvas.appendChild(table);
     viewport.appendChild(canvas);
     wrap.appendChild(viewport);
@@ -5005,6 +5076,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const id = makeMatrixId(label, matrix.cols);
       matrix.cols.splice(idx, 0, id);
       matrix.col_labels[id] = label;
+      if(!matrix.col_widths || typeof matrix.col_widths !== "object") matrix.col_widths = {};
+      if(!(id in matrix.col_widths)) matrix.col_widths[id] = 140;
       for(const rowId of matrix.rows){
         const key = matrixCellKey(rowId, id);
         if(!(key in matrix.cells)) matrix.cells[key] = "";
@@ -5021,6 +5094,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const deleteCol = (colId) => {
       matrix.cols = matrix.cols.filter(c => c !== colId);
       if(matrix.col_labels) delete matrix.col_labels[colId];
+      if(matrix.col_widths) delete matrix.col_widths[colId];
       for(const rowId of matrix.rows){
         const key = matrixCellKey(rowId, colId);
         if(matrix.cells) delete matrix.cells[key];
