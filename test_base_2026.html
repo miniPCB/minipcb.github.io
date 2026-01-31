@@ -4375,6 +4375,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const nk = normKey(k);
       return ["line_item","item","row","row_id","rowid","id","row_label","rowlabel"].includes(nk);
     };
+    const aliasKey = (k) => {
+      const nk = normKey(k);
+      if(["ref_des","refdes","ref_desig","ref_designators","refdesignators","ref"].includes(nk)) return "refdes";
+      if(["part_type","parttype","type","category","part_category","part"].includes(nk)) return "description";
+      if(["value_description","value_desc","valuedescription","value","description_value","value_description_"].includes(nk)) return "value";
+      if(["qty","quantity","quant"].includes(nk)) return "qty";
+      if(["mpn","mpn_1","manufacturer_part_number","mfr_pn","manufacturer_pn"].includes(nk)) return "mpn_1";
+      if(["mfr","manufacturer","mfr_1","manufacturer_1"].includes(nk)) return "mfr_1";
+      return nk;
+    };
     const colIdMap = new Map();
     for(const id of currentMatrix.cols || []){
       colIdMap.set(normKey(id), id);
@@ -4399,7 +4409,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       rowLabels[rowId] = String(rowLabel ?? rowId);
       for(const [rawKey, rawVal] of Object.entries(rowObj)){
         if(isRowMetaKey(rawKey)) continue;
-        const keyNorm = normKey(rawKey);
+        const keyNorm = aliasKey(rawKey);
         if(!keyNorm) continue;
         let colId = colIdMap.get(keyNorm);
         if(!colId){
@@ -4413,10 +4423,25 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         cells[cellKey] = val;
       }
     }
+    if(colOrder.length && !colOrder.includes("item")) colOrder.unshift("item");
+    if(colOrder.includes("description") && colOrder.includes("value")){
+      colOrder.sort((a, b) => {
+        const order = ["item","refdes","qty","description","value","package","mfr_1","mpn_1","mfr_2","mpn_2","mfr_3","mpn_3","notes"];
+        const ai = order.indexOf(a);
+        const bi = order.indexOf(b);
+        if(ai === -1 && bi === -1) return a.localeCompare(b);
+        if(ai === -1) return 1;
+        if(bi === -1) return -1;
+        return ai - bi;
+      });
+    }
     const colLabels = {};
     for(const colId of colOrder){
       const existing = currentMatrix.col_labels?.[colId];
-      colLabels[colId] = existing || titleFromKey(colId) || colId;
+      if(colId === "refdes") colLabels[colId] = "REF DES";
+      else if(colId === "description") colLabels[colId] = "PART TYPE";
+      else if(colId === "value") colLabels[colId] = "VALUE / DESCRIPTION";
+      else colLabels[colId] = existing || titleFromKey(colId) || colId;
     }
     const merged = normalizeMatrixValue({
       rows: rowIds,
@@ -4430,13 +4455,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(schema && typeof schema === "object"){
       schema.rows = rowIds.map((id) => ({ id, label: merged.row_labels?.[id] || id }));
       schema.cols = colOrder.map((id) => ({ id, label: merged.col_labels?.[id] || id }));
-      if(schema.col_prompts && typeof schema.col_prompts === "object"){
-        const nextPrompts = {};
-        for(const colId of colOrder){
-          if(schema.col_prompts[colId]) nextPrompts[colId] = schema.col_prompts[colId];
-        }
-        schema.col_prompts = nextPrompts;
+      const nextPrompts = {};
+      for(const colId of colOrder){
+        if(colId === "refdes") nextPrompts[colId] = "Reference designators (e.g., R1,R2,C5).";
+        else if(colId === "description") nextPrompts[colId] = "Part type (e.g., capacitor, resistor, connector).";
+        else if(colId === "value") nextPrompts[colId] = "Value or description from schematic partlist.";
+        else if(schema.col_prompts && schema.col_prompts[colId]) nextPrompts[colId] = schema.col_prompts[colId];
       }
+      schema.col_prompts = nextPrompts;
     }
     return merged;
   }
