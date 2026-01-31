@@ -4849,11 +4849,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const expandLabel = state.matrixExpanded ? "Collapse" : "Expand";
     toolbar.innerHTML = `
       <button class="btn" data-action="import-csv">Import CSV</button>
+      <button class="btn" data-action="export-csv">Export CSV</button>
       <button class="btn" data-action="expand">${expandLabel}</button>
       <span class="matrixZoomControls">
-      <button class="btn" data-action="zoom-in">Zoom In</button>
-      <button class="btn" data-action="zoom-out">Zoom Out</button>
-      <button class="btn" data-action="zoom-reset">Reset</button>
+        <button class="btn" data-action="zoom-in">Zoom In</button>
+        <button class="btn" data-action="zoom-out">Zoom Out</button>
+        <button class="btn" data-action="zoom-reset">Reset</button>
       <span class="tag">Zoom ${Math.round(view.scale * 100)}%</span>
       </span>
       <input class="input matrixSearch" type="search" placeholder="Search BOM…" aria-label="Search matrix" />
@@ -5081,6 +5082,36 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             }
           };
           input.click();
+          return;
+        }
+        if(action === "export-csv"){
+          const header = ["Row", ...matrix.cols.map(c => matrix.col_labels?.[c] || c)];
+          const lines = [header];
+          for(const rowId of matrix.rows){
+            const rowLabel = matrix.row_labels?.[rowId] || rowId;
+            const rowVals = matrix.cols.map(colId => {
+              const key = matrixCellKey(rowId, colId);
+              return matrix.cells?.[key] ?? "";
+            });
+            lines.push([rowLabel, ...rowVals]);
+          }
+          const csv = lines
+            .map(cols => cols.map(val => {
+              const s = String(val ?? "");
+              if(/[",\r\n]/.test(s)) return `"${s.replace(/"/g, "\"\"")}"`;
+              return s;
+            }).join(","))
+            .join("\r\n");
+          const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const base = String(test.data?.test_no || "matrix").replace(/[^\w\-]+/g, "_");
+          a.href = url;
+          a.download = `${base}_${fieldKey}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
           return;
         }
         if(action === "zoom-in"){
