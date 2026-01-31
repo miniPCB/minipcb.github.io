@@ -1517,6 +1517,7 @@
     ai_review_concurrency: 1,         // concurrent AI review calls
     ai_chat_permission: 1,            // 0=search, 1=revise, 2=create/delete
     ai_maturity_clicks: 4,            // 2=inline select, 4=modal
+    ui_clicks: 4,                     // 2=fast edit/review, 4=explicit
     ai_personality_dialog: false,
     test_editor_lock: "locked",
     new_test_template_mode: "default",// default | choose
@@ -1657,6 +1658,7 @@
       }
         prefs.ai_chat_permission = normalizeAiChatPermission(prefs.ai_chat_permission ?? DEFAULT_PREFS.ai_chat_permission);
         prefs.ai_maturity_clicks = normalizeMaturityClicks(prefs.ai_maturity_clicks ?? DEFAULT_PREFS.ai_maturity_clicks);
+        prefs.ui_clicks = normalizeUiClicks(prefs.ui_clicks ?? DEFAULT_PREFS.ui_clicks);
         prefs.test_editor_lock = (prefs.test_editor_lock === "unlocked") ? "unlocked" : "locked";
         prefs.ai_personality_dialog = !!prefs.ai_personality_dialog;
         return prefs;
@@ -1745,6 +1747,11 @@
   }
 
   function normalizeMaturityClicks(val){
+    const num = Number(val);
+    return num === 2 ? 2 : 4;
+  }
+
+  function normalizeUiClicks(val){
     const num = Number(val);
     return num === 2 ? 2 : 4;
   }
@@ -4419,7 +4426,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           updateSaveAllIndicator();
         });
         input.addEventListener("click", (e) => {
-          if(e.detail !== 4) return;
+          const clicks = normalizeUiClicks(state.prefs.ui_clicks ?? 4);
+          if(e.detail !== clicks) return;
           e.preventDefault();
           e.stopPropagation();
           showMatrixCellPromptEditor(test, fieldKey, key);
@@ -4822,7 +4830,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const labelEl = head.querySelector(`[data-field]`);
       if(labelEl){
         labelEl.addEventListener("click", (e) => {
-          if(e.detail !== 4) return;
+          const clicks = normalizeUiClicks(state.prefs.ui_clicks ?? 4);
+          if(e.detail !== clicks) return;
           e.preventDefault();
           runAsync(editFieldMetaFlow(k));
         });
@@ -4911,7 +4920,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           openPersonalityDialog(test, k);
         };
         control.addEventListener("click", (e) => {
-          if(e.detail !== 4) return;
+          const clicks = normalizeUiClicks(state.prefs.ui_clicks ?? 4);
+          if(e.detail !== clicks) return;
           handlePersonalityClick(e);
         });
         control.addEventListener("focus", () => {
@@ -6770,6 +6780,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             </select>
           </div>
           <div>
+            <div class="label">Edit/Review Clicks</div>
+            <select class="select" id="prefUiClicks">
+              <option value="2">2 Click</option>
+              <option value="4">4 Click</option>
+            </select>
+          </div>
+          <div>
             <div class="label">Personalities Dialog</div>
             <select class="select" id="prefPersonalityDialog">
               <option value="false">Disabled</option>
@@ -6861,7 +6878,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const prefPersonalityDialog = $("prefPersonalityDialog");
       if(prefPersonalityDialog) prefPersonalityDialog.value = state.prefs.ai_personality_dialog ? "true" : "false";
       const prefMaturityClicks = $("prefMaturityClicks");
+      const prefUiClicks = $("prefUiClicks");
       if(prefMaturityClicks) prefMaturityClicks.value = String(state.prefs.ai_maturity_clicks ?? 4);
+      if(prefUiClicks) prefUiClicks.value = String(state.prefs.ui_clicks ?? 4);
       const prefTestEditorLock = $("prefTestEditorLock");
       if(prefTestEditorLock) prefTestEditorLock.value = state.prefs.test_editor_lock || "locked";
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
@@ -6939,6 +6958,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         // proxy key removed
         state.prefs.ai_suggest_maturity_max = Number($("prefSuggestMax").value);
         state.prefs.ai_maturity_clicks = normalizeMaturityClicks($("prefMaturityClicks").value);
+        state.prefs.ui_clicks = normalizeUiClicks($("prefUiClicks").value);
         const prefPersonalityDialog = $("prefPersonalityDialog");
         if(prefPersonalityDialog) state.prefs.ai_personality_dialog = prefPersonalityDialog.value === "true";
         state.prefs.test_editor_lock = $("prefTestEditorLock").value || "locked";
