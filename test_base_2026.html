@@ -4227,6 +4227,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const colLabels = (src.col_labels && typeof src.col_labels === "object") ? { ...src.col_labels } : {};
     const cells = (src.cells && typeof src.cells === "object") ? { ...src.cells } : {};
     const cellPrompts = (src.cell_prompts && typeof src.cell_prompts === "object") ? { ...src.cell_prompts } : {};
+    const schemaCellPrompts = (schema?.cell_prompts && typeof schema.cell_prompts === "object") ? schema.cell_prompts : null;
+    if(schemaCellPrompts){
+      for(const [k,v] of Object.entries(schemaCellPrompts)){
+        if(!(k in cellPrompts)) cellPrompts[k] = v;
+      }
+    }
     for(const r of schemaRows){
       if(r?.id && !(r.id in rowLabels)) rowLabels[r.id] = r.label || r.id;
       if(r?.id && !rows.includes(r.id)) rows.push(r.id);
@@ -4242,6 +4248,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!test || !fieldKey) return { matrix: { rows: [], cols: [], row_labels: {}, col_labels: {}, cells: {} }, schema: null };
     const schema = getMatrixSchema(test, fieldKey);
     const normalized = normalizeMatrixValue(test.data?.[fieldKey], schema);
+    if(schema && schema.cell_prompts && (!normalized.cell_prompts || Object.keys(normalized.cell_prompts).length === 0)){
+      normalized.cell_prompts = cloneJsonValue(schema.cell_prompts);
+    }
     test.data[fieldKey] = normalized;
     if(schema && (!schema.cell_prompts || Object.keys(schema.cell_prompts || {}).length === 0)){
       if(normalized.cell_prompts && Object.keys(normalized.cell_prompts).length){
