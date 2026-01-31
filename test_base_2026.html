@@ -3642,46 +3642,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             }
             const schema = getMatrixSchema(test, k);
             const currentMatrix = normalizeMatrixValue(test.data?.[k], schema);
-            const nextObj = (nextVal && typeof nextVal === "object" && !Array.isArray(nextVal)) ? nextVal : {};
-            const hasStructure = ("rows" in nextObj) || ("cols" in nextObj) || ("row_labels" in nextObj) || ("col_labels" in nextObj);
-            let merged;
-            if(nextObj.cells && !hasStructure){
-              merged = currentMatrix;
-              applyMatrixCellUpdates(merged, schema, nextObj.cells || {});
-            }else{
-              const base = {
-                rows: Array.isArray(nextObj.rows) ? nextObj.rows : currentMatrix.rows,
-                cols: Array.isArray(nextObj.cols) ? nextObj.cols : currentMatrix.cols,
-                row_labels: { ...currentMatrix.row_labels, ...(nextObj.row_labels || {}) },
-                col_labels: { ...currentMatrix.col_labels, ...(nextObj.col_labels || {}) },
-                cells: { ...currentMatrix.cells }
-              };
-              merged = normalizeMatrixValue(base, schema);
-              if(nextObj.cells) applyMatrixCellUpdates(merged, schema, nextObj.cells || {});
-              if(Array.isArray(nextObj.rows) || Array.isArray(nextObj.cols)) pruneMatrixToShape(merged);
-              if(schema && typeof schema === "object"){
-                if(Array.isArray(nextObj.rows)){
-                  schema.rows = nextObj.rows.map((id) => ({
-                    id,
-                    label: (nextObj.row_labels && nextObj.row_labels[id]) || merged.row_labels?.[id] || id
-                  }));
-                }
-                if(Array.isArray(nextObj.cols)){
-                  schema.cols = nextObj.cols.map((id) => ({
-                    id,
-                    label: (nextObj.col_labels && nextObj.col_labels[id]) || merged.col_labels?.[id] || id
-                  }));
-                }
-                if(nextObj.col_prompts && typeof nextObj.col_prompts === "object"){
-                  if(!schema.col_prompts) schema.col_prompts = {};
-                  for(const [cid, prompt] of Object.entries(nextObj.col_prompts)){
-                    const val = String(prompt ?? "").trim();
-                    if(!val) continue;
-                    schema.col_prompts[cid] = val;
-                  }
-                }
-              }
-            }
+            const merged = applyMatrixPayload(currentMatrix, schema, nextVal);
             test.data[k] = merged;
           }else{
             const val = sanitizeAiText(v);
@@ -4356,6 +4317,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   }
 
   function applyMatrixPayload(currentMatrix, schema, nextObj){
+    if(Array.isArray(nextObj)){
+      return applyMatrixArrayPayload(currentMatrix, schema, nextObj);
+    }
     const payload = (nextObj && typeof nextObj === "object" && !Array.isArray(nextObj)) ? nextObj : {};
     const hasStructure = ("rows" in payload) || ("cols" in payload) || ("row_labels" in payload) || ("col_labels" in payload);
     let merged;
@@ -4394,6 +4358,84 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             schema.col_prompts[cid] = val;
           }
         }
+      }
+    }
+    return merged;
+  }
+
+  function applyMatrixArrayPayload(currentMatrix, schema, rowsArr){
+    const rowsInput = Array.isArray(rowsArr) ? rowsArr : [];
+    const normKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const titleFromKey = (s) => {
+      const raw = String(s || "").replace(/[_\-]+/g, " ").trim();
+      if(!raw) return "";
+      return raw.split(/\s+/).map(w => w ? (w[0].toUpperCase() + w.slice(1)) : "").join(" ");
+    };
+    const isRowMetaKey = (k) => {
+      const nk = normKey(k);
+      return ["line_item","item","row","row_id","rowid","id","row_label","rowlabel"].includes(nk);
+    };
+    const colIdMap = new Map();
+    for(const id of currentMatrix.cols || []){
+      colIdMap.set(normKey(id), id);
+    }
+    for(const [id, label] of Object.entries(currentMatrix.col_labels || {})){
+      colIdMap.set(normKey(label), id);
+    }
+    const colOrder = [];
+    const rowIds = [];
+    const rowLabels = {};
+    const cells = {};
+    for(let idx = 0; idx < rowsInput.length; idx++){
+      const rowObj = rowsInput[idx] && typeof rowsInput[idx] === "object" ? rowsInput[idx] : {};
+      let rowId = rowObj.line_item ?? rowObj.item ?? rowObj.row ?? rowObj.row_id ?? rowObj.id ?? rowObj.rowid ?? "";
+      if(rowId === "") rowId = idx + 1;
+      if(typeof rowId === "number" && Number.isFinite(rowId)){
+        rowId = String(Math.trunc(rowId)).padStart(3, "0");
+      }
+      rowId = String(rowId).trim() || String(idx + 1).padStart(3, "0");
+      rowIds.push(rowId);
+      const rowLabel = rowObj.row_label ?? rowObj.rowlabel ?? rowObj.item ?? rowId;
+      rowLabels[rowId] = String(rowLabel ?? rowId);
+      for(const [rawKey, rawVal] of Object.entries(rowObj)){
+        if(isRowMetaKey(rawKey)) continue;
+        const keyNorm = normKey(rawKey);
+        if(!keyNorm) continue;
+        let colId = colIdMap.get(keyNorm);
+        if(!colId){
+          colId = keyNorm;
+          colIdMap.set(keyNorm, colId);
+        }
+        if(!colOrder.includes(colId)) colOrder.push(colId);
+        const cellKey = `${rowId}::${colId}`;
+        const val = sanitizeAiText(rawVal);
+        if(!val) continue;
+        cells[cellKey] = val;
+      }
+    }
+    const colLabels = {};
+    for(const colId of colOrder){
+      const existing = currentMatrix.col_labels?.[colId];
+      colLabels[colId] = existing || titleFromKey(colId) || colId;
+    }
+    const merged = normalizeMatrixValue({
+      rows: rowIds,
+      cols: colOrder,
+      row_labels: rowLabels,
+      col_labels: colLabels,
+      cells: {}
+    }, schema);
+    applyMatrixCellUpdates(merged, schema, cells);
+    pruneMatrixToShape(merged);
+    if(schema && typeof schema === "object"){
+      schema.rows = rowIds.map((id) => ({ id, label: merged.row_labels?.[id] || id }));
+      schema.cols = colOrder.map((id) => ({ id, label: merged.col_labels?.[id] || id }));
+      if(schema.col_prompts && typeof schema.col_prompts === "object"){
+        const nextPrompts = {};
+        for(const colId of colOrder){
+          if(schema.col_prompts[colId]) nextPrompts[colId] = schema.col_prompts[colId];
+        }
+        schema.col_prompts = nextPrompts;
       }
     }
     return merged;
