@@ -1525,7 +1525,7 @@
     review_field:
       "Return ONLY the field value text. No extra words, no markdown. Use field_prompt and field_label as guidance. Use authoritative_values to keep consistency across sections. Use context_files (if provided) as source material. If maturity <= 2, improve and rewrite the value even if current_value is already filled. If current_value is empty, generate a concise, professional value based on the field_prompt/label. Do NOT repeat TODO or Auto-filled text; replace it with improved content even if brief.{{guidanceLine}}",
     review_matrix_cell:
-      "Return ONLY the cell value text. No extra words, no markdown. Use matrix_cell.row_label and matrix_cell.col_label to decide what belongs in the cell. Use matrix_cell.col_prompt if provided. Use matrix_cell.cell_value as the current value. If provided, matrix_full is the initial full matrix and matrix_changes is the list of accepted changes so far. If unknown, return an empty string. Never return placeholders like \"Value\" or \"TBD\", and never repeat the column label.{{guidanceLine}}",
+      "Return ONLY the cell value text. No extra words, no markdown. Use matrix_cell.row_label and matrix_cell.col_label to decide what belongs in the cell. Use matrix_cell.cell_prompt if provided; otherwise use matrix_cell.col_prompt. Use matrix_cell.cell_value as the current value. If provided, matrix_full is the initial full matrix and matrix_changes is the list of accepted changes so far. If unknown, return an empty string. Never return placeholders like \"Value\" or \"TBD\", and never repeat the column label.{{guidanceLine}}",
     chat_edit:
       "You edit a document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
     create_plan:
@@ -3210,6 +3210,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   row_label: matrix.row_labels?.[item.rowId] || item.rowId,
                   col_label: matrix.col_labels?.[item.colId] || item.colId,
                   cell_value: matrix.cells?.[item.cellKey] ?? "",
+                  cell_prompt: schema?.cell_prompts?.[item.cellKey] || "",
                   col_prompt: schema?.col_prompts?.[item.colId] || ""
                 };
                 if(matrixState){
@@ -4237,6 +4238,50 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return { matrix: normalized, schema };
   }
 
+  function showMatrixCellPromptEditor(test, fieldKey, cellKey){
+    if(!test || !fieldKey || !cellKey) return;
+    if(!test.data._ai) test.data._ai = ensureAiMeta(null, Object.keys(test.data).filter(k => k !== "_ai"));
+    if(!test.data._ai.field_schema) test.data._ai.field_schema = {};
+    if(!test.data._ai.field_schema[fieldKey]) test.data._ai.field_schema[fieldKey] = {};
+    if(!test.data._ai.field_schema[fieldKey].cell_prompts){
+      test.data._ai.field_schema[fieldKey].cell_prompts = {};
+    }
+    const { matrix } = ensureMatrixField(test, fieldKey);
+    const [rowId, colId] = String(cellKey).split("::");
+    const rowLabel = matrix.row_labels?.[rowId] || rowId || "";
+    const colLabel = matrix.col_labels?.[colId] || colId || "";
+    const prompts = test.data._ai.field_schema[fieldKey].cell_prompts;
+    const current = prompts[cellKey] || "";
+    const title = `Cell Prompt: ${rowLabel} × ${colLabel}`;
+    showModal(title, (body, footer) => {
+      body.innerHTML = `
+        <div class="label">Prompt</div>
+        <textarea class="input" id="cellPromptInput" rows="4" spellcheck="false" placeholder="Optional guidance for this specific cell.">${escapeHtml(current)}</textarea>
+        <div class="hint">Leave blank to clear the cell prompt.</div>
+      `;
+      footer.innerHTML = `
+        <button class="btn" id="cellPromptCancel">Cancel</button>
+        <button class="btn primary" id="cellPromptSave">Save</button>
+      `;
+      $("#cellPromptCancel").addEventListener("click", closeModal);
+      $("#cellPromptSave").addEventListener("click", () => {
+        const val = $("#cellPromptInput").value.trim();
+        if(val){
+          prompts[cellKey] = val;
+        }else{
+          delete prompts[cellKey];
+        }
+        test.modified = true;
+        if(!test._dirtyFields) test._dirtyFields = {};
+        test._dirtyFields[fieldKey] = true;
+        $("dirtyHint").style.display = "";
+        updateSaveAllIndicator();
+        renderForm();
+        closeModal();
+      });
+    });
+  }
+
   function matrixCellKey(rowId, colId){
     return `${rowId}::${colId}`;
   }
@@ -4332,6 +4377,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test._dirtyFields[fieldKey] = true;
           $("dirtyHint").style.display = "";
           updateSaveAllIndicator();
+        });
+        input.addEventListener("click", (e) => {
+          if(e.detail !== 4) return;
+          e.preventDefault();
+          e.stopPropagation();
+          showMatrixCellPromptEditor(test, fieldKey, key);
         });
         td.appendChild(input);
         tr.appendChild(td);
