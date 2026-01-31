@@ -3691,6 +3691,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 if(set[`${baseName}_rows`] != null) nextVal = set[`${baseName}_rows`];
                 else if(set[`${baseName}Rows`] != null) nextVal = set[`${baseName}Rows`];
                 else if(set[`${baseName}_matrix`] != null) nextVal = set[`${baseName}_matrix`];
+                else if(set[`${baseName}_template`] != null) nextVal = set[`${baseName}_template`];
+                else if(set.matrix_template != null) nextVal = set.matrix_template;
               }
             }
             if((nextVal == null) && set && typeof set === "object"){
@@ -4427,11 +4429,51 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return nk;
   }
 
+  function normalizeMatrixPayloadStructure(payload){
+    if(!payload || typeof payload !== "object") return payload;
+    const out = { ...payload };
+    if(Array.isArray(payload.cols)){
+      out.cols = payload.cols.map(c => normalizeMatrixColId(c)).filter(Boolean);
+    }
+    if(payload.col_labels && typeof payload.col_labels === "object"){
+      const nextLabels = {};
+      for(const [k, v] of Object.entries(payload.col_labels)){
+        const id = normalizeMatrixColId(k);
+        if(!id) continue;
+        nextLabels[id] = v;
+      }
+      out.col_labels = nextLabels;
+    }
+    if(payload.col_prompts && typeof payload.col_prompts === "object"){
+      const nextPrompts = {};
+      for(const [k, v] of Object.entries(payload.col_prompts)){
+        const id = normalizeMatrixColId(k);
+        if(!id) continue;
+        nextPrompts[id] = v;
+      }
+      out.col_prompts = nextPrompts;
+    }
+    if(payload.cells && typeof payload.cells === "object"){
+      const nextCells = {};
+      for(const [k, v] of Object.entries(payload.cells)){
+        const parts = String(k).split("::");
+        if(parts.length < 2){ continue; }
+        let rowId = parts[0];
+        let colId = normalizeMatrixColId(parts[1]);
+        if(/^\d+$/.test(rowId)) rowId = String(rowId).padStart(3, "0");
+        if(!colId) continue;
+        nextCells[`${rowId}::${colId}`] = v;
+      }
+      out.cells = nextCells;
+    }
+    return out;
+  }
+
   function applyMatrixPayload(currentMatrix, schema, nextObj){
     if(Array.isArray(nextObj)){
       return applyMatrixArrayPayload(currentMatrix, schema, nextObj);
     }
-    const payload = (nextObj && typeof nextObj === "object" && !Array.isArray(nextObj)) ? nextObj : {};
+    const payload = normalizeMatrixPayloadStructure((nextObj && typeof nextObj === "object" && !Array.isArray(nextObj)) ? nextObj : {});
     const hasStructure = ("rows" in payload) || ("cols" in payload) || ("row_labels" in payload) || ("col_labels" in payload);
     let merged;
     if(payload.cells && !hasStructure){
