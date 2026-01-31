@@ -3717,11 +3717,15 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       let parsed = null;
       if(typeof raw === "string"){
         const extracted = extractJsonBlock(raw);
-        try{ parsed = JSON.parse(extracted); }catch{ parsed = null; }
+        if(extracted){
+          parsed = safeParseJson(extracted, "AI Chat");
+        }else{
+          parsed = safeParseJson(raw, "AI Chat");
+        }
       }else if(raw && typeof raw === "object"){
         parsed = raw;
       }
-      if(parsed && typeof parsed === "object"){
+      if(parsed && typeof parsed === "object" && Object.keys(parsed).length){
         const message = sanitizeAiText(parsed.message || "Applied requested updates.");
         appendChatMessage("ai", message);
         const changed = await applyAiChatUpdates(plan, parsed);
@@ -3733,7 +3737,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           renderTestsList();
         }
       }else{
-        appendChatMessage("ai", sanitizeAiText(String(raw || "")));
+        const rawText = sanitizeAiText(String(raw || ""));
+        logLine(`AI Chat parse failed. Raw response: ${rawText.slice(0, 800)}`, "warn");
+        appendChatMessage("ai", rawText);
       }
     }catch(e){
       appendChatMessage("ai", `AI error: ${e.message || e}`);
