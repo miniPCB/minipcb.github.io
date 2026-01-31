@@ -4224,6 +4224,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const rowLabels = (src.row_labels && typeof src.row_labels === "object") ? { ...src.row_labels } : {};
     const colLabels = (src.col_labels && typeof src.col_labels === "object") ? { ...src.col_labels } : {};
     const cells = (src.cells && typeof src.cells === "object") ? { ...src.cells } : {};
+    const cellPrompts = (src.cell_prompts && typeof src.cell_prompts === "object") ? { ...src.cell_prompts } : {};
     for(const r of schemaRows){
       if(r?.id && !(r.id in rowLabels)) rowLabels[r.id] = r.label || r.id;
       if(r?.id && !rows.includes(r.id)) rows.push(r.id);
@@ -4232,7 +4233,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(c?.id && !(c.id in colLabels)) colLabels[c.id] = c.label || c.id;
       if(c?.id && !cols.includes(c.id)) cols.push(c.id);
     }
-    return { rows, cols, row_labels: rowLabels, col_labels: colLabels, cells };
+    return { rows, cols, row_labels: rowLabels, col_labels: colLabels, cells, cell_prompts: cellPrompts };
   }
 
   function ensureMatrixField(test, fieldKey){
@@ -4240,6 +4241,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const schema = getMatrixSchema(test, fieldKey);
     const normalized = normalizeMatrixValue(test.data?.[fieldKey], schema);
     test.data[fieldKey] = normalized;
+    if(schema && (!schema.cell_prompts || Object.keys(schema.cell_prompts || {}).length === 0)){
+      if(normalized.cell_prompts && Object.keys(normalized.cell_prompts).length){
+        schema.cell_prompts = cloneJsonValue(normalized.cell_prompts);
+      }
+    }
     return { matrix: normalized, schema };
   }
 
@@ -4275,11 +4281,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(saveBtn) saveBtn.addEventListener("click", () => {
         if(!inputEl) return;
         const val = inputEl.value.trim();
+        const { matrix } = ensureMatrixField(test, fieldKey);
         if(val){
           prompts[cellKey] = val;
+          if(!matrix.cell_prompts) matrix.cell_prompts = {};
+          matrix.cell_prompts[cellKey] = val;
         }else{
           delete prompts[cellKey];
+          if(matrix.cell_prompts) delete matrix.cell_prompts[cellKey];
         }
+        test.data[fieldKey] = matrix;
         test.modified = true;
         if(!test._dirtyFields) test._dirtyFields = {};
         test._dirtyFields[fieldKey] = true;
