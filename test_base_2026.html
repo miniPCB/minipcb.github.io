@@ -1532,9 +1532,9 @@
     review_matrix_cell:
       "Return ONLY the cell value text. No extra words, no markdown. Use matrix_cell.row_label and matrix_cell.col_label to decide what belongs in the cell. Use matrix_cell.cell_prompt if provided; otherwise use matrix_cell.col_prompt. Use matrix_cell.cell_value as the current value. If maturity <= 2, rewrite and improve the value even if it is already filled; do not return the exact same text. If you cannot improve, return an empty string. If provided, matrix_full is the initial full matrix and matrix_changes is the list of accepted changes so far. If unknown, return an empty string. Never return placeholders like \"Value\" or \"TBD\", and never repeat the column label.{{guidanceLine}}",
     chat_edit:
-      "You edit a document. Permission level: {{permLabel}} ({{perm}}). Return ONLY strict JSON (no extra text, no markdown). Use these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+      "You edit a document. Permission level: {{permLabel}} ({{perm}}). Return ONLY strict JSON (no extra text, no markdown). Use these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material. If matrix_template is provided in the user payload (derived from Partlist headers), you MUST return the matrix structure ONLY (rows/cols/row_labels/col_labels/col_prompts/cells:{}), and MUST NOT include any cell data.",
     create_plan:
-      "Respond with strict JSON containing: plan (goal, scope) and tests (array of sections). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful test_name values. Each section must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive content. No extra text.",
+      "Respond with strict JSON containing: plan (goal, scope) and tests (array of sections). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful test_name values. Each section must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive content. If matrix_template is provided in the user payload (derived from Partlist headers), you MUST return the matrix structure ONLY (rows/cols/row_labels/col_labels/col_prompts/cells:{}), and MUST NOT include any cell data. No extra text.",
     suggest_field:
       "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.",
     suggest_field_strict:
@@ -1843,9 +1843,19 @@
     return out;
   }
 
+  function parseMarkdownTableHeader(lines){
+    const rows = lines.filter(l => /\|/.test(l));
+    if(rows.length < 2) return [];
+    return rows[0].split("|").map(s => s.trim()).filter(Boolean);
+  }
+
+  function escapeRegex(text){
+    return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   function extractMarkdownSectionTable(md, heading){
     if(!md) return [];
-    const re = new RegExp(`^#\\s+${heading}\\s*$`, "im");
+    const re = new RegExp(`^#\\s+${escapeRegex(heading)}\\s*$`, "im");
     const match = md.match(re);
     if(!match) return [];
     const start = md.slice(match.index + match[0].length);
@@ -1854,13 +1864,61 @@
     return parseMarkdownTableLines(lines);
   }
 
+  function extractMarkdownSectionMeta(md, headings){
+    const list = Array.isArray(headings) ? headings : [headings];
+    for(const heading of list){
+      if(!heading) continue;
+      const re = new RegExp(`^#\\s+${escapeRegex(heading)}\\s*$`, "im");
+      const match = md.match(re);
+      if(!match) continue;
+      const start = md.slice(match.index + match[0].length);
+      const section = start.split(/\n# /)[0];
+      const lines = section.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const headers = parseMarkdownTableHeader(lines);
+      const rows = parseMarkdownTableLines(lines);
+      return { headers, rowCount: rows.length };
+    }
+    return { headers: [], rowCount: 0 };
+  }
+
+  function buildMatrixTemplateFromPartlist(headers, rowCount){
+    const normKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const cols = [];
+    const colLabels = {};
+    const colPrompts = {};
+    for(const raw of (headers || [])){
+      const id = normKey(raw);
+      if(!id) continue;
+      if(!cols.includes(id)) cols.push(id);
+      if(!(id in colLabels)) colLabels[id] = raw;
+      if(!(id in colPrompts)) colPrompts[id] = `Provide ${raw}.`;
+    }
+    const rows = [];
+    const rowLabels = {};
+    const count = Math.max(Number(rowCount) || 0, 0);
+    for(let i = 1; i <= count; i++){
+      const id = String(i).padStart(3, "0");
+      rows.push(id);
+      rowLabels[id] = id;
+    }
+    return {
+      rows,
+      cols,
+      row_labels: rowLabels,
+      col_labels: colLabels,
+      col_prompts: colPrompts,
+      cells: {}
+    };
+  }
+
   function extractSchematicMarkdownData(md){
     const netlist = extractMarkdownSectionTable(md, "Netlist");
     const partlist = extractMarkdownSectionTable(md, "Partlist");
+    const partlistMeta = extractMarkdownSectionMeta(md, ["Partlist", "Partlist (Schematic)"]);
     const pinout = extractMarkdownSectionTable(md, "Pinout Description Table, P1");
     const circuitId = extractMarkdownSectionTable(md, "Circuit Identification");
     const testPoints = partlist.filter(p => /test point/i.test(p["PART TYPE"] || p["Part Type"] || p["PART"] || ""));
-    return { netlist, partlist, pinout, circuitId, testPoints };
+    return { netlist, partlist, partlistHeaders: partlistMeta.headers, partlistRowCount: partlistMeta.rowCount, pinout, circuitId, testPoints };
   }
 
     function sanitizeAiMeta(meta){
@@ -2820,6 +2878,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     fixed = fixed.replace(/```(?:json)?/gi, "").replace(/```/g, "");
     fixed = fixed.replace(/^\uFEFF/, "");
     fixed = fixed.replace(/[\u200B-\u200D\uFEFF]/g, "");
+    fixed = fixed.replace(/[“”]/g, "\"").replace(/[‘’]/g, "'");
     const start = fixed.search(/[\{\[]/);
     if(start >= 0) fixed = fixed.slice(start);
     const end = Math.max(fixed.lastIndexOf("}"), fixed.lastIndexOf("]"));
@@ -3713,6 +3772,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const model = state.prefs.ai_model || "gpt-4.1-mini";
     const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
     const permLabel = aiChatPermissionLabel(perm);
+    const partlistMeta = (state.aiChatContextFiles || []).reduce((acc, f) => {
+      if(acc.headers.length) return acc;
+      if(!f?.text) return acc;
+      const meta = extractMarkdownSectionMeta(f.text, ["Partlist", "Partlist (Schematic)"]);
+      if(meta.headers.length){
+        acc.headers = meta.headers;
+        acc.rowCount = meta.rowCount;
+      }
+      return acc;
+    }, { headers: [], rowCount: 0 });
+    const matrixTemplate = partlistMeta.headers.length
+      ? buildMatrixTemplateFromPartlist(partlistMeta.headers, partlistMeta.rowCount)
+      : null;
     const payload = {
       plan: { name: plan.name || "", goal: plan.goal || "", scope: plan.scope || "" },
       tests: (plan.tests || []).map(t => ({
@@ -3727,6 +3799,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         section_type: t.data?.test_type || ""
       })),
       permission: { level: perm, label: permLabel },
+      partlist_headers: partlistMeta.headers,
+      partlist_row_count: partlistMeta.rowCount,
+      matrix_template: matrixTemplate,
       context_files: (state.aiChatContextFiles || []).map(f => ({
         name: f.name,
         type: f.type,
@@ -6039,6 +6114,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             try{
               logLine(`AI Create: using model "${model}".`, "ok");
               const mdData = mdText ? extractSchematicMarkdownData(mdText) : null;
+              const matrixTemplate = mdData?.partlistHeaders?.length
+                ? buildMatrixTemplateFromPartlist(mdData.partlistHeaders, mdData.partlistRowCount || mdData.partlist?.length || 0)
+                : null;
               const payload = {
                 plan_name: name,
                 uut_pn: uutPn,
@@ -6048,6 +6126,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 test_count: count,
                 source_markdown_name: mdName,
                 source_markdown_text: mdText || "",
+                partlist_headers: mdData?.partlistHeaders || [],
+                partlist_row_count: mdData?.partlistRowCount || 0,
+                matrix_template: matrixTemplate,
                 pin_interface_descriptions: mdData?.pinout || [],
                 test_point_list: mdData?.testPoints || [],
                 netlist: mdData?.netlist || [],
