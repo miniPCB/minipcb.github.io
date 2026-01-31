@@ -2818,19 +2818,52 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   function repairJsonText(text){
     let fixed = String(text || "");
     fixed = fixed.replace(/```(?:json)?/gi, "").replace(/```/g, "");
-    fixed = fixed.replace(/,\s*([}\]])/g, "$1");
+    fixed = fixed.replace(/^\uFEFF/, "");
+    fixed = fixed.replace(/[\u200B-\u200D\uFEFF]/g, "");
+    const start = fixed.search(/[\{\[]/);
+    if(start >= 0) fixed = fixed.slice(start);
+    const end = Math.max(fixed.lastIndexOf("}"), fixed.lastIndexOf("]"));
+    if(end >= 0) fixed = fixed.slice(0, end + 1);
     const dq = (fixed.match(/"/g) || []).length;
     const sq = (fixed.match(/'/g) || []).length;
     if(dq === 0 && sq > 0){
       fixed = fixed.replace(/'/g, "\"");
     }
-    fixed = fixed.replace(/[\u0000-\u0019]/g, (c) => {
-      if(c === "\n") return "\\n";
-      if(c === "\r") return "\\r";
-      if(c === "\t") return "\\t";
-      return "";
-    });
+    fixed = escapeNewlinesInStrings(fixed);
+    fixed = fixed.replace(/,\s*([}\]])/g, "$1");
     return fixed.trim();
+  }
+
+  function escapeNewlinesInStrings(text){
+    let out = "";
+    let inStr = false;
+    let esc = false;
+    for(let i = 0; i < text.length; i++){
+      const ch = text[i];
+      if(inStr){
+        if(esc){
+          esc = false;
+          out += ch;
+          continue;
+        }
+        if(ch === "\\"){
+          esc = true;
+          out += ch;
+          continue;
+        }
+        if(ch === "\n"){ out += "\\n"; continue; }
+        if(ch === "\r"){ out += "\\r"; continue; }
+        out += ch;
+        continue;
+      }
+      if(ch === "\""){
+        inStr = true;
+        out += ch;
+        continue;
+      }
+      out += ch;
+    }
+    return out;
   }
 
   function parseLooseJsonPairs(text){
