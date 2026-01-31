@@ -431,6 +431,17 @@
       background: rgba(255, 218, 132, .12);
       box-shadow: 0 0 0 1px rgba(255, 218, 132, .45) inset;
     }
+    .matrixInput.matrixMatch{
+      background: rgba(124,196,255,.18);
+      box-shadow: 0 0 0 1px rgba(124,196,255,.45) inset;
+    }
+    .matrixSearch{
+      height:26px;
+      min-width:160px;
+      font-size:11px;
+      padding:0 8px;
+      border-radius: 10px;
+    }
     .matrixHint{
       font-size:10px;
       color: var(--muted);
@@ -1520,6 +1531,7 @@
     ui_clicks: 4,                     // 2=fast edit/review, 4=explicit
     ai_personality_dialog: false,
     test_editor_lock: "locked",
+    bom_matrix_controls: true,
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -4838,10 +4850,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     toolbar.innerHTML = `
       <button class="btn" data-action="import-csv">Import CSV</button>
       <button class="btn" data-action="expand">${expandLabel}</button>
-      <button class="btn" data-action="zoom-in">Zoom In</button>
-      <button class="btn" data-action="zoom-out">Zoom Out</button>
-      <button class="btn" data-action="zoom-reset">Reset</button>
-      <span class="tag">Zoom ${Math.round(view.scale * 100)}%</span>
+      <span class="matrixZoomControls">
+        <button class="btn" data-action="zoom-in">Zoom In</button>
+        <button class="btn" data-action="zoom-out">Zoom Out</button>
+        <button class="btn" data-action="zoom-reset">Reset</button>
+        <span class="tag">Zoom ${Math.round(view.scale * 100)}%</span>
+      </span>
+      <input class="input matrixSearch" type="search" placeholder="Search BOM…" aria-label="Search matrix" />
     `;
     wrap.appendChild(toolbar);
 
@@ -4926,6 +4941,24 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       canvas.style.transform = `scale(${view.scale})`;
     };
 
+    const applyMatrixSearch = (query) => {
+      const term = String(query || "").trim().toLowerCase();
+      const inputs = table.querySelectorAll(".matrixInput");
+      if(!term){
+        inputs.forEach(input => input.classList.remove("matrixMatch"));
+        return;
+      }
+      inputs.forEach(input => {
+        const cellKey = input.getAttribute("data-matrix-cell") || "";
+        const [rowId, colId] = cellKey.split("::");
+        const rowLabel = (matrix.row_labels?.[rowId] || rowId || "").toLowerCase();
+        const colLabel = (matrix.col_labels?.[colId] || colId || "").toLowerCase();
+        const val = String(input.value || "").toLowerCase();
+        const hit = val.includes(term) || rowLabel.includes(term) || colLabel.includes(term);
+        input.classList.toggle("matrixMatch", !!hit);
+      });
+    };
+
     const requestRerender = () => {
       test.modified = true;
       if(!test._dirtyFields) test._dirtyFields = {};
@@ -4970,6 +5003,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(matrix.cells) delete matrix.cells[key];
       }
     };
+
+    const showMatrixControls = state.prefs.bom_matrix_controls !== false;
+    const zoomControls = toolbar.querySelector(".matrixZoomControls");
+    if(zoomControls) zoomControls.style.display = showMatrixControls ? "" : "none";
 
     toolbar.querySelectorAll("button").forEach(btn => {
       const action = btn.getAttribute("data-action");
@@ -5041,6 +5078,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
       });
     });
+    const searchInput = toolbar.querySelector(".matrixSearch");
+    if(searchInput){
+      searchInput.addEventListener("input", () => applyMatrixSearch(searchInput.value));
+    }
 
     viewport.addEventListener("contextmenu", (e) => {
       e.preventDefault();
@@ -7345,6 +7386,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               <option value="unlocked">Unlocked</option>
             </select>
           </div>
+          <div>
+            <div class="label">BOM Matrix Controls</div>
+            <select class="select" id="prefMatrixControls">
+              <option value="true">Show</option>
+              <option value="false">Hide</option>
+            </select>
+          </div>
         </div>
 
         <div class="hr"></div>
@@ -7400,6 +7448,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(prefUiClicks) prefUiClicks.value = String(state.prefs.ui_clicks ?? 4);
       const prefTestEditorLock = $("prefTestEditorLock");
       if(prefTestEditorLock) prefTestEditorLock.value = state.prefs.test_editor_lock || "locked";
+      const prefMatrixControls = $("prefMatrixControls");
+      if(prefMatrixControls) prefMatrixControls.value = state.prefs.bom_matrix_controls === false ? "false" : "true";
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -7479,6 +7529,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const prefPersonalityDialog = $("prefPersonalityDialog");
         if(prefPersonalityDialog) state.prefs.ai_personality_dialog = prefPersonalityDialog.value === "true";
         state.prefs.test_editor_lock = $("prefTestEditorLock").value || "locked";
+        const prefMatrixControls = $("prefMatrixControls");
+        if(prefMatrixControls) state.prefs.bom_matrix_controls = prefMatrixControls.value === "true";
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
