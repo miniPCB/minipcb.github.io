@@ -4528,6 +4528,30 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       `${fieldKey}.cells.`,
       `${String(fieldKey).replace(/_matrix$/i, "")}_matrix.cells.`
     ];
+    const nestedKeys = [
+      "matrix_template.cells",
+      "matrix.cells",
+      `${fieldKey}.cells`,
+      `${String(fieldKey).replace(/_matrix$/i, "")}_matrix.cells`
+    ];
+    for(const nk of nestedKeys){
+      if(!(nk in set)) continue;
+      const block = set[nk];
+      if(!block || typeof block !== "object") continue;
+      for(const [rowIdRaw, colsObj] of Object.entries(block)){
+        if(!colsObj || typeof colsObj !== "object") continue;
+        let rowId = String(rowIdRaw || "");
+        if(/^\d+$/.test(rowId)) rowId = String(rowId).padStart(3, "0");
+        for(const [colRaw, valRaw] of Object.entries(colsObj)){
+          const colId = normalizeMatrixColId(colRaw);
+          if(!colId) continue;
+          const cellKey = `${rowId}::${colId}`;
+          const val = sanitizeAiText(valRaw);
+          if(!val) continue;
+          cells[cellKey] = val;
+        }
+      }
+    }
     for(const [k, v] of Object.entries(set)){
       const key = String(k || "");
       const prefix = prefixes.find(p => key.startsWith(p));
