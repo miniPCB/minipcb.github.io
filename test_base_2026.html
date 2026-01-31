@@ -4393,6 +4393,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       colIdMap.set(normKey(label), id);
     }
     const colOrder = [];
+    const colLabelMap = {};
     const rowIds = [];
     const rowLabels = {};
     const cells = {};
@@ -4416,6 +4417,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           colId = keyNorm;
           colIdMap.set(keyNorm, colId);
         }
+        if(!colLabelMap[colId]){
+          const label = String(rawKey || "").trim();
+          if(label) colLabelMap[colId] = label;
+        }
         if(!colOrder.includes(colId)) colOrder.push(colId);
         const cellKey = `${rowId}::${colId}`;
         const val = sanitizeAiText(rawVal);
@@ -4423,7 +4428,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         cells[cellKey] = val;
       }
     }
-    if(colOrder.length && !colOrder.includes("item")) colOrder.unshift("item");
     if(colOrder.includes("description") && colOrder.includes("value")){
       colOrder.sort((a, b) => {
         const order = ["item","refdes","qty","description","value","package","mfr_1","mpn_1","mfr_2","mpn_2","mfr_3","mpn_3","notes"];
@@ -4438,10 +4442,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const colLabels = {};
     for(const colId of colOrder){
       const existing = currentMatrix.col_labels?.[colId];
-      if(colId === "refdes") colLabels[colId] = "REF DES";
-      else if(colId === "description") colLabels[colId] = "PART TYPE";
-      else if(colId === "value") colLabels[colId] = "VALUE / DESCRIPTION";
-      else colLabels[colId] = existing || titleFromKey(colId) || colId;
+      const mapped = colLabelMap[colId];
+      colLabels[colId] = mapped || existing || titleFromKey(colId) || colId;
     }
     const merged = normalizeMatrixValue({
       rows: rowIds,
