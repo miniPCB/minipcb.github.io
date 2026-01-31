@@ -3693,6 +3693,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 else if(set[`${baseName}_matrix`] != null) nextVal = set[`${baseName}_matrix`];
               }
             }
+            if((nextVal == null) && set && typeof set === "object"){
+              const cellUpdates = extractMatrixCellPathUpdates(set, k);
+              if(Object.keys(cellUpdates).length){
+                const schema = getMatrixSchema(test, k);
+                const currentMatrix = normalizeMatrixValue(test.data?.[k], schema);
+                const merged = applyMatrixPayload(currentMatrix, schema, { cells: cellUpdates });
+                test.data[k] = merged;
+                setFieldMaturity(test, k, 2);
+                test.modified = true;
+                if(!test._dirtyFields) test._dirtyFields = {};
+                test._dirtyFields[k] = true;
+                changed = true;
+              }
+              continue;
+            }
             if(typeof nextVal === "string"){
               const raw = nextVal.trim();
               if(raw.startsWith("{") || raw.startsWith("[")){
@@ -4399,6 +4414,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
   }
 
+  function normalizeMatrixColId(rawKey){
+    const normKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const nk = normKey(rawKey);
+    if(["ref_des","refdes","ref_desig","ref_designators","refdesignators","ref"].includes(nk)) return "refdes";
+    if(["part_type","parttype","type","category","part_category","part"].includes(nk)) return "description";
+    if(["value_description","value_desc","valuedescription","value","description_value","value_description_"].includes(nk)) return "value";
+    if(["qty","quantity","quant"].includes(nk)) return "qty";
+    if(["mpn","mpn_1","manufacturer_part_number","mfr_pn","manufacturer_pn","supplier_pn","spn"].includes(nk)) return "mpn_1";
+    if(["mfr","manufacturer","mfr_1","manufacturer_1","supplier"].includes(nk)) return "mfr_1";
+    if(nk === "line_item") return "item";
+    return nk;
+  }
+
   function applyMatrixPayload(currentMatrix, schema, nextObj){
     if(Array.isArray(nextObj)){
       return applyMatrixArrayPayload(currentMatrix, schema, nextObj);
@@ -4446,6 +4474,34 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return merged;
   }
 
+  function extractMatrixCellPathUpdates(set, fieldKey){
+    const cells = {};
+    if(!set || typeof set !== "object") return cells;
+    const prefixes = [
+      `matrix_template.cells.`,
+      `matrix.cells.`,
+      `${fieldKey}.cells.`,
+      `${String(fieldKey).replace(/_matrix$/i, "")}_matrix.cells.`
+    ];
+    for(const [k, v] of Object.entries(set)){
+      const key = String(k || "");
+      const prefix = prefixes.find(p => key.startsWith(p));
+      if(!prefix) continue;
+      const rest = key.slice(prefix.length);
+      const parts = rest.split(".").filter(Boolean);
+      if(parts.length < 2) continue;
+      let rowId = parts[0];
+      let colId = parts[1];
+      if(/^\d+$/.test(rowId)) rowId = String(rowId).padStart(3, "0");
+      colId = normalizeMatrixColId(colId);
+      const cellKey = `${rowId}::${colId}`;
+      const val = sanitizeAiText(v);
+      if(!val) continue;
+      cells[cellKey] = val;
+    }
+    return cells;
+  }
+
   function applyMatrixArrayPayload(currentMatrix, schema, rowsArr){
     const rowsInput = Array.isArray(rowsArr) ? rowsArr : [];
     const normKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -4458,16 +4514,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const nk = normKey(k);
       return ["line_item","item","row","row_id","rowid","id","row_label","rowlabel"].includes(nk);
     };
-    const aliasKey = (k) => {
-      const nk = normKey(k);
-      if(["ref_des","refdes","ref_desig","ref_designators","refdesignators","ref"].includes(nk)) return "refdes";
-      if(["part_type","parttype","type","category","part_category","part"].includes(nk)) return "description";
-      if(["value_description","value_desc","valuedescription","value","description_value","value_description_"].includes(nk)) return "value";
-      if(["qty","quantity","quant"].includes(nk)) return "qty";
-      if(["mpn","mpn_1","manufacturer_part_number","mfr_pn","manufacturer_pn"].includes(nk)) return "mpn_1";
-      if(["mfr","manufacturer","mfr_1","manufacturer_1"].includes(nk)) return "mfr_1";
-      return nk;
-    };
+    const aliasKey = (k) => normalizeMatrixColId(k);
     const colIdMap = new Map();
     for(const id of currentMatrix.cols || []){
       colIdMap.set(normKey(id), id);
