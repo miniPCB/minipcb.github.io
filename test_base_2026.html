@@ -2808,6 +2808,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         return JSON.parse(fixed);
       }catch(e2){
         const fallback = parseLooseJsonPairs(text);
+        try{ Object.defineProperty(fallback, "__fromFallback", { value: true, enumerable: false }); }catch(_){}
         logLine(`${label} parse failed: ${e.message || e}. Fallback pairs: ${Object.keys(fallback).length}`, "warn");
         return fallback;
       }
@@ -2818,6 +2819,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     let fixed = String(text || "");
     fixed = fixed.replace(/```(?:json)?/gi, "").replace(/```/g, "");
     fixed = fixed.replace(/,\s*([}\]])/g, "$1");
+    const dq = (fixed.match(/"/g) || []).length;
+    const sq = (fixed.match(/'/g) || []).length;
+    if(dq === 0 && sq > 0){
+      fixed = fixed.replace(/'/g, "\"");
+    }
     fixed = fixed.replace(/[\u0000-\u0019]/g, (c) => {
       if(c === "\n") return "\\n";
       if(c === "\r") return "\\r";
@@ -3736,6 +3742,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         parsed = raw;
       }
       if(parsed && typeof parsed === "object" && Object.keys(parsed).length){
+        if(parsed.__fromFallback){
+          const rawText = sanitizeAiText(String(raw || ""));
+          logLine(`AI Chat parse fallback used. Raw response: ${rawText.slice(0, 800)}`, "warn");
+        }
         const message = sanitizeAiText(parsed.message || "Applied requested updates.");
         appendChatMessage("ai", message);
         const changed = await applyAiChatUpdates(plan, parsed);
@@ -5845,6 +5855,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   parsed = safeParseJson(candidate, "AI Create");
                 }else if(raw && typeof raw === "object"){
                   parsed = raw;
+                }
+                if(parsed && parsed.__fromFallback){
+                  const rawText = sanitizeAiText(String(raw || ""));
+                  logLine(`AI Create parse fallback used. Raw response: ${rawText.slice(0, 800)}`, "warn");
                 }
                 if(!parsed || (typeof parsed === "object" && !Array.isArray(parsed.tests) && !parsed.plan)){
                   const rawText = sanitizeAiText(String(raw || ""));
