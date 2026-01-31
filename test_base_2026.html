@@ -3647,20 +3647,39 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             let merged;
             if(nextObj.cells && !hasStructure){
               merged = currentMatrix;
-              for(const [cellKey, cellVal] of Object.entries(nextObj.cells || {})){
-                merged.cells[cellKey] = sanitizeAiText(cellVal);
-              }
+              applyMatrixCellUpdates(merged, schema, nextObj.cells || {});
             }else{
               const base = {
                 rows: Array.isArray(nextObj.rows) ? nextObj.rows : currentMatrix.rows,
                 cols: Array.isArray(nextObj.cols) ? nextObj.cols : currentMatrix.cols,
                 row_labels: { ...currentMatrix.row_labels, ...(nextObj.row_labels || {}) },
                 col_labels: { ...currentMatrix.col_labels, ...(nextObj.col_labels || {}) },
-                cells: { ...currentMatrix.cells, ...(nextObj.cells || {}) }
+                cells: { ...currentMatrix.cells }
               };
               merged = normalizeMatrixValue(base, schema);
-              for(const [cellKey, cellVal] of Object.entries(merged.cells || {})){
-                merged.cells[cellKey] = sanitizeAiText(cellVal);
+              if(nextObj.cells) applyMatrixCellUpdates(merged, schema, nextObj.cells || {});
+              if(Array.isArray(nextObj.rows) || Array.isArray(nextObj.cols)) pruneMatrixToShape(merged);
+              if(schema && typeof schema === "object"){
+                if(Array.isArray(nextObj.rows)){
+                  schema.rows = nextObj.rows.map((id) => ({
+                    id,
+                    label: (nextObj.row_labels && nextObj.row_labels[id]) || merged.row_labels?.[id] || id
+                  }));
+                }
+                if(Array.isArray(nextObj.cols)){
+                  schema.cols = nextObj.cols.map((id) => ({
+                    id,
+                    label: (nextObj.col_labels && nextObj.col_labels[id]) || merged.col_labels?.[id] || id
+                  }));
+                }
+                if(nextObj.col_prompts && typeof nextObj.col_prompts === "object"){
+                  if(!schema.col_prompts) schema.col_prompts = {};
+                  for(const [cid, prompt] of Object.entries(nextObj.col_prompts)){
+                    const val = String(prompt ?? "").trim();
+                    if(!val) continue;
+                    schema.col_prompts[cid] = val;
+                  }
+                }
               }
             }
             test.data[k] = merged;
@@ -4316,6 +4335,96 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(c?.id && !cols.includes(c.id)) cols.push(c.id);
     }
     return { rows, cols, row_labels: rowLabels, col_labels: colLabels, cells, cell_prompts: cellPrompts };
+  }
+
+  function applyMatrixCellUpdates(matrix, schema, cells){
+    if(!matrix || !cells || typeof cells !== "object") return;
+    for(const [cellKey, cellVal] of Object.entries(cells)){
+      const val = sanitizeAiText(cellVal);
+      if(!val) continue;
+      const parts = String(cellKey).split("::");
+      const rowId = parts[0] || "";
+      const colId = parts[1] || "";
+      if(rowId && !matrix.rows.includes(rowId)) matrix.rows.push(rowId);
+      if(colId && !matrix.cols.includes(colId)) matrix.cols.push(colId);
+      if(rowId && !matrix.row_labels[rowId]) matrix.row_labels[rowId] = rowId;
+      if(colId && !matrix.col_labels[colId]) matrix.col_labels[colId] = colId;
+      matrix.cells[cellKey] = val;
+      if(matrix.cell_prompts) delete matrix.cell_prompts[cellKey];
+      if(schema?.cell_prompts) delete schema.cell_prompts[cellKey];
+    }
+  }
+
+  function applyMatrixPayload(currentMatrix, schema, nextObj){
+    const payload = (nextObj && typeof nextObj === "object" && !Array.isArray(nextObj)) ? nextObj : {};
+    const hasStructure = ("rows" in payload) || ("cols" in payload) || ("row_labels" in payload) || ("col_labels" in payload);
+    let merged;
+    if(payload.cells && !hasStructure){
+      merged = currentMatrix;
+      applyMatrixCellUpdates(merged, schema, payload.cells || {});
+    }else{
+      const base = {
+        rows: Array.isArray(payload.rows) ? payload.rows : currentMatrix.rows,
+        cols: Array.isArray(payload.cols) ? payload.cols : currentMatrix.cols,
+        row_labels: { ...currentMatrix.row_labels, ...(payload.row_labels || {}) },
+        col_labels: { ...currentMatrix.col_labels, ...(payload.col_labels || {}) },
+        cells: { ...currentMatrix.cells }
+      };
+      merged = normalizeMatrixValue(base, schema);
+      if(payload.cells) applyMatrixCellUpdates(merged, schema, payload.cells || {});
+      if(Array.isArray(payload.rows) || Array.isArray(payload.cols)) pruneMatrixToShape(merged);
+      if(schema && typeof schema === "object"){
+        if(Array.isArray(payload.rows)){
+          schema.rows = payload.rows.map((id) => ({
+            id,
+            label: (payload.row_labels && payload.row_labels[id]) || merged.row_labels?.[id] || id
+          }));
+        }
+        if(Array.isArray(payload.cols)){
+          schema.cols = payload.cols.map((id) => ({
+            id,
+            label: (payload.col_labels && payload.col_labels[id]) || merged.col_labels?.[id] || id
+          }));
+        }
+        if(payload.col_prompts && typeof payload.col_prompts === "object"){
+          if(!schema.col_prompts) schema.col_prompts = {};
+          for(const [cid, prompt] of Object.entries(payload.col_prompts)){
+            const val = String(prompt ?? "").trim();
+            if(!val) continue;
+            schema.col_prompts[cid] = val;
+          }
+        }
+      }
+    }
+    return merged;
+  }
+
+  function pruneMatrixToShape(matrix){
+    if(!matrix) return;
+    const rows = new Set(matrix.rows || []);
+    const cols = new Set(matrix.cols || []);
+    const prunedCells = {};
+    for(const [cellKey, cellVal] of Object.entries(matrix.cells || {})){
+      const [r, c] = String(cellKey).split("::");
+      if(rows.has(r) && cols.has(c)) prunedCells[cellKey] = cellVal;
+    }
+    const prunedRowLabels = {};
+    for(const [k, v] of Object.entries(matrix.row_labels || {})){
+      if(rows.has(k)) prunedRowLabels[k] = v;
+    }
+    const prunedColLabels = {};
+    for(const [k, v] of Object.entries(matrix.col_labels || {})){
+      if(cols.has(k)) prunedColLabels[k] = v;
+    }
+    const prunedPrompts = {};
+    for(const [k, v] of Object.entries(matrix.cell_prompts || {})){
+      const [r, c] = String(k).split("::");
+      if(rows.has(r) && cols.has(c)) prunedPrompts[k] = v;
+    }
+    matrix.cells = prunedCells;
+    matrix.row_labels = prunedRowLabels;
+    matrix.col_labels = prunedColLabels;
+    if(matrix.cell_prompts) matrix.cell_prompts = prunedPrompts;
   }
 
   function ensureMatrixField(test, fieldKey){
@@ -5914,6 +6023,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                     if(item.test_name && !set.test_name) set.test_name = item.test_name;
                     if(testNo && !set.test_no) set.test_no = testNo;
                     const baseData = normalizeTestData(set);
+                    for(const [k, v] of Object.entries(set)){
+                      const fieldType = String(baseData?._ai?.field_types?.[k] || "").toLowerCase();
+                      if(!fieldType.includes("matrix")) continue;
+                      if(!v || typeof v !== "object" || Array.isArray(v)) continue;
+                      const schema = baseData?._ai?.field_schema?.[k] || null;
+                      const currentMatrix = normalizeMatrixValue(baseData[k], schema);
+                      baseData[k] = applyMatrixPayload(currentMatrix, schema, v);
+                    }
                     if(uutPn && !baseData.uut_pn) baseData.uut_pn = uutPn;
                     plan.tests.push({
                       id: uid(),
