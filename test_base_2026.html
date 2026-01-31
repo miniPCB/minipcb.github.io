@@ -3616,6 +3616,35 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return s.trim();
   }
 
+  function extractBalancedJsonObject(text){
+    const s = String(text || "");
+    const start = s.indexOf("{");
+    if(start < 0) return "";
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for(let i = start; i < s.length; i++){
+      const ch = s[i];
+      if(inStr){
+        if(esc){ esc = false; continue; }
+        if(ch === "\\"){ esc = true; continue; }
+        if(ch === "\""){ inStr = false; continue; }
+        continue;
+      }
+      if(ch === "\""){ inStr = true; continue; }
+      if(ch === "{"){ depth++; }
+      else if(ch === "}"){
+        depth--;
+        if(depth === 0) return s.slice(start, i + 1);
+      }
+    }
+    return "";
+  }
+
+  function tryParseJson(text){
+    try{ return JSON.parse(text); }catch{ return null; }
+  }
+
   async function applyAiChatUpdates(plan, payload){
     const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
     if(perm <= 0) return false;
@@ -3851,9 +3880,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const raw = extractResponseText(data);
       let parsed = null;
       if(typeof raw === "string"){
+        const candidates = [];
+        const balanced = extractBalancedJsonObject(raw);
+        if(balanced) candidates.push(balanced);
         const extracted = extractJsonBlock(raw);
-        const candidate = repairJsonText(extracted || raw);
-        parsed = safeParseJson(candidate, "AI Chat");
+        if(extracted && extracted !== balanced) candidates.push(extracted);
+        candidates.push(raw);
+        for(const cand of candidates){
+          const repaired = repairJsonText(cand);
+          const strict = tryParseJson(repaired);
+          if(strict){ parsed = strict; break; }
+        }
+        if(!parsed){
+          const fallbackCandidate = repairJsonText(candidates[0] || raw);
+          parsed = safeParseJson(fallbackCandidate, "AI Chat");
+        }
       }else if(raw && typeof raw === "object"){
         parsed = raw;
       }
@@ -6268,8 +6309,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 const raw = extractResponseText(data);
                 let parsed = null;
                 if(typeof raw === "string"){
-                  const candidate = repairJsonText(raw);
-                  parsed = safeParseJson(candidate, "AI Create");
+                  const candidates = [];
+                  const balanced = extractBalancedJsonObject(raw);
+                  if(balanced) candidates.push(balanced);
+                  candidates.push(raw);
+                  for(const cand of candidates){
+                    const repaired = repairJsonText(cand);
+                    const strict = tryParseJson(repaired);
+                    if(strict){ parsed = strict; break; }
+                  }
+                  if(!parsed){
+                    const fallbackCandidate = repairJsonText(candidates[0] || raw);
+                    parsed = safeParseJson(fallbackCandidate, "AI Create");
+                  }
                 }else if(raw && typeof raw === "object"){
                   parsed = raw;
                 }
