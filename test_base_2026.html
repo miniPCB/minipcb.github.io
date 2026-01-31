@@ -1532,7 +1532,7 @@
     review_matrix_cell:
       "Return ONLY the cell value text. No extra words, no markdown. Use matrix_cell.row_label and matrix_cell.col_label to decide what belongs in the cell. Use matrix_cell.cell_prompt if provided; otherwise use matrix_cell.col_prompt. Use matrix_cell.cell_value as the current value. If maturity <= 2, rewrite and improve the value even if it is already filled; do not return the exact same text. If you cannot improve, return an empty string. If provided, matrix_full is the initial full matrix and matrix_changes is the list of accepted changes so far. If unknown, return an empty string. Never return placeholders like \"Value\" or \"TBD\", and never repeat the column label.{{guidanceLine}}",
     chat_edit:
-      "You edit a document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
+      "You edit a document. Permission level: {{permLabel}} ({{perm}}). Return ONLY strict JSON (no extra text, no markdown). Use these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
     create_plan:
       "Respond with strict JSON containing: plan (goal, scope) and tests (array of sections). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful test_name values. Each section must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive content. No extra text.",
     suggest_field:
@@ -2814,6 +2814,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     }
   }
 
+  function repairJsonText(text){
+    let fixed = String(text || "");
+    fixed = fixed.replace(/```(?:json)?/gi, "").replace(/```/g, "");
+    fixed = fixed.replace(/,\s*([}\]])/g, "$1");
+    fixed = fixed.replace(/[\u0000-\u0019]/g, (c) => {
+      if(c === "\n") return "\\n";
+      if(c === "\r") return "\\r";
+      if(c === "\t") return "\\t";
+      return "";
+    });
+    return fixed.trim();
+  }
+
   function parseLooseJsonPairs(text){
     const out = {};
     const re = /"([^"\\]+)"\s*:\s*"((?:\\.|[^"\\])*)"/g;
@@ -3717,11 +3730,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       let parsed = null;
       if(typeof raw === "string"){
         const extracted = extractJsonBlock(raw);
-        if(extracted){
-          parsed = safeParseJson(extracted, "AI Chat");
-        }else{
-          parsed = safeParseJson(raw, "AI Chat");
-        }
+        const candidate = repairJsonText(extracted || raw);
+        parsed = safeParseJson(candidate, "AI Chat");
       }else if(raw && typeof raw === "object"){
         parsed = raw;
       }
@@ -5829,7 +5839,17 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               if(resp.ok){
                 const data = await resp.json();
                 const raw = extractResponseText(data);
-                const parsed = safeParseJson(raw, "AI Create");
+                let parsed = null;
+                if(typeof raw === "string"){
+                  const candidate = repairJsonText(raw);
+                  parsed = safeParseJson(candidate, "AI Create");
+                }else if(raw && typeof raw === "object"){
+                  parsed = raw;
+                }
+                if(!parsed || (typeof parsed === "object" && !Array.isArray(parsed.tests) && !parsed.plan)){
+                  const rawText = sanitizeAiText(String(raw || ""));
+                  logLine(`AI Create parse failed. Raw response: ${rawText.slice(0, 800)}`, "warn");
+                }
                 if(parsed?.plan){
                   if(!plan.goal && typeof parsed.plan.goal === "string") plan.goal = sanitizeAiText(parsed.plan.goal);
                   if(!plan.scope && typeof parsed.plan.scope === "string") plan.scope = sanitizeAiText(parsed.plan.scope);
