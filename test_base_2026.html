@@ -3338,9 +3338,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                   }
                   const colLabel = String(matrixContext?.col_label || "").trim();
                   const rowLabel = String(matrixContext?.row_label || "").trim();
-                  const tooLong = val.length > 120;
+                  const maxLen = (item.colId === "requirement" || item.colId === "notes") ? 300 : 120;
+                  const tooLong = val.length > maxLen;
                   const looksInstruction = /(?:\bshould\b|\benter\b|\bpopulate\b|\bfill\b|\buse\b|\binclude\b|\bprovide\b|\bset\b|\bcomplete\b)/i.test(val);
                   const looksSentence = /[.!?]/.test(val);
+                  const allowInstruction = item.colId === "requirement";
                   const startsWithBad = /^(value|tbd|to be completed|to be filled|complete per|per drawing|per schematic|\{|\[|```)/i.test(val);
                   const allowRowMatch = ((item.colId === "item" || item.colId === "req_id") && rowLabel && val === rowLabel);
                   const bad = /^value/i.test(val)
@@ -3348,7 +3350,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                     || (colLabel && val === colLabel)
                     || (!allowRowMatch && rowLabel && val === rowLabel)
                     || startsWithBad
-                    || (looksInstruction && looksSentence)
+                    || (!allowInstruction && looksInstruction && looksSentence)
                     || tooLong;
                   if(bad){
                     logLine(`AI Review: matrix cell rejected "${val}" for ${t.data.test_no || t.id.slice(0,6)}.${field} ${item.cellKey}.`, "warn");
