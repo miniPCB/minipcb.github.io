@@ -7,7 +7,7 @@
   <!-- If this file lives at site root next to styles.css, this link will pick up your site's dark theme. -->
   <link rel="stylesheet" href="styles.css" />
   <style>
-    /* Page‑specific light styling that plays nicely with your existing dark theme */
+    /* Page-specific light styling that plays nicely with your existing dark theme */
     .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
     .page-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
     .muted { opacity: .8; font-size: .9rem; }
@@ -46,9 +46,9 @@
   <header class="container">
     <div class="page-title">
       <h1>Electrical Part Stress Analyzer <span class="muted">(EPSA)</span></h1>
-      <div id="epsa-status" class="muted">Ready.</div>
+      <div id="epsa-status" class="muted" role="status" aria-live="polite">Ready.</div>
     </div>
-    <p class="notice">Paste a <strong>Part List</strong> (CSV or JSON) and an optional <strong>Netlist</strong> (SPICE‑like). The tool computes stress ratios against editable derating rules and produces a Markdown table you can copy into reports.</p>
+    <p class="notice">Paste a <strong>Part List</strong> (CSV or JSON) and an optional <strong>Netlist</strong> (SPICE-like). The tool computes stress ratios against editable derating rules and produces a Markdown table you can copy into reports.</p>
   </header>
 
   <main class="container">
@@ -56,8 +56,9 @@
       <!-- INPUTS -->
       <section class="card">
         <h2>1) Part List</h2>
-        <p class="small">CSV headers suggested (case‑insensitive, aliases allowed): <span class="mono">RefDes, Type, Value, Units, V_op, V_rating, I_op, I_rating, P_op, P_rating, T_op, T_rating, Notes</span></p>
+        <p class="small">CSV headers suggested (case-insensitive, aliases allowed): <span class="mono">RefDes, Type, Value, Units, V_op, V_rating, I_op, I_rating, P_op, P_rating, T_op, T_rating, Notes</span></p>
         <div class="controls">
+          <label class="small" for="parts-file">Choose file</label>
           <input id="parts-file" type="file" accept=".csv,.json,.txt" />
           <button class="btn-ghost" id="load-parts">Load file</button>
           <button class="btn-ghost" id="example-parts">Load Example</button>
@@ -67,13 +68,14 @@
 
       <section class="card">
         <h2>2) Netlist (optional)</h2>
-        <p class="small">SPICE‑style lines like <span class="mono">R1 N001 N002 10k</span>, <span class="mono">C3 OUT GND 0.1u</span>. Used for cross‑checking RefDes coverage only.</p>
+        <p class="small">SPICE-style lines like <span class="mono">R1 N001 N002 10k</span>, <span class="mono">C3 OUT GND 0.1u</span>. Used for cross-checking RefDes coverage only.</p>
         <div class="controls">
+          <label class="small" for="netlist-file">Choose file</label>
           <input id="netlist-file" type="file" accept=".cir,.sp,.txt" />
           <button class="btn-ghost" id="load-net">Load file</button>
           <button class="btn-ghost" id="example-net">Load Example</button>
         </div>
-        <textarea id="netlist-input" placeholder="Paste SPICE‑like netlist here (optional)..."></textarea>
+        <textarea id="netlist-input" placeholder="Paste SPICE-like netlist here (optional)..."></textarea>
       </section>
 
       <section class="card">
@@ -124,7 +126,7 @@
       <h3>Input Hints</h3>
       <ul>
         <li>Only metrics present in your data are evaluated. For example, if you provide <span class="mono">P_op</span> and <span class="mono">P_rating</span> for resistors, EPSA will compute a power stress check even if no voltage/current is provided.</li>
-        <li>Alias headers are recognized: <span class="mono">Vop, V_oper, V(applied)</span> → <span class="mono">V_op</span>; <span class="mono">Vr, Vrated</span> → <span class="mono">V_rating</span>; similarly for <span class="mono">I</span>, <span class="mono">P</span>, and <span class="mono">T</span>.</li>
+        <li>Alias headers are recognized: <span class="mono">Vop, V_oper, V(applied)</span> -> <span class="mono">V_op</span>; <span class="mono">Vr, Vrated</span> -> <span class="mono">V_rating</span>; similarly for <span class="mono">I</span>, <span class="mono">P</span>, and <span class="mono">T</span>.</li>
         <li>Netlist is optional and used only to flag missing/extra RefDes compared to your part list.</li>
         <li>Derating rules are intentionally simple and editable. If you have program standards, paste them here as ratios.</li>
       </ul>
@@ -276,10 +278,14 @@
       const m = s.match(/^([+-]?(?:\d+\.?\d*|\d*\.?\d+))(?:\s*([kKmMgGuUnNpP]))?$/);
       if (m){
         const num = parseFloat(m[1]);
-        const suf = (m[2]||'').toLowerCase();
-        const mult = { 'g':1e9, 'm':1e6, 'k':1e3, '':1, 'm_':1e-3, 'u':1e-6, 'n':1e-9, 'p':1e-12 };
-        if (suf==='m'){ return num*1e-3; }
-        if (suf && suf in {g:1,m:1,k:1,u:1,n:1,p:1}) return num*mult[suf];
+        const suf = (m[2]||'');
+        if (suf === 'G') return num * 1e9;
+        if (suf === 'M') return num * 1e6;
+        if (suf === 'k' || suf === 'K') return num * 1e3;
+        if (suf === 'm') return num * 1e-3;
+        if (suf === 'u' || suf === 'U') return num * 1e-6;
+        if (suf === 'n' || suf === 'N') return num * 1e-9;
+        if (suf === 'p' || suf === 'P') return num * 1e-12;
         return num;
       }
       // fallback: strip non-numeric (keeps ., -, e, E)
@@ -353,7 +359,7 @@
     }
 
     function toPercent(x){
-      if (!isFinite(x)) return '—';
+      if (!isFinite(x)) return '--';
       return (x*100).toFixed(0) + '%';
     }
 
@@ -365,10 +371,10 @@
       for (const r of results){
         const get = (lbl) => {
           const m = r.metrics.find(x=>x.label===lbl);
-          if (!m || m.op==null) return '—';
+          if (!m || m.op==null) return '--';
           return `${fmtNum(m.op)}/${fmtNum(m.rat)} (${toPercent(m.stress)})`;
         };
-        const margin = (isFinite(r.worst.limit) && isFinite(r.worst.stress)) ? toPercent(r.worst.limit - r.worst.stress) : '—';
+        const margin = (isFinite(r.worst.limit) && isFinite(r.worst.stress)) ? toPercent(r.worst.limit - r.worst.stress) : '--';
         const row = [
           escMD(r.RefDes||''),
           escMD(r.Type||''),
@@ -390,7 +396,7 @@
 
     function escMD(s){ return String(s).replace(/\|/g,'\\|'); }
     function fmtNum(v){
-      if (!isFinite(v)) return '—';
+      if (!isFinite(v)) return '--';
       if (Math.abs(v) >= 1000 || Math.abs(v) < 0.01) return v.toExponential(2);
       return String(+v.toFixed(3));
     }
@@ -405,11 +411,11 @@
         const td = (...xs) => xs.map(x=>{ const el=document.createElement('td'); el.innerHTML = x; return el; });
         function cell(lbl){
           const m = r.metrics.find(x=>x.label===lbl);
-          if (!m || m.op==null) return '—';
+          if (!m || m.op==null) return '--';
           const cls = m.status==='FAIL'?'fail':(m.status==='WARN'?'warn':'pass');
           return `${fmtNum(m.op)} / ${fmtNum(m.rat)} <span class="tag ${cls}">${toPercent(m.stress)}</span>`;
         }
-        const margin = (isFinite(r.worst.limit) && isFinite(r.worst.stress)) ? toPercent(r.worst.limit - r.worst.stress) : '—';
+        const margin = (isFinite(r.worst.limit) && isFinite(r.worst.stress)) ? toPercent(r.worst.limit - r.worst.stress) : '--';
         const statusCls = r.overall==='FAIL'?'fail':(r.overall==='WARN'?'warn':'pass');
         const tds = td(
           escHTML(r.RefDes),
@@ -465,7 +471,7 @@
 
     function loadExamples(){
       const parts = `RefDes,Type,Value,Units,V_op,V_rating,I_op,I_rating,P_op,P_rating,T_op,T_rating,Notes\n`+
-        `R1,Resistor,10k,Ω,,,,,0.08,0.25,45,125,Divider top resistor\n`+
+        `R1,Resistor,10k,ohm,,,,,0.08,0.25,45,125,Divider top resistor\n`+
         `C1,Ceramic Capacitor,0.1uF,F,5,50,,,,,40,85,Bypass cap\n`+
         `Q1,MOSFET,IRLZ44N,,10,55,5,30,1.2,2.0,55,175,Load switch MOSFET`;
       const net = `* Example SPICE-ish netlist\nR1 N001 N002 10k\nC1 N002 GND 0.1u\nQ1 OUT N001 GND IRLZ44N`;
@@ -486,9 +492,18 @@
 
     function analyze(){
       setStatus('Analyzing...');
-      const parts = tryParseParts($('#parts-input').value);
-      const rules = parseRules();
-      const netset = parseNetlist($('#netlist-input').value);
+      let parts = [];
+      let rules = null;
+      let netset = new Set();
+      try {
+        parts = tryParseParts($('#parts-input').value);
+        rules = parseRules();
+        netset = parseNetlist($('#netlist-input').value);
+      } catch (e){
+        $('#warnings').textContent = e.message || 'Unable to parse inputs.';
+        setStatus('Check inputs.');
+        return;
+      }
 
       const warnings = [];
       if (!parts.length) warnings.push('Part List is empty or could not be parsed.');
