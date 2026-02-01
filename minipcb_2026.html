@@ -339,9 +339,9 @@
       const el = $("previewLog");
       if(!el) return;
       const current = el.getAttribute("data-log") || "";
-      const next = (line + "\\n" + current).trim().split("\\n").slice(0, 5).join("\\n");
+      const next = (line + "\n" + current).trim().split("\n").slice(0, 5).join("\n");
       el.setAttribute("data-log", next);
-      el.textContent = next;
+      el.innerHTML = next.split("\n").map(escapeHtml).join("<br>");
     }
 
     function getHashPath(){
@@ -558,20 +558,18 @@
       $("emptyState").style.display = "none";
       $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
 
+      const url = entry.path + "?v=" + Date.now();
+      logDebug(`fetch -> ${url}`);
+
       const timeoutMs = 6000;
-      const timer = setTimeout(() => {
-        if(requestId !== state.requestId) return;
-        $("previewPane").innerHTML = '<div class="empty">Request timed out.</div>';
-        $("previewDebug").textContent = `Error: Request timed out`;
-        logDebug(`timeout -> ${entry.path || ""}`);
-      }, timeoutMs);
+      let timedOut = false;
+      const timer = setTimeout(() => { timedOut = true; }, timeoutMs);
 
       try{
-        const url = entry.path + "?v=" + Date.now();
-        logDebug(`fetch -> ${url}`);
         const res = await fetch(url, { cache: "no-store" });
-        if(requestId !== state.requestId) return;
         clearTimeout(timer);
+        if(timedOut) throw new Error("Request timed out");
+        if(requestId !== state.requestId) return;
         if(!res.ok) throw new Error(`Failed to load ${entry.path} (${res.status})`);
         $("previewDebug").textContent = `Path: ${entry.path || ""} | status ${res.status}`;
         const text = await res.text();
@@ -582,8 +580,8 @@
         logDebug(`render -> ${entry.path || ""} (${text.length} bytes)`);
         setHashPath(entry.path);
       }catch(err){
-        if(requestId !== state.requestId) return;
         clearTimeout(timer);
+        if(requestId !== state.requestId) return;
         const msg = err?.message || "Unknown error";
         $("previewPane").innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         $("previewDebug").textContent = `Error: ${msg}`;
