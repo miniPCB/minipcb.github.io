@@ -314,6 +314,7 @@
           <div class="preview-title" id="previewTitle">Select a markdown file</div>
           <div class="preview-meta" id="previewMeta"></div>
           <div class="preview-meta" id="previewDebug"></div>
+          <div class="preview-meta" id="previewLog"></div>
         </div>
         <div class="preview" id="previewPane">
           <div class="empty" id="emptyState">Pick a file from the left to render its markdown.</div>
@@ -331,6 +332,20 @@
     };
 
     const $ = (id) => document.getElementById(id);
+
+    function logDebug(msg){
+      const ts = new Date().toLocaleTimeString();
+      const line = `[${ts}] ${msg}`;
+      const el = $("previewLog");
+      if(!el) return;
+      const current = el.getAttribute("data-log") || "";
+      const next = (line + "
+" + current).trim().split("
+").slice(0, 5).join("
+");
+      el.setAttribute("data-log", next);
+      el.textContent = next;
+    }
 
     function getHashPath(){
       const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
@@ -541,38 +556,45 @@
       const requestId = ++state.requestId;
       $("previewTitle").textContent = entry.filename;
       updateMeta(entry);
-      $("previewDebug").textContent = `Path: ${entry.path || ""} ? fetching...`;
+      $("previewDebug").textContent = `Path: ${entry.path || ""} | fetching...`;
+      logDebug(`click -> ${entry.path || entry.filename || ""}`);
       $("emptyState").style.display = "none";
       $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
 
+      const timeoutMs = 6000;
+      const timer = setTimeout(() => {
+        if(requestId !== state.requestId) return;
+        $("previewPane").innerHTML = '<div class="empty">Request timed out.</div>';
+        $("previewDebug").textContent = `Error: Request timed out`;
+        logDebug(`timeout -> ${entry.path || ""}`);
+      }, timeoutMs);
+
       try{
         const url = entry.path + "?v=" + Date.now();
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Request timed out")), 12000)
-        );
-        const res = await Promise.race([
-          fetch(url, { cache: "no-store" }),
-          timeout
-        ]);
-
+        logDebug(`fetch -> ${url}`);
+        const res = await fetch(url, { cache: "no-store" });
+        if(requestId !== state.requestId) return;
+        clearTimeout(timer);
         if(!res.ok) throw new Error(`Failed to load ${entry.path} (${res.status})`);
-        $("previewDebug").textContent = `Path: ${entry.path || ""} ? received ${res.status}`;
+        $("previewDebug").textContent = `Path: ${entry.path || ""} | status ${res.status}`;
         const text = await res.text();
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
         $("previewPane").innerHTML = `<div class="md" data-path="${escapeHtml(entry.path)}">${html}</div>`;
-        $("previewDebug").textContent = `Path: ${entry.path || ""} ? ${text.length} bytes ? URL: ${res.url}`;
+        $("previewDebug").textContent = `Path: ${entry.path || ""} | ${text.length} bytes | URL: ${res.url}`;
+        logDebug(`render -> ${entry.path || ""} (${text.length} bytes)`);
         setHashPath(entry.path);
       }catch(err){
         if(requestId !== state.requestId) return;
+        clearTimeout(timer);
         const msg = err?.message || "Unknown error";
         $("previewPane").innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         $("previewDebug").textContent = `Error: ${msg}`;
+        logDebug(`error -> ${msg}`);
       }
 
       renderList();
     }
-
     function filterList(query){
       const q = query.trim().toLowerCase();
       if(!q){
