@@ -800,6 +800,58 @@
       meta.innerHTML = parts.map(p => `<span class="pill">${p}</span>`).join("");
     }
 
+    function compareRevDesc(a, b){
+      const parse = (rev) => {
+        const m = String(rev || "").match(/^([A-Z]+)(\d+)-(\d+)$/i);
+        if(!m) return { stage: "", major: -1, minor: -1 };
+        return { stage: m[1].toUpperCase(), major: Number(m[2]), minor: Number(m[3]) };
+      };
+      const ra = parse(a);
+      const rb = parse(b);
+      if(ra.stage !== rb.stage) return ra.stage < rb.stage ? 1 : -1;
+      if(ra.major !== rb.major) return rb.major - ra.major;
+      return rb.minor - ra.minor;
+    }
+
+    async function resolveMdPathForEntry(entry){
+      if(entry?.mdPath) return entry.mdPath;
+      const pn = entry?.pn || "";
+      if(!pn) return "";
+
+      const existing = (state.mdIndex || []).filter(x => x && x.pn === pn);
+      if(existing.length){
+        existing.sort((a, b) => compareRevDesc(a.rev, b.rev));
+        const best = existing[0];
+        if(best?.path){
+          entry.mdPath = best.path;
+          entry.filename = best.filename || entry.filename || "";
+          entry.rev = best.rev || entry.rev || "";
+          entry.kind = best.kind || entry.kind || "";
+          entry.hasMarkdown = true;
+          return best.path;
+        }
+      }
+
+      // Fallback probe when index.json is stale: try common A1-XX schematic names.
+      for(let i = 30; i >= 1; i -= 1){
+        const rev = String(i).padStart(2, "0");
+        const candidate = `md/${pn}_A1-${rev}_sch.md`;
+        try{
+          const res = await fetch(candidate, { method: "HEAD", cache: "no-store" });
+          if(res.ok){
+            entry.mdPath = candidate;
+            entry.filename = `${pn}_A1-${rev}_sch.md`;
+            entry.rev = `A1-${rev}`;
+            entry.kind = "sch";
+            entry.hasMarkdown = true;
+            return candidate;
+          }
+        }catch(_){}
+      }
+
+      return "";
+    }
+
     function setupImageInteractions(scope){
       const viewports = (scope || document).querySelectorAll(".imageViewport");
       const storedZoom = parseFloat(localStorage.getItem("imageZoom") || "1");
@@ -883,8 +935,7 @@
     }
 
     async function selectEntry(entry){
-      const path = entry && entry.mdPath ? entry.mdPath : "";
-      const hashTarget = path || entry?.pn || entry?.filename || "";
+      let path = entry && entry.mdPath ? entry.mdPath : "";
       try{
         state.current = entry;
         const requestId = ++state.requestId;
@@ -894,6 +945,8 @@
         const emptyState = $("emptyState");
         if(emptyState) emptyState.style.display = "none";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
+        path = await resolveMdPathForEntry(entry);
+        const hashTarget = path || entry?.pn || entry?.filename || "";
         safeSetHashPath(hashTarget);
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
