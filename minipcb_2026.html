@@ -545,14 +545,18 @@
       $("emptyState").style.display = "none";
       $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-
       try{
         const url = entry.path + "?v=" + Date.now();
-        const res = await fetch(url, { cache: "no-store", signal: controller.signal });
-        clearTimeout(timeoutId);
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Request timed out")), 12000)
+        );
+        const res = await Promise.race([
+          fetch(url, { cache: "no-store" }),
+          timeout
+        ]);
+
         if(!res.ok) throw new Error(`Failed to load ${entry.path} (${res.status})`);
+        $("previewDebug").textContent = `Path: ${entry.path || ""} ? received ${res.status}`;
         const text = await res.text();
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
@@ -560,9 +564,8 @@
         $("previewDebug").textContent = `Path: ${entry.path || ""} ? ${text.length} bytes ? URL: ${res.url}`;
         setHashPath(entry.path);
       }catch(err){
-        clearTimeout(timeoutId);
         if(requestId !== state.requestId) return;
-        const msg = err && err.name === "AbortError" ? "Request timed out" : err.message;
+        const msg = err?.message || "Unknown error";
         $("previewPane").innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         $("previewDebug").textContent = `Error: ${msg}`;
       }
