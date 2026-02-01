@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>miniPCB | Markdown Reader</title>
+  <title>Markdown Reader</title>
   <style>
     :root{
       --bg: #0f141b;
@@ -332,6 +332,17 @@
 
     const $ = (id) => document.getElementById(id);
 
+    function getHashPath(){
+      const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
+      return raw.split("|")[0];
+    }
+
+    function setHashPath(path){
+      const stamp = Date.now().toString(36);
+      const next = encodeURIComponent(path || "") + "|" + stamp;
+      history.replaceState(null, "", "#" + next);
+    }
+
     function escapeHtml(str){
       return String(str)
         .replace(/&/g, "&amp;")
@@ -542,8 +553,8 @@
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
         $("previewPane").innerHTML = `<div class="md" data-path="${escapeHtml(entry.path)}">${html}</div>`;
-        $("previewDebug").textContent = `Path: ${entry.path || ""} ? ${text.length} bytes`;
-        location.hash = encodeURIComponent(entry.path);
+        $("previewDebug").textContent = `Path: ${entry.path || ""} ? ${text.length} bytes ? URL: ${res.url}`;
+        setHashPath(entry.path);
       }catch(err){
         if(requestId !== state.requestId) return;
         $("previewPane").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
@@ -607,8 +618,8 @@
       if(entry) selectEntry(entry);
     });
     window.addEventListener("hashchange", () => {
-      const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
-      const target = state.entries.find(e => e.path === hash || e.filename === hash);
+      const hashPath = getHashPath();
+      const target = state.entries.find(e => e.path === hashPath || e.filename === hashPath);
       if(target && (!state.current || target.path !== state.current.path)) selectEntry(target);
     });
 
