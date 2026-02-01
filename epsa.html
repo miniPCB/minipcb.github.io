@@ -26,6 +26,10 @@
     .tab-btn { background:#1f1f1f; border-color:#3a3a3a; font-weight:600; }
     .tab-btn.is-active { background:#4a7fff; border-color:#4a7fff; color:#fff; }
     .tab-panel[hidden] { display: none; }
+    .view-toggle { display:flex; gap:.5rem; }
+    .toggle-btn { background:#1f1f1f; border-color:#3a3a3a; font-weight:600; }
+    .toggle-btn.is-active { background:#4a7fff; border-color:#4a7fff; color:#fff; }
+    .view-panel[hidden] { display: none; }
     .tag { display:inline-block; padding:.15rem .5rem; border-radius:999px; font-size:.8rem; border:1px solid #555; }
     .tag.pass { color:#6be07d; border-color:#2a6b33; }
     .tag.warn { color:#ffd56b; border-color:#6b5a2a; }
@@ -114,21 +118,24 @@
             <button class="btn-ghost" id="download-csv" type="button">Download .csv</button>
           </div>
         </div>
-        <div class="grid-2">
-          <div>
-            <h3>Markdown Output</h3>
-            <textarea id="md-output" class="mono" style="min-height:260px" placeholder="Run EPSA to produce Markdown..."></textarea>
+        <div class="flex space-between" style="margin-top:0.75rem;">
+          <h3 style="margin:0;">Output</h3>
+          <div class="view-toggle" aria-label="Output view">
+            <button class="toggle-btn is-active" data-view="markdown" type="button">Markdown</button>
+            <button class="toggle-btn" data-view="rendered" type="button">Rendered</button>
           </div>
-          <div>
-            <h3>Rendered Preview</h3>
-            <div class="scroll">
-              <table id="html-table">
-                <thead></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-            <div id="summary" class="footer"></div>
+        </div>
+        <div class="view-panel" data-view-panel="markdown" style="margin-top:0.75rem;">
+          <textarea id="md-output" class="mono" style="min-height:260px" placeholder="Run EPSA to produce Markdown..."></textarea>
+        </div>
+        <div class="view-panel" data-view-panel="rendered" hidden style="margin-top:0.75rem;">
+          <div class="scroll">
+            <table id="html-table">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
           </div>
+          <div id="summary" class="footer"></div>
         </div>
         <details style="margin-top:1rem;">
           <summary>Warnings & Coverage</summary>
@@ -487,6 +494,13 @@
       tabPanels.forEach(panel => panel.hidden = panel.dataset.panel !== name);
     }
 
+    const viewButtons = [...document.querySelectorAll('[data-view]')];
+    const viewPanels = [...document.querySelectorAll('[data-view-panel]')];
+    function setActiveView(name){
+      viewButtons.forEach(btn => btn.classList.toggle('is-active', btn.dataset.view === name));
+      viewPanels.forEach(panel => panel.hidden = panel.dataset.viewPanel !== name);
+    }
+
     // --- Wire up UI -------------------------------------------------------
     function loadDefaults(){
       const savedRules = localStorage.getItem('epsa_rules_json');
@@ -586,7 +600,9 @@
 
     // Initialize
     tabButtons.forEach(btn => btn.addEventListener('click', ()=> setActiveTab(btn.dataset.tab)));
+    viewButtons.forEach(btn => btn.addEventListener('click', ()=> setActiveView(btn.dataset.view)));
     setActiveTab('parts');
+    setActiveView('markdown');
     loadDefaults();
     setStatus('Ready. Paste your Part List and optionally a Netlist, then click "Run EPSA".');
   </script>
