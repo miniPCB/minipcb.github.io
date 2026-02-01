@@ -1055,7 +1055,7 @@
 
   /* ---------- Schema (edit freely) ---------- */
   const TEST_SCHEMA_DEFAULT = Object.freeze({
-    test_name: "",
+    section_title: "",
     test_no: "",
     uut_pn: "",
     last_test_no: "",
@@ -1089,7 +1089,7 @@
   });
 
   const DEFAULT_FIELD_LABELS = Object.freeze({
-    test_name: "Test Name",
+    section_title: "Test Name",
     test_no: "Test No",
     uut_pn: "UUT P/N",
     last_test_no: "Last Test No",
@@ -1122,7 +1122,7 @@
   });
 
   const DEFAULT_FIELD_PROMPTS = Object.freeze({
-    test_name: "Provide a short, descriptive test name.",
+    section_title: "Provide a short, descriptive test name.",
     test_no: "Provide the test number (e.g., 001).",
     uut_pn: "",
     last_test_no: "Enter the prior test number that precedes this step (or N/A).",
@@ -1320,7 +1320,7 @@
   );
 
   const REQUIRED_FIELDS = Object.freeze([
-    "test_name","test_no","uut_pn","test_type",
+    "section_title","test_no","uut_pn","test_type",
     "purpose","setup","procedure","measurement",
     "in_tol_conclusion","in_tol_next_step",
     "oot_low_conclusion","oot_low_next_step",
@@ -1560,7 +1560,7 @@
     chat_edit:
       "You edit a document. Permission level: {{permLabel}} ({{perm}}). Return ONLY strict JSON (no extra text, no markdown). Use these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material. If matrix_template is provided in the user payload (derived from Partlist headers), you MUST return the matrix structure ONLY (rows/cols/row_labels/col_labels/col_prompts/cells:{}), and MUST NOT include any cell data.",
     create_plan:
-      "Respond with strict JSON containing: plan (goal, scope) and tests (array of sections). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful test_name values. Each section must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive content. If matrix_template is provided in the user payload (derived from Partlist headers), you MUST return the matrix structure ONLY (rows/cols/row_labels/col_labels/col_prompts/cells:{}), and MUST NOT include any cell data. No extra text.",
+      "Respond with strict JSON containing: plan (goal, scope) and tests (array of sections). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful section_title values. Each section must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive content. If matrix_template is provided in the user payload (derived from Partlist headers), you MUST return the matrix structure ONLY (rows/cols/row_labels/col_labels/col_prompts/cells:{}), and MUST NOT include any cell data. No extra text.",
     suggest_field:
       "Respond with strict JSON with keys value and rationale. The value must be a rewritten replacement (not a critique) and MUST be a plain string (no objects, no arrays). Use field_prompt as guidance and follow ai_review_guidance style/tone/vibe. Use field_label for context. If current_value contains TODO or Auto-filled text, replace it with improved content.",
     suggest_field_strict:
@@ -1572,7 +1572,7 @@
   const DOC_PROMPT_OVERRIDES = Object.freeze({
     specifications: Object.freeze({
       create_plan:
-        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"SEC-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections with meaningful section titles and IDs. The set object should use full schema keys: {{schemaKeys}}. Write as a specifications document, not a test procedure. No extra text.",
+        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"SEC-001\",\"section_title\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections with meaningful section titles and IDs. The set object should use full schema keys: {{schemaKeys}}. Write as a specifications document, not a test procedure. No extra text.",
       chat_edit:
         "You edit a specifications document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
       suggest_field:
@@ -1582,7 +1582,7 @@
     }),
     verification: Object.freeze({
       create_plan:
-        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"VM-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a verification matrix. The set object should use full schema keys: {{schemaKeys}}. Use concise, matrix-style language. No extra text.",
+        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"VM-001\",\"section_title\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a verification matrix. The set object should use full schema keys: {{schemaKeys}}. Use concise, matrix-style language. No extra text.",
       chat_edit:
         "You edit a verification matrix. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
       suggest_field:
@@ -1592,7 +1592,7 @@
     }),
     designReview: Object.freeze({
       create_plan:
-        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"DR-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a design review checklist. The set object should use full schema keys: {{schemaKeys}}. Use checklist-style, review-oriented language. No extra text.",
+        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"DR-001\",\"section_title\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for a design review checklist. The set object should use full schema keys: {{schemaKeys}}. Use checklist-style, review-oriented language. No extra text.",
       chat_edit:
         "You edit a design review checklist. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
       suggest_field:
@@ -1602,7 +1602,7 @@
     }),
     icd: Object.freeze({
       create_plan:
-        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"ICD-001\",\"test_name\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for an interface control document. The set object should use full schema keys: {{schemaKeys}}. Use precise interface terminology. No extra text.",
+        "Return STRICT JSON: {\"plan\":{\"goal\":\"\",\"scope\":\"\"},\"tests\":[{\"test_no\":\"ICD-001\",\"section_title\":\"...\",\"set\":{...}}, ...]}. Provide exactly {{testCount}} sections for an interface control document. The set object should use full schema keys: {{schemaKeys}}. Use precise interface terminology. No extra text.",
       chat_edit:
         "You edit an interface control document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
       suggest_field:
@@ -2244,7 +2244,7 @@
       const data = await fsReadJson(templatesDir, name);
       if(!data) continue;
       const testData = data.data || data;
-      const title = (testData?.test_name || "").trim() || name.replace(/\.json$/i, "");
+      const title = (testData?.section_title || "").trim() || name.replace(/\.json$/i, "");
       list.push({ id: name, name: title, file: name, data: testData });
     }
     return list.sort((a,b) => a.name.localeCompare(b.name));
@@ -2449,7 +2449,7 @@
         order: payload.order,
         file,
         test_no: payload.data.test_no || "",
-        test_name: payload.data.test_name || ""
+        section_title: payload.data.section_title || ""
       });
     }
     for(const name of existing){
@@ -2717,7 +2717,7 @@
     const listLabel = docKind === "test" ? "List" : "Sections";
     const totalLabel = docKind === "test" ? "Total Tests" : "Total Sections";
     const listHeaders = docKind === "test"
-      ? "| Order | test_no | test_name | test_type |"
+      ? "| Order | test_no | section_title | test_type |"
       : "| Order | section_id | section_title | section_type |";
 
     const md =
@@ -2738,7 +2738,7 @@ ${listHeaders}
 ${tests.map((t, idx) => {
   const d = t.data || {};
   const esc = (x) => String(x ?? "").replace(/\|/g, "\\|");
-  return `| ${idx+1} | ${esc(d.test_no)} | ${esc(d.test_name)} | ${esc(d.test_type)} |`;
+  return `| ${idx+1} | ${esc(d.test_no)} | ${esc(d.section_title)} | ${esc(d.test_type)} |`;
 }).join("\n")}
 
 ## Notes
@@ -3118,7 +3118,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const payloadBase = {
         plan: { name: plan.name, created: plan.created, updated: plan.updated },
         test_no: test.data.test_no || "",
-        test_name: test.data.test_name || "",
+        section_title: test.data.section_title || "",
         field,
         current_value: test.data[field] ?? "",
         field_prompt: test.data?._ai?.field_prompts?.[field] || "",
@@ -3323,7 +3323,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const matrixReviewState = new Map();
       const allItemsPayload = tests.map(tt => ({
         item_no: tt.data.test_no || "",
-        item_name: tt.data.test_name || "",
+        item_name: tt.data.section_title || "",
         item_type: tt.data.test_type || ""
       }));
 
@@ -3386,7 +3386,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               const out = {};
               for(const k of Object.keys(t.data || {})){
                 if(k === "_ai") continue;
-                if(k === "test_name" || k === "test_no" || k === "test_type") continue;
+                if(k === "section_title" || k === "test_no" || k === "test_type") continue;
                 const v = t.data[k];
                 if(typeof v === "string" || typeof v === "number" || typeof v === "boolean" || v === null){
                   out[k] = v;
@@ -3396,10 +3396,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             })();
             const matrixPlanContext = isMatrixCell ? {
               item_no: t.data.test_no || "",
-              item_name: t.data.test_name || "",
+              item_name: t.data.section_title || "",
               item_type: t.data.test_type || "",
               section_no: t.data.test_no || "",
-              section_name: t.data.test_name || "",
+              section_name: t.data.section_title || "",
               section_type: t.data.test_type || ""
             } : contextData;
 
@@ -3412,10 +3412,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 section_type: x.item_type
               })),
               item_no: t.data.test_no || "",
-              item_name: t.data.test_name || "",
+              item_name: t.data.section_title || "",
               item_type: t.data.test_type || "",
               section_no: t.data.test_no || "",
-              section_name: t.data.test_name || "",
+              section_name: t.data.section_title || "",
               section_type: t.data.test_type || "",
               field,
               current_value: isMatrixCell ? (matrixContext?.cell_value ?? "") : (t.data[field] ?? ""),
@@ -3864,13 +3864,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       plan: { name: plan.name || "", goal: plan.goal || "", scope: plan.scope || "" },
       tests: (plan.tests || []).map(t => ({
         test_no: t.data?.test_no || "",
-        test_name: t.data?.test_name || "",
+        section_title: t.data?.section_title || "",
         test_type: t.data?.test_type || ""
       })),
       document: { name: plan.name || "", goal: plan.goal || "", scope: plan.scope || "" },
       sections: (plan.tests || []).map(t => ({
         section_no: t.data?.test_no || "",
-        section_name: t.data?.test_name || "",
+        section_name: t.data?.section_title || "",
         section_type: t.data?.test_type || ""
       })),
       permission: { level: perm, label: permLabel },
@@ -4298,7 +4298,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     for(const t of tests){
       const d = t.data || {};
       const tno = (d.test_no || "").trim() || "(no test_no)";
-      const name = (d.test_name || "").trim() || "(no test_name)";
+      const name = (d.section_title || "").trim() || "(no section_title)";
       const type = (d.test_type || "").trim() || "(no test_type)";
       if(q && !(tno.toLowerCase().includes(q) || name.toLowerCase().includes(q))) continue;
 
@@ -4374,7 +4374,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 toast("Templates", "Set a Library Folder to use list item templates.", "warn");
                 return;
               }
-              const name = prompt("Template name:", t.data?.test_name || "New Test Template");
+              const name = prompt("Template name:", t.data?.section_title || "New Test Template");
               if(name === null) return;
               const ok = await createTestTemplateFromData(state.currentPlan, name, t.data);
               if(ok) toast("Templates", "Template created.", "ok");
@@ -5438,7 +5438,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     };
     for(const k of fields){
       if(["param1_label","param1_value","param2_label","param2_value"].includes(k)) continue;
-      if(state.matrixExpanded && ["test_name","test_no","test_type"].includes(k)) continue;
+      if(state.matrixExpanded && ["section_title","test_no","test_type"].includes(k)) continue;
       let type = String(test.data?._ai?.field_types?.[k] || "text").toLowerCase();
       if(type.includes("textarea") || type.includes("multi")) type = "textarea";
         const isSelect = type.includes("select");
@@ -5456,7 +5456,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       head.className = "fieldHead";
       const LABEL_OVERRIDES = {
         test_no: "Test No",
-        test_name: "Test Name",
+        section_title: "Test Name",
         uut_pn: "UUT P/N",
         last_test_no: "Last Test No",
         test_type: "Test Type",
@@ -6185,7 +6185,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     for(const t of tests.slice(0,12)){ // show first N in skeleton
       const d = t.data || {};
       const label1 = (d.test_no || "(no test_no)").trim();
-      const label2 = (d.test_name || "(no test_name)").trim();
+      const label2 = (d.section_title || "(no section_title)").trim();
       const node = { id: t.id, testNo: label1, data: d, x, y, w: boxW, h: boxH };
       nodes.push(node);
       y += boxH + gap;
@@ -6269,7 +6269,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       t1.textContent = n.testNo;
       txt.appendChild(t1);
 
-      const name = (n.data?.test_name || "(no test_name)").trim();
+      const name = (n.data?.section_title || "(no section_title)").trim();
       const t2 = make("tspan", {x:String(n.x+12), dy:"14", fill:"rgba(167,179,200,.95)"});
       t2.textContent = name.length > 32 ? name.slice(0,32) + "…" : name;
       txt.appendChild(t2);
@@ -6531,14 +6531,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 const list = Array.isArray(parsed?.tests) ? parsed.tests : [];
                 const cleaned = list.map(t => ({
                   test_no: String(t?.test_no || "").trim(),
-                  test_name: String(t?.test_name || "").trim(),
+                  section_title: String(t?.section_title || "").trim(),
                   set: t?.set && typeof t.set === "object" ? t.set : {}
                 })).filter(t => t.test_no);
                 if(cleaned.length){
                   for(const [idx, item] of cleaned.entries()){
                     const testNo = item.test_no || String(idx + 1).padStart(3, "0");
                     const set = { ...item.set };
-                    if(item.test_name && !set.test_name) set.test_name = item.test_name;
+                    if(item.section_title && !set.section_title) set.section_title = item.section_title;
                     if(testNo && !set.test_no) set.test_no = testNo;
                     const baseData = normalizeTestData(set);
                     for(const [k, v] of Object.entries(set)){
@@ -7019,7 +7019,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       body.innerHTML = `
         <div class="muted">Deletes the selected list item from this document.</div>
         <div class="hr"></div>
-        <div class="muted">Item: <span class="tag">${escapeHtml(d.test_no || "(no id)")}</span> ${escapeHtml(d.test_name || "(no name)")}</div>
+        <div class="muted">Item: <span class="tag">${escapeHtml(d.test_no || "(no id)")}</span> ${escapeHtml(d.section_title || "(no name)")}</div>
       `;
       footer.innerHTML = `
         <button class="btn" id="cancelDelTest">Cancel</button>
@@ -7707,7 +7707,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         id: "__spec_requirements__",
         name: "Requirements (Spec)",
         data: {
-          test_name: "Requirements",
+          section_title: "Requirements",
           test_no: "SEC-000",
           test_type: "Requirements",
           param1_label: "",
@@ -7722,7 +7722,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           constraints: "",
           _ai: {
             maturity: {
-              test_name: 3,
+              section_title: 3,
               test_no: 0,
               test_type: 3,
               param1_label: 3,
@@ -7752,7 +7752,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this specification.",
+                  section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this specification.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., SEC-001).",
                   test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
@@ -7774,7 +7774,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this specification.",
+                  section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this specification.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., SEC-001).",
                   test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
@@ -7796,7 +7796,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this specification.",
+                  section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this specification.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., SEC-001).",
                   test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
@@ -7813,7 +7813,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               }
             },
             field_labels: {
-              test_name: "Section Title",
+              section_title: "Section Title",
               test_no: "Section ID",
               test_type: "Section Type",
               param1_label: "Param 1 Label",
@@ -7828,7 +7828,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               constraints: "Constraints / Limitations"
             },
             field_prompts: {
-              test_name: "Enter the section title for this specification.",
+              section_title: "Enter the section title for this specification.",
               test_no: "Enter the section identifier (e.g., SEC-001).",
               test_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
@@ -7843,7 +7843,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               constraints: "Provide the constraints / limitations for this specification section."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               test_type: "text",
               param1_label: "text",
@@ -7864,7 +7864,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         id: "__vm_requirements_table__",
         name: "Requirements Table (VM)",
         data: {
-          test_name: "Requirements Table",
+          section_title: "Requirements Table",
           test_no: "VM-000",
           test_type: "Requirements Table",
           param1_label: "",
@@ -7874,7 +7874,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           requirements_table: "REQ-001 | Provide regulated 5V output ±5%\nREQ-002 | Startup within 2 seconds\nREQ-003 | Operate from 9–15 VDC input",
           _ai: {
             maturity: {
-              test_name: 3,
+              section_title: 3,
               test_no: 3,
               test_type: 3,
               param1_label: 3,
@@ -7899,7 +7899,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this verification matrix.",
+                  section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this verification matrix.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., VM-001).",
                   test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
@@ -7916,7 +7916,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this verification matrix.",
+                  section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this verification matrix.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., VM-001).",
                   test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
@@ -7933,7 +7933,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this verification matrix.",
+                  section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this verification matrix.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., VM-001).",
                   test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
@@ -7945,7 +7945,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               }
             },
             field_labels: {
-              test_name: "Section Title",
+              section_title: "Section Title",
               test_no: "Section ID",
               test_type: "Section Type",
               param1_label: "Param 1 Label",
@@ -7955,7 +7955,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               requirements_table: "Requirements Table"
             },
             field_prompts: {
-              test_name: "Enter the section title for this verification matrix.",
+              section_title: "Enter the section title for this verification matrix.",
               test_no: "Enter the section identifier (e.g., VM-001).",
               test_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
@@ -7965,7 +7965,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               requirements_table: "Provide the requirements table for this verification matrix section."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               test_type: "text",
               param1_label: "text",
@@ -7982,7 +7982,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         id: "__vm_verification_mapping__",
         name: "Verification Mapping (VM)",
         data: {
-          test_name: "Verification Mapping",
+          section_title: "Verification Mapping",
           test_no: "VM-000",
           test_type: "Verification Mapping",
           param1_label: "",
@@ -7992,7 +7992,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           verification_mapping: "REQ-001 → Test 003 (Power Voltages), Method: Test, Status: Planned\nREQ-002 → Test 004 (Input Power), Method: Test, Status: Planned\nREQ-003 → Test 004 (Input Power), Method: Test, Status: Planned",
           _ai: {
             maturity: {
-              test_name: 3,
+              section_title: 3,
               test_no: 3,
               test_type: 3,
               param1_label: 3,
@@ -8017,7 +8017,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this verification matrix.",
+                  section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this verification matrix.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., VM-001).",
                   test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
@@ -8034,7 +8034,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this verification matrix.",
+                  section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this verification matrix.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., VM-001).",
                   test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
@@ -8051,7 +8051,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this verification matrix.",
+                  section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this verification matrix.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., VM-001).",
                   test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
@@ -8063,7 +8063,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               }
             },
             field_labels: {
-              test_name: "Section Title",
+              section_title: "Section Title",
               test_no: "Section ID",
               test_type: "Section Type",
               param1_label: "Param 1 Label",
@@ -8073,7 +8073,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               verification_mapping: "Verification Mapping"
             },
             field_prompts: {
-              test_name: "Enter the section title for this verification matrix.",
+              section_title: "Enter the section title for this verification matrix.",
               test_no: "Enter the section identifier (e.g., VM-001).",
               test_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
@@ -8083,7 +8083,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               verification_mapping: "Provide the verification mapping for this verification matrix section."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               test_type: "text",
               param1_label: "text",
@@ -8100,7 +8100,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         id: "__fmea_failure_mode__",
         name: "Failure Mode (FMEA)",
         data: {
-          test_name: "Failure Mode 1",
+          section_title: "Failure Mode 1",
           test_no: "FMEA-000",
           test_type: "Failure Mode",
           param1_label: "",
@@ -8124,7 +8124,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test_plan_reference: "",
           _ai: {
             maturity: {
-              test_name: 1,
+              section_title: 1,
               test_no: 1,
               test_type: 3,
               param1_label: 3,
@@ -8163,7 +8163,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this FMEA document.",
+                  section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this FMEA document.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., FMEA-003).",
                   test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
@@ -8194,7 +8194,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this FMEA document.",
+                  section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this FMEA document.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., FMEA-003).",
                   test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
@@ -8225,7 +8225,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this FMEA document.",
+                  section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this FMEA document.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., FMEA-003).",
                   test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
@@ -8251,7 +8251,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               }
             },
             field_labels: {
-              test_name: "Section Title",
+              section_title: "Section Title",
               test_no: "Section ID",
               test_type: "Section Type",
               param1_label: "Param 1 Label",
@@ -8275,7 +8275,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_plan_reference: "Test Plan Reference"
             },
             field_prompts: {
-              test_name: "Enter the section title for this FMEA document.",
+              section_title: "Enter the section title for this FMEA document.",
               test_no: "Enter the section identifier (e.g., FMEA-003).",
               test_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
@@ -8299,7 +8299,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_plan_reference: "Provide the test plan reference for this failure mode."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               test_type: "text",
               param1_label: "text",
@@ -8334,7 +8334,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         id: "__bom_table__",
         name: "BOM Table",
         data: {
-          test_name: "BOM Table",
+          section_title: "BOM Table",
           test_no: "BOM-002",
           test_type: "BOM Table",
           param1_label: "",
@@ -8370,7 +8370,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           },
           _ai: {
             maturity: {
-              test_name: 3,
+              section_title: 3,
               test_no: 3,
               test_type: 3,
               param1_label: 3,
@@ -8395,7 +8395,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this bill of materials.",
+                  section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this bill of materials.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., BOM-001).",
                   test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
@@ -8412,7 +8412,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this bill of materials.",
+                  section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this bill of materials.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., BOM-001).",
                   test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
@@ -8429,7 +8429,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 summary: "Seed review comments generated for all fields.",
                 notes: "",
                 field_comments: {
-                  test_name: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this bill of materials.",
+                  section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this bill of materials.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., BOM-001).",
                   test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
@@ -8441,7 +8441,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               }
             },
             field_labels: {
-              test_name: "Section Title",
+              section_title: "Section Title",
               test_no: "Section ID",
               test_type: "Section Type",
               param1_label: "Param 1 Label",
@@ -8451,7 +8451,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               bom_matrix: "BOM Matrix"
             },
             field_prompts: {
-              test_name: "Enter the section title for this bill of materials.",
+              section_title: "Enter the section title for this bill of materials.",
               test_no: "Enter the section identifier (e.g., BOM-001).",
               test_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
@@ -8461,7 +8461,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               bom_matrix: "Provide the bill of materials table with items, quantities, and manufacturer details."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               test_type: "text",
               param1_label: "text",
@@ -8653,7 +8653,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           toast("Templates", "Select a list item first.", "warn");
           return;
         }
-        const name = prompt("Template name:", test.data?.test_name || "New Test Template");
+        const name = prompt("Template name:", test.data?.section_title || "New Test Template");
         if(name === null) return;
         const ok = await createTestTemplateFromData(plan, name, test.data);
         if(ok){
@@ -8849,7 +8849,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const payload = {
         plan: { name: plan.name || "", goal: plan.goal || mdMeta.goal || "", scope: plan.scope || mdMeta.scope || "", ai_review_guidance: guidance },
         test_no: test.data.test_no || "",
-        test_name: test.data.test_name || "",
+        section_title: test.data.section_title || "",
         field,
         current_value: test.data[field] || "",
         field_prompt: test.data?._ai?.field_prompts?.[field] || "",
@@ -9128,14 +9128,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         review_persona: DEFAULT_AI_PROMPTS.review_persona,
         review_field: DEFAULT_AI_PROMPTS.review_field,
         chat_edit: "You edit a document. Permission level: {{permLabel}} ({{perm}}). Respond with strict JSON using these keys: message (string), plan (optional with name/goal/scope), tests (optional array of sections as {test_no?, set:{field:value}, delete?:true}), delete_all (optional boolean), delete_tests (optional array of test_no). Use schema field keys for set. You may update multiple fields in a single section by including all desired keys inside set. To fully update a section, include all relevant schema keys in set. If permission is Search/Find, do not include plan or tests; respond with message only. If permission is Create/Delete, you may add a new section by including a tests entry with a new test_no or by omitting test_no (the app will assign the next number), and you may request deletions via delete_all/delete_tests or delete:true. Use context_files (if provided) as source material.",
-        create_plan: "Respond with strict JSON containing: plan (goal, scope) and tests (array). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful test_name values. Each test must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.",
+        create_plan: "Respond with strict JSON containing: plan (goal, scope) and tests (array). Provide exactly {{testCount}} sections with 3-digit test_no values and meaningful section_title values. Each test must include a set object using full schema keys: {{schemaKeys}}. Fill purpose/scope/setup/procedure/measurement/parameter and limits/units where applicable. Use source markdown tables (pin interfaces, test points, netlist, partlist) to drive test content. No extra text.",
         suggest_field: DEFAULT_AI_PROMPTS.suggest_field,
         suggest_field_strict: DEFAULT_AI_PROMPTS.suggest_field_strict,
         suggest_limits_note: DEFAULT_AI_PROMPTS.suggest_limits_note
       },
       tests: [
         { id: uid(), order: 1, modified:false, data: normalizeTestData({
-          test_name: "Visual Inspection",
+          section_title: "Visual Inspection",
           test_no: "001",
           uut_pn: "TBD",
           last_test_no: "N/A",
@@ -9200,14 +9200,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_conclusion: 0,
               oot_high_unable_adjust: 0,
               oot_high_next_step: 0,
-              test_name: 3
+              section_title: 3
             },
             last_ai_reviewed: "",
             last_ai_review_model: "",
             last_human_reviewed: "",
             notes: "",
             field_labels: {
-              test_name: "Test Name",
+              section_title: "Test Name",
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
@@ -9239,7 +9239,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "OOT High Next Step"
             },
             field_prompts: {
-              test_name: "Provide a short, descriptive test name.",
+              section_title: "Provide a short, descriptive test name.",
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
@@ -9271,7 +9271,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "Specify next action/step after high OOT."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
@@ -9305,7 +9305,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         }) },
         { id: uid(), order: 2, modified:false, data: normalizeTestData({
-          test_name: "Electrical Inspection",
+          section_title: "Electrical Inspection",
           test_no: "002",
           uut_pn: "TBD",
           last_test_no: "001",
@@ -9342,7 +9342,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               last_human_reviewed: 2,
               notes: 2,
               oot_high_conclusion: 0,
-              test_name: 3,
+              section_title: 3,
               test_no: 3,
               uut_pn: 0,
               last_test_no: 3,
@@ -9377,7 +9377,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             last_human_reviewed: "",
             notes: "",
             field_labels: {
-              test_name: "Test Name",
+              section_title: "Test Name",
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
@@ -9409,7 +9409,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "OOT High Next Step"
             },
             field_prompts: {
-              test_name: "Provide a short, descriptive test name.",
+              section_title: "Provide a short, descriptive test name.",
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
@@ -9441,7 +9441,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "Specify next action/step after high OOT."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
@@ -9475,7 +9475,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         }) },
         { id: uid(), order: 3, modified:false, data: normalizeTestData({
-          test_name: "Power Voltages",
+          section_title: "Power Voltages",
           test_no: "003",
           uut_pn: "TBD",
           last_test_no: "002",
@@ -9511,7 +9511,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               last_ai_review_model: 2,
               last_human_reviewed: 2,
               notes: 2,
-              test_name: 3,
+              section_title: 3,
               test_no: 3,
               uut_pn: 0,
               last_test_no: 3,
@@ -9547,7 +9547,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             last_human_reviewed: "",
             notes: "",
             field_labels: {
-              test_name: "Test Name",
+              section_title: "Test Name",
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
@@ -9579,7 +9579,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "OOT High Next Step"
             },
             field_prompts: {
-              test_name: "Provide a short, descriptive test name.",
+              section_title: "Provide a short, descriptive test name.",
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
@@ -9611,7 +9611,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "Specify next action/step after high OOT."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
@@ -9645,7 +9645,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         }) },
         { id: uid(), order: 4, modified:false, data: normalizeTestData({
-          test_name: "Input Power",
+          section_title: "Input Power",
           test_no: "004",
           uut_pn: "TBD",
           last_test_no: "003",
@@ -9681,7 +9681,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               last_ai_review_model: 2,
               last_human_reviewed: 2,
               notes: 2,
-              test_name: 3,
+              section_title: 3,
               test_no: 3,
               last_test_no: 3,
               test_type: 3,
@@ -9715,7 +9715,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             last_human_reviewed: "",
             notes: "",
             field_labels: {
-              test_name: "Test Name",
+              section_title: "Test Name",
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
@@ -9747,7 +9747,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "OOT High Next Step"
             },
             field_prompts: {
-              test_name: "Provide a short, descriptive test name.",
+              section_title: "Provide a short, descriptive test name.",
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
@@ -9779,7 +9779,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "Specify next action/step after high OOT."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
@@ -9813,7 +9813,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         }) },
         { id: uid(), order: 5, modified:false, data: normalizeTestData({
-          test_name: "Output Power",
+          section_title: "Output Power",
           test_no: "005",
           uut_pn: "TBD",
           last_test_no: "004",
@@ -9849,7 +9849,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               last_ai_review_model: 2,
               last_human_reviewed: 2,
               notes: 2,
-              test_name: 3,
+              section_title: 3,
               test_no: 3,
               last_test_no: 3,
               test_type: 3,
@@ -9885,7 +9885,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             last_human_reviewed: "",
             notes: "",
             field_labels: {
-              test_name: "Test Name",
+              section_title: "Test Name",
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
@@ -9917,7 +9917,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "OOT High Next Step"
             },
             field_prompts: {
-              test_name: "Provide a short, descriptive test name.",
+              section_title: "Provide a short, descriptive test name.",
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
@@ -9949,7 +9949,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               oot_high_next_step: "Specify next action/step after high OOT."
             },
             field_types: {
-              test_name: "text",
+              section_title: "text",
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
@@ -10015,7 +10015,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "date_updated", label: "Date Updated", type: "text", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10043,7 +10043,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "references", label: "References / Related docs", type: "textarea", value: "None. This specification section currently contains no references or related documents." }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10069,7 +10069,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "constraints", label: "Constraints / Limitations", type: "textarea", value: "- Maximum allowable data input size is 10 MB to ensure efficient processing without performance degradation.  \n- System operation is limited to environments with ambient temperatures between -20°C and 50°C and relative humidity from 10% to 90% non-condensing.  \n- Communication interfaces must adhere to predefined protocol standards to maintain compatibility with external systems.  \n- Power supply constraints restrict maximum consumption to 10 watts during standard operation.  \n- The system shall not operate beyond an altitude of 2000 meters to maintain functional integrity.  \n- Any software updates must be backward compatible with existing system versions to avoid" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10094,7 +10094,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "quality_requirements", label: "Quality / Safety Requirements", type: "textarea", value: "- The product shall comply with established quality management system standards, such as ISO 9001, to ensure consistent quality processes and continuous improvement.\n- All safety-related components and processes shall meet applicable safety standards, including ISO 12100 for risk assessment and ISO 13849 for safety-related control systems.\n- The design and manufacturing processes shall incorporate rigorous quality control measures, including incoming inspection, in-process monitoring, and final product testing to maintain high reliability and safety levels.\n- The product shall undergo failure mode and effects analysis (FMEA) to identify and mitigate potential safety risks throughout its lifecycle.\n- All" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10116,7 +10116,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "test_plan_reference", label: "Test Plan Reference", type: "textarea", value: "Refer to the Verification Test Plan v1.2, document number TP-005-2026, which details the procedures, test cases, and acceptance criteria for validating compliance and functionality outlined in this specification section." }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10138,7 +10138,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "open_issues", label: "Open Issues", type: "textarea", value: "No open issues have been identified for this specification section at this time." }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10158,7 +10158,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "change_log", label: "Change Log", type: "textarea", value: "Change Log:\n\n- 2026-01-28: Initial creation of the Change Control section to document all future changes to the specifications.\n- 2026-01-29: Added detailed review comments and updated structure for consistency with other specification sections." }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10172,7 +10172,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = sections.map((section, idx) => {
       const data = {
-        test_name: section.title,
+        section_title: section.title,
         test_no: section.id,
         test_type: section.type,
         param1_label: "",
@@ -10182,7 +10182,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldLabels = {
-        test_name: "Section Title",
+        section_title: "Section Title",
         test_no: "Section ID",
         test_type: "Section Type",
         param1_label: "Param 1 Label",
@@ -10192,7 +10192,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldTypes = {
-        test_name: "text",
+        section_title: "text",
         test_no: "text",
         test_type: "text",
         param1_label: "text",
@@ -10201,7 +10201,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         param2_value: "text"
       };
       const fieldPrompts = {
-        test_name: "Enter the section title for this specification.",
+        section_title: "Enter the section title for this specification.",
         test_no: "Enter the section identifier (e.g., SEC-001).",
         test_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
@@ -10310,7 +10310,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "date_updated", label: "Date Updated", type: "text", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10339,7 +10339,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         },
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10353,7 +10353,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = sections.map((section, idx) => {
       const data = {
-        test_name: section.title,
+        section_title: section.title,
         test_no: section.id,
         test_type: section.type,
         param1_label: "",
@@ -10363,7 +10363,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldLabels = {
-        test_name: "Section Title",
+        section_title: "Section Title",
         test_no: "Section ID",
         test_type: "Section Type",
         param1_label: "Param 1 Label",
@@ -10372,7 +10372,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         param2_value: "Param 2 Value"
       };
       const fieldTypes = {
-        test_name: "text",
+        section_title: "text",
         test_no: "text",
         test_type: "text",
         param1_label: "text",
@@ -10381,7 +10381,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         param2_value: "text"
       };
       const fieldPrompts = {
-        test_name: "Enter the section title for this requirements traceability matrix.",
+        section_title: "Enter the section title for this requirements traceability matrix.",
         test_no: "Enter the section identifier (e.g., RTM-001).",
         test_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
@@ -10515,7 +10515,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "date_updated", label: "Date Updated", type: "text", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10544,7 +10544,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           }
         },
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10558,7 +10558,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = sections.map((section, idx) => {
       const data = {
-        test_name: section.title,
+        section_title: section.title,
         test_no: section.id,
         test_type: section.type,
         param1_label: "",
@@ -10568,7 +10568,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldLabels = {
-        test_name: "Section Title",
+        section_title: "Section Title",
         test_no: "Section ID",
         test_type: "Section Type",
         param1_label: "Param 1 Label",
@@ -10577,7 +10577,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         param2_value: "Param 2 Value"
       };
       const fieldTypes = {
-        test_name: "text",
+        section_title: "text",
         test_no: "text",
         test_type: "text",
         param1_label: "text",
@@ -10586,7 +10586,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         param2_value: "text"
       };
       const fieldPrompts = {
-        test_name: "Enter the section title for this bill of materials.",
+        section_title: "Enter the section title for this bill of materials.",
         test_no: "Enter the section identifier (e.g., BOM-001).",
         test_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
@@ -10689,7 +10689,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "date_updated", label: "Date Updated", type: "text", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10712,7 +10712,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "requirements_table", label: "Requirements Table", type: "textarea", value: "REQ-001 | Provide regulated 5V output ±5%\nREQ-002 | Startup within 2 seconds\nREQ-003 | Operate from 9–15 VDC input" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10730,7 +10730,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "verification_mapping", label: "Verification Mapping", type: "textarea", value: "REQ-001 → Test 003 (Power Voltages), Method: Test, Status: Planned\nREQ-002 → Test 004 (Input Power), Method: Test, Status: Planned\nREQ-003 → Test 004 (Input Power), Method: Test, Status: Planned" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10749,7 +10749,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "coverage_gaps", label: "Coverage Gaps", type: "textarea", value: "None identified at this time." }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10768,7 +10768,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "notes_assumptions", label: "Notes / Assumptions", type: "textarea", value: "Assumptions:\n- Requirements list is stable for this revision.\n- Verification methods will be test-based unless noted otherwise." }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10782,7 +10782,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = sections.map((section, idx) => {
       const data = {
-        test_name: section.title,
+        section_title: section.title,
         test_no: section.id,
         test_type: section.type,
         param1_label: "",
@@ -10792,7 +10792,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldLabels = {
-        test_name: "Section Title",
+        section_title: "Section Title",
         test_no: "Section ID",
         test_type: "Section Type",
         param1_label: "Param 1 Label",
@@ -10802,7 +10802,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldTypes = {
-        test_name: "text",
+        section_title: "text",
         test_no: "text",
         test_type: "text",
         param1_label: "text",
@@ -10811,7 +10811,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         param2_value: "text"
       };
       const fieldPrompts = {
-        test_name: "Enter the section title for this verification matrix.",
+        section_title: "Enter the section title for this verification matrix.",
         test_no: "Enter the section identifier (e.g., VM-001).",
         test_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
@@ -10895,7 +10895,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "artifacts_reviewed", label: "Artifacts Reviewed", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10926,7 +10926,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "notes", label: "Notes", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10952,7 +10952,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "notes", label: "Notes", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -10979,7 +10979,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "notes", label: "Notes", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11006,7 +11006,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "notes", label: "Notes", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11032,7 +11032,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "notes", label: "Notes", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11057,7 +11057,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "final_recommendation", label: "Final Recommendation", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11074,7 +11074,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = sections.map((section, idx) => {
       const data = {
-        test_name: section.title,
+        section_title: section.title,
         test_no: section.id,
         test_type: section.type,
         param1_label: "",
@@ -11084,7 +11084,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldLabels = {
-        test_name: "Section Title",
+        section_title: "Section Title",
         test_no: "Section ID",
         test_type: "Section Type",
         param1_label: "Param 1 Label",
@@ -11094,7 +11094,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldTypes = {
-        test_name: "text",
+        section_title: "text",
         test_no: "text",
         test_type: "text",
         param1_label: "text",
@@ -11103,7 +11103,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         param2_value: "text"
       };
       const fieldPrompts = {
-        test_name: "Enter the section title for this design review.",
+        section_title: "Enter the section title for this design review.",
         test_no: "Enter the section identifier (e.g., DR-001).",
         test_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
@@ -11185,7 +11185,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "date_updated", label: "Date Updated", type: "text", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11213,7 +11213,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "assumptions_constraints", label: "Assumptions / Constraints", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11237,7 +11237,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "mechanical_notes", label: "Mechanical Interface Notes", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11262,7 +11262,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "grounding_shielding", label: "Grounding / Shielding Strategy", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11287,7 +11287,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "clock_reset", label: "Clock / Reset Requirements", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11310,7 +11310,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "compatibility", label: "Compatibility / Backward Support", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11333,7 +11333,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "test_plan_reference", label: "Test Plan Reference", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11355,7 +11355,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "open_issues", label: "Open Issues", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11370,7 +11370,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = sections.map((section, idx) => {
       const data = {
-        test_name: section.title,
+        section_title: section.title,
         test_no: section.id,
         test_type: section.type,
         param1_label: "",
@@ -11380,7 +11380,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldLabels = {
-        test_name: "Section Title",
+        section_title: "Section Title",
         test_no: "Section ID",
         test_type: "Section Type",
         param1_label: "Param 1 Label",
@@ -11390,7 +11390,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldTypes = {
-        test_name: "text",
+        section_title: "text",
         test_no: "text",
         test_type: "text",
         param1_label: "text",
@@ -11399,7 +11399,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         param2_value: "text"
       };
       const fieldPrompts = {
-        test_name: "Enter the section title for this interface control document.",
+        section_title: "Enter the section title for this interface control document.",
         test_no: "Enter the section identifier (e.g., ICD-001).",
         test_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
@@ -11481,7 +11481,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "date_updated", label: "Date Updated", type: "text", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11509,7 +11509,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "regulatory_regions", label: "Regulatory Regions", type: "text", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11534,7 +11534,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "deviations_notes", label: "Notes on Deviations/Interpretations", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11562,7 +11562,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "test_levels_margins", label: "Test Levels / Margins", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11590,7 +11590,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "worst_case_mode", label: "Worst‑Case Mode", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11619,7 +11619,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "immunity_pass_fail", label: "Pass/Fail Criteria", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11647,7 +11647,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "uncertainty_tolerance", label: "Uncertainty / Tolerance", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11670,7 +11670,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "risk_areas", label: "Risk Areas / Suspected Emissions", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11692,7 +11692,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "retest_criteria", label: "Re‑test Criteria", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11714,7 +11714,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "responsible_roles", label: "Responsible Roles", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11736,7 +11736,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "open_issues", label: "Open Issues", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11752,7 +11752,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = sections.map((section, idx) => {
       const data = {
-        test_name: section.title,
+        section_title: section.title,
         test_no: section.id,
         test_type: section.type,
         param1_label: "",
@@ -11762,7 +11762,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldLabels = {
-        test_name: "Section Title",
+        section_title: "Section Title",
         test_no: "Section ID",
         test_type: "Section Type",
         param1_label: "Param 1 Label",
@@ -11772,7 +11772,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldTypes = {
-        test_name: "text",
+        section_title: "text",
         test_no: "text",
         test_type: "text",
         param1_label: "text",
@@ -11782,7 +11782,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldPrompts = {
-        test_name: "Enter the section title for this EMC/EMI compliance plan.",
+        section_title: "Enter the section title for this EMC/EMI compliance plan.",
         test_no: "Enter the section identifier (e.g., EMC-001).",
         test_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
@@ -11879,7 +11879,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "date_updated", label: "Date Updated", type: "text", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11907,7 +11907,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "operating_environment", label: "Operating Environment", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11945,7 +11945,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           { key: "test_plan_reference", label: "Test Plan Reference", type: "textarea", value: "" }
         ],
         maturity: {
-          test_name: 3,
+          section_title: 3,
           test_no: 3,
           test_type: 3,
           param1_label: 3,
@@ -11973,7 +11973,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
     const tests = sections.map((section, idx) => {
       const data = {
-        test_name: section.title,
+        section_title: section.title,
         test_no: section.id,
         test_type: section.type,
         param1_label: "",
@@ -11983,7 +11983,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldLabels = {
-        test_name: "Section Title",
+        section_title: "Section Title",
         test_no: "Section ID",
         test_type: "Section Type",
         param1_label: "Param 1 Label",
@@ -11993,7 +11993,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       };
 
       const fieldTypes = {
-        test_name: "text",
+        section_title: "text",
         test_no: "text",
         test_type: "text",
         param1_label: "text",
@@ -12004,7 +12004,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
       const fieldOptions = {};
       const fieldPrompts = {
-        test_name: "Enter the section title for this FMEA document.",
+        section_title: "Enter the section title for this FMEA document.",
         test_no: "Enter the section identifier (e.g., FMEA-003).",
         test_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
@@ -12482,6 +12482,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 </script>
 </body>
 </html>
+
 
 
 
