@@ -494,6 +494,8 @@
       for(const entry of state.filtered){
         const item = document.createElement("div");
         item.className = "file-item" + (state.current && state.current.path === entry.path ? " active" : "");
+        item.dataset.path = entry.path || "";
+        item.dataset.filename = entry.filename || "";
         item.innerHTML = `
           <div class="name">${escapeHtml(entry.filename)}</div>
           <div class="sub">
@@ -502,7 +504,6 @@
             ${entry.kind ? `<span class="pill">${escapeHtml(entry.kind)}</span>` : ""}
           </div>
         `;
-        item.addEventListener("click", () => selectEntry(entry));
         list.appendChild(item);
       }
     }
@@ -523,16 +524,13 @@
 
     async function selectEntry(entry){
       state.current = entry;
-      document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
-      const match = Array.from(document.querySelectorAll('.file-item')).find(el => el.textContent.includes(entry.filename));
-      if(match) match.classList.add('active');
-
       $("previewTitle").textContent = entry.filename;
       updateMeta(entry);
       $("emptyState").style.display = "none";
+      $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
 
       try{
-        const res = await fetch(entry.path);
+        const res = await fetch(entry.path, { cache: "no-store" });
         if(!res.ok) throw new Error(`Failed to load ${entry.path}`);
         const text = await res.text();
         const html = markdownToHtml(text);
@@ -590,6 +588,14 @@
     }
 
     $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
+    $("fileList").addEventListener("click", (e) => {
+      const item = e.target.closest(".file-item");
+      if(!item) return;
+      const path = item.dataset.path || "";
+      const filename = item.dataset.filename || "";
+      const entry = state.entries.find(e => e.path === path || e.filename === filename);
+      if(entry) selectEntry(entry);
+    });
     window.addEventListener("hashchange", () => {
       const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
       const target = state.entries.find(e => e.path === hash || e.filename === hash);
