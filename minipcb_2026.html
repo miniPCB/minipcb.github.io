@@ -325,7 +325,8 @@
     const state = {
       entries: [],
       filtered: [],
-      current: null
+      current: null,
+      requestId: 0
     };
 
     const $ = (id) => document.getElementById(id);
@@ -504,6 +505,7 @@
             ${entry.kind ? `<span class="pill">${escapeHtml(entry.kind)}</span>` : ""}
           </div>
         `;
+        item.addEventListener("click", () => selectEntry(entry));
         list.appendChild(item);
       }
     }
@@ -524,19 +526,23 @@
 
     async function selectEntry(entry){
       state.current = entry;
+      const requestId = ++state.requestId;
       $("previewTitle").textContent = entry.filename;
       updateMeta(entry);
       $("emptyState").style.display = "none";
       $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
 
       try{
-        const res = await fetch(entry.path, { cache: "no-store" });
+        const url = entry.path + "?v=" + Date.now();
+        const res = await fetch(url, { cache: "no-store" });
         if(!res.ok) throw new Error(`Failed to load ${entry.path}`);
         const text = await res.text();
+        if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
         $("previewPane").innerHTML = `<div class="md">${html}</div>`;
         location.hash = encodeURIComponent(entry.path);
       }catch(err){
+        if(requestId !== state.requestId) return;
         $("previewPane").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
       }
 
