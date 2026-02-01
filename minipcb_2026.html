@@ -216,6 +216,40 @@
       min-height:0;
     }
 
+    .tabBar{
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+
+    .tabBtn{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      padding:6px 10px;
+      border-radius:10px;
+      font-size:12px;
+      letter-spacing:0.4px;
+      text-transform:uppercase;
+      cursor:pointer;
+      transition: all 0.12s ease;
+    }
+
+    .tabBtn.active{
+      color: var(--text);
+      border-color: rgba(102,163,255,0.8);
+      background: rgba(102,163,255,0.18);
+    }
+
+    .tabPanel{
+      display:none;
+    }
+
+    .tabPanel.active{
+      display:block;
+    }
+
     .empty{
       color: var(--muted);
       font-size:14px;
@@ -315,9 +349,30 @@
           <div class="preview-meta" id="previewMeta"></div>
           <div class="preview-meta" id="previewDebug"></div>
           <div class="preview-meta" id="previewLog"></div>
+          <div class="tabBar" id="previewTabs">
+            <button class="tabBtn active" data-tab="markdown">Markdown</button>
+            <button class="tabBtn" data-tab="schematic">Schematic</button>
+            <button class="tabBtn" data-tab="layout">Layout</button>
+            <button class="tabBtn" data-tab="assembly">Assembly</button>
+            <button class="tabBtn" data-tab="testing">Testing</button>
+          </div>
         </div>
         <div class="preview" id="previewPane">
-          <div class="empty" id="emptyState">Pick a file from the left to render its markdown.</div>
+          <div class="tabPanel active" data-panel="markdown">
+            <div class="empty" id="emptyState">Pick a file from the left to render its markdown.</div>
+          </div>
+          <div class="tabPanel" data-panel="schematic">
+            <div class="empty">Schematic view placeholder. Add images or SVGs here.</div>
+          </div>
+          <div class="tabPanel" data-panel="layout">
+            <div class="empty">Layout view placeholder. Add board renders or layout images here.</div>
+          </div>
+          <div class="tabPanel" data-panel="assembly">
+            <div class="empty">Assembly view placeholder. Add assembly drawings or BOM links here.</div>
+          </div>
+          <div class="tabPanel" data-panel="testing">
+            <div class="empty">Testing view placeholder. Add procedures or test results here.</div>
+          </div>
         </div>
       </main>
     </div>
@@ -570,8 +625,8 @@
         logDebug(`click -> ${path || entry?.filename || ""}`);
         const emptyState = $("emptyState");
         if(emptyState) emptyState.style.display = "none";
-        const previewPane = $("previewPane");
-        if(previewPane) previewPane.innerHTML = '<div class="empty">Loading...</div>';
+        const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
+        if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
         safeSetHashPath(path);
 
         if(state.currentFetch && typeof state.currentFetch.abort === "function"){
@@ -601,13 +656,13 @@
         const text = await res.text();
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
-        if(previewPane) previewPane.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
+        if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
         $("previewDebug").textContent = `Path: ${path} | ${text.length} bytes | URL: ${res.url}`;
         logDebug(`render -> ${path} (${text.length} bytes)`);
       }catch(err){
         const msg = err?.message || "Unknown error";
-        const previewPane = $("previewPane");
-        if(previewPane) previewPane.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
+        const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
+        if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         $("previewDebug").textContent = `Error: ${msg}`;
         logDebug(`error -> ${msg}`);
       }
@@ -659,12 +714,28 @@
     }
 
     $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
+    function setupTabs(){
+      const tabs = document.querySelectorAll("#previewTabs .tabBtn");
+      const panels = document.querySelectorAll(".tabPanel");
+      tabs.forEach(btn => {
+        btn.addEventListener("click", () => {
+          tabs.forEach(t => t.classList.remove("active"));
+          btn.classList.add("active");
+          const id = btn.getAttribute("data-tab");
+          panels.forEach(p => {
+            p.classList.toggle("active", p.getAttribute("data-panel") === id);
+          });
+        });
+      });
+    }
+
     window.addEventListener("hashchange", () => {
       const hashPath = getHashPath();
       const target = state.entries.find(e => e.path === hashPath || e.filename === hashPath);
       if(target && (!state.current || target.path !== state.current.path)) selectEntry(target);
     });
 
+    setupTabs();
     loadIndex();
   </script>
 </body>
