@@ -294,7 +294,6 @@
     .imageLayer{
       position: relative;
       display: inline-block;
-      transform-origin: 0 0;
     }
 
     .imageOverlay{
@@ -439,16 +438,23 @@
     </div>
   </div>
 
-  <script>
+    <script src="schematics-data.js"></script>
+<script>
     const state = {
       entries: [],
       filtered: [],
       current: null,
       requestId: 0,
-      currentFetch: null
+      currentFetch: null,
+      mdIndex: []
     };
 
     const $ = (id) => document.getElementById(id);
+
+    function parsePnFromTitle(title){
+      const raw = (title || "").split("|")[0].trim();
+      return raw || "";
+    }
 
     function logDebug(msg){
       const ts = new Date().toLocaleTimeString();
@@ -722,15 +728,15 @@
 
       for(const entry of state.filtered){
         const item = document.createElement("div");
-        item.className = "file-item" + (state.current && state.current.path === entry.path ? " active" : "");
-        item.dataset.path = entry.path || "";
-        item.dataset.filename = entry.filename || "";
+        item.className = "file-item" + (state.current && state.current.pn === entry.pn ? " active" : "");
+        item.dataset.pn = entry.pn || "";
         item.innerHTML = `
-          <div class="name">${escapeHtml(entry.filename)}</div>
+          <div class="name">${escapeHtml(entry.title || entry.pn || entry.filename || "")}</div>
           <div class="sub">
             ${entry.pn ? `<span class="pill">${escapeHtml(entry.pn)}</span>` : ""}
             ${entry.rev ? `<span class="pill">${escapeHtml(entry.rev)}</span>` : ""}
             ${entry.kind ? `<span class="pill">${escapeHtml(entry.kind)}</span>` : ""}
+            ${entry.hasMarkdown ? `<span class="pill">md</span>` : `<span class="pill">no md</span>`}
           </div>
         `;
         item.addEventListener("click", () => selectEntry(entry));
@@ -755,13 +761,27 @@
     function setupImageInteractions(scope){
       const viewports = (scope || document).querySelectorAll(".imageViewport");
       const storedZoom = parseFloat(localStorage.getItem("imageZoom") || "1");
+
+      const applyZoom = (vp, layer, img, zoom) => {
+        if(!img) return;
+        const naturalW = img.naturalWidth || img.width || 0;
+        const naturalH = img.naturalHeight || img.height || 0;
+        if(!naturalW || !naturalH) return;
+        layer.style.width = `${naturalW * zoom}px`;
+        layer.style.height = `${naturalH * zoom}px`;
+        vp.setAttribute("data-zoom", String(zoom));
+      };
+
       viewports.forEach(vp => {
         if(vp.getAttribute("data-ready") == "true") return;
         vp.setAttribute("data-ready", "true");
         const layer = vp.querySelector(".imageLayer");
+        const img = vp.querySelector("img");
         if(!layer) return;
-        vp.setAttribute("data-zoom", String(storedZoom));
-        layer.style.transform = `scale(${storedZoom})`;
+        if(img && !img.complete){
+          img.addEventListener("load", () => applyZoom(vp, layer, img, storedZoom), { once: true });
+        }
+        applyZoom(vp, layer, img, storedZoom);
 
         let isDown = false;
         let startX = 0;
@@ -797,9 +817,8 @@
           const current = parseFloat(vp.getAttribute("data-zoom") || "1");
           const delta = e.deltaY < 0 ? 0.12 : -0.12;
           const next = Math.min(4, Math.max(0.1, current + delta));
-          vp.setAttribute("data-zoom", String(next));
           localStorage.setItem("imageZoom", String(next));
-          layer.style.transform = `scale(${next})`;
+          applyZoom(vp, layer, img, next);
         }, { passive: false });
       });
     }
@@ -808,8 +827,8 @@
       try{
         state.current = entry;
         const requestId = ++state.requestId;
-        const path = entry && entry.path ? entry.path : "";
-        $("previewTitle").textContent = entry?.filename || "";
+        const path = entry && entry.mdPath ? entry.mdPath : "";
+        $("previewTitle").textContent = entry?.title || entry?.pn || entry?.filename || "";
         updateMeta(entry);
         renderImages(entry);
         $("previewDebug").textContent = `Path: ${path} | fetching...`;
@@ -817,6 +836,11 @@
         const emptyState = $("emptyState");
         if(emptyState) emptyState.style.display = "none";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
+        if(!path){
+          if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
+          $("previewDebug").textContent = `Path: (none)`;
+          return;
+        }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
         safeSetHashPath(path);
 
@@ -853,6 +877,11 @@
       }catch(err){
         const msg = err?.message || "Unknown error";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
+        if(!path){
+          if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
+          $("previewDebug").textContent = `Path: (none)`;
+          return;
+        }
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         $("previewDebug").textContent = `Error: ${msg}`;
         logDebug(`error -> ${msg}`);
@@ -866,39 +895,73 @@
         state.filtered = state.entries.slice();
       }else{
         state.filtered = state.entries.filter(e => {
-          return [e.filename, e.pn, e.rev, e.kind].some(v => (v || "").toLowerCase().includes(q));
+          return [e.title, e.pn, e.rev, e.kind].some(v => (v || "").toLowerCase().includes(q));
         });
       }
-      $("fileCount").textContent = `${state.filtered.length} files`;
+      $("fileCount").textContent = `${state.filtered.length} items`;
       renderList();
     }
 
     async function loadIndex(){
+      let mdEntries = [];
       try{
         const res = await fetch("md/index.json");
         if(!res.ok) throw new Error("Index not found");
         const data = await res.json();
-        state.entries = Array.isArray(data.entries) ? data.entries.slice() : [];
-        state.entries.sort((a, b) => (a.filename || "").localeCompare(b.filename || ""));
+        mdEntries = Array.isArray(data.entries) ? data.entries.slice() : [];
         setStatus(true, "Index: loaded");
       }catch(err){
         setStatus(false, "Index: missing");
-        state.entries = [{
-          path: "md/README.md",
-          filename: "README.md",
-          pn: "",
-          rev: "",
-          kind: "",
-          mtime: ""
-        }];
       }
 
-      state.filtered = state.entries.slice();
-      $("fileCount").textContent = `${state.filtered.length} files`;
+      state.mdIndex = mdEntries;
+      const mdByPn = new Map();
+      mdEntries.forEach(entry => {
+        if(entry.pn) mdByPn.set(entry.pn, entry);
+      });
+
+      const catalog = Array.isArray(window.SCHEMATICS) ? window.SCHEMATICS : [];
+      const merged = catalog.map(item => {
+        const pn = parsePnFromTitle(item.title);
+        const md = mdByPn.get(pn);
+        return {
+          title: item.title,
+          href: item.href,
+          pn,
+          mdPath: md ? md.path : "",
+          filename: md ? md.filename : "",
+          rev: md ? md.rev : "",
+          kind: md ? md.kind : "",
+          mtime: md ? md.mtime : "",
+          hasMarkdown: !!md
+        };
+      });
+
+      mdEntries.forEach(md => {
+        if(!md.pn) return;
+        if(!merged.find(e => e.pn === md.pn)){
+          merged.push({
+            title: md.filename,
+            href: "",
+            pn: md.pn,
+            mdPath: md.path,
+            filename: md.filename,
+            rev: md.rev,
+            kind: md.kind,
+            mtime: md.mtime,
+            hasMarkdown: true
+          });
+        }
+      });
+
+      merged.sort((a, b) => (a.pn || "").localeCompare(b.pn || ""));
+      state.entries = merged;
+      state.filtered = merged.slice();
+      $("fileCount").textContent = `${state.filtered.length} items`;
       renderList();
 
-      const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
-      const target = hash ? state.entries.find(e => e.path === hash || e.filename === hash) : state.entries[0];
+      const hashPath = getHashPath();
+      const target = state.entries.find(e => e.mdPath === hashPath || e.filename === hashPath || e.pn === hashPath);
       if(target){
         selectEntry(target);
       }
@@ -929,5 +992,5 @@
     setupTabs();
     loadIndex();
   </script>
-</body>
+  </body>
 </html>
