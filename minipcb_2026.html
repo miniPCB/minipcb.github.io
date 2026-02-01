@@ -308,8 +308,8 @@
     }
 
     .imageViewport img{
-      width: auto;
-      max-width: none;
+      width: 100%;
+      height: auto;
       display: block;
     }
 
@@ -766,7 +766,7 @@
       const storedZoom = parseFloat(localStorage.getItem("imageZoom") || "1");
 
       const applyZoom = (vp, layer, img, zoom) => {
-        if(!img) return;
+        if(!layer || !img) return;
         const naturalW = img.naturalWidth || img.width || 0;
         const naturalH = img.naturalHeight || img.height || 0;
         if(!naturalW || !naturalH) return;
@@ -778,46 +778,52 @@
       viewports.forEach(vp => {
         if(vp.getAttribute("data-ready") == "true") return;
         vp.setAttribute("data-ready", "true");
+
         const layer = vp.querySelector(".imageLayer");
         const img = vp.querySelector("img");
-        if(!layer) return;
-        if(img && !img.complete){
-          img.addEventListener("load", () => applyZoom(vp, layer, img, storedZoom), { once: true });
-        }
-        applyZoom(vp, layer, img, storedZoom);
+        if(!layer || !img) return;
 
-        let isDown = false;
+        const initZoom = storedZoom || 1;
+        if(!img.complete){
+          img.addEventListener("load", () => applyZoom(vp, layer, img, initZoom), { once: true });
+        }
+        applyZoom(vp, layer, img, initZoom);
+
+        let isPanning = false;
         let startX = 0;
         let startY = 0;
         let scrollLeft = 0;
         let scrollTop = 0;
 
-        vp.addEventListener("mousedown", (e) => {
-          isDown = true;
-          startX = e.pageX - vp.offsetLeft;
-          startY = e.pageY - vp.offsetTop;
+        vp.addEventListener("pointerdown", (e) => {
+          if(e.button !== 0) return;
+          isPanning = true;
+          vp.setPointerCapture(e.pointerId);
+          const rect = vp.getBoundingClientRect();
+          startX = e.clientX - rect.left;
+          startY = e.clientY - rect.top;
           scrollLeft = vp.scrollLeft;
           scrollTop = vp.scrollTop;
         });
 
-        vp.addEventListener("mouseleave", () => { isDown = false; });
-        vp.addEventListener("mouseup", () => { isDown = false; });
+        vp.addEventListener("pointerup", (e) => {
+          isPanning = false;
+          try{ vp.releasePointerCapture(e.pointerId); }catch(_){}
+        });
 
-        vp.addEventListener("mousemove", (e) => {
-          if(!isDown) return;
+        vp.addEventListener("pointerleave", () => { isPanning = false; });
+
+        vp.addEventListener("pointermove", (e) => {
+          if(!isPanning) return;
           e.preventDefault();
-          const x = e.pageX - vp.offsetLeft;
-          const y = e.pageY - vp.offsetTop;
-          const walkX = x - startX;
-          const walkY = y - startY;
-          vp.scrollLeft = scrollLeft - walkX;
-          vp.scrollTop = scrollTop - walkY;
+          const rect = vp.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          vp.scrollLeft = scrollLeft - (x - startX);
+          vp.scrollTop = scrollTop - (y - startY);
         });
 
         vp.addEventListener("wheel", (e) => {
-          const wantsZoom = e.ctrlKey || e.metaKey || e.altKey;
-          const hasOverflow = vp.scrollHeight > vp.clientHeight || vp.scrollWidth > vp.clientWidth;
-          if(!wantsZoom && hasOverflow) return;
           e.preventDefault();
           const current = parseFloat(vp.getAttribute("data-zoom") || "1");
           const delta = e.deltaY < 0 ? 0.12 : -0.12;
