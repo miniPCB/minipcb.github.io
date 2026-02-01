@@ -275,6 +275,39 @@
       color: var(--muted);
     }
 
+    .imageViewport{
+      position: relative;
+      height: 320px;
+      overflow: auto;
+      border-radius: 10px;
+      background: rgba(8, 12, 18, 0.65);
+      border: 1px solid var(--border);
+      cursor: grab;
+    }
+
+    .imageViewport:active{
+      cursor: grabbing;
+    }
+
+    .imageLayer{
+      position: relative;
+      display: inline-block;
+      transform-origin: 0 0;
+    }
+
+    .imageOverlay{
+      position: absolute;
+      inset: 0;
+      background: rgba(180, 180, 180, 0.22);
+      pointer-events: none;
+    }
+
+    .imageViewport img{
+      width: auto;
+      max-width: none;
+      display: block;
+    }
+
 
     .empty{
       color: var(--muted);
@@ -629,7 +662,15 @@
         const img = new Image();
         img.onload = () => {
           foundSchematics.push(
-            `<div class="imageCard"><img src="${src}" alt="${pn} schematic ${page}" /><div class="caption">${pn} schematic ${page}</div></div>`
+            `<div class="imageCard">
+              <div class="imageViewport" data-zoom="1">
+                <div class="imageLayer">
+                  <img src="${src}" alt="${pn} schematic ${page}" />
+                  <div class="imageOverlay"></div>
+                </div>
+              </div>
+              <div class="caption">${pn} schematic ${page}</div>
+            </div>`
           );
           tryFinishSchematics();
         };
@@ -645,10 +686,17 @@
         layoutPanel.innerHTML = `
           <div class="imageGrid">
             <div class="imageCard">
-              <img src="${layoutSrc}" alt="${pn} components top" />
+              <div class="imageViewport" data-zoom="1">
+                <div class="imageLayer">
+                  <img src="${layoutSrc}" alt="${pn} components top" />
+                  <div class="imageOverlay"></div>
+                </div>
+              </div>
               <div class="caption">${pn} components top</div>
             </div>
           </div>`;
+      };
+        setupImageInteractions(layoutPanel);
       };
       layoutImg.onerror = () => {
         layoutPanel.innerHTML = '<div class="empty">No layout image found for this PN.</div>';
@@ -700,6 +748,54 @@
       if(entry.kind) parts.push(`KIND: ${escapeHtml(entry.kind)}`);
       if(entry.mtime) parts.push(`Updated: ${escapeHtml(entry.mtime)}`);
       meta.innerHTML = parts.map(p => `<span class="pill">${p}</span>`).join("");
+    }
+
+    function setupImageInteractions(scope){
+      const viewports = (scope || document).querySelectorAll(".imageViewport");
+      viewports.forEach(vp => {
+        if(vp.getAttribute("data-ready") == "true") return;
+        vp.setAttribute("data-ready", "true");
+        const layer = vp.querySelector(".imageLayer");
+        if(!layer) return;
+
+        let isDown = false;
+        let startX = 0;
+        let startY = 0;
+        let scrollLeft = 0;
+        let scrollTop = 0;
+
+        vp.addEventListener("mousedown", (e) => {
+          isDown = true;
+          startX = e.pageX - vp.offsetLeft;
+          startY = e.pageY - vp.offsetTop;
+          scrollLeft = vp.scrollLeft;
+          scrollTop = vp.scrollTop;
+        });
+
+        vp.addEventListener("mouseleave", () => { isDown = false; });
+        vp.addEventListener("mouseup", () => { isDown = false; });
+
+        vp.addEventListener("mousemove", (e) => {
+          if(!isDown) return;
+          e.preventDefault();
+          const x = e.pageX - vp.offsetLeft;
+          const y = e.pageY - vp.offsetTop;
+          const walkX = x - startX;
+          const walkY = y - startY;
+          vp.scrollLeft = scrollLeft - walkX;
+          vp.scrollTop = scrollTop - walkY;
+        });
+
+        vp.addEventListener("wheel", (e) => {
+          if(!e.ctrlKey) return;
+          e.preventDefault();
+          const current = parseFloat(vp.getAttribute("data-zoom") || "1");
+          const delta = e.deltaY < 0 ? 0.1 : -0.1;
+          const next = Math.min(4, Math.max(0.5, current + delta));
+          vp.setAttribute("data-zoom", String(next));
+          layer.style.transform = `scale(${next})`;
+        }, { passive: false });
+      });
     }
 
     async function selectEntry(entry){
