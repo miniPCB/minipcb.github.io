@@ -313,6 +313,7 @@
         <div class="preview-head">
           <div class="preview-title" id="previewTitle">Select a markdown file</div>
           <div class="preview-meta" id="previewMeta"></div>
+          <div class="preview-meta" id="previewDebug"></div>
         </div>
         <div class="preview" id="previewPane">
           <div class="empty" id="emptyState">Pick a file from the left to render its markdown.</div>
@@ -529,6 +530,7 @@
       const requestId = ++state.requestId;
       $("previewTitle").textContent = entry.filename;
       updateMeta(entry);
+      $("previewDebug").textContent = `Path: ${entry.path || ""}`;
       $("emptyState").style.display = "none";
       $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
 
@@ -539,11 +541,13 @@
         const text = await res.text();
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
-        $("previewPane").innerHTML = `<div class="md">${html}</div>`;
+        $("previewPane").innerHTML = `<div class="md" data-path="${escapeHtml(entry.path)}">${html}</div>`;
+        $("previewDebug").textContent = `Path: ${entry.path || ""} ? ${text.length} bytes`;
         location.hash = encodeURIComponent(entry.path);
       }catch(err){
         if(requestId !== state.requestId) return;
         $("previewPane").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+        $("previewDebug").textContent = `Error: ${err.message}`;
       }
 
       renderList();
