@@ -412,9 +412,7 @@
         <div class="preview-head">
           <div class="preview-title" id="previewTitle">Select a markdown file</div>
           <div class="preview-meta" id="previewMeta"></div>
-          <div class="preview-meta" id="previewDebug"></div>
-          <div class="preview-meta" id="previewLog"></div>
-          <div class="tabBar" id="previewTabs">
+                              <div class="tabBar" id="previewTabs">
             <button class="tabBtn active" data-tab="markdown">Markdown</button>
             <button class="tabBtn" data-tab="schematic">Schematic</button>
             <button class="tabBtn" data-tab="layout">Layout</button>
@@ -461,17 +459,6 @@
       return raw || "";
     }
 
-    function logDebug(msg){
-      const ts = new Date().toLocaleTimeString();
-      const line = `[${ts}] ${msg}`;
-      const el = $("previewLog");
-      if(!el) return;
-      const current = el.getAttribute("data-log") || "";
-      const next = (line + "\n" + current).trim().split("\n").slice(0, 5).join("\n");
-      el.setAttribute("data-log", next);
-      el.innerHTML = next.split("\n").map(escapeHtml).join("<br>");
-    }
-
     function getHashPath(){
       const raw = decodeURIComponent(location.hash.replace(/^#/, ""));
       return raw.split("|")[0];
@@ -489,7 +476,6 @@
       }catch(err){
         const next = encodeURIComponent(path || "");
         location.hash = next;
-        logDebug(`hash error -> ${err && err.message ? err.message : "unknown"}`);
       }
     }
 
@@ -851,14 +837,11 @@
         $("previewTitle").textContent = entry?.title || entry?.pn || entry?.filename || "";
         updateMeta(entry);
         renderImages(entry);
-        $("previewDebug").textContent = `Path: ${path} | fetching...`;
-        logDebug(`click -> ${path || entry?.filename || ""}`);
         const emptyState = $("emptyState");
         if(emptyState) emptyState.style.display = "none";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
-          $("previewDebug").textContent = `Path: (none)`;
           return;
         }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
@@ -871,7 +854,6 @@
         state.currentFetch = controller;
 
         const url = path + "?v=" + Date.now();
-        logDebug(`fetch -> ${url}`);
 
         const timeoutMs = 6000;
         const timeout = new Promise((_, reject) =>
@@ -887,24 +869,18 @@
         ]);
         if(requestId !== state.requestId) return;
         if(!res.ok) throw new Error(`Failed to load ${path} (${res.status})`);
-        $("previewDebug").textContent = `Path: ${path} | status ${res.status}`;
         const text = await res.text();
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
-        $("previewDebug").textContent = `Path: ${path} | ${text.length} bytes | URL: ${res.url}`;
-        logDebug(`render -> ${path} (${text.length} bytes)`);
       }catch(err){
         const msg = err?.message || "Unknown error";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
-          $("previewDebug").textContent = `Path: (none)`;
           return;
         }
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
-        $("previewDebug").textContent = `Error: ${msg}`;
-        logDebug(`error -> ${msg}`);
       }
 
       renderList();
