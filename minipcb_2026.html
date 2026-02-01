@@ -328,7 +328,8 @@
       entries: [],
       filtered: [],
       current: null,
-      requestId: 0
+      requestId: 0,
+      currentFetch: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -557,18 +558,30 @@
       logDebug(`click -> ${entry.path || entry.filename || ""}`);
       $("emptyState").style.display = "none";
       $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
+      setHashPath(entry.path);
+
+      if(state.currentFetch && typeof state.currentFetch.abort === "function"){
+        state.currentFetch.abort();
+      }
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      state.currentFetch = controller;
 
       const url = entry.path + "?v=" + Date.now();
       logDebug(`fetch -> ${url}`);
 
       const timeoutMs = 6000;
-      let timedOut = false;
-      const timer = setTimeout(() => { timedOut = true; }, timeoutMs);
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => {
+          if(controller) controller.abort();
+          reject(new Error("Request timed out"));
+        }, timeoutMs)
+      );
 
       try{
-        const res = await fetch(url, { cache: "no-store" });
-        clearTimeout(timer);
-        if(timedOut) throw new Error("Request timed out");
+        const res = await Promise.race([
+          fetch(url, { cache: "no-store", signal: controller ? controller.signal : undefined }),
+          timeout
+        ]);
         if(requestId !== state.requestId) return;
         if(!res.ok) throw new Error(`Failed to load ${entry.path} (${res.status})`);
         $("previewDebug").textContent = `Path: ${entry.path || ""} | status ${res.status}`;
@@ -578,9 +591,7 @@
         $("previewPane").innerHTML = `<div class="md" data-path="${escapeHtml(entry.path)}">${html}</div>`;
         $("previewDebug").textContent = `Path: ${entry.path || ""} | ${text.length} bytes | URL: ${res.url}`;
         logDebug(`render -> ${entry.path || ""} (${text.length} bytes)`);
-        setHashPath(entry.path);
       }catch(err){
-        clearTimeout(timer);
         if(requestId !== state.requestId) return;
         const msg = err?.message || "Unknown error";
         $("previewPane").innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
