@@ -309,6 +309,32 @@
       pointer-events: none;
     }
 
+    .pageTabs{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      margin-bottom:10px;
+    }
+
+    .pageBtn{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      padding:4px 8px;
+      border-radius:8px;
+      font-size:11px;
+      letter-spacing:0.4px;
+      text-transform:uppercase;
+      cursor:pointer;
+    }
+
+    .pageBtn.active{
+      color: var(--text);
+      border-color: rgba(102,163,255,0.8);
+      background: rgba(102,163,255,0.18);
+    }
+
+
     .imageViewport img{
       width: 100%;
       height: auto;
@@ -641,15 +667,45 @@
       schematicPanel.innerHTML = '<div class="empty">Loading schematics...</div>';
       layoutPanel.innerHTML = '<div class="empty">Loading layout...</div>';
 
-      const foundSchematics = [];
+      const found = [];
       const maxPages = 12;
       let checked = 0;
 
       const tryFinishSchematics = () => {
         checked += 1;
         if(checked < maxPages) return;
-        if(foundSchematics.length){
-          schematicPanel.innerHTML = `<div class="imageGrid">${foundSchematics.join('')}</div>`;
+        if(found.length){
+          const buttons = found.map((it, idx) =>
+            `<button class="pageBtn${idx == 0 ? ' active' : ''}" data-src="${it.src}" data-label="${it.label}">${it.label}</button>`
+          ).join('');
+          const first = found[0];
+          schematicPanel.innerHTML = `
+            <div class="pageTabs" data-pages="schematic">${buttons}</div>
+            <div class="imageCard">
+              <div class="imageViewport" data-zoom="1">
+                <div class="imageLayer">
+                  <img src="${first.src}" alt="${first.label}" />
+                  <div class="imageOverlay"></div>
+                </div>
+              </div>
+              <div class="caption" id="schematicCaption">${first.label}</div>
+            </div>`;
+
+          const tabs = schematicPanel.querySelector('.pageTabs');
+          tabs.addEventListener('click', (e) => {
+            const btn = e.target.closest('.pageBtn');
+            if(!btn) return;
+            tabs.querySelectorAll('.pageBtn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const img = schematicPanel.querySelector('img');
+            const cap = schematicPanel.querySelector('#schematicCaption');
+            if(img) img.src = btn.getAttribute('data-src') || '';
+            if(cap) cap.textContent = btn.getAttribute('data-label') || '';
+            const vp = schematicPanel.querySelector('.imageViewport');
+            if(vp) vp.setAttribute('data-ready', 'false');
+            setupImageInteractions(schematicPanel);
+          });
+
           setupImageInteractions(schematicPanel);
         }else{
           schematicPanel.innerHTML = '<div class="empty">No schematic images found for this PN.</div>';
@@ -661,17 +717,10 @@
         const src = `images/${pn}_schematic_${page}.png`;
         const img = new Image();
         img.onload = () => {
-          foundSchematics.push(
-            `<div class="imageCard">
-              <div class="imageViewport" data-zoom="1">
-                <div class="imageLayer">
-                  <img src="${src}" alt="${pn} schematic ${page}" />
-                  <div class="imageOverlay"></div>
-                </div>
-              </div>
-              <div class="caption">${pn} schematic ${page}</div>
-            </div>`
-          );
+          found.push({
+            src,
+            label: `${pn} schematic ${page}`
+          });
           tryFinishSchematics();
         };
         img.onerror = () => {
@@ -764,14 +813,16 @@
       };
 
       viewports.forEach(vp => {
-        if(vp.getAttribute("data-ready") == "true") return;
-        vp.setAttribute("data-ready", "true");
-
         const layer = vp.querySelector(".imageLayer");
         const img = vp.querySelector("img");
         if(!layer || !img) return;
 
         const initZoom = storedZoom || 1;
+        if(vp.getAttribute("data-ready") == "true"){
+          applyZoom(vp, layer, img, initZoom);
+          return;
+        }
+        vp.setAttribute("data-ready", "true");
         if(!img.complete){
           img.addEventListener("load", () => applyZoom(vp, layer, img, initZoom), { once: true });
         }
