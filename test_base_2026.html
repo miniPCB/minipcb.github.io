@@ -1059,7 +1059,7 @@
     test_no: "",
     uut_pn: "",
     last_test_no: "",
-    test_type: "",
+    section_type: "",
     test_equipment: "",
     purpose: "",
     scope: "",
@@ -1093,7 +1093,7 @@
     test_no: "Test No",
     uut_pn: "UUT P/N",
     last_test_no: "Last Test No",
-    test_type: "Test Type",
+    section_type: "Test Type",
     test_equipment: "Test Equipment",
     purpose: "Purpose",
     scope: "Scope",
@@ -1126,7 +1126,7 @@
     test_no: "Provide the test number (e.g., 001).",
     uut_pn: "",
     last_test_no: "Enter the prior test number that precedes this step (or N/A).",
-    test_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
+    section_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
     test_equipment: "List required test equipment and tools.",
     purpose: "State the objective of this test in one concise paragraph.",
     scope: "Define what is covered/excluded and conditions for this test.",
@@ -1320,7 +1320,7 @@
   );
 
   const REQUIRED_FIELDS = Object.freeze([
-    "section_title","test_no","uut_pn","test_type",
+    "section_title","test_no","uut_pn","section_type",
     "purpose","setup","procedure","measurement",
     "in_tol_conclusion","in_tol_next_step",
     "oot_low_conclusion","oot_low_next_step",
@@ -2717,7 +2717,7 @@
     const listLabel = docKind === "test" ? "List" : "Sections";
     const totalLabel = docKind === "test" ? "Total Tests" : "Total Sections";
     const listHeaders = docKind === "test"
-      ? "| Order | test_no | section_title | test_type |"
+      ? "| Order | test_no | section_title | section_type |"
       : "| Order | section_id | section_title | section_type |";
 
     const md =
@@ -2738,7 +2738,7 @@ ${listHeaders}
 ${tests.map((t, idx) => {
   const d = t.data || {};
   const esc = (x) => String(x ?? "").replace(/\|/g, "\\|");
-  return `| ${idx+1} | ${esc(d.test_no)} | ${esc(d.section_title)} | ${esc(d.test_type)} |`;
+  return `| ${idx+1} | ${esc(d.test_no)} | ${esc(d.section_title)} | ${esc(d.section_type)} |`;
 }).join("\n")}
 
 ## Notes
@@ -3324,7 +3324,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const allItemsPayload = tests.map(tt => ({
         item_no: tt.data.test_no || "",
         item_name: tt.data.section_title || "",
-        item_type: tt.data.test_type || ""
+        item_type: tt.data.section_type || ""
       }));
 
       const pauseMs = Number(state.prefs.ai_review_pause_ms ?? 0);
@@ -3386,7 +3386,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               const out = {};
               for(const k of Object.keys(t.data || {})){
                 if(k === "_ai") continue;
-                if(k === "section_title" || k === "test_no" || k === "test_type") continue;
+                if(k === "section_title" || k === "test_no" || k === "section_type") continue;
                 const v = t.data[k];
                 if(typeof v === "string" || typeof v === "number" || typeof v === "boolean" || v === null){
                   out[k] = v;
@@ -3397,10 +3397,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             const matrixPlanContext = isMatrixCell ? {
               item_no: t.data.test_no || "",
               item_name: t.data.section_title || "",
-              item_type: t.data.test_type || "",
+              item_type: t.data.section_type || "",
               section_no: t.data.test_no || "",
               section_name: t.data.section_title || "",
-              section_type: t.data.test_type || ""
+              section_type: t.data.section_type || ""
             } : contextData;
 
             const payload = {
@@ -3413,10 +3413,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               })),
               item_no: t.data.test_no || "",
               item_name: t.data.section_title || "",
-              item_type: t.data.test_type || "",
+              item_type: t.data.section_type || "",
               section_no: t.data.test_no || "",
               section_name: t.data.section_title || "",
-              section_type: t.data.test_type || "",
+              section_type: t.data.section_type || "",
               field,
               current_value: isMatrixCell ? (matrixContext?.cell_value ?? "") : (t.data[field] ?? ""),
               field_prompt: t.data?._ai?.field_prompts?.[field] || "",
@@ -3865,13 +3865,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       tests: (plan.tests || []).map(t => ({
         test_no: t.data?.test_no || "",
         section_title: t.data?.section_title || "",
-        test_type: t.data?.test_type || ""
+        section_type: t.data?.section_type || ""
       })),
       document: { name: plan.name || "", goal: plan.goal || "", scope: plan.scope || "" },
       sections: (plan.tests || []).map(t => ({
         section_no: t.data?.test_no || "",
         section_name: t.data?.section_title || "",
-        section_type: t.data?.test_type || ""
+        section_type: t.data?.section_type || ""
       })),
       permission: { level: perm, label: permLabel },
       partlist_headers: partlistMeta.headers,
@@ -4299,7 +4299,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const d = t.data || {};
       const tno = (d.test_no || "").trim() || "(no test_no)";
       const name = (d.section_title || "").trim() || "(no section_title)";
-      const type = (d.test_type || "").trim() || "(no test_type)";
+      const type = (d.section_type || "").trim() || "(no section_type)";
       if(q && !(tno.toLowerCase().includes(q) || name.toLowerCase().includes(q))) continue;
 
       const row = document.createElement("div");
@@ -5438,7 +5438,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     };
     for(const k of fields){
       if(["param1_label","param1_value","param2_label","param2_value"].includes(k)) continue;
-      if(state.matrixExpanded && ["section_title","test_no","test_type"].includes(k)) continue;
+      if(state.matrixExpanded && ["section_title","test_no","section_type"].includes(k)) continue;
       let type = String(test.data?._ai?.field_types?.[k] || "text").toLowerCase();
       if(type.includes("textarea") || type.includes("multi")) type = "textarea";
         const isSelect = type.includes("select");
@@ -5459,7 +5459,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         section_title: "Test Name",
         uut_pn: "UUT P/N",
         last_test_no: "Last Test No",
-        test_type: "Test Type",
+        section_type: "Test Type",
         test_equipment: "Test Equipment",
         purpose: "Purpose",
         scope: "Scope",
@@ -7709,7 +7709,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         data: {
           section_title: "Requirements",
           test_no: "SEC-000",
-          test_type: "Requirements",
+          section_type: "Requirements",
           param1_label: "",
           param1_value: "",
           param2_label: "",
@@ -7724,7 +7724,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             maturity: {
               section_title: 3,
               test_no: 0,
-              test_type: 3,
+              section_type: 3,
               param1_label: 3,
               param1_value: 3,
               param2_label: 3,
@@ -7754,7 +7754,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this specification.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., SEC-001).",
-                  test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
+                  section_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Validate Param 1 Value for completeness, clarity, and acceptance criteria. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Validate Param 2 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 2 (optional).",
@@ -7776,7 +7776,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this specification.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., SEC-001).",
-                  test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
+                  section_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Verify Param 1 Value is technically correct and aligned with design intent. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Verify Param 2 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 2 (optional).",
@@ -7798,7 +7798,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this specification.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., SEC-001).",
-                  test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
+                  section_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Check Param 1 Value for robustness and failure-mode coverage. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Check Param 2 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 2 (optional).",
@@ -7815,7 +7815,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_labels: {
               section_title: "Section Title",
               test_no: "Section ID",
-              test_type: "Section Type",
+              section_type: "Section Type",
               param1_label: "Param 1 Label",
               param1_value: "Param 1 Value",
               param2_label: "Param 2 Label",
@@ -7830,7 +7830,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_prompts: {
               section_title: "Enter the section title for this specification.",
               test_no: "Enter the section identifier (e.g., SEC-001).",
-              test_type: "Describe the section type or category.",
+              section_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
               param1_value: "Select which field should supply parameter 1's value.",
               param2_label: "Enter a label for parameter 2 (optional).",
@@ -7845,7 +7845,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_types: {
               section_title: "text",
               test_no: "text",
-              test_type: "text",
+              section_type: "text",
               param1_label: "text",
               param1_value: "text",
               param2_label: "text",
@@ -7866,7 +7866,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         data: {
           section_title: "Requirements Table",
           test_no: "VM-000",
-          test_type: "Requirements Table",
+          section_type: "Requirements Table",
           param1_label: "",
           param1_value: "",
           param2_label: "",
@@ -7876,7 +7876,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             maturity: {
               section_title: 3,
               test_no: 3,
-              test_type: 3,
+              section_type: 3,
               param1_label: 3,
               param1_value: 3,
               param2_label: 3,
@@ -7901,7 +7901,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this verification matrix.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., VM-001).",
-                  test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
+                  section_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Validate Param 1 Value for completeness, clarity, and acceptance criteria. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Validate Param 2 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 2 (optional).",
@@ -7918,7 +7918,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this verification matrix.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., VM-001).",
-                  test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
+                  section_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Verify Param 1 Value is technically correct and aligned with design intent. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Verify Param 2 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 2 (optional).",
@@ -7935,7 +7935,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this verification matrix.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., VM-001).",
-                  test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
+                  section_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Check Param 1 Value for robustness and failure-mode coverage. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Check Param 2 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 2 (optional).",
@@ -7947,7 +7947,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_labels: {
               section_title: "Section Title",
               test_no: "Section ID",
-              test_type: "Section Type",
+              section_type: "Section Type",
               param1_label: "Param 1 Label",
               param1_value: "Param 1 Value",
               param2_label: "Param 2 Label",
@@ -7957,7 +7957,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_prompts: {
               section_title: "Enter the section title for this verification matrix.",
               test_no: "Enter the section identifier (e.g., VM-001).",
-              test_type: "Describe the section type or category.",
+              section_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
               param1_value: "Select which field should supply parameter 1's value.",
               param2_label: "Enter a label for parameter 2 (optional).",
@@ -7967,7 +7967,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_types: {
               section_title: "text",
               test_no: "text",
-              test_type: "text",
+              section_type: "text",
               param1_label: "text",
               param1_value: "text",
               param2_label: "text",
@@ -7984,7 +7984,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         data: {
           section_title: "Verification Mapping",
           test_no: "VM-000",
-          test_type: "Verification Mapping",
+          section_type: "Verification Mapping",
           param1_label: "",
           param1_value: "",
           param2_label: "",
@@ -7994,7 +7994,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             maturity: {
               section_title: 3,
               test_no: 3,
-              test_type: 3,
+              section_type: 3,
               param1_label: 3,
               param1_value: 3,
               param2_label: 3,
@@ -8019,7 +8019,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this verification matrix.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., VM-001).",
-                  test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
+                  section_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Validate Param 1 Value for completeness, clarity, and acceptance criteria. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Validate Param 2 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 2 (optional).",
@@ -8036,7 +8036,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this verification matrix.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., VM-001).",
-                  test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
+                  section_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Verify Param 1 Value is technically correct and aligned with design intent. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Verify Param 2 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 2 (optional).",
@@ -8053,7 +8053,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this verification matrix.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., VM-001).",
-                  test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
+                  section_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Check Param 1 Value for robustness and failure-mode coverage. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Check Param 2 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 2 (optional).",
@@ -8065,7 +8065,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_labels: {
               section_title: "Section Title",
               test_no: "Section ID",
-              test_type: "Section Type",
+              section_type: "Section Type",
               param1_label: "Param 1 Label",
               param1_value: "Param 1 Value",
               param2_label: "Param 2 Label",
@@ -8075,7 +8075,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_prompts: {
               section_title: "Enter the section title for this verification matrix.",
               test_no: "Enter the section identifier (e.g., VM-001).",
-              test_type: "Describe the section type or category.",
+              section_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
               param1_value: "Select which field should supply parameter 1's value.",
               param2_label: "Enter a label for parameter 2 (optional).",
@@ -8085,7 +8085,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_types: {
               section_title: "text",
               test_no: "text",
-              test_type: "text",
+              section_type: "text",
               param1_label: "text",
               param1_value: "text",
               param2_label: "text",
@@ -8102,7 +8102,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         data: {
           section_title: "Failure Mode 1",
           test_no: "FMEA-000",
-          test_type: "Failure Mode",
+          section_type: "Failure Mode",
           param1_label: "",
           param1_value: "",
           param2_label: "",
@@ -8126,7 +8126,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             maturity: {
               section_title: 1,
               test_no: 1,
-              test_type: 3,
+              section_type: 3,
               param1_label: 3,
               param1_value: 3,
               param2_label: 3,
@@ -8165,7 +8165,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this FMEA document.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., FMEA-003).",
-                  test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
+                  section_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Validate Param 1 Value for completeness, clarity, and acceptance criteria. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Validate Param 2 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 2 (optional).",
@@ -8196,7 +8196,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this FMEA document.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., FMEA-003).",
-                  test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
+                  section_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Verify Param 1 Value is technically correct and aligned with design intent. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Verify Param 2 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 2 (optional).",
@@ -8227,7 +8227,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this FMEA document.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., FMEA-003).",
-                  test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
+                  section_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Check Param 1 Value for robustness and failure-mode coverage. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Check Param 2 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 2 (optional).",
@@ -8253,7 +8253,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_labels: {
               section_title: "Section Title",
               test_no: "Section ID",
-              test_type: "Section Type",
+              section_type: "Section Type",
               param1_label: "Param 1 Label",
               param1_value: "Param 1 Value",
               param2_label: "Param 2 Label",
@@ -8277,7 +8277,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_prompts: {
               section_title: "Enter the section title for this FMEA document.",
               test_no: "Enter the section identifier (e.g., FMEA-003).",
-              test_type: "Describe the section type or category.",
+              section_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
               param1_value: "Select which field should supply parameter 1's value.",
               param2_label: "Enter a label for parameter 2 (optional).",
@@ -8301,7 +8301,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_types: {
               section_title: "text",
               test_no: "text",
-              test_type: "text",
+              section_type: "text",
               param1_label: "text",
               param1_value: "text",
               param2_label: "text",
@@ -8336,7 +8336,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         data: {
           section_title: "BOM Table",
           test_no: "BOM-002",
-          test_type: "BOM Table",
+          section_type: "BOM Table",
           param1_label: "",
           param1_value: "",
           param2_label: "",
@@ -8372,7 +8372,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             maturity: {
               section_title: 3,
               test_no: 3,
-              test_type: 3,
+              section_type: 3,
               param1_label: 3,
               param1_value: 3,
               param2_label: 3,
@@ -8397,7 +8397,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Validate Section Title for completeness, clarity, and acceptance criteria. Guide: Enter the section title for this bill of materials.",
                   test_no: "Validate Section ID for completeness, clarity, and acceptance criteria. Guide: Enter the section identifier (e.g., BOM-001).",
-                  test_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
+                  section_type: "Validate Section Type for completeness, clarity, and acceptance criteria. Guide: Describe the section type or category.",
                   param1_label: "Validate Param 1 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Validate Param 1 Value for completeness, clarity, and acceptance criteria. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Validate Param 2 Label for completeness, clarity, and acceptance criteria. Guide: Enter a label for parameter 2 (optional).",
@@ -8414,7 +8414,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Verify Section Title is technically correct and aligned with design intent. Guide: Enter the section title for this bill of materials.",
                   test_no: "Verify Section ID is technically correct and aligned with design intent. Guide: Enter the section identifier (e.g., BOM-001).",
-                  test_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
+                  section_type: "Verify Section Type is technically correct and aligned with design intent. Guide: Describe the section type or category.",
                   param1_label: "Verify Param 1 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Verify Param 1 Value is technically correct and aligned with design intent. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Verify Param 2 Label is technically correct and aligned with design intent. Guide: Enter a label for parameter 2 (optional).",
@@ -8431,7 +8431,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 field_comments: {
                   section_title: "Check Section Title for robustness and failure-mode coverage. Guide: Enter the section title for this bill of materials.",
                   test_no: "Check Section ID for robustness and failure-mode coverage. Guide: Enter the section identifier (e.g., BOM-001).",
-                  test_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
+                  section_type: "Check Section Type for robustness and failure-mode coverage. Guide: Describe the section type or category.",
                   param1_label: "Check Param 1 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 1 (optional).",
                   param1_value: "Check Param 1 Value for robustness and failure-mode coverage. Guide: Select which field should supply parameter 1's value.",
                   param2_label: "Check Param 2 Label for robustness and failure-mode coverage. Guide: Enter a label for parameter 2 (optional).",
@@ -8443,7 +8443,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_labels: {
               section_title: "Section Title",
               test_no: "Section ID",
-              test_type: "Section Type",
+              section_type: "Section Type",
               param1_label: "Param 1 Label",
               param1_value: "Param 1 Value",
               param2_label: "Param 2 Label",
@@ -8453,7 +8453,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_prompts: {
               section_title: "Enter the section title for this bill of materials.",
               test_no: "Enter the section identifier (e.g., BOM-001).",
-              test_type: "Describe the section type or category.",
+              section_type: "Describe the section type or category.",
               param1_label: "Enter a label for parameter 1 (optional).",
               param1_value: "Select which field should supply parameter 1's value.",
               param2_label: "Enter a label for parameter 2 (optional).",
@@ -8463,7 +8463,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             field_types: {
               section_title: "text",
               test_no: "text",
-              test_type: "text",
+              section_type: "text",
               param1_label: "text",
               param1_value: "text",
               param2_label: "text",
@@ -9139,7 +9139,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test_no: "001",
           uut_pn: "TBD",
           last_test_no: "N/A",
-          test_type: "Inspection",
+          section_type: "Inspection",
           test_equipment: "ESD-safe workstation, adequate lighting, magnification (loupe/microscope), inspection tools (flashlight, tweezers), camera for defect photos, and current drawings/specifications.",
           purpose: "Verify that the Unit Under Test (UUT) is properly assembled, undamaged, free from contamination or foreign materials, and correctly labeled or marked before conducting any further testing.",
           scope: "Conduct a thorough visual inspection of the Unit Under Test (UUT) to ensure workmanship quality and conformity to applicable drawings and specifications. This includes checking for any physical damage such as cracks, dents, or deformation; presence of contamination, foreign material, corrosion, or signs of overheating; verification that all hardware and parts are present, secure, and correctly aligned; assessment of connectors and contacts for any damage or malfunction; confirmation of the integrity of seals and tamper indicators where applicable; and validation that all labels and markings are present, accurate, and legible.",
@@ -9175,7 +9175,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: 3,
               uut_pn: 0,
               last_test_no: 3,
-              test_type: 3,
+              section_type: 3,
               test_equipment: 0,
               purpose: 0,
               scope: 0,
@@ -9211,7 +9211,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
-              test_type: "Test Type",
+              section_type: "Test Type",
               test_equipment: "Test Equipment",
               purpose: "Purpose",
               scope: "Scope",
@@ -9243,7 +9243,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
-              test_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
+              section_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
               test_equipment: "List required test equipment and tools.",
               purpose: "State the objective of this test in one concise paragraph.",
               scope: "Define what is covered/excluded and conditions for this test.",
@@ -9275,7 +9275,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
-              test_type: "text",
+              section_type: "text",
               test_equipment: "text",
               purpose: "text",
               scope: "text",
@@ -9309,7 +9309,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test_no: "002",
           uut_pn: "TBD",
           last_test_no: "001",
-          test_type: "Inspection",
+          section_type: "Inspection",
           test_equipment: "Programmable input source or bench supply (per spec), electronic or resistive loads, calibrated DMM, oscilloscope (as needed), test cables/fixtures, and ESD controls.",
           purpose: "Confirm the UUT operates correctly under nominal conditions by performing the functional test procedure and verifying all checks and measurements meet the defined acceptance criteria.",
           scope: "Verifies basic functional operation of the power supply under nominal conditions, including power-up behavior, control/indicator operation, and confirmation that all required outputs are present and within specified limits. Does not include detailed performance characterization, environmental or reliability stress testing, EMI/EMC evaluation, or extended burn-in.",
@@ -9346,7 +9346,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: 3,
               uut_pn: 0,
               last_test_no: 3,
-              test_type: 3,
+              section_type: 3,
               test_equipment: 0,
               purpose: 0,
               scope: 0,
@@ -9381,7 +9381,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
-              test_type: "Test Type",
+              section_type: "Test Type",
               test_equipment: "Test Equipment",
               purpose: "Purpose",
               scope: "Scope",
@@ -9413,7 +9413,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
-              test_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
+              section_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
               test_equipment: "List required test equipment and tools.",
               purpose: "State the objective of this test in one concise paragraph.",
               scope: "Define what is covered/excluded and conditions for this test.",
@@ -9445,7 +9445,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
-              test_type: "text",
+              section_type: "text",
               test_equipment: "text",
               purpose: "text",
               scope: "text",
@@ -9479,7 +9479,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test_no: "003",
           uut_pn: "TBD",
           last_test_no: "002",
-          test_type: "Functional Verification",
+          section_type: "Functional Verification",
           test_equipment: "Programmable AC/DC source, electronic loads, calibrated DMM/DAQ, oscilloscope for ripple/noise (if required), test fixture/harness, and ESD controls.",
           purpose: "Verify the power supply UUT powers up without faults or alarms and maintains regulated output voltage within the specified limits at defined input, load, and environmental conditions for this step.",
           scope: "Applies to the power supply UUT identified by part number and revision. Confirms normal power-up (no faults or alarms) and verifies regulated output voltage at the specified input and load conditions.",
@@ -9515,7 +9515,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: 3,
               uut_pn: 0,
               last_test_no: 3,
-              test_type: 3,
+              section_type: 3,
               test_equipment: 0,
               purpose: 0,
               scope: 0,
@@ -9551,7 +9551,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
-              test_type: "Test Type",
+              section_type: "Test Type",
               test_equipment: "Test Equipment",
               purpose: "Purpose",
               scope: "Scope",
@@ -9583,7 +9583,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
-              test_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
+              section_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
               test_equipment: "List required test equipment and tools.",
               purpose: "State the objective of this test in one concise paragraph.",
               scope: "Define what is covered/excluded and conditions for this test.",
@@ -9615,7 +9615,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
-              test_type: "text",
+              section_type: "text",
               test_equipment: "text",
               purpose: "text",
               scope: "text",
@@ -9649,7 +9649,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test_no: "004",
           uut_pn: "TBD",
           last_test_no: "003",
-          test_type: "Functional Verification",
+          section_type: "Functional Verification",
           test_equipment: "AC source or mains feed, electronic/resistive load, calibrated DMM, oscilloscope (if required), safety ground, and test fixture/harness.",
           purpose: "Verify the UUT power supply meets applicable functional performance requirements at this stage of the test flow and record results to support acceptance or rejection.",
           scope: "Verify the UUT powers on and operates within specified electrical limits under defined input and load conditions using calibrated equipment. This test defines required connections, ambient conditions, measurement points, and pass/fail criteria.",
@@ -9684,7 +9684,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               section_title: 3,
               test_no: 3,
               last_test_no: 3,
-              test_type: 3,
+              section_type: 3,
               test_equipment: 0,
               ll: 3,
               tv: 3,
@@ -9719,7 +9719,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
-              test_type: "Test Type",
+              section_type: "Test Type",
               test_equipment: "Test Equipment",
               purpose: "Purpose",
               scope: "Scope",
@@ -9751,7 +9751,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
-              test_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
+              section_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
               test_equipment: "List required test equipment and tools.",
               purpose: "State the objective of this test in one concise paragraph.",
               scope: "Define what is covered/excluded and conditions for this test.",
@@ -9783,7 +9783,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
-              test_type: "text",
+              section_type: "text",
               test_equipment: "text",
               purpose: "text",
               scope: "text",
@@ -9817,7 +9817,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           test_no: "005",
           uut_pn: "TBD",
           last_test_no: "004",
-          test_type: "Functional Verification",
+          section_type: "Functional Verification",
           test_equipment: "Electronic load(s), calibrated DMM or power meter, oscilloscope (if required), test fixture/harness, and ESD controls.",
           purpose: "Verify the Unit Under Test (UUT) meets specified output power requirements by executing the defined setup and test procedure, measuring necessary parameters, and recording results to determine pass/fail status.",
           scope: "Perform thorough functional verification of the power supply UUT’s output power under nominal and specified operating conditions. This test excludes environmental, reliability, and regulatory compliance testing unless explicitly included in the plan.",
@@ -9852,7 +9852,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               section_title: 3,
               test_no: 3,
               last_test_no: 3,
-              test_type: 3,
+              section_type: 3,
               test_equipment: 0,
               uut_pn: 0,
               purpose: 0,
@@ -9889,7 +9889,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Test No",
               uut_pn: "UUT P/N",
               last_test_no: "Last Test No",
-              test_type: "Test Type",
+              section_type: "Test Type",
               test_equipment: "Test Equipment",
               purpose: "Purpose",
               scope: "Scope",
@@ -9921,7 +9921,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "Provide the test number (e.g., 001).",
               uut_pn: "",
               last_test_no: "Enter the prior test number that precedes this step (or N/A).",
-              test_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
+              section_type: "Specify the test type/category (e.g., Inspection, Functional Verification).",
               test_equipment: "List required test equipment and tools.",
               purpose: "State the objective of this test in one concise paragraph.",
               scope: "Define what is covered/excluded and conditions for this test.",
@@ -9953,7 +9953,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               test_no: "text",
               uut_pn: "text",
               last_test_no: "text",
-              test_type: "text",
+              section_type: "text",
               test_equipment: "text",
               purpose: "text",
               scope: "text",
@@ -10017,7 +10017,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10045,7 +10045,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10071,7 +10071,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10096,7 +10096,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10118,7 +10118,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10140,7 +10140,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10160,7 +10160,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10174,7 +10174,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = {
         section_title: section.title,
         test_no: section.id,
-        test_type: section.type,
+        section_type: section.type,
         param1_label: "",
         param1_value: "",
         param2_label: "",
@@ -10184,7 +10184,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldLabels = {
         section_title: "Section Title",
         test_no: "Section ID",
-        test_type: "Section Type",
+        section_type: "Section Type",
         param1_label: "Param 1 Label",
         param1_value: "Param 1 Value",
         param2_label: "Param 2 Label",
@@ -10194,7 +10194,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldTypes = {
         section_title: "text",
         test_no: "text",
-        test_type: "text",
+        section_type: "text",
         param1_label: "text",
         param1_value: "text",
         param2_label: "text",
@@ -10203,7 +10203,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldPrompts = {
         section_title: "Enter the section title for this specification.",
         test_no: "Enter the section identifier (e.g., SEC-001).",
-        test_type: "Describe the section type or category.",
+        section_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
         param1_value: "Select which field should supply parameter 1's value.",
         param2_label: "Enter a label for parameter 2 (optional).",
@@ -10312,7 +10312,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10341,7 +10341,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10355,7 +10355,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = {
         section_title: section.title,
         test_no: section.id,
-        test_type: section.type,
+        section_type: section.type,
         param1_label: "",
         param1_value: "",
         param2_label: "",
@@ -10365,7 +10365,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldLabels = {
         section_title: "Section Title",
         test_no: "Section ID",
-        test_type: "Section Type",
+        section_type: "Section Type",
         param1_label: "Param 1 Label",
         param1_value: "Param 1 Value",
         param2_label: "Param 2 Label",
@@ -10374,7 +10374,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldTypes = {
         section_title: "text",
         test_no: "text",
-        test_type: "text",
+        section_type: "text",
         param1_label: "text",
         param1_value: "text",
         param2_label: "text",
@@ -10383,7 +10383,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldPrompts = {
         section_title: "Enter the section title for this requirements traceability matrix.",
         test_no: "Enter the section identifier (e.g., RTM-001).",
-        test_type: "Describe the section type or category.",
+        section_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
         param1_value: "Select which field should supply parameter 1's value.",
         param2_label: "Enter a label for parameter 2 (optional).",
@@ -10517,7 +10517,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10546,7 +10546,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10560,7 +10560,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = {
         section_title: section.title,
         test_no: section.id,
-        test_type: section.type,
+        section_type: section.type,
         param1_label: "",
         param1_value: "",
         param2_label: "",
@@ -10570,7 +10570,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldLabels = {
         section_title: "Section Title",
         test_no: "Section ID",
-        test_type: "Section Type",
+        section_type: "Section Type",
         param1_label: "Param 1 Label",
         param1_value: "Param 1 Value",
         param2_label: "Param 2 Label",
@@ -10579,7 +10579,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldTypes = {
         section_title: "text",
         test_no: "text",
-        test_type: "text",
+        section_type: "text",
         param1_label: "text",
         param1_value: "text",
         param2_label: "text",
@@ -10588,7 +10588,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldPrompts = {
         section_title: "Enter the section title for this bill of materials.",
         test_no: "Enter the section identifier (e.g., BOM-001).",
-        test_type: "Describe the section type or category.",
+        section_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
         param1_value: "Select which field should supply parameter 1's value.",
         param2_label: "Enter a label for parameter 2 (optional).",
@@ -10691,7 +10691,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10714,7 +10714,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10732,7 +10732,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10751,7 +10751,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10770,7 +10770,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10784,7 +10784,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = {
         section_title: section.title,
         test_no: section.id,
-        test_type: section.type,
+        section_type: section.type,
         param1_label: "",
         param1_value: "",
         param2_label: "",
@@ -10794,7 +10794,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldLabels = {
         section_title: "Section Title",
         test_no: "Section ID",
-        test_type: "Section Type",
+        section_type: "Section Type",
         param1_label: "Param 1 Label",
         param1_value: "Param 1 Value",
         param2_label: "Param 2 Label",
@@ -10804,7 +10804,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldTypes = {
         section_title: "text",
         test_no: "text",
-        test_type: "text",
+        section_type: "text",
         param1_label: "text",
         param1_value: "text",
         param2_label: "text",
@@ -10813,7 +10813,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldPrompts = {
         section_title: "Enter the section title for this verification matrix.",
         test_no: "Enter the section identifier (e.g., VM-001).",
-        test_type: "Describe the section type or category.",
+        section_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
         param1_value: "Select which field should supply parameter 1's value.",
         param2_label: "Enter a label for parameter 2 (optional).",
@@ -10897,7 +10897,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10928,7 +10928,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10954,7 +10954,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -10981,7 +10981,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11008,7 +11008,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11034,7 +11034,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11059,7 +11059,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11076,7 +11076,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = {
         section_title: section.title,
         test_no: section.id,
-        test_type: section.type,
+        section_type: section.type,
         param1_label: "",
         param1_value: "",
         param2_label: "",
@@ -11086,7 +11086,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldLabels = {
         section_title: "Section Title",
         test_no: "Section ID",
-        test_type: "Section Type",
+        section_type: "Section Type",
         param1_label: "Param 1 Label",
         param1_value: "Param 1 Value",
         param2_label: "Param 2 Label",
@@ -11096,7 +11096,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldTypes = {
         section_title: "text",
         test_no: "text",
-        test_type: "text",
+        section_type: "text",
         param1_label: "text",
         param1_value: "text",
         param2_label: "text",
@@ -11105,7 +11105,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldPrompts = {
         section_title: "Enter the section title for this design review.",
         test_no: "Enter the section identifier (e.g., DR-001).",
-        test_type: "Describe the section type or category.",
+        section_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
         param1_value: "Select which field should supply parameter 1's value.",
         param2_label: "Enter a label for parameter 2 (optional).",
@@ -11187,7 +11187,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11215,7 +11215,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11239,7 +11239,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11264,7 +11264,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11289,7 +11289,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11312,7 +11312,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11335,7 +11335,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11357,7 +11357,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11372,7 +11372,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = {
         section_title: section.title,
         test_no: section.id,
-        test_type: section.type,
+        section_type: section.type,
         param1_label: "",
         param1_value: "",
         param2_label: "",
@@ -11382,7 +11382,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldLabels = {
         section_title: "Section Title",
         test_no: "Section ID",
-        test_type: "Section Type",
+        section_type: "Section Type",
         param1_label: "Param 1 Label",
         param1_value: "Param 1 Value",
         param2_label: "Param 2 Label",
@@ -11392,7 +11392,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldTypes = {
         section_title: "text",
         test_no: "text",
-        test_type: "text",
+        section_type: "text",
         param1_label: "text",
         param1_value: "text",
         param2_label: "text",
@@ -11401,7 +11401,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldPrompts = {
         section_title: "Enter the section title for this interface control document.",
         test_no: "Enter the section identifier (e.g., ICD-001).",
-        test_type: "Describe the section type or category.",
+        section_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
         param1_value: "Select which field should supply parameter 1's value.",
         param2_label: "Enter a label for parameter 2 (optional).",
@@ -11483,7 +11483,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11511,7 +11511,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11536,7 +11536,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11564,7 +11564,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11592,7 +11592,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11621,7 +11621,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11649,7 +11649,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11672,7 +11672,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11694,7 +11694,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11716,7 +11716,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11738,7 +11738,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11754,7 +11754,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = {
         section_title: section.title,
         test_no: section.id,
-        test_type: section.type,
+        section_type: section.type,
         param1_label: "",
         param1_value: "",
         param2_label: "",
@@ -11764,7 +11764,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldLabels = {
         section_title: "Section Title",
         test_no: "Section ID",
-        test_type: "Section Type",
+        section_type: "Section Type",
         param1_label: "Param 1 Label",
         param1_value: "Param 1 Value",
         param2_label: "Param 2 Label",
@@ -11774,7 +11774,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldTypes = {
         section_title: "text",
         test_no: "text",
-        test_type: "text",
+        section_type: "text",
         param1_label: "text",
         param1_value: "text",
         param2_label: "text",
@@ -11784,7 +11784,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldPrompts = {
         section_title: "Enter the section title for this EMC/EMI compliance plan.",
         test_no: "Enter the section identifier (e.g., EMC-001).",
-        test_type: "Describe the section type or category.",
+        section_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
         param1_value: "Select which field should supply parameter 1's value.",
         param2_label: "Enter a label for parameter 2 (optional).",
@@ -11881,7 +11881,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11909,7 +11909,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11947,7 +11947,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         maturity: {
           section_title: 3,
           test_no: 3,
-          test_type: 3,
+          section_type: 3,
           param1_label: 3,
           param1_value: 3,
           param2_label: 3,
@@ -11975,7 +11975,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const data = {
         section_title: section.title,
         test_no: section.id,
-        test_type: section.type,
+        section_type: section.type,
         param1_label: "",
         param1_value: "",
         param2_label: "",
@@ -11985,7 +11985,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldLabels = {
         section_title: "Section Title",
         test_no: "Section ID",
-        test_type: "Section Type",
+        section_type: "Section Type",
         param1_label: "Param 1 Label",
         param1_value: "Param 1 Value",
         param2_label: "Param 2 Label",
@@ -11995,7 +11995,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldTypes = {
         section_title: "text",
         test_no: "text",
-        test_type: "text",
+        section_type: "text",
         param1_label: "text",
         param1_value: "text",
         param2_label: "text",
@@ -12006,7 +12006,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const fieldPrompts = {
         section_title: "Enter the section title for this FMEA document.",
         test_no: "Enter the section identifier (e.g., FMEA-003).",
-        test_type: "Describe the section type or category.",
+        section_type: "Describe the section type or category.",
         param1_label: "Enter a label for parameter 1 (optional).",
         param1_value: "Select which field should supply parameter 1's value.",
         param2_label: "Enter a label for parameter 2 (optional).",
@@ -12482,6 +12482,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 </script>
 </body>
 </html>
+
 
 
 
