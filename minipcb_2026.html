@@ -356,6 +356,16 @@
       history.replaceState(null, "", "#" + next);
     }
 
+    function safeSetHashPath(path){
+      try{
+        setHashPath(path);
+      }catch(err){
+        const next = encodeURIComponent(path || "");
+        location.hash = next;
+        logDebug(`hash error -> ${err && err.message ? err.message : "unknown"}`);
+      }
+    }
+
     function escapeHtml(str){
       return String(str)
         .replace(/&/g, "&amp;")
@@ -550,49 +560,49 @@
     }
 
     async function selectEntry(entry){
-      state.current = entry;
-      const requestId = ++state.requestId;
-      $("previewTitle").textContent = entry.filename;
-      updateMeta(entry);
-      $("previewDebug").textContent = `Path: ${entry.path || ""} | fetching...`;
-      logDebug(`click -> ${entry.path || entry.filename || ""}`);
-      $("emptyState").style.display = "none";
-      $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
-      setHashPath(entry.path);
-
-      if(state.currentFetch && typeof state.currentFetch.abort === "function"){
-        state.currentFetch.abort();
-      }
-      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-      state.currentFetch = controller;
-
-      const url = entry.path + "?v=" + Date.now();
-      logDebug(`fetch -> ${url}`);
-
-      const timeoutMs = 6000;
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => {
-          if(controller) controller.abort();
-          reject(new Error("Request timed out"));
-        }, timeoutMs)
-      );
-
       try{
+        state.current = entry;
+        const requestId = ++state.requestId;
+        const path = entry && entry.path ? entry.path : "";
+        $("previewTitle").textContent = entry?.filename || "";
+        updateMeta(entry);
+        $("previewDebug").textContent = `Path: ${path} | fetching...`;
+        logDebug(`click -> ${path || entry?.filename || ""}`);
+        $("emptyState").style.display = "none";
+        $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
+        safeSetHashPath(path);
+
+        if(state.currentFetch && typeof state.currentFetch.abort === "function"){
+          state.currentFetch.abort();
+        }
+        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+        state.currentFetch = controller;
+
+        const url = path + "?v=" + Date.now();
+        logDebug(`fetch -> ${url}`);
+
+        const timeoutMs = 6000;
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => {
+            if(controller) controller.abort();
+            reject(new Error("Request timed out"));
+          }, timeoutMs)
+        );
+
         const res = await Promise.race([
           fetch(url, { cache: "no-store", signal: controller ? controller.signal : undefined }),
           timeout
         ]);
         if(requestId !== state.requestId) return;
-        if(!res.ok) throw new Error(`Failed to load ${entry.path} (${res.status})`);
-        $("previewDebug").textContent = `Path: ${entry.path || ""} | status ${res.status}`;
+        if(!res.ok) throw new Error(`Failed to load ${path} (${res.status})`);
+        $("previewDebug").textContent = `Path: ${path} | status ${res.status}`;
         const text = await res.text();
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
-        $("previewPane").innerHTML = `<div class="md" data-path="${escapeHtml(entry.path)}">${html}</div>`;
-        $("previewDebug").textContent = `Path: ${entry.path || ""} | ${text.length} bytes | URL: ${res.url}`;
-        logDebug(`render -> ${entry.path || ""} (${text.length} bytes)`);
+        $("previewPane").innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
+        $("previewDebug").textContent = `Path: ${path} | ${text.length} bytes | URL: ${res.url}`;
+        logDebug(`render -> ${path} (${text.length} bytes)`);
       }catch(err){
-        if(requestId !== state.requestId) return;
         const msg = err?.message || "Unknown error";
         $("previewPane").innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         $("previewDebug").textContent = `Error: ${msg}`;
@@ -646,14 +656,6 @@
     }
 
     $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
-    $("fileList").addEventListener("click", (e) => {
-      const item = e.target.closest(".file-item");
-      if(!item) return;
-      const path = item.dataset.path || "";
-      const filename = item.dataset.filename || "";
-      const entry = state.entries.find(e => e.path === path || e.filename === filename);
-      if(entry) selectEntry(entry);
-    });
     window.addEventListener("hashchange", () => {
       const hashPath = getHashPath();
       const target = state.entries.find(e => e.path === hashPath || e.filename === hashPath);
