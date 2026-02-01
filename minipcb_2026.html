@@ -883,22 +883,23 @@
     }
 
     async function selectEntry(entry){
+      const path = entry && entry.mdPath ? entry.mdPath : "";
+      const hashTarget = path || entry?.pn || entry?.filename || "";
       try{
         state.current = entry;
         const requestId = ++state.requestId;
-        const path = entry && entry.mdPath ? entry.mdPath : "";
         $("previewTitle").textContent = entry?.title || entry?.pn || entry?.filename || "";
         updateMeta(entry);
         renderImages(entry);
         const emptyState = $("emptyState");
         if(emptyState) emptyState.style.display = "none";
-        const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
+        const mdPanel = document.querySelector(".tabPanel[data-panel="markdown"]");
+        safeSetHashPath(hashTarget);
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
           return;
         }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
-        safeSetHashPath(path);
 
         if(state.currentFetch && typeof state.currentFetch.abort === "function"){
           state.currentFetch.abort();
@@ -928,7 +929,7 @@
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
       }catch(err){
         const msg = err?.message || "Unknown error";
-        const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
+        const mdPanel = document.querySelector(".tabPanel[data-panel="markdown"]");
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
           return;
@@ -938,6 +939,7 @@
 
       renderList();
     }
+
     function filterList(query){
       const q = query.trim().toLowerCase();
       if(!q){
