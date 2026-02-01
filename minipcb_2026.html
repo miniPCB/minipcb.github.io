@@ -568,8 +568,10 @@
         updateMeta(entry);
         $("previewDebug").textContent = `Path: ${path} | fetching...`;
         logDebug(`click -> ${path || entry?.filename || ""}`);
-        $("emptyState").style.display = "none";
-        $("previewPane").innerHTML = '<div class="empty">Loading...</div>';
+        const emptyState = $("emptyState");
+        if(emptyState) emptyState.style.display = "none";
+        const previewPane = $("previewPane");
+        if(previewPane) previewPane.innerHTML = '<div class="empty">Loading...</div>';
         safeSetHashPath(path);
 
         if(state.currentFetch && typeof state.currentFetch.abort === "function"){
@@ -599,12 +601,13 @@
         const text = await res.text();
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
-        $("previewPane").innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
+        if(previewPane) previewPane.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
         $("previewDebug").textContent = `Path: ${path} | ${text.length} bytes | URL: ${res.url}`;
         logDebug(`render -> ${path} (${text.length} bytes)`);
       }catch(err){
         const msg = err?.message || "Unknown error";
-        $("previewPane").innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
+        const previewPane = $("previewPane");
+        if(previewPane) previewPane.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         $("previewDebug").textContent = `Error: ${msg}`;
         logDebug(`error -> ${msg}`);
       }
