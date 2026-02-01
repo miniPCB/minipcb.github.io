@@ -250,6 +250,32 @@
       display:block;
     }
 
+    .imageGrid{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap:12px;
+    }
+
+    .imageCard{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,0.03);
+      padding:10px;
+    }
+
+    .imageCard img{
+      width:100%;
+      border-radius:8px;
+      display:block;
+    }
+
+    .imageCard .caption{
+      margin-top:8px;
+      font-size:12px;
+      color: var(--muted);
+    }
+
+
     .empty{
       color: var(--muted);
       font-size:14px;
@@ -568,6 +594,68 @@
       return blocks.join("\n");
     }
 
+    function renderImages(entry){
+      const schematicPanel = document.querySelector('.tabPanel[data-panel="schematic"]');
+      const layoutPanel = document.querySelector('.tabPanel[data-panel="layout"]');
+      if(!schematicPanel || !layoutPanel) return;
+
+      const pn = entry && entry.pn ? entry.pn : '';
+      if(!pn){
+        schematicPanel.innerHTML = '<div class="empty">No PN found for this file.</div>';
+        layoutPanel.innerHTML = '<div class="empty">No PN found for this file.</div>';
+        return;
+      }
+
+      schematicPanel.innerHTML = '<div class="empty">Loading schematics...</div>';
+      layoutPanel.innerHTML = '<div class="empty">Loading layout...</div>';
+
+      const foundSchematics = [];
+      const maxPages = 12;
+      let checked = 0;
+
+      const tryFinishSchematics = () => {
+        checked += 1;
+        if(checked < maxPages) return;
+        if(foundSchematics.length){
+          schematicPanel.innerHTML = `<div class="imageGrid">${foundSchematics.join('')}</div>`;
+        }else{
+          schematicPanel.innerHTML = '<div class="empty">No schematic images found for this PN.</div>';
+        }
+      };
+
+      for(let i = 1; i <= maxPages; i += 1){
+        const page = String(i).padStart(2, '0');
+        const src = `images/${pn}_schematic_${page}.png`;
+        const img = new Image();
+        img.onload = () => {
+          foundSchematics.push(
+            `<div class="imageCard"><img src="${src}" alt="${pn} schematic ${page}" /><div class="caption">${pn} schematic ${page}</div></div>`
+          );
+          tryFinishSchematics();
+        };
+        img.onerror = () => {
+          tryFinishSchematics();
+        };
+        img.src = src;
+      }
+
+      const layoutSrc = `images/${pn}_components_top.png`;
+      const layoutImg = new Image();
+      layoutImg.onload = () => {
+        layoutPanel.innerHTML = `
+          <div class="imageGrid">
+            <div class="imageCard">
+              <img src="${layoutSrc}" alt="${pn} components top" />
+              <div class="caption">${pn} components top</div>
+            </div>
+          </div>`;
+      };
+      layoutImg.onerror = () => {
+        layoutPanel.innerHTML = '<div class="empty">No layout image found for this PN.</div>';
+      };
+      layoutImg.src = layoutSrc;
+    }
+
     function setStatus(ok, message){
       const el = $("dataStatus");
       el.textContent = message;
@@ -621,6 +709,7 @@
         const path = entry && entry.path ? entry.path : "";
         $("previewTitle").textContent = entry?.filename || "";
         updateMeta(entry);
+        renderImages(entry);
         $("previewDebug").textContent = `Path: ${path} | fetching...`;
         logDebug(`click -> ${path || entry?.filename || ""}`);
         const emptyState = $("emptyState");
