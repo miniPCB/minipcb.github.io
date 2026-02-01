@@ -22,6 +22,10 @@
     button:hover { filter: brightness(1.1); }
     .btn-primary { background:#4a7fff; border-color:#4a7fff; color:#fff; }
     .btn-ghost { background:transparent; border-color:#555; }
+    .tab-bar { display:flex; flex-wrap: wrap; gap:.5rem; margin-bottom:1rem; }
+    .tab-btn { background:#1f1f1f; border-color:#3a3a3a; font-weight:600; }
+    .tab-btn.is-active { background:#4a7fff; border-color:#4a7fff; color:#fff; }
+    .tab-panel[hidden] { display: none; }
     .tag { display:inline-block; padding:.15rem .5rem; border-radius:999px; font-size:.8rem; border:1px solid #555; }
     .tag.pass { color:#6be07d; border-color:#2a6b33; }
     .tag.warn { color:#ffd56b; border-color:#6b5a2a; }
@@ -51,87 +55,100 @@
     <p class="notice">Paste a <strong>Part List</strong> (CSV or JSON) and an optional <strong>Netlist</strong> (SPICE-like). The tool computes stress ratios against editable derating rules and produces a Markdown table you can copy into reports.</p>
   </header>
 
-  <main class="container">
-    <div class="grid-3">
-      <!-- INPUTS -->
+    <main class="container">
+    <nav class="tab-bar" aria-label="EPSA sections">
+      <button class="tab-btn is-active" data-tab="parts" type="button">Part List</button>
+      <button class="tab-btn" data-tab="netlist" type="button">Netlist</button>
+      <button class="tab-btn" data-tab="rules" type="button">Derating Rules</button>
+      <button class="tab-btn" data-tab="analyze" type="button">Analyze</button>
+    </nav>
+
+    <section class="tab-panel" data-panel="parts">
       <section class="card">
-        <h2>1) Part List</h2>
+        <h2>Part List</h2>
         <p class="small">CSV headers suggested (case-insensitive, aliases allowed): <span class="mono">RefDes, Type, Value, Units, V_op, V_rating, I_op, I_rating, P_op, P_rating, T_op, T_rating, Notes</span></p>
         <div class="controls">
           <label class="small" for="parts-file">Choose file</label>
           <input id="parts-file" type="file" accept=".csv,.json,.txt" />
-          <button class="btn-ghost" id="load-parts">Load file</button>
-          <button class="btn-ghost" id="example-parts">Load Example</button>
+          <button class="btn-ghost" id="load-parts" type="button">Load file</button>
+          <button class="btn-ghost" id="example-parts" type="button">Load Example</button>
         </div>
         <textarea id="parts-input" placeholder="Paste Part List CSV or JSON here..."></textarea>
       </section>
+    </section>
 
+    <section class="tab-panel" data-panel="netlist" hidden>
       <section class="card">
-        <h2>2) Netlist (optional)</h2>
+        <h2>Netlist (optional)</h2>
         <p class="small">SPICE-style lines like <span class="mono">R1 N001 N002 10k</span>, <span class="mono">C3 OUT GND 0.1u</span>. Used for cross-checking RefDes coverage only.</p>
         <div class="controls">
           <label class="small" for="netlist-file">Choose file</label>
           <input id="netlist-file" type="file" accept=".cir,.sp,.txt" />
-          <button class="btn-ghost" id="load-net">Load file</button>
-          <button class="btn-ghost" id="example-net">Load Example</button>
+          <button class="btn-ghost" id="load-net" type="button">Load file</button>
+          <button class="btn-ghost" id="example-net" type="button">Load Example</button>
         </div>
         <textarea id="netlist-input" placeholder="Paste SPICE-like netlist here (optional)..."></textarea>
       </section>
+    </section>
 
+    <section class="tab-panel" data-panel="rules" hidden>
       <section class="card">
-        <h2>3) Derating Rules</h2>
+        <h2>Derating Rules</h2>
         <p class="small">Edit as JSON. Keys match <span class="mono">Type</span> (normalized). Ratios are maximum allowed <em>applied/rated</em>.</p>
         <div class="controls">
-          <button class="btn-ghost" id="reset-rules">Reset Defaults</button>
-          <button class="btn-ghost" id="save-rules">Save Rules</button>
+          <button class="btn-ghost" id="reset-rules" type="button">Reset Defaults</button>
+          <button class="btn-ghost" id="save-rules" type="button">Save Rules</button>
         </div>
         <textarea id="rules-input" class="mono"></textarea>
         <p class="notice small">Tip: You can add custom types, e.g., <span class="mono">"hall_sensor": {"V_max_ratio":0.8}</span>. Fallback limits used when a metric or type is missing.</p>
       </section>
-    </div>
-
-    <section class="card">
-      <div class="flex space-between">
-        <h2>4) Analyze</h2>
-        <div class="controls">
-          <button class="btn-primary" id="analyze">Run EPSA</button>
-          <button class="btn-ghost" id="copy-md">Copy Markdown</button>
-          <button class="btn-ghost" id="download-md">Download .md</button>
-          <button class="btn-ghost" id="download-csv">Download .csv</button>
-        </div>
-      </div>
-      <div class="grid-2">
-        <div>
-          <h3>Markdown Output</h3>
-          <textarea id="md-output" class="mono" style="min-height:260px" placeholder="Run EPSA to produce Markdown..."></textarea>
-        </div>
-        <div>
-          <h3>Rendered Preview</h3>
-          <div class="scroll">
-            <table id="html-table">
-              <thead></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <div id="summary" class="footer"></div>
-        </div>
-      </div>
-      <details style="margin-top:1rem;">
-        <summary>Warnings & Coverage</summary>
-        <pre id="warnings" class="mono small"></pre>
-      </details>
     </section>
 
-    <section class="card">
-      <h3>Input Hints</h3>
-      <ul>
-        <li>Only metrics present in your data are evaluated. For example, if you provide <span class="mono">P_op</span> and <span class="mono">P_rating</span> for resistors, EPSA will compute a power stress check even if no voltage/current is provided.</li>
-        <li>Alias headers are recognized: <span class="mono">Vop, V_oper, V(applied)</span> -> <span class="mono">V_op</span>; <span class="mono">Vr, Vrated</span> -> <span class="mono">V_rating</span>; similarly for <span class="mono">I</span>, <span class="mono">P</span>, and <span class="mono">T</span>.</li>
-        <li>Netlist is optional and used only to flag missing/extra RefDes compared to your part list.</li>
-        <li>Derating rules are intentionally simple and editable. If you have program standards, paste them here as ratios.</li>
-      </ul>
+    <section class="tab-panel" data-panel="analyze" hidden>
+      <section class="card">
+        <div class="flex space-between">
+          <h2>Analyze</h2>
+          <div class="controls">
+            <button class="btn-primary" id="analyze" type="button">Run EPSA</button>
+            <button class="btn-ghost" id="copy-md" type="button">Copy Markdown</button>
+            <button class="btn-ghost" id="download-md" type="button">Download .md</button>
+            <button class="btn-ghost" id="download-csv" type="button">Download .csv</button>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <h3>Markdown Output</h3>
+            <textarea id="md-output" class="mono" style="min-height:260px" placeholder="Run EPSA to produce Markdown..."></textarea>
+          </div>
+          <div>
+            <h3>Rendered Preview</h3>
+            <div class="scroll">
+              <table id="html-table">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div id="summary" class="footer"></div>
+          </div>
+        </div>
+        <details style="margin-top:1rem;">
+          <summary>Warnings & Coverage</summary>
+          <pre id="warnings" class="mono small"></pre>
+        </details>
+      </section>
+
+      <section class="card">
+        <h3>Input Hints</h3>
+        <ul>
+          <li>Only metrics present in your data are evaluated. For example, if you provide <span class="mono">P_op</span> and <span class="mono">P_rating</span> for resistors, EPSA will compute a power stress check even if no voltage/current is provided.</li>
+          <li>Alias headers are recognized: <span class="mono">Vop, V_oper, V(applied)</span> -> <span class="mono">V_op</span>; <span class="mono">Vr, Vrated</span> -> <span class="mono">V_rating</span>; similarly for <span class="mono">I</span>, <span class="mono">P</span>, and <span class="mono">T</span>.</li>
+          <li>Netlist is optional and used only to flag missing/extra RefDes compared to your part list.</li>
+          <li>Derating rules are intentionally simple and editable. If you have program standards, paste them here as ratios.</li>
+        </ul>
+      </section>
     </section>
   </main>
+
 
   <script>
     // --- Utilities ---------------------------------------------------------
@@ -463,6 +480,14 @@
       catch(e){ setStatus('Copy failed. Select and copy manually.'); }
     }
 
+    // --- Tabs -------------------------------------------------------------
+    const tabButtons = [...document.querySelectorAll('[data-tab]')];
+    const tabPanels = [...document.querySelectorAll('[data-panel]')];
+    function setActiveTab(name){
+      tabButtons.forEach(btn => btn.classList.toggle('is-active', btn.dataset.tab === name));
+      tabPanels.forEach(panel => panel.hidden = panel.dataset.panel !== name);
+    }
+
     // --- Wire up UI -------------------------------------------------------
     function loadDefaults(){
       const savedRules = localStorage.getItem('epsa_rules_json');
@@ -561,6 +586,8 @@
     });
 
     // Initialize
+    tabButtons.forEach(btn => btn.addEventListener('click', ()=> setActiveTab(btn.dataset.tab)));
+    setActiveTab('parts');
     loadDefaults();
     setStatus('Ready. Paste your Part List and optionally a Netlist, then click "Run EPSA".');
   </script>
