@@ -691,33 +691,75 @@
       return "Choose value/rating based on operating point, tolerance stack-up, thermal limits, and manufacturability.";
     }
 
+    function componentRoleHint(refdes, partType){
+      const ref = String(refdes || "").toUpperCase();
+      const t = String(partType || "").toLowerCase();
+      if(ref.startsWith("R")) return "Biasing, gain setting, pull-up/down, or current limiting.";
+      if(ref.startsWith("C")) return "Decoupling, filtering, AC coupling, or timing stabilization.";
+      if(ref.startsWith("L")) return "Energy storage/filtering in supply or switching paths.";
+      if(ref.startsWith("D")) return "Protection, steering, clamping, or rectification.";
+      if(ref.startsWith("U")) return "Active control/processing function (amplifier, comparator, regulator, logic).";
+      if(ref.startsWith("Q")) return "Active gain/switch element in analog or power stage.";
+      if(ref.startsWith("TP")) return "Measurement access for bring-up and debugging.";
+      if(ref.startsWith("P") || t.includes("connector")) return "External interface for signals, power, or I/O.";
+      return "Supports signal integrity, biasing, protection, or interconnect behavior.";
+    }
+
     function generateDescriptionMarkdown(entry, mdText){
       const pn = entry?.pn || "Unknown PN";
       const rows = extractPartlistRows(mdText);
       const lines = [];
       lines.push(`# ${pn} Circuit Description`);
       lines.push("");
-      lines.push("This AI-generated overview summarizes likely circuit intent, key components, and practical value-selection tradeoffs.");
+      lines.push("This AI-generated overview summarizes likely circuit intent, component roles, and practical value-selection tradeoffs.");
       lines.push("");
       if(!rows.length){
         lines.push("No partlist table was found in this markdown, so a component-level description could not be generated.");
         return lines.join("\n");
       }
+
+      const groups = new Map();
+      for(const row of rows){
+        const key = (row.partType || "Other").trim();
+        if(!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row);
+      }
+
+      lines.push("## Quick Summary");
+      lines.push("");
+      lines.push(`- Total listed parts: **${rows.length}**`);
+      lines.push(`- Distinct part categories: **${groups.size}**`);
+      lines.push("- Use the table and grouped sections below to find reference-specific tradeoffs quickly.");
+      lines.push("");
+
       lines.push("## Components by Reference Designator");
       lines.push("");
+      lines.push("| RefDes | Type | Nominal | Likely Function |");
+      lines.push("| --- | --- | --- | --- |");
       for(const row of rows){
         const ref = row.refdes || "(unknown)";
         const kind = row.partType || "Component";
         const val = row.value || "not specified";
-        lines.push(`- **${ref}** (${kind}) - Function: participates in the ${kind.toLowerCase()} role for signal/power behavior. Nominal value: ${val}.`);
-        lines.push(`  - ${valueRangeHint(kind, val)}`);
+        lines.push(`| ${ref} | ${kind} | ${val} | ${componentRoleHint(ref, kind)} |`);
       }
       lines.push("");
-      lines.push("## Typical Design Tradeoffs");
+
+      lines.push("## Value Ranges and Tradeoffs by Component Type");
+      lines.push("");
+      for(const [kind, items] of groups.entries()){
+        lines.push(`### ${kind}`);
+        lines.push("");
+        lines.push(`- Reference designators: ${items.map(x => x.refdes || "?").join(", ")}`);
+        lines.push(`- Typical range guidance: ${valueRangeHint(kind, items[0]?.value || "")}`);
+        lines.push("");
+      }
+
+      lines.push("## Cross-Cutting Selection Notes");
       lines.push("");
       lines.push("- Tighter tolerances improve repeatability but increase BOM cost.");
       lines.push("- Higher bandwidth choices improve response speed but may increase noise/EMI sensitivity.");
       lines.push("- Larger safety margins improve robustness but can reduce efficiency or dynamic performance.");
+      lines.push("- Derating and temperature margins usually improve reliability at the expense of size/cost.");
       return lines.join("\n");
     }
 
