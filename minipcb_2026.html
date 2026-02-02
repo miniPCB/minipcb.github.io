@@ -479,7 +479,9 @@
       current: null,
       requestId: 0,
       currentFetch: null,
-      mdIndex: []
+      mdIndex: [],
+      currentMarkdownText: "",
+      descriptionStatus: ""
     };
 
     const $ = (id) => document.getElementById(id);
@@ -705,13 +707,133 @@
       return "Supports signal integrity, biasing, protection, or interconnect behavior.";
     }
 
-    function generateDescriptionMarkdown(entry, mdText){
+    function getApiConfig(){
+      const baseRaw = (localStorage.getItem("prefApiBase") || "").trim();
+      if(!baseRaw) return null;
+      const base = baseRaw.replace(/\/+$/, "");
+      return {
+        chatUrl: `${base}/chat`,
+        model: (localStorage.getItem("prefModel") || "gpt-4.1-mini").trim() || "gpt-4.1-mini",
+        proxyKey: (localStorage.getItem("prefProxyKey") || "").trim()
+      };
+    }
+
+    function extractResponseText(resp){
+      if(!resp || typeof resp !== "object") return "";
+      if(typeof resp.output_text === "string" && resp.output_text.trim()) return resp.output_text.trim();
+      const out = [];
+      const output = Array.isArray(resp.output) ? resp.output : [];
+      for(const item of output){
+        const content = Array.isArray(item?.content) ? item.content : [];
+        for(const c of content){
+          if(typeof c?.text === "string" && c.text.trim()) out.push(c.text.trim());
+        }
+      }
+      return out.join("\n").trim();
+    }
+
+    async function findSchematicImageUrls(pn){
+      const urls = [];
+      if(!pn) return urls;
+      for(let i = 1; i <= 12; i += 1){
+        const page = String(i).padStart(2, "0");
+        const rel = `images/${pn}_schematic_${page}.png`;
+        try{
+          const head = await fetch(rel, { method: "HEAD", cache: "no-store" });
+          if(head.ok){
+            urls.push(new URL(rel, location.origin).toString());
+          }
+        }catch(_){}
+      }
+      return urls.slice(0, 6);
+    }
+
+    async function generateAiDescriptionData(entry, mdText){
+      const api = getApiConfig();
+      if(!api) throw new Error("API Base URL is not set. Configure prefApiBase first.");
+      const rows = extractPartlistRows(mdText);
+      if(!rows.length) throw new Error("Partlist table not found in markdown.");
+      const pn = entry?.pn || "Unknown PN";
+      const imageUrls = await findSchematicImageUrls(pn);
+      const cacheKey = `desc_ai_${pn}_${entry?.rev || ""}`;
+      const cached = localStorage.getItem(cacheKey);
+      if(cached){
+        try{ return JSON.parse(cached); }catch(_){}
+      }
+
+      const refList = rows.map(r => `${r.refdes}|${r.partType}|${r.value || ""}`).join("\n");
+      const userBlocks = [
+        {
+          type: "input_text",
+          text:
+            `Part number: ${pn}\n` +
+            `Revision: ${entry?.rev || "unknown"}\n\n` +
+            `Partlist rows (refdes|type|value):\n${refList}\n\n` +
+            `Markdown source:\n${mdText}`
+        }
+      ];
+      for(const url of imageUrls){
+        userBlocks.push({ type: "input_image", image_url: url });
+      }
+
+      const payload = {
+        model: api.model,
+        input: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  "You analyze circuits. Return strict JSON only. " +
+                  "Schema: {\"summary\":\"...\",\"components\":[{\"refdes\":\"R1\",\"likely_function\":\"...\",\"confidence\":\"high|medium|low\",\"tradeoffs\":\"...\"}]}. " +
+                  "Use markdown netlist/partlist/testpoints and schematic images to infer each component's role and value tradeoffs."
+              }
+            ]
+          },
+          { role: "user", content: userBlocks }
+        ]
+      };
+
+      const headers = { "Content-Type": "application/json" };
+      if(api.proxyKey) headers["X-Proxy-Key"] = api.proxyKey;
+      const resp = await fetch(api.chatUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload)
+      });
+      if(!resp.ok){
+        const txt = await resp.text();
+        throw new Error(`AI request failed (${resp.status}): ${txt.slice(0, 180)}`);
+      }
+      const data = await resp.json();
+      const text = extractResponseText(data);
+      if(!text) throw new Error("AI returned an empty response.");
+      let parsed = null;
+      try{
+        parsed = JSON.parse(text);
+      }catch(_){
+        const m = text.match(/\{[\s\S]*\}/);
+        if(m) parsed = JSON.parse(m[0]);
+      }
+      if(!parsed || !Array.isArray(parsed.components)){
+        throw new Error("AI response JSON did not match expected schema.");
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(parsed));
+      return parsed;
+    }
+
+    function generateDescriptionMarkdown(entry, mdText, aiData){
       const pn = entry?.pn || "Unknown PN";
       const rows = extractPartlistRows(mdText);
+      const aiMap = new Map(
+        (Array.isArray(aiData?.components) ? aiData.components : [])
+          .map(c => [String(c.refdes || "").toUpperCase(), c])
+      );
       const lines = [];
       lines.push(`# ${pn} Circuit Description`);
       lines.push("");
-      lines.push("This AI-generated overview summarizes likely circuit intent, component roles, and practical value-selection tradeoffs.");
+      lines.push((aiData?.summary || "This AI-generated overview summarizes likely circuit intent, component roles, and practical value-selection tradeoffs."));
       lines.push("");
       if(!rows.length){
         lines.push("No partlist table was found in this markdown, so a component-level description could not be generated.");
@@ -734,23 +856,31 @@
 
       lines.push("## Components by Reference Designator");
       lines.push("");
-      lines.push("| RefDes | Type | Nominal | Likely Function |");
-      lines.push("| --- | --- | --- | --- |");
+      lines.push("| RefDes | Type | Nominal | Likely Function | Confidence |");
+      lines.push("| --- | --- | --- | --- | --- |");
       for(const row of rows){
         const ref = row.refdes || "(unknown)";
         const kind = row.partType || "Component";
         const val = row.value || "not specified";
-        lines.push(`| ${ref} | ${kind} | ${val} | ${componentRoleHint(ref, kind)} |`);
+        const ai = aiMap.get(String(ref).toUpperCase());
+        const fn = ai?.likely_function || componentRoleHint(ref, kind);
+        const conf = ai?.confidence || "-";
+        lines.push(`| ${ref} | ${kind} | ${val} | ${fn} | ${conf} |`);
       }
       lines.push("");
 
       lines.push("## Value Ranges and Tradeoffs by Component Type");
       lines.push("");
       for(const [kind, items] of groups.entries()){
+        const groupedRefs = items.map(x => String(x.refdes || "").toUpperCase());
+        const aiNotes = groupedRefs
+          .map(r => aiMap.get(r)?.tradeoffs)
+          .filter(Boolean);
+        const tradeoffText = aiNotes.length ? aiNotes[0] : valueRangeHint(kind, items[0]?.value || "");
         lines.push(`### ${kind}`);
         lines.push("");
         lines.push(`- Reference designators: ${items.map(x => x.refdes || "?").join(", ")}`);
-        lines.push(`- Typical range guidance: ${valueRangeHint(kind, items[0]?.value || "")}`);
+        lines.push(`- Typical range guidance: ${tradeoffText}`);
         lines.push("");
       }
 
@@ -763,11 +893,36 @@
       return lines.join("\n");
     }
 
-    function renderDescriptionTab(entry, mdText){
+    function renderDescriptionTab(entry, mdText, aiData){
       const panel = document.querySelector('.tabPanel[data-panel="description"]');
       if(!panel) return;
-      const doc = generateDescriptionMarkdown(entry, mdText);
-      panel.innerHTML = `<div class="md">${markdownToHtml(doc)}</div>`;
+      const doc = generateDescriptionMarkdown(entry, mdText, aiData || null);
+      const status = state.descriptionStatus ? `<span class="pill">${escapeHtml(state.descriptionStatus)}</span>` : "";
+      panel.innerHTML = `
+        <div class="toolbarRow" style="margin-bottom:10px;">
+          <button class="btn" id="btnGenerateDescriptionAi">Generate AI Description</button>
+          ${status}
+        </div>
+        <div class="md">${markdownToHtml(doc)}</div>`;
+      const btn = panel.querySelector("#btnGenerateDescriptionAi");
+      if(btn){
+        btn.addEventListener("click", async () => {
+          const targetPn = state.current?.pn || "";
+          btn.disabled = true;
+          state.descriptionStatus = "Generating...";
+          renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
+          try{
+            const ai = await generateAiDescriptionData(state.current, state.currentMarkdownText || "");
+            if((state.current?.pn || "") !== targetPn) return;
+            state.descriptionStatus = "AI description ready";
+            renderDescriptionTab(state.current, state.currentMarkdownText || "", ai);
+          }catch(err){
+            if((state.current?.pn || "") !== targetPn) return;
+            state.descriptionStatus = `AI failed: ${err.message || err}`;
+            renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
+          }
+        });
+      }
     }
 
     function renderImages(entry){
@@ -1068,7 +1223,9 @@
         safeSetHashPath(hashTarget);
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
-          renderDescriptionTab(entry, "");
+          state.currentMarkdownText = "";
+          state.descriptionStatus = "";
+          renderDescriptionTab(entry, "", null);
           return;
         }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
@@ -1099,17 +1256,23 @@
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
-        renderDescriptionTab(entry, text);
+        state.currentMarkdownText = text;
+        state.descriptionStatus = "";
+        renderDescriptionTab(entry, text, null);
       }catch(err){
         const msg = err?.message || "Unknown error";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
-          renderDescriptionTab(entry, "");
+          state.currentMarkdownText = "";
+          state.descriptionStatus = "";
+          renderDescriptionTab(entry, "", null);
           return;
         }
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
-        renderDescriptionTab(entry, "");
+        state.currentMarkdownText = "";
+        state.descriptionStatus = "";
+        renderDescriptionTab(entry, "", null);
       }
 
       renderList();
