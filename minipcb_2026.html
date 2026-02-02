@@ -404,6 +404,53 @@
     .status.ok{ background: rgba(123,220,181,0.12); color: var(--accent); border:1px solid rgba(123,220,181,0.35); }
     .status.err{ background: rgba(255,123,123,0.12); color: var(--danger); border:1px solid rgba(255,123,123,0.35); }
 
+    .modalBack{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+    }
+
+    .modal{
+      width: min(560px, 96vw);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+
+    .modal h3{
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .modalGrid{
+      display: grid;
+      gap: 10px;
+    }
+
+    .modalActions{
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .input{
+      width: 100%;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+    }
+
     @media (max-width: 980px){
       .layout{ grid-template-columns: 1fr; }
       aside{ order:2; }
@@ -429,6 +476,7 @@
           <div class="meta-row">
             <span class="pill" id="fileCount">Loading...</span>
             <span class="pill" id="dataStatus">Index: pending</span>
+            <button class="tabBtn" id="btnOpenPrefs" type="button">Preferences</button>
           </div>
         </div>
         <div class="file-list" id="fileList"></div>
@@ -468,6 +516,30 @@
           </div>
         </div>
       </main>
+    </div>
+  </div>
+
+  <div class="modalBack" id="prefsModal">
+    <div class="modal">
+      <h3>Catalog Reader Preferences</h3>
+      <div class="modalGrid">
+        <label>
+          <div class="label">API Base URL</div>
+          <input class="input" id="prefApiBaseInput" placeholder="https://your-vercel-project.vercel.app/api" />
+        </label>
+        <label>
+          <div class="label">Model</div>
+          <input class="input" id="prefModelInput" placeholder="gpt-4.1-mini" />
+        </label>
+        <label>
+          <div class="label">Proxy Key (optional)</div>
+          <input class="input" id="prefProxyKeyInput" placeholder="X-Proxy-Key value" />
+        </label>
+      </div>
+      <div class="modalActions">
+        <button class="btn" id="btnClosePrefs" type="button">Cancel</button>
+        <button class="btn primary" id="btnSavePrefs" type="button">Save</button>
+      </div>
     </div>
   </div>
 
@@ -718,6 +790,30 @@
       };
     }
 
+    function openPreferencesDialog(){
+      const modal = $("prefsModal");
+      if(!modal) return;
+      $("prefApiBaseInput").value = localStorage.getItem("prefApiBase") || "";
+      $("prefModelInput").value = localStorage.getItem("prefModel") || "gpt-4.1-mini";
+      $("prefProxyKeyInput").value = localStorage.getItem("prefProxyKey") || "";
+      modal.style.display = "flex";
+    }
+
+    function closePreferencesDialog(){
+      const modal = $("prefsModal");
+      if(modal) modal.style.display = "none";
+    }
+
+    function savePreferencesDialog(){
+      const apiBase = ($("prefApiBaseInput")?.value || "").trim();
+      const model = ($("prefModelInput")?.value || "gpt-4.1-mini").trim() || "gpt-4.1-mini";
+      const proxyKey = ($("prefProxyKeyInput")?.value || "").trim();
+      localStorage.setItem("prefApiBase", apiBase);
+      localStorage.setItem("prefModel", model);
+      localStorage.setItem("prefProxyKey", proxyKey);
+      closePreferencesDialog();
+    }
+
     function extractResponseText(resp){
       if(!resp || typeof resp !== "object") return "";
       if(typeof resp.output_text === "string" && resp.output_text.trim()) return resp.output_text.trim();
@@ -908,6 +1004,12 @@
       if(btn){
         btn.addEventListener("click", async () => {
           const targetPn = state.current?.pn || "";
+          if(!getApiConfig()){
+            state.descriptionStatus = "Set API preferences to enable AI.";
+            renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
+            openPreferencesDialog();
+            return;
+          }
           btn.disabled = true;
           state.descriptionStatus = "Generating...";
           renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
@@ -1357,6 +1459,18 @@
     }
 
     $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
+    const openPrefsBtn = $("btnOpenPrefs");
+    if(openPrefsBtn) openPrefsBtn.addEventListener("click", openPreferencesDialog);
+    const closePrefsBtn = $("btnClosePrefs");
+    if(closePrefsBtn) closePrefsBtn.addEventListener("click", closePreferencesDialog);
+    const savePrefsBtn = $("btnSavePrefs");
+    if(savePrefsBtn) savePrefsBtn.addEventListener("click", savePreferencesDialog);
+    const prefsModal = $("prefsModal");
+    if(prefsModal){
+      prefsModal.addEventListener("click", (e) => {
+        if(e.target === prefsModal) closePreferencesDialog();
+      });
+    }
     function setupTabs(){
       const tabs = document.querySelectorAll("#previewTabs .tabBtn");
       const panels = document.querySelectorAll(".tabPanel");
@@ -1380,6 +1494,9 @@
 
     setupTabs();
     loadIndex();
+    if(!getApiConfig()){
+      setTimeout(openPreferencesDialog, 150);
+    }
   </script>
   </body>
 </html>
