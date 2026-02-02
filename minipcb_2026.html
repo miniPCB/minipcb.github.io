@@ -438,12 +438,13 @@
         <div class="preview-head">
           <div class="preview-title" id="previewTitle">Select a markdown file</div>
           <div class="preview-meta" id="previewMeta"></div>
-                              <div class="tabBar" id="previewTabs">
+          <div class="tabBar" id="previewTabs">
             <button class="tabBtn active" data-tab="markdown">Markdown</button>
             <button class="tabBtn" data-tab="schematic">Schematic</button>
             <button class="tabBtn" data-tab="layout">Layout</button>
             <button class="tabBtn" data-tab="assembly">Assembly</button>
             <button class="tabBtn" data-tab="testing">Testing</button>
+            <button class="tabBtn" data-tab="description">Description</button>
           </div>
         </div>
         <div class="preview" id="previewPane">
@@ -461,6 +462,9 @@
           </div>
           <div class="tabPanel" data-panel="testing">
             <div class="empty">Testing view placeholder. Add procedures or test results here.</div>
+          </div>
+          <div class="tabPanel" data-panel="description">
+            <div class="empty">Description view placeholder. Select a file to generate a circuit summary.</div>
           </div>
         </div>
       </main>
@@ -650,6 +654,78 @@
       }
 
       return blocks.join("\n");
+    }
+
+    function extractPartlistRows(mdText){
+      const lines = String(mdText || "").replace(/\r\n?/g, "\n").split("\n");
+      let start = -1;
+      for(let i = 0; i < lines.length; i += 1){
+        if(/^\s*\|\s*REF DES\s*\|/i.test(lines[i])){
+          start = i;
+          break;
+        }
+      }
+      if(start === -1) return [];
+      const rows = [];
+      for(let i = start + 2; i < lines.length; i += 1){
+        const line = lines[i].trim();
+        if(!line.startsWith("|")) break;
+        const raw = line.replace(/^\|/, "").replace(/\|$/, "");
+        const cols = raw.split("|").map(x => x.trim());
+        if(cols.length < 3) continue;
+        rows.push({ refdes: cols[0], partType: cols[1], value: cols[2] });
+      }
+      return rows;
+    }
+
+    function valueRangeHint(partType, value){
+      const t = String(partType || "").toLowerCase();
+      if(t.includes("resistor")) return "Typical range: 100 ohm to 1 Mohm. Lower values draw more current; higher values reduce current but increase noise and sensitivity to leakage.";
+      if(t.includes("capacitor")) return "Typical range: 10 pF to 100 uF. Small values preserve bandwidth; large values improve filtering but increase startup/settling time.";
+      if(t.includes("inductor")) return "Typical range: 1 uH to 1 mH. Higher inductance smooths current better but increases size and transient response time.";
+      if(t.includes("diode")) return "Typical selection tradeoff: fast switching vs. lower forward drop. Schottky parts reduce drop but often leak more at temperature.";
+      if(t.includes("transistor")) return "Typical tradeoff: gain, bandwidth, and power handling. Higher-gain devices simplify biasing but may reduce stability margins.";
+      if(t.includes("integrated circuit") || t.includes("ic")) return "Typical tradeoff: precision, noise, bandwidth, and supply current. Better performance usually increases cost and power.";
+      if(t.includes("connector")) return "Typical tradeoff: pin count, current rating, and mechanical robustness. Higher-current connectors are larger and cost more.";
+      if(value) return `Value noted: ${value}. Pick this based on target bias point, gain/filter response, and tolerance margin.`;
+      return "Choose value/rating based on operating point, tolerance stack-up, thermal limits, and manufacturability.";
+    }
+
+    function generateDescriptionMarkdown(entry, mdText){
+      const pn = entry?.pn || "Unknown PN";
+      const rows = extractPartlistRows(mdText);
+      const lines = [];
+      lines.push(`# ${pn} Circuit Description`);
+      lines.push("");
+      lines.push("This AI-generated overview summarizes likely circuit intent, key components, and practical value-selection tradeoffs.");
+      lines.push("");
+      if(!rows.length){
+        lines.push("No partlist table was found in this markdown, so a component-level description could not be generated.");
+        return lines.join("\n");
+      }
+      lines.push("## Components by Reference Designator");
+      lines.push("");
+      for(const row of rows){
+        const ref = row.refdes || "(unknown)";
+        const kind = row.partType || "Component";
+        const val = row.value || "not specified";
+        lines.push(`- **${ref}** (${kind}) - Function: participates in the ${kind.toLowerCase()} role for signal/power behavior. Nominal value: ${val}.`);
+        lines.push(`  - ${valueRangeHint(kind, val)}`);
+      }
+      lines.push("");
+      lines.push("## Typical Design Tradeoffs");
+      lines.push("");
+      lines.push("- Tighter tolerances improve repeatability but increase BOM cost.");
+      lines.push("- Higher bandwidth choices improve response speed but may increase noise/EMI sensitivity.");
+      lines.push("- Larger safety margins improve robustness but can reduce efficiency or dynamic performance.");
+      return lines.join("\n");
+    }
+
+    function renderDescriptionTab(entry, mdText){
+      const panel = document.querySelector('.tabPanel[data-panel="description"]');
+      if(!panel) return;
+      const doc = generateDescriptionMarkdown(entry, mdText);
+      panel.innerHTML = `<div class="md">${markdownToHtml(doc)}</div>`;
     }
 
     function renderImages(entry){
@@ -950,6 +1026,7 @@
         safeSetHashPath(hashTarget);
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
+          renderDescriptionTab(entry, "");
           return;
         }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
@@ -980,14 +1057,17 @@
         if(requestId !== state.requestId) return;
         const html = markdownToHtml(text);
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
+        renderDescriptionTab(entry, text);
       }catch(err){
         const msg = err?.message || "Unknown error";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
+          renderDescriptionTab(entry, "");
           return;
         }
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
+        renderDescriptionTab(entry, "");
       }
 
       renderList();
