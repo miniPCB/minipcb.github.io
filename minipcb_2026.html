@@ -584,6 +584,7 @@
   </div>
   <div class="contextMenu" id="descContextMenu">
     <button id="btnDescAiRephrase" type="button">AI rephrase</button>
+    <button id="btnDescSave" type="button">Save</button>
   </div>
 
     <script src="schematics-data.js"></script>
@@ -1143,15 +1144,16 @@
       const rec = getDescRecord(entry);
       const doc = generateDescriptionMarkdown(entry, mdText, aiData || null, rec.intro || "");
       panel.innerHTML = `
-        <div style="margin-bottom:12px;">
-          <div class="label">Circuit Description (3-5 sentences)</div>
+        <div class="md">${markdownToHtml(doc)}</div>
+        <div style="margin-top:12px;">
+          <div class="label">Edit intro (3–5 sentences)</div>
           <textarea class="input" id="descIntro" rows="5" spellcheck="true" placeholder="Describe circuit function, performance characteristics, and ideal applications.">${escapeHtml(rec.intro || "")}</textarea>
-        </div>
-        <div class="md">${markdownToHtml(doc)}</div>`;
+        </div>`;
       const introEl = panel.querySelector("#descIntro");
       if(introEl){
         introEl.addEventListener("input", () => {
           setDescRecord(state.current, { intro: introEl.value });
+          renderDescriptionTab(state.current, state.currentMarkdownText || "", aiData || null);
         });
         introEl.addEventListener("contextmenu", (e) => {
           e.preventDefault();
@@ -1633,8 +1635,20 @@
           const text = await aiRephraseIntro(state.current, state.currentMarkdownText || "", introEl.value);
           introEl.value = text;
           setDescRecord(state.current, { intro: text });
+          renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
         }catch(_){}
         rephraseBtn.disabled = false;
+      });
+    }
+    const saveBtn = $("btnDescSave");
+    if(saveBtn){
+      saveBtn.addEventListener("click", () => {
+        if(descMenu) descMenu.style.display = "none";
+        const introEl = $("descIntro");
+        if(introEl){
+          setDescRecord(state.current, { intro: introEl.value });
+        }
+        downloadDescJson();
       });
     }
     function setupTabs(){
