@@ -245,24 +245,12 @@
       flex:1;
     }
 
-    .editor-grid{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto 1fr;
-      gap:14px;
-      min-height:0;
-    }
-
     .panel-card{
       border:1px solid var(--border);
       border-radius:12px;
       background: rgba(255,255,255,0.03);
       padding:12px;
       min-height:0;
-    }
-
-    .panel-card.form{
-      grid-column: 1 / -1;
     }
 
     .panel-title{
@@ -277,6 +265,39 @@
       display:grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap:10px;
+    }
+
+    .form-stack{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+
+    .section-card{
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px;
+      background: rgba(255,255,255,0.02);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .inline-row{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap:10px;
+    }
+
+    .row-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .tiny{
+      font-size:11px;
+      color: var(--muted);
     }
 
     label{
@@ -325,14 +346,6 @@
     .status.ok{ background: rgba(123,220,181,0.12); color: var(--accent); border:1px solid rgba(123,220,181,0.35); }
     .status.warn{ background: rgba(255,205,123,0.12); color: #ffd27b; border:1px solid rgba(255,205,123,0.35); }
     .status.err{ background: rgba(255,123,123,0.12); color: var(--danger); border:1px solid rgba(255,123,123,0.35); }
-
-    .viewer-frame{
-      width:100%;
-      height:100%;
-      border:1px solid var(--border);
-      border-radius:10px;
-      background: #0b1118;
-    }
 
     .empty{
       color: var(--muted);
@@ -384,10 +397,6 @@
       justify-content: flex-end;
     }
 
-    @media (max-width: 1100px){
-      .editor-grid{ grid-template-columns: 1fr; }
-    }
-
     @media (max-width: 980px){
       .layout{ grid-template-columns: 1fr; }
       aside{ order:2; }
@@ -429,43 +438,13 @@
             <button class="btn" id="revertBtn" type="button">Revert Draft</button>
             <button class="btn" id="downloadBtn" type="button">Download HTML</button>
             <button class="btn secondary" id="prefsBtn" type="button">Preferences</button>
+            <button class="btn" id="applyFormBtn" type="button">Apply Form to HTML</button>
+            <button class="btn secondary" id="syncFormBtn" type="button">Rebuild Form</button>
             <span class="status ok" id="editStatus">Idle</span>
           </div>
         </div>
         <div class="preview">
-          <div class="editor-grid" id="editorGrid">
-            <section class="panel-card form">
-              <div class="panel-title">Form Editor</div>
-              <div class="form-grid">
-                <label>
-                  Title
-                  <input class="input" id="formTitle" type="text" placeholder="Page title" />
-                </label>
-                <label>
-                  Meta Description
-                  <input class="input" id="formDescription" type="text" placeholder="Meta description content" />
-                </label>
-                <label>
-                  First H1
-                  <input class="input" id="formH1" type="text" placeholder="First H1 text" />
-                </label>
-              </div>
-              <div class="panel-actions">
-                <button class="btn" id="applyFormBtn" type="button">Apply Form to HTML</button>
-                <button class="btn secondary" id="syncFormBtn" type="button">Sync Form from HTML</button>
-              </div>
-            </section>
-
-            <section class="panel-card" id="editorPanel">
-              <div class="panel-title">HTML Source</div>
-              <textarea id="editorArea" placeholder="Select a file to load HTML..."></textarea>
-            </section>
-
-            <section class="panel-card" id="viewerPanel">
-              <div class="panel-title">Live Preview</div>
-              <iframe id="previewFrame" class="viewer-frame" title="HTML preview"></iframe>
-            </section>
-          </div>
+          <div class="form-stack" id="formContainer"></div>
         </div>
       </main>
     </div>
@@ -494,7 +473,6 @@
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
     const LOCAL_PREFIX = "websiteEditorDraft::";
-    const PREVIEW_DELAY = 500;
     const SAVE_DELAY = 600;
 
     const state = {
@@ -503,9 +481,9 @@
       current: null,
       originalText: "",
       editorText: "",
-      previewTimer: null,
       saveTimer: null,
-      baseDir: "draft/"
+      baseDir: "draft/",
+      formState: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -618,51 +596,95 @@
       meta.innerHTML = parts.join("");
     }
 
-    function ensureBaseTag(html, baseHref){
-      if(/<base\s/i.test(html)) return html;
-      const baseTag = `<base href="${baseHref}">`;
-      if(/<head[^>]*>/i.test(html)){
-        return html.replace(/<head[^>]*>/i, (match) => `${match}\n  ${baseTag}`);
-      }
-      return baseTag + "\n" + html;
-    }
-
-    function schedulePreview(html, baseUrl){
-      if(state.previewTimer) clearTimeout(state.previewTimer);
-      state.previewTimer = setTimeout(() => {
-        const frame = $("previewFrame");
-        const patched = ensureBaseTag(html, baseUrl);
-        frame.srcdoc = patched;
-      }, PREVIEW_DELAY);
-    }
-
     function applyFormToHtml(html, formData){
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, "text/html");
-      if(formData.title){
-        doc.title = formData.title;
+      doc.title = formData.meta.title || doc.title || "";
+
+      const metaDesc = doc.querySelector('meta[name="description"]') || doc.createElement("meta");
+      metaDesc.setAttribute("name", "description");
+      metaDesc.setAttribute("content", formData.meta.description || "");
+      doc.head.appendChild(metaDesc);
+
+      const metaKeywords = doc.querySelector('meta[name="keywords"]') || doc.createElement("meta");
+      metaKeywords.setAttribute("name", "keywords");
+      metaKeywords.setAttribute("content", formData.meta.keywords || "");
+      doc.head.appendChild(metaKeywords);
+
+      const h1 = doc.querySelector("header h1") || doc.querySelector("h1") || doc.createElement("h1");
+      h1.textContent = formData.meta.h1 || "";
+      if(!h1.parentElement){
+        doc.body.insertBefore(h1, doc.body.firstChild);
       }
-      if(formData.description !== null){
-        let meta = doc.querySelector('meta[name="description"]');
-        if(!meta){
-          meta = doc.createElement("meta");
-          meta.setAttribute("name", "description");
-          doc.head.appendChild(meta);
-        }
-        meta.setAttribute("content", formData.description);
+
+      const slogan = doc.querySelector("header .slogan") || doc.querySelector(".slogan");
+      if(slogan){
+        slogan.textContent = formData.meta.slogan || "";
       }
-      if(formData.h1 !== null){
-        let h1 = doc.querySelector("h1");
-        if(!h1){
-          h1 = doc.createElement("h1");
-          if(doc.body.firstChild){
-            doc.body.insertBefore(h1, doc.body.firstChild);
-          }else{
-            doc.body.appendChild(h1);
+
+      const navList = doc.querySelector(".nav-links");
+      if(navList){
+        navList.innerHTML = formData.nav
+          .map(item => `<li><a href="${escapeHtml(item.href)}">${escapeHtml(item.text)}</a></li>`)
+          .join("");
+      }
+
+      const tabsHost = doc.querySelector(".tabs");
+      if(tabsHost){
+        const visibleTabs = formData.sections.filter(section => section.tabLabel);
+        const firstTabId = visibleTabs.length ? visibleTabs[0].id : "";
+        const tabButtons = visibleTabs.map(section => {
+          const active = section.id === firstTabId ? " active" : "";
+          return `<button class="tab${active}" onclick="showTab('${section.id}', this)">${escapeHtml(section.tabLabel)}</button>`;
+        }).join("");
+        tabsHost.innerHTML = tabButtons;
+      }
+
+      const tabContainer = doc.querySelector(".tab-container");
+      if(tabContainer){
+        const existing = Array.from(tabContainer.querySelectorAll(".tab-content"));
+        const byId = new Map(existing.map(el => [el.id, el]));
+        const firstTabSection = formData.sections.find(section => section.tabLabel) || formData.sections[0];
+        const activeId = firstTabSection ? firstTabSection.id : "";
+        formData.sections.forEach((section) => {
+          let el = byId.get(section.id);
+          if(!el){
+            el = doc.createElement("div");
+            el.id = section.id;
+            el.className = "tab-content";
+            tabContainer.appendChild(el);
           }
-        }
-        h1.textContent = formData.h1;
+          el.className = "tab-content" + (section.id === activeId ? " active" : "");
+          if(section.hidden){
+            el.setAttribute("data-hidden", "true");
+          }else{
+            el.removeAttribute("data-hidden");
+          }
+
+          if(section.type === "details"){
+            const rows = section.rows
+              .map(row => `<p><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}</p>`)
+              .join("");
+            el.innerHTML = `<h2>${escapeHtml(section.title)}</h2>${rows}`;
+          }else if(section.type === "images"){
+            const images = section.images.map(img => {
+              const full = img.full ? ` data-full="${escapeHtml(img.full)}"` : "";
+              return `<img src="${escapeHtml(img.src)}" class="zoomable" alt="${escapeHtml(img.alt)}" onclick="openLightbox(this)"${full}>`;
+            }).join("");
+            el.innerHTML = `<h2>${escapeHtml(section.title)}</h2><div class="lightbox-container">${images}</div>`;
+          }else{
+            const body = section.bodyHtml ? section.bodyHtml : "";
+            el.innerHTML = `<h2>${escapeHtml(section.title)}</h2>${body}`;
+          }
+        });
+
+        existing.forEach(el => {
+          if(!formData.sections.find(section => section.id === el.id)){
+            el.remove();
+          }
+        });
       }
+
       const doctypeMatch = html.match(/<!doctype[^>]*>/i);
       const doctype = doctypeMatch ? doctypeMatch[0] : "<!doctype html>";
       return `${doctype}\n${doc.documentElement.outerHTML}`;
@@ -671,19 +693,256 @@
     function extractFormFromHtml(html){
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, "text/html");
-      const meta = doc.querySelector('meta[name="description"]');
+      const metaDesc = doc.querySelector('meta[name="description"]');
+      const metaKeywords = doc.querySelector('meta[name="keywords"]');
+      const h1 = doc.querySelector("header h1") || doc.querySelector("h1");
+      const slogan = doc.querySelector("header .slogan") || doc.querySelector(".slogan");
+
+      const navLinks = Array.from(doc.querySelectorAll(".nav-links a")).map(link => ({
+        text: link.textContent.trim(),
+        href: link.getAttribute("href") || ""
+      }));
+
+      const tabs = Array.from(doc.querySelectorAll(".tabs .tab")).map(btn => {
+        const onclick = btn.getAttribute("onclick") || "";
+        const match = onclick.match(/showTab\('([^']+)'/);
+        return {
+          id: match ? match[1] : btn.dataset.tab || "",
+          label: btn.textContent.trim()
+        };
+      });
+      const tabById = new Map(tabs.map(tab => [tab.id, tab.label]));
+
+      const sections = Array.from(doc.querySelectorAll(".tab-content")).map((section, idx) => {
+        const id = section.id || `section-${idx + 1}`;
+        const hidden = section.getAttribute("data-hidden") === "true";
+        const h2 = section.querySelector("h2");
+        const title = h2 ? h2.textContent.trim() : id;
+        const tabLabel = tabById.get(id) || "";
+        if(id === "details"){
+          const rows = Array.from(section.querySelectorAll("p")).map(p => {
+            const strong = p.querySelector("strong");
+            if(!strong) return null;
+            const label = strong.textContent.replace(/:$/, "").trim();
+            const value = p.textContent.replace(strong.textContent, "").trim();
+            return { label, value };
+          }).filter(Boolean);
+          return { id, hidden, title, tabLabel, type: "details", rows };
+        }
+
+        const images = Array.from(section.querySelectorAll("img"));
+        if(images.length){
+          return {
+            id,
+            hidden,
+            title,
+            tabLabel,
+            type: "images",
+            images: images.map(img => ({
+              src: img.getAttribute("src") || "",
+              alt: img.getAttribute("alt") || "",
+              full: img.getAttribute("data-full") || ""
+            }))
+          };
+        }
+
+        const clone = section.cloneNode(true);
+        const cloneH2 = clone.querySelector("h2");
+        if(cloneH2) cloneH2.remove();
+        return {
+          id,
+          hidden,
+          title,
+          tabLabel,
+          type: "html",
+          bodyHtml: clone.innerHTML.trim()
+        };
+      });
+
       return {
-        title: doc.title || "",
-        description: meta ? meta.getAttribute("content") || "" : "",
-        h1: (doc.querySelector("h1") || {}).textContent || ""
+        meta: {
+          title: doc.title || "",
+          description: metaDesc ? metaDesc.getAttribute("content") || "" : "",
+          keywords: metaKeywords ? metaKeywords.getAttribute("content") || "" : "",
+          h1: h1 ? h1.textContent.trim() : "",
+          slogan: slogan ? slogan.textContent.trim() : ""
+        },
+        nav: navLinks,
+        sections
       };
     }
 
     function syncFormInputs(html){
-      const data = extractFormFromHtml(html);
-      $("formTitle").value = data.title;
-      $("formDescription").value = data.description;
-      $("formH1").value = data.h1;
+      state.formState = extractFormFromHtml(html);
+      renderForm(state.formState);
+    }
+
+    function renderForm(data){
+      const container = $("formContainer");
+      container.innerHTML = "";
+
+      const metaCard = document.createElement("div");
+      metaCard.className = "panel-card";
+      metaCard.innerHTML = `
+        <div class="panel-title">Page Meta</div>
+        <div class="form-grid">
+          <label>Title<input class="input" data-field="meta-title" type="text"></label>
+          <label>Meta Description<input class="input" data-field="meta-description" type="text"></label>
+          <label>Meta Keywords<input class="input" data-field="meta-keywords" type="text"></label>
+          <label>Header H1<input class="input" data-field="meta-h1" type="text"></label>
+          <label>Slogan<input class="input" data-field="meta-slogan" type="text"></label>
+        </div>
+      `;
+      container.appendChild(metaCard);
+
+      const navCard = document.createElement("div");
+      navCard.className = "panel-card";
+      navCard.innerHTML = `
+        <div class="panel-title">Navigation Links</div>
+        <div class="form-stack" data-nav-list></div>
+        <div class="row-actions">
+          <button class="btn secondary" data-action="add-nav" type="button">Add Link</button>
+        </div>
+      `;
+      container.appendChild(navCard);
+
+      const sectionsWrap = document.createElement("div");
+      sectionsWrap.className = "panel-card";
+      sectionsWrap.innerHTML = `<div class="panel-title">Sections</div>`;
+      container.appendChild(sectionsWrap);
+
+      const sectionsStack = document.createElement("div");
+      sectionsStack.className = "form-stack";
+      sectionsWrap.appendChild(sectionsStack);
+
+      (data.sections || []).forEach(section => {
+        const card = document.createElement("div");
+        card.className = "section-card";
+        card.dataset.sectionId = section.id;
+        card.dataset.sectionType = section.type;
+        card.innerHTML = `
+          <div class="inline-row">
+            <label>Section ID<input class="input" data-field="section-id" type="text" value="${escapeHtml(section.id)}" readonly></label>
+            <label>Tab Label<input class="input" data-field="section-tab" type="text" value="${escapeHtml(section.tabLabel || "")}"></label>
+          </div>
+          <div class="inline-row">
+            <label>Section Title<input class="input" data-field="section-title" type="text" value="${escapeHtml(section.title || "")}"></label>
+            <label>Visible<input class="input" data-field="section-visible" type="checkbox"${section.hidden ? "" : " checked"}></label>
+          </div>
+        `;
+
+        if(section.type === "details"){
+          const rows = document.createElement("div");
+          rows.className = "form-stack";
+          rows.dataset.detailList = "true";
+          (section.rows || []).forEach(row => {
+            const rowEl = document.createElement("div");
+            rowEl.className = "inline-row";
+            rowEl.dataset.detailRow = "true";
+            rowEl.innerHTML = `
+              <label>Label<input class="input" data-field="detail-label" type="text" value="${escapeHtml(row.label)}"></label>
+              <label>Value<input class="input" data-field="detail-value" type="text" value="${escapeHtml(row.value)}"></label>
+            `;
+            rows.appendChild(rowEl);
+          });
+          card.appendChild(rows);
+          const actions = document.createElement("div");
+          actions.className = "row-actions";
+          actions.innerHTML = `
+            <button class="btn secondary" data-action="add-detail" type="button">Add Detail Row</button>
+          `;
+          card.appendChild(actions);
+        }else if(section.type === "images"){
+          const rows = document.createElement("div");
+          rows.className = "form-stack";
+          rows.dataset.imageList = "true";
+          (section.images || []).forEach(img => {
+            const rowEl = document.createElement("div");
+            rowEl.className = "inline-row";
+            rowEl.dataset.imageRow = "true";
+            rowEl.innerHTML = `
+              <label>Image Src<input class="input" data-field="image-src" type="text" value="${escapeHtml(img.src)}"></label>
+              <label>Alt Text<input class="input" data-field="image-alt" type="text" value="${escapeHtml(img.alt)}"></label>
+              <label>Full Src<input class="input" data-field="image-full" type="text" value="${escapeHtml(img.full || "")}"></label>
+            `;
+            rows.appendChild(rowEl);
+          });
+          card.appendChild(rows);
+          const actions = document.createElement("div");
+          actions.className = "row-actions";
+          actions.innerHTML = `
+            <button class="btn secondary" data-action="add-image" type="button">Add Image</button>
+          `;
+          card.appendChild(actions);
+        }else{
+          const label = document.createElement("label");
+          label.innerHTML = `Body HTML<textarea class="input" data-field="section-body">${escapeHtml(section.bodyHtml || "")}</textarea>`;
+          card.appendChild(label);
+        }
+
+        sectionsStack.appendChild(card);
+      });
+
+      container.querySelector('[data-field="meta-title"]').value = data.meta.title || "";
+      container.querySelector('[data-field="meta-description"]').value = data.meta.description || "";
+      container.querySelector('[data-field="meta-keywords"]').value = data.meta.keywords || "";
+      container.querySelector('[data-field="meta-h1"]').value = data.meta.h1 || "";
+      container.querySelector('[data-field="meta-slogan"]').value = data.meta.slogan || "";
+
+      const navList = container.querySelector("[data-nav-list]");
+      (data.nav || []).forEach(item => {
+        const row = document.createElement("div");
+        row.className = "inline-row";
+        row.dataset.navItem = "true";
+        row.innerHTML = `
+          <label>Link Text<input class="input" data-field="nav-text" type="text" value="${escapeHtml(item.text)}"></label>
+          <label>Link Href<input class="input" data-field="nav-href" type="text" value="${escapeHtml(item.href)}"></label>
+        `;
+        navList.appendChild(row);
+      });
+    }
+
+    function collectFormState(){
+      const container = $("formContainer");
+      const meta = {
+        title: container.querySelector('[data-field="meta-title"]').value.trim(),
+        description: container.querySelector('[data-field="meta-description"]').value.trim(),
+        keywords: container.querySelector('[data-field="meta-keywords"]').value.trim(),
+        h1: container.querySelector('[data-field="meta-h1"]').value.trim(),
+        slogan: container.querySelector('[data-field="meta-slogan"]').value.trim()
+      };
+
+      const nav = Array.from(container.querySelectorAll("[data-nav-item]")).map(row => ({
+        text: row.querySelector('[data-field="nav-text"]').value.trim(),
+        href: row.querySelector('[data-field="nav-href"]').value.trim()
+      })).filter(item => item.text || item.href);
+
+      const sections = Array.from(container.querySelectorAll(".section-card")).map(card => {
+        const id = card.dataset.sectionId || card.querySelector('[data-field="section-id"]').value.trim();
+        const title = card.querySelector('[data-field="section-title"]').value.trim();
+        const tabLabel = card.querySelector('[data-field="section-tab"]').value.trim();
+        const visible = card.querySelector('[data-field="section-visible"]').checked;
+        const type = card.dataset.sectionType;
+        if(type === "details"){
+          const rows = Array.from(card.querySelectorAll("[data-detail-row]")).map(row => ({
+            label: row.querySelector('[data-field="detail-label"]').value.trim(),
+            value: row.querySelector('[data-field="detail-value"]').value.trim()
+          })).filter(row => row.label || row.value);
+          return { id, title, tabLabel, hidden: !visible, type, rows };
+        }
+        if(type === "images"){
+          const images = Array.from(card.querySelectorAll("[data-image-row]")).map(row => ({
+            src: row.querySelector('[data-field="image-src"]').value.trim(),
+            alt: row.querySelector('[data-field="image-alt"]').value.trim(),
+            full: row.querySelector('[data-field="image-full"]').value.trim()
+          })).filter(img => img.src || img.alt || img.full);
+          return { id, title, tabLabel, hidden: !visible, type, images };
+        }
+        const bodyHtml = card.querySelector('[data-field="section-body"]').value;
+        return { id, title, tabLabel, hidden: !visible, type, bodyHtml };
+      });
+
+      return { meta, nav, sections };
     }
 
     function updateModifiedState(){
@@ -720,10 +979,7 @@
         state.originalText = text;
         const draft = loadDraft(entry.path);
         state.editorText = draft && draft !== text ? draft : text;
-        $("editorArea").value = state.editorText;
         syncFormInputs(state.editorText);
-        const baseUrl = new URL(entry.path, location.href).href;
-        schedulePreview(state.editorText, baseUrl);
         updateModifiedState();
         renderList();
       }catch(err){
@@ -751,40 +1007,16 @@
         if(!state.current) return;
         clearDraft(state.current.path);
         state.editorText = state.originalText;
-        $("editorArea").value = state.editorText;
         syncFormInputs(state.editorText);
-        const baseUrl = new URL(state.current.path, location.href).href;
-        schedulePreview(state.editorText, baseUrl);
         updateModifiedState();
       });
       $("downloadBtn").addEventListener("click", downloadCurrent);
 
-      $("editorArea").addEventListener("input", (e) => {
-        state.editorText = e.target.value;
-        updateModifiedState();
-        if(state.current){
-          const baseUrl = new URL(state.current.path, location.href).href;
-          schedulePreview(state.editorText, baseUrl);
-          if(state.saveTimer) clearTimeout(state.saveTimer);
-          state.saveTimer = setTimeout(() => {
-            saveDraft(state.current.path, state.editorText);
-            updateModifiedState();
-          }, SAVE_DELAY);
-        }
-      });
-
       $("applyFormBtn").addEventListener("click", () => {
         if(!state.current) return;
-        const data = {
-          title: $("formTitle").value.trim(),
-          description: $("formDescription").value.trim(),
-          h1: $("formH1").value.trim()
-        };
+        const data = collectFormState();
         const updated = applyFormToHtml(state.editorText, data);
         state.editorText = updated;
-        $("editorArea").value = updated;
-        const baseUrl = new URL(state.current.path, location.href).href;
-        schedulePreview(state.editorText, baseUrl);
         saveDraft(state.current.path, state.editorText);
         updateModifiedState();
       });
@@ -792,6 +1024,48 @@
       $("syncFormBtn").addEventListener("click", () => {
         if(!state.current) return;
         syncFormInputs(state.editorText);
+      });
+
+      $("formContainer").addEventListener("click", (e) => {
+        const target = e.target.closest("[data-action]");
+        if(!target) return;
+        const action = target.getAttribute("data-action");
+        if(action === "add-nav"){
+          const list = $("formContainer").querySelector("[data-nav-list]");
+          const row = document.createElement("div");
+          row.className = "inline-row";
+          row.dataset.navItem = "true";
+          row.innerHTML = `
+            <label>Link Text<input class="input" data-field="nav-text" type="text"></label>
+            <label>Link Href<input class="input" data-field="nav-href" type="text"></label>
+          `;
+          list.appendChild(row);
+        }
+        if(action === "add-detail"){
+          const card = target.closest(".section-card");
+          const list = card.querySelector("[data-detail-list]");
+          const row = document.createElement("div");
+          row.className = "inline-row";
+          row.dataset.detailRow = "true";
+          row.innerHTML = `
+            <label>Label<input class="input" data-field="detail-label" type="text"></label>
+            <label>Value<input class="input" data-field="detail-value" type="text"></label>
+          `;
+          list.appendChild(row);
+        }
+        if(action === "add-image"){
+          const card = target.closest(".section-card");
+          const list = card.querySelector("[data-image-list]");
+          const row = document.createElement("div");
+          row.className = "inline-row";
+          row.dataset.imageRow = "true";
+          row.innerHTML = `
+            <label>Image Src<input class="input" data-field="image-src" type="text"></label>
+            <label>Alt Text<input class="input" data-field="image-alt" type="text"></label>
+            <label>Full Src<input class="input" data-field="image-full" type="text"></label>
+          `;
+          list.appendChild(row);
+        }
       });
 
       $("prefsBtn").addEventListener("click", () => {
