@@ -502,7 +502,6 @@
           <div class="meta-row">
             <span class="pill" id="fileCount">Loading...</span>
             <span class="pill" id="dataStatus">Index: pending</span>
-            <button class="tabBtn" id="btnOpenPrefs" type="button">Preferences</button>
           </div>
         </div>
         <div class="file-list" id="fileList"></div>
@@ -518,7 +517,6 @@
             <button class="tabBtn" data-tab="layout">Layout</button>
             <button class="tabBtn" data-tab="assembly">Assembly</button>
             <button class="tabBtn" data-tab="testing">Testing</button>
-            <button class="tabBtn" data-tab="description">Description</button>
           </div>
         </div>
         <div class="preview" id="previewPane">
@@ -537,55 +535,12 @@
           <div class="tabPanel" data-panel="testing">
             <div class="empty">Testing view placeholder. Add procedures or test results here.</div>
           </div>
-          <div class="tabPanel" data-panel="description">
-            <div class="empty">Description view placeholder. Select a file to generate a circuit summary.</div>
-          </div>
         </div>
       </main>
     </div>
   </div>
 
-  <div class="modalBack" id="prefsModal">
-    <div class="modal">
-      <h3>Catalog Reader Preferences</h3>
-      <div class="modalGrid">
-        <label>
-          <div class="label">API Base URL</div>
-          <input class="input" id="prefApiBaseInput" placeholder="https://your-vercel-project.vercel.app/api" />
-        </label>
-        <label>
-          <div class="label">Model</div>
-          <input class="input" id="prefModelInput" placeholder="gpt-4.1-mini" />
-        </label>
-        <label>
-          <div class="label">Proxy Key (optional)</div>
-          <input class="input" id="prefProxyKeyInput" placeholder="X-Proxy-Key value" />
-        </label>
-      </div>
-      <div class="modalActions">
-        <button class="btn" id="btnClosePrefs" type="button">Cancel</button>
-        <button class="btn primary" id="btnSavePrefs" type="button">Save</button>
-      </div>
-    </div>
-  </div>
-  <div class="modalBack" id="aiProgressModal">
-    <div class="modal">
-      <h3>Generating Description</h3>
-      <div class="modalGrid">
-        <div class="label">Progress</div>
-        <div class="input" id="aiProgressCounter">0</div>
-        <div class="label">Log</div>
-        <div class="input" id="aiProgressLog" style="height:140px; overflow:auto; white-space:pre-wrap;"></div>
-      </div>
-      <div class="modalActions">
-        <button class="btn" id="btnCloseAiProgress" type="button">Hide</button>
-      </div>
-    </div>
-  </div>
-  <div class="contextMenu" id="descContextMenu">
-    <button id="btnDescAiRephrase" type="button">AI rephrase</button>
-    <button id="btnDescSave" type="button">Save</button>
-  </div>
+
 
     <script src="schematics-data.js"></script>
 <script>
@@ -596,8 +551,7 @@
       requestId: 0,
       currentFetch: null,
       mdIndex: [],
-      currentMarkdownText: "",
-      descData: {}
+      currentMarkdownText: ""
     };
 
     const $ = (id) => document.getElementById(id);
@@ -774,237 +728,6 @@
       return blocks.join("\n");
     }
 
-    function extractPartlistRows(mdText){
-      const lines = String(mdText || "").replace(/\r\n?/g, "\n").split("\n");
-      let start = -1;
-      for(let i = 0; i < lines.length; i += 1){
-        if(/^\s*\|\s*REF DES\s*\|/i.test(lines[i])){
-          start = i;
-          break;
-        }
-      }
-      if(start === -1) return [];
-      const rows = [];
-      for(let i = start + 2; i < lines.length; i += 1){
-        const line = lines[i].trim();
-        if(!line.startsWith("|")) break;
-        const raw = line.replace(/^\|/, "").replace(/\|$/, "");
-        const cols = raw.split("|").map(x => x.trim());
-        if(cols.length < 3) continue;
-        rows.push({ refdes: cols[0], partType: cols[1], value: cols[2] });
-      }
-      return rows;
-    }
-
-    function valueRangeHint(partType, value){
-      const t = String(partType || "").toLowerCase();
-      if(t.includes("resistor")) return "Typical range: 100 ohm to 1 Mohm. Lower values draw more current; higher values reduce current but increase noise and sensitivity to leakage.";
-      if(t.includes("capacitor")) return "Typical range: 10 pF to 100 uF. Small values preserve bandwidth; large values improve filtering but increase startup/settling time.";
-      if(t.includes("inductor")) return "Typical range: 1 uH to 1 mH. Higher inductance smooths current better but increases size and transient response time.";
-      if(t.includes("diode")) return "Typical selection tradeoff: fast switching vs. lower forward drop. Schottky parts reduce drop but often leak more at temperature.";
-      if(t.includes("transistor")) return "Typical tradeoff: gain, bandwidth, and power handling. Higher-gain devices simplify biasing but may reduce stability margins.";
-      if(t.includes("integrated circuit") || t.includes("ic")) return "Typical tradeoff: precision, noise, bandwidth, and supply current. Better performance usually increases cost and power.";
-      if(t.includes("connector")) return "Typical tradeoff: pin count, current rating, and mechanical robustness. Higher-current connectors are larger and cost more.";
-      if(value) return `Value noted: ${value}. Pick this based on target bias point, gain/filter response, and tolerance margin.`;
-      return "Choose value/rating based on operating point, tolerance stack-up, thermal limits, and manufacturability.";
-    }
-
-    function componentRoleHint(refdes, partType){
-      const ref = String(refdes || "").toUpperCase();
-      const t = String(partType || "").toLowerCase();
-      if(ref.startsWith("R")) return "Biasing, gain setting, pull-up/down, or current limiting.";
-      if(ref.startsWith("C")) return "Decoupling, filtering, AC coupling, or timing stabilization.";
-      if(ref.startsWith("L")) return "Energy storage/filtering in supply or switching paths.";
-      if(ref.startsWith("D")) return "Protection, steering, clamping, or rectification.";
-      if(ref.startsWith("U")) return "Active control/processing function (amplifier, comparator, regulator, logic).";
-      if(ref.startsWith("Q")) return "Active gain/switch element in analog or power stage.";
-      if(ref.startsWith("TP")) return "Measurement access for bring-up and debugging.";
-      if(ref.startsWith("P") || t.includes("connector")) return "External interface for signals, power, or I/O.";
-      return "Supports signal integrity, biasing, protection, or interconnect behavior.";
-    }
-
-    function getApiConfig(){
-      const baseRaw = (localStorage.getItem("prefApiBase") || "").trim();
-      if(!baseRaw) return null;
-      const base = baseRaw.replace(/\/+$/, "");
-      return {
-        chatUrl: `${base}/chat`,
-        model: (localStorage.getItem("prefModel") || "gpt-4.1-mini").trim() || "gpt-4.1-mini",
-        proxyKey: (localStorage.getItem("prefProxyKey") || "").trim()
-      };
-    }
-
-    function loadDescData(){
-      try{
-        const raw = localStorage.getItem("circuit_descriptions");
-        state.descData = raw ? JSON.parse(raw) : {};
-      }catch(_){
-        state.descData = {};
-      }
-    }
-
-    function saveDescData(){
-      localStorage.setItem("circuit_descriptions", JSON.stringify(state.descData || {}));
-    }
-
-    function getDescKey(entry){
-      const pn = entry?.pn || "unknown";
-      const rev = entry?.rev || "";
-      return rev ? `${pn}__${rev}` : pn;
-    }
-
-    function getDescRecord(entry){
-      const key = getDescKey(entry);
-      return state.descData[key] || { intro: "", maturity: "M0", updated: "" };
-    }
-
-    function setDescRecord(entry, next){
-      const key = getDescKey(entry);
-      state.descData[key] = { ...getDescRecord(entry), ...next, updated: new Date().toISOString() };
-      saveDescData();
-    }
-
-    function downloadDescJson(){
-      const blob = new Blob([JSON.stringify(state.descData || {}, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "circuit_descriptions.json";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
-
-    function promptImportDescJson(){
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "application/json";
-      input.addEventListener("change", async () => {
-        const file = input.files && input.files[0];
-        if(!file) return;
-        try{
-          const text = await file.text();
-          const parsed = JSON.parse(text);
-          state.descData = parsed || {};
-          saveDescData();
-          renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
-        }catch(_){}
-      });
-      input.click();
-    }
-
-    async function aiRephraseIntro(entry, mdText, current){
-      const api = getApiConfig();
-      if(!api) throw new Error("API Base URL is not set.");
-      const prompt = `Rephrase and improve the following circuit description into 3-5 concise sentences. Include function, performance characteristics (if available), and ideal applications. Be direct and technical.\n\n${current || mdText || ""}`;
-      const payload = {
-        model: api.model,
-        input: [
-          { role: "system", content: [{ type: "input_text", text: "Return plain text only. 3-5 sentences." }] },
-          { role: "user", content: [{ type: "input_text", text: prompt }] }
-        ]
-      };
-      const headers = { "Content-Type": "application/json" };
-      if(api.proxyKey) headers["X-Proxy-Key"] = api.proxyKey;
-      const resp = await fetch(api.chatUrl, { method: "POST", headers, body: JSON.stringify(payload) });
-      if(!resp.ok){
-        const txt = await resp.text();
-        throw new Error(`AI request failed (${resp.status}): ${txt.slice(0, 120)}`);
-      }
-      const data = await resp.json();
-      const text = extractResponseText(data);
-      if(!text) throw new Error("AI returned empty response.");
-      return text.trim();
-    }
-
-    function openPreferencesDialog(){
-      const modal = $("prefsModal");
-      if(!modal) return;
-      $("prefApiBaseInput").value = localStorage.getItem("prefApiBase") || "";
-      $("prefModelInput").value = localStorage.getItem("prefModel") || "gpt-4.1-mini";
-      $("prefProxyKeyInput").value = localStorage.getItem("prefProxyKey") || "";
-      modal.style.display = "flex";
-    }
-
-    function closePreferencesDialog(){
-      const modal = $("prefsModal");
-      if(modal) modal.style.display = "none";
-    }
-
-    function savePreferencesDialog(){
-      const apiBase = ($("prefApiBaseInput")?.value || "").trim();
-      const model = ($("prefModelInput")?.value || "gpt-4.1-mini").trim() || "gpt-4.1-mini";
-      const proxyKey = ($("prefProxyKeyInput")?.value || "").trim();
-      localStorage.setItem("prefApiBase", apiBase);
-      localStorage.setItem("prefModel", model);
-      localStorage.setItem("prefProxyKey", proxyKey);
-      closePreferencesDialog();
-    }
-
-    function openAiProgressDialog(){
-      const modal = $("aiProgressModal");
-      if(!modal) return;
-      $("aiProgressCounter").textContent = "0";
-      $("aiProgressLog").textContent = "Starting AI request...";
-      modal.style.display = "flex";
-    }
-
-    function closeAiProgressDialog(){
-      const modal = $("aiProgressModal");
-      if(modal) modal.style.display = "none";
-    }
-
-    function appendAiProgressLog(msg){
-      const log = $("aiProgressLog");
-      if(!log) return;
-      log.textContent = `${log.textContent}\n${msg}`.trim();
-      log.scrollTop = log.scrollHeight;
-    }
-
-    function extractResponseText(resp){
-      if(!resp || typeof resp !== "object") return "";
-      if(typeof resp.output_text === "string" && resp.output_text.trim()) return resp.output_text.trim();
-      const out = [];
-      const output = Array.isArray(resp.output) ? resp.output : [];
-      for(const item of output){
-        const content = Array.isArray(item?.content) ? item.content : [];
-        for(const c of content){
-          if(typeof c?.text === "string" && c.text.trim()) out.push(c.text.trim());
-        }
-      }
-      return out.join("\n").trim();
-    }
-
-    async function findSchematicImageUrls(pn){
-      const urls = [];
-      if(!pn) return urls;
-      for(let i = 1; i <= 12; i += 1){
-        const page = String(i).padStart(2, "0");
-        const rel = `images/${pn}_schematic_${page}.png`;
-        try{
-          const head = await fetch(rel, { method: "HEAD", cache: "no-store" });
-          if(head.ok){
-            urls.push(new URL(rel, location.origin).toString());
-          }
-        }catch(_){}
-      }
-      return urls.slice(0, 6);
-    }
-
-    async function generateAiDescriptionData(entry, mdText){
-      const api = getApiConfig();
-      if(!api) throw new Error("API Base URL is not set. Configure prefApiBase first.");
-      const rows = extractPartlistRows(mdText);
-      if(!rows.length) throw new Error("Partlist table not found in markdown.");
-      const pn = entry?.pn || "Unknown PN";
-      const imageUrls = await findSchematicImageUrls(pn);
-      const cacheKey = `desc_ai_${pn}_${entry?.rev || ""}`;
-      const cached = localStorage.getItem(cacheKey);
-      if(cached){
-        try{ return JSON.parse(cached); }catch(_){}
-      }
-
       const refList = rows.map(r => `${r.refdes}|${r.partType}|${r.value || ""}`).join("\n");
       const userBlocks = [
         {
@@ -1067,24 +790,6 @@
       return parsed;
     }
 
-    function generateDescriptionMarkdown(entry, mdText, aiData, introOverride){
-      const pn = entry?.pn || "Unknown PN";
-      const rows = extractPartlistRows(mdText);
-      const aiMap = new Map(
-        (Array.isArray(aiData?.components) ? aiData.components : [])
-          .map(c => [String(c.refdes || "").toUpperCase(), c])
-      );
-      const lines = [];
-      lines.push(`# ${pn} Circuit Description`);
-      lines.push("");
-      const intro = (introOverride || "").trim() || (aiData?.summary || "This AI-generated overview summarizes likely circuit intent, component roles, and practical value-selection tradeoffs.");
-      lines.push(intro);
-      lines.push("");
-      if(!rows.length){
-        lines.push("No partlist table was found in this markdown, so a component-level description could not be generated.");
-        return lines.join("\n");
-      }
-
       const groups = new Map();
       for(const row of rows){
         const key = (row.partType || "Other").trim();
@@ -1136,35 +841,6 @@
       lines.push("- Larger safety margins improve robustness but can reduce efficiency or dynamic performance.");
       lines.push("- Derating and temperature margins usually improve reliability at the expense of size/cost.");
       return lines.join("\n");
-    }
-
-    function renderDescriptionTab(entry, mdText, aiData){
-      const panel = document.querySelector('.tabPanel[data-panel="description"]');
-      if(!panel) return;
-      const rec = getDescRecord(entry);
-      const doc = generateDescriptionMarkdown(entry, mdText, aiData || null, rec.intro || "");
-      panel.innerHTML = `
-        <div style="margin-bottom:12px;">
-          <div class="label">Edit intro (3–5 sentences)</div>
-          <textarea class="input" id="descIntro" rows="5" spellcheck="true" placeholder="Describe circuit function, performance characteristics, and ideal applications.">${escapeHtml(rec.intro || "")}</textarea>
-        </div>
-        <div class="md">${markdownToHtml(doc)}</div>`;
-      const introEl = panel.querySelector("#descIntro");
-      if(introEl){
-        introEl.addEventListener("input", () => {
-          setDescRecord(state.current, { intro: introEl.value });
-          renderDescriptionTab(state.current, state.currentMarkdownText || "", aiData || null);
-        });
-        introEl.addEventListener("contextmenu", (e) => {
-          e.preventDefault();
-          const menu = $("descContextMenu");
-          if(!menu) return;
-          menu.style.display = "block";
-          menu.style.left = `${e.clientX}px`;
-          menu.style.top = `${e.clientY}px`;
-          menu.setAttribute("data-field", "descIntro");
-        });
-      }
     }
 
     function renderImages(entry){
@@ -1466,7 +1142,6 @@
       if(!path){
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
         state.currentMarkdownText = "";
-        renderDescriptionTab(entry, "", null);
         return;
       }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
@@ -1498,19 +1173,16 @@
         const html = markdownToHtml(text);
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
         state.currentMarkdownText = text;
-        renderDescriptionTab(entry, text, null);
       }catch(err){
         const msg = err?.message || "Unknown error";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
           state.currentMarkdownText = "";
-          renderDescriptionTab(entry, "", null);
           return;
         }
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         state.currentMarkdownText = "";
-        renderDescriptionTab(entry, "", null);
       }
 
       renderList();
@@ -1595,62 +1267,6 @@
     }
 
     $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
-    const openPrefsBtn = $("btnOpenPrefs");
-    if(openPrefsBtn) openPrefsBtn.addEventListener("click", openPreferencesDialog);
-    const closePrefsBtn = $("btnClosePrefs");
-    if(closePrefsBtn) closePrefsBtn.addEventListener("click", closePreferencesDialog);
-    const savePrefsBtn = $("btnSavePrefs");
-    if(savePrefsBtn) savePrefsBtn.addEventListener("click", savePreferencesDialog);
-    const prefsModal = $("prefsModal");
-    if(prefsModal){
-      prefsModal.addEventListener("click", (e) => {
-        if(e.target === prefsModal) closePreferencesDialog();
-      });
-    }
-    const aiProgressModal = $("aiProgressModal");
-    if(aiProgressModal){
-      aiProgressModal.addEventListener("click", (e) => {
-        if(e.target === aiProgressModal) closeAiProgressDialog();
-      });
-    }
-    const closeAiBtn = $("btnCloseAiProgress");
-    if(closeAiBtn) closeAiBtn.addEventListener("click", closeAiProgressDialog);
-    loadDescData();
-    const descMenu = $("descContextMenu");
-    document.addEventListener("click", (e) => {
-      if(descMenu && e.target !== descMenu) descMenu.style.display = "none";
-    });
-    const rephraseBtn = $("btnDescAiRephrase");
-    if(rephraseBtn){
-      rephraseBtn.addEventListener("click", async () => {
-        if(descMenu) descMenu.style.display = "none";
-        const introEl = $("descIntro");
-        if(!introEl) return;
-        if(!getApiConfig()){
-          openPreferencesDialog();
-          return;
-        }
-        try{
-          rephraseBtn.disabled = true;
-          const text = await aiRephraseIntro(state.current, state.currentMarkdownText || "", introEl.value);
-          introEl.value = text;
-          setDescRecord(state.current, { intro: text });
-          renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
-        }catch(_){}
-        rephraseBtn.disabled = false;
-      });
-    }
-    const saveBtn = $("btnDescSave");
-    if(saveBtn){
-      saveBtn.addEventListener("click", () => {
-        if(descMenu) descMenu.style.display = "none";
-        const introEl = $("descIntro");
-        if(introEl){
-          setDescRecord(state.current, { intro: introEl.value });
-        }
-        downloadDescJson();
-      });
-    }
     function setupTabs(){
       const tabs = document.querySelectorAll("#previewTabs .tabBtn");
       const panels = document.querySelectorAll(".tabPanel");
@@ -1674,9 +1290,6 @@
 
     setupTabs();
     loadIndex();
-    if(!getApiConfig()){
-      setTimeout(openPreferencesDialog, 150);
-    }
   </script>
   </body>
 </html>
