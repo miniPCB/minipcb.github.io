@@ -451,6 +451,32 @@
       font: inherit;
     }
 
+    .contextMenu{
+      position: fixed;
+      display: none;
+      z-index: 60;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      min-width: 160px;
+      overflow: hidden;
+    }
+
+    .contextMenu button{
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    .contextMenu button:hover{
+      background: rgba(102,163,255,0.15);
+    }
+
     @media (max-width: 980px){
       .layout{ grid-template-columns: 1fr; }
       aside{ order:2; }
@@ -542,6 +568,9 @@
       </div>
     </div>
   </div>
+  <div class="contextMenu" id="descContextMenu">
+    <button id="btnDescAiRephrase" type="button">AI rephrase</button>
+  </div>
 
     <script src="schematics-data.js"></script>
 <script>
@@ -553,7 +582,8 @@
       currentFetch: null,
       mdIndex: [],
       currentMarkdownText: "",
-      descriptionStatus: ""
+      descriptionStatus: "",
+      descData: {}
     };
 
     const $ = (id) => document.getElementById(id);
@@ -790,6 +820,90 @@
       };
     }
 
+    function loadDescData(){
+      try{
+        const raw = localStorage.getItem("circuit_descriptions");
+        state.descData = raw ? JSON.parse(raw) : {};
+      }catch(_){
+        state.descData = {};
+      }
+    }
+
+    function saveDescData(){
+      localStorage.setItem("circuit_descriptions", JSON.stringify(state.descData || {}));
+    }
+
+    function getDescKey(entry){
+      const pn = entry?.pn || "unknown";
+      const rev = entry?.rev || "";
+      return rev ? `${pn}__${rev}` : pn;
+    }
+
+    function getDescRecord(entry){
+      const key = getDescKey(entry);
+      return state.descData[key] || { intro: "", maturity: "M0", updated: "" };
+    }
+
+    function setDescRecord(entry, next){
+      const key = getDescKey(entry);
+      state.descData[key] = { ...getDescRecord(entry), ...next, updated: new Date().toISOString() };
+      saveDescData();
+    }
+
+    function downloadDescJson(){
+      const blob = new Blob([JSON.stringify(state.descData || {}, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "circuit_descriptions.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function promptImportDescJson(){
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "application/json";
+      input.addEventListener("change", async () => {
+        const file = input.files && input.files[0];
+        if(!file) return;
+        try{
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          state.descData = parsed || {};
+          saveDescData();
+          renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
+        }catch(_){}
+      });
+      input.click();
+    }
+
+    async function aiRephraseIntro(entry, mdText, current){
+      const api = getApiConfig();
+      if(!api) throw new Error("API Base URL is not set.");
+      const prompt = `Rephrase the following circuit description into 3-5 concise sentences. Include function, performance characteristics (if available), and ideal applications.\\n\\n${current || mdText || ""}`;
+      const payload = {
+        model: api.model,
+        input: [
+          { role: "system", content: [{ type: "input_text", text: "Return plain text only. 3-5 sentences." }] },
+          { role: "user", content: [{ type: "input_text", text: prompt }] }
+        ]
+      };
+      const headers = { "Content-Type": "application/json" };
+      if(api.proxyKey) headers["X-Proxy-Key"] = api.proxyKey;
+      const resp = await fetch(api.chatUrl, { method: "POST", headers, body: JSON.stringify(payload) });
+      if(!resp.ok){
+        const txt = await resp.text();
+        throw new Error(`AI request failed (${resp.status}): ${txt.slice(0, 120)}`);
+      }
+      const data = await resp.json();
+      const text = extractResponseText(data);
+      if(!text) throw new Error("AI returned empty response.");
+      return text.trim();
+    }
+
     function openPreferencesDialog(){
       const modal = $("prefsModal");
       if(!modal) return;
@@ -919,7 +1033,7 @@
       return parsed;
     }
 
-    function generateDescriptionMarkdown(entry, mdText, aiData){
+    function generateDescriptionMarkdown(entry, mdText, aiData, introOverride){
       const pn = entry?.pn || "Unknown PN";
       const rows = extractPartlistRows(mdText);
       const aiMap = new Map(
@@ -929,7 +1043,8 @@
       const lines = [];
       lines.push(`# ${pn} Circuit Description`);
       lines.push("");
-      lines.push((aiData?.summary || "This AI-generated overview summarizes likely circuit intent, component roles, and practical value-selection tradeoffs."));
+      const intro = (introOverride || "").trim() || (aiData?.summary || "This AI-generated overview summarizes likely circuit intent, component roles, and practical value-selection tradeoffs.");
+      lines.push(intro);
       lines.push("");
       if(!rows.length){
         lines.push("No partlist table was found in this markdown, so a component-level description could not be generated.");
@@ -992,12 +1107,32 @@
     function renderDescriptionTab(entry, mdText, aiData){
       const panel = document.querySelector('.tabPanel[data-panel="description"]');
       if(!panel) return;
-      const doc = generateDescriptionMarkdown(entry, mdText, aiData || null);
+      const rec = getDescRecord(entry);
+      const doc = generateDescriptionMarkdown(entry, mdText, aiData || null, rec.intro || "");
       const status = state.descriptionStatus ? `<span class="pill">${escapeHtml(state.descriptionStatus)}</span>` : "";
       panel.innerHTML = `
         <div class="toolbarRow" style="margin-bottom:10px;">
           <button class="btn" id="btnGenerateDescriptionAi">Generate AI Description</button>
+          <button class="btn" id="btnExportDescJson">Export JSON</button>
+          <button class="btn" id="btnImportDescJson">Import JSON</button>
           ${status}
+        </div>
+        <div style="margin-bottom:12px;">
+          <div class="label">AI Maturity</div>
+          <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+            <span class="pill">${escapeHtml(rec.maturity || "M0")}</span>
+            <select class="select" id="descMaturity">
+              <option value="M0">M0</option>
+              <option value="M1">M1</option>
+              <option value="M2">M2</option>
+              <option value="M3">M3</option>
+              <option value="M4">M4</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div class="label">Circuit Description (3-5 sentences)</div>
+          <textarea class="input" id="descIntro" rows="5" spellcheck="true" placeholder="Describe circuit function, performance characteristics, and ideal applications.">${escapeHtml(rec.intro || "")}</textarea>
         </div>
         <div class="md">${markdownToHtml(doc)}</div>`;
       const btn = panel.querySelector("#btnGenerateDescriptionAi");
@@ -1025,6 +1160,33 @@
           }
         });
       }
+      const introEl = panel.querySelector("#descIntro");
+      if(introEl){
+        introEl.addEventListener("input", () => {
+          setDescRecord(state.current, { intro: introEl.value });
+        });
+        introEl.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          const menu = $("descContextMenu");
+          if(!menu) return;
+          menu.style.display = "block";
+          menu.style.left = `${e.clientX}px`;
+          menu.style.top = `${e.clientY}px`;
+          menu.setAttribute("data-field", "descIntro");
+        });
+      }
+      const maturityEl = panel.querySelector("#descMaturity");
+      if(maturityEl){
+        maturityEl.value = rec.maturity || "M0";
+        maturityEl.addEventListener("change", () => {
+          setDescRecord(state.current, { maturity: maturityEl.value });
+          renderDescriptionTab(state.current, state.currentMarkdownText || "", aiData || null);
+        });
+      }
+      const exportBtn = panel.querySelector("#btnExportDescJson");
+      if(exportBtn) exportBtn.addEventListener("click", downloadDescJson);
+      const importBtn = panel.querySelector("#btnImportDescJson");
+      if(importBtn) importBtn.addEventListener("click", promptImportDescJson);
     }
 
     function renderImages(entry){
@@ -1469,6 +1631,30 @@
     if(prefsModal){
       prefsModal.addEventListener("click", (e) => {
         if(e.target === prefsModal) closePreferencesDialog();
+      });
+    }
+    loadDescData();
+    const descMenu = $("descContextMenu");
+    document.addEventListener("click", (e) => {
+      if(descMenu && e.target !== descMenu) descMenu.style.display = "none";
+    });
+    const rephraseBtn = $("btnDescAiRephrase");
+    if(rephraseBtn){
+      rephraseBtn.addEventListener("click", async () => {
+        if(descMenu) descMenu.style.display = "none";
+        const introEl = $("descIntro");
+        if(!introEl) return;
+        if(!getApiConfig()){
+          openPreferencesDialog();
+          return;
+        }
+        try{
+          rephraseBtn.disabled = true;
+          const text = await aiRephraseIntro(state.current, state.currentMarkdownText || "", introEl.value);
+          introEl.value = text;
+          setDescRecord(state.current, { intro: text });
+        }catch(_){}
+        rephraseBtn.disabled = false;
       });
     }
     function setupTabs(){
