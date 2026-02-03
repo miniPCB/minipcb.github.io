@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Website Editor</title>
+  <style>
+    :root{
+      --bg: #0f141b;
+      --bg-soft: #141b24;
+      --panel: #1b2430;
+      --panel-2: #202b3a;
+      --text: #e6edf3;
+      --muted: #a6b4c3;
+      --accent: #7bdcb5;
+      --accent-2: #66a3ff;
+      --danger: #ff7b7b;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 20px 60px rgba(0,0,0,0.35);
+      --radius: 14px;
+      --mono: "Cascadia Mono", "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+      --sans: "Space Grotesk", "Trebuchet MS", "Segoe UI", sans-serif;
+    }
+
+    *{ box-sizing:border-box; }
+    html, body{ height:100%; }
+    body{
+      margin:0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 15% -10%, rgba(102,163,255,0.25), transparent 60%),
+        radial-gradient(1000px 600px at 90% 10%, rgba(123,220,181,0.2), transparent 65%),
+        var(--bg);
+    }
+
+    .app{
+      height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
+
+    header{
+      padding:22px 28px 16px;
+      border-bottom:1px solid var(--border);
+      backdrop-filter: blur(8px);
+      background: rgba(15,20,27,0.75);
+      position: sticky;
+      top:0;
+      z-index:10;
+    }
+
+    .title{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      font-size:22px;
+      font-weight:600;
+      letter-spacing:0.4px;
+    }
+
+    .title .badge{
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:1px;
+      padding:4px 8px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .layout{
+      flex:1;
+      display:grid;
+      grid-template-columns: 320px 1fr;
+      gap:18px;
+      padding:18px 22px 26px;
+      min-height:0;
+      overflow:hidden;
+    }
+
+    aside{
+      background: var(--panel);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      overflow:hidden;
+    }
+
+    .sidebar-head{
+      padding:16px 16px 12px;
+      border-bottom:1px solid var(--border);
+    }
+
+    .sidebar-head .label{
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:0.9px;
+      color: var(--muted);
+      margin-bottom:8px;
+    }
+
+    .search{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      background: var(--panel-2);
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:8px 10px;
+    }
+
+    .search input{
+      background: transparent;
+      border: none;
+      color: var(--text);
+      width:100%;
+      font-size:14px;
+      outline:none;
+    }
+
+    .meta-row{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:10px;
+      color: var(--muted);
+      font-size:12px;
+    }
+
+    .pill{
+      padding:3px 8px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .file-list{
+      overflow:auto;
+      padding:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      flex:1;
+      min-height:0;
+    }
+
+    .file-item{
+      border:1px solid transparent;
+      border-radius:12px;
+      padding:10px 12px;
+      background: rgba(255,255,255,0.02);
+      cursor:pointer;
+      transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+    }
+
+    .file-item:hover{
+      border-color: rgba(123,220,181,0.4);
+      transform: translateY(-1px);
+      background: rgba(123,220,181,0.08);
+    }
+
+    .file-item.active{
+      border-color: rgba(102,163,255,0.8);
+      background: rgba(102,163,255,0.15);
+      box-shadow: inset 0 0 0 1px rgba(102,163,255,0.35);
+    }
+
+    .file-item .name{
+      font-weight:600;
+      font-size:14px;
+      word-break: break-word;
+    }
+
+    .file-item .sub{
+      margin-top:6px;
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      color: var(--muted);
+      font-size:11px;
+    }
+
+    main{
+      background: var(--panel);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      overflow:hidden;
+    }
+
+    .preview-head{
+      padding:18px 20px 12px;
+      border-bottom:1px solid var(--border);
+      background: rgba(32,43,58,0.5);
+    }
+
+    .preview-title{
+      font-size:18px;
+      font-weight:600;
+    }
+
+    .preview-meta{
+      margin-top:8px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      color: var(--muted);
+      font-size:12px;
+    }
+
+    .toolbar{
+      margin-top:12px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+    }
+
+    .btn{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding:6px 12px;
+      border-radius:10px;
+      font-size:12px;
+      letter-spacing:0.4px;
+      text-transform:uppercase;
+      cursor:pointer;
+      transition: all 0.12s ease;
+    }
+
+    .btn:hover{
+      border-color: rgba(102,163,255,0.6);
+      background: rgba(102,163,255,0.15);
+    }
+
+    .btn.secondary{
+      color: var(--muted);
+    }
+
+    .preview{
+      padding:18px 20px 22px;
+      overflow:auto;
+      min-height:0;
+      flex:1;
+    }
+
+    .editor-grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr;
+      gap:14px;
+      min-height:0;
+    }
+
+    .panel-card{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,0.03);
+      padding:12px;
+      min-height:0;
+    }
+
+    .panel-card.form{
+      grid-column: 1 / -1;
+    }
+
+    .panel-title{
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:0.8px;
+      color: var(--muted);
+      margin-bottom:10px;
+    }
+
+    .form-grid{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap:10px;
+    }
+
+    label{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      font-size:12px;
+      color: var(--muted);
+    }
+
+    .input, textarea{
+      width: 100%;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+    }
+
+    textarea{
+      font-family: var(--mono);
+      font-size:12px;
+      min-height:300px;
+      resize: vertical;
+    }
+
+    .panel-actions{
+      margin-top:10px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+
+    .status{
+      padding:8px 12px;
+      border-radius:999px;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:0.8px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+
+    .status.ok{ background: rgba(123,220,181,0.12); color: var(--accent); border:1px solid rgba(123,220,181,0.35); }
+    .status.warn{ background: rgba(255,205,123,0.12); color: #ffd27b; border:1px solid rgba(255,205,123,0.35); }
+    .status.err{ background: rgba(255,123,123,0.12); color: var(--danger); border:1px solid rgba(255,123,123,0.35); }
+
+    .viewer-frame{
+      width:100%;
+      height:100%;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background: #0b1118;
+    }
+
+    .empty{
+      color: var(--muted);
+      font-size:14px;
+      padding:18px;
+      border:1px dashed var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    @media (max-width: 1100px){
+      .editor-grid{ grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 980px){
+      .layout{ grid-template-columns: 1fr; }
+      aside{ order:2; }
+      main{ order:1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title">
+        Website Editor
+        <span class="badge">Form + HTML</span>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside>
+        <div class="sidebar-head">
+          <div class="label">HTML Files</div>
+          <div class="search">
+            <input id="searchInput" type="search" placeholder="Filter by filename or title..." />
+          </div>
+          <div class="meta-row">
+            <span class="pill" id="fileCount">Loading...</span>
+            <span class="pill" id="dataStatus">Index: pending</span>
+          </div>
+        </div>
+        <div class="file-list" id="fileList"></div>
+      </aside>
+
+      <main>
+        <div class="preview-head">
+          <div class="preview-title" id="previewTitle">Select an HTML file</div>
+          <div class="preview-meta" id="previewMeta"></div>
+          <div class="toolbar">
+            <a class="btn secondary" id="openLink" href="#" target="_blank" rel="noopener">Open</a>
+            <button class="btn" id="reloadBtn" type="button">Reload Source</button>
+            <button class="btn" id="revertBtn" type="button">Revert Draft</button>
+            <button class="btn" id="downloadBtn" type="button">Download HTML</button>
+            <span class="status ok" id="editStatus">Idle</span>
+          </div>
+        </div>
+        <div class="preview">
+          <div class="editor-grid" id="editorGrid">
+            <section class="panel-card form">
+              <div class="panel-title">Form Editor</div>
+              <div class="form-grid">
+                <label>
+                  Title
+                  <input class="input" id="formTitle" type="text" placeholder="Page title" />
+                </label>
+                <label>
+                  Meta Description
+                  <input class="input" id="formDescription" type="text" placeholder="Meta description content" />
+                </label>
+                <label>
+                  First H1
+                  <input class="input" id="formH1" type="text" placeholder="First H1 text" />
+                </label>
+              </div>
+              <div class="panel-actions">
+                <button class="btn" id="applyFormBtn" type="button">Apply Form to HTML</button>
+                <button class="btn secondary" id="syncFormBtn" type="button">Sync Form from HTML</button>
+              </div>
+            </section>
+
+            <section class="panel-card" id="editorPanel">
+              <div class="panel-title">HTML Source</div>
+              <textarea id="editorArea" placeholder="Select a file to load HTML..."></textarea>
+            </section>
+
+            <section class="panel-card" id="viewerPanel">
+              <div class="panel-title">Live Preview</div>
+              <iframe id="previewFrame" class="viewer-frame" title="HTML preview"></iframe>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="site_index.js"></script>
+  <script>
+    const LOCAL_PREFIX = "websiteEditorDraft::";
+    const PREVIEW_DELAY = 500;
+    const SAVE_DELAY = 600;
+
+    const state = {
+      entries: [],
+      filtered: [],
+      current: null,
+      originalText: "",
+      editorText: "",
+      previewTimer: null,
+      saveTimer: null
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function escapeHtml(str){
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setStatus(kind, message){
+      const el = $("editStatus");
+      el.textContent = message;
+      el.className = "status " + kind;
+    }
+
+    function setDataStatus(ok, message){
+      const el = $("dataStatus");
+      el.textContent = message;
+      el.className = ok ? "pill status ok" : "pill status err";
+    }
+
+    function loadDraft(path){
+      return localStorage.getItem(LOCAL_PREFIX + path);
+    }
+
+    function saveDraft(path, text){
+      localStorage.setItem(LOCAL_PREFIX + path, text);
+    }
+
+    function clearDraft(path){
+      localStorage.removeItem(LOCAL_PREFIX + path);
+    }
+
+    function listFromIndex(){
+      const src = Array.isArray(window.siteIndex) ? window.siteIndex : [];
+      const map = new Map();
+      src.forEach(entry => {
+        if(!entry || typeof entry.url !== "string") return;
+        const url = entry.url.replace(/^\.\//, "");
+        if(!url.toLowerCase().endsWith(".html")) return;
+        if(!map.has(url)){
+          map.set(url, {
+            url,
+            title: entry.title || url
+          });
+        }
+      });
+      if(!map.has("website_editor.html")){
+        map.set("website_editor.html", { url: "website_editor.html", title: "Website Editor" });
+      }
+      return Array.from(map.values()).sort((a, b) => a.url.localeCompare(b.url));
+    }
+
+    function renderList(){
+      const list = $("fileList");
+      list.innerHTML = "";
+      if(!state.filtered.length){
+        list.innerHTML = '<div class="empty">No files match the filter.</div>';
+        return;
+      }
+
+      state.filtered.forEach(entry => {
+        const item = document.createElement("div");
+        item.className = "file-item" + (state.current && state.current.url === entry.url ? " active" : "");
+        item.innerHTML = `
+          <div class="name">${escapeHtml(entry.title || entry.url)}</div>
+          <div class="sub">
+            <span class="pill">${escapeHtml(entry.url)}</span>
+          </div>
+        `;
+        item.addEventListener("click", () => selectEntry(entry));
+        list.appendChild(item);
+      });
+    }
+
+    function filterList(query){
+      const q = query.trim().toLowerCase();
+      if(!q){
+        state.filtered = state.entries.slice();
+      }else{
+        state.filtered = state.entries.filter(e => {
+          return [e.title, e.url].some(v => (v || "").toLowerCase().includes(q));
+        });
+      }
+      $("fileCount").textContent = `${state.filtered.length} files`;
+      renderList();
+    }
+
+    function updatePreviewMeta(entry){
+      const meta = $("previewMeta");
+      if(!entry){
+        meta.innerHTML = "";
+        return;
+      }
+      const parts = [
+        `<span class="pill">${escapeHtml(entry.url)}</span>`,
+        entry.title ? `<span class="pill">${escapeHtml(entry.title)}</span>` : ""
+      ].filter(Boolean);
+      meta.innerHTML = parts.join("");
+    }
+
+    function ensureBaseTag(html, baseHref){
+      if(/<base\s/i.test(html)) return html;
+      const baseTag = `<base href="${baseHref}">`;
+      if(/<head[^>]*>/i.test(html)){
+        return html.replace(/<head[^>]*>/i, (match) => `${match}\n  ${baseTag}`);
+      }
+      return baseTag + "\n" + html;
+    }
+
+    function schedulePreview(html, baseUrl){
+      if(state.previewTimer) clearTimeout(state.previewTimer);
+      state.previewTimer = setTimeout(() => {
+        const frame = $("previewFrame");
+        const patched = ensureBaseTag(html, baseUrl);
+        frame.srcdoc = patched;
+      }, PREVIEW_DELAY);
+    }
+
+    function applyFormToHtml(html, formData){
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      if(formData.title){
+        doc.title = formData.title;
+      }
+      if(formData.description !== null){
+        let meta = doc.querySelector('meta[name="description"]');
+        if(!meta){
+          meta = doc.createElement("meta");
+          meta.setAttribute("name", "description");
+          doc.head.appendChild(meta);
+        }
+        meta.setAttribute("content", formData.description);
+      }
+      if(formData.h1 !== null){
+        let h1 = doc.querySelector("h1");
+        if(!h1){
+          h1 = doc.createElement("h1");
+          if(doc.body.firstChild){
+            doc.body.insertBefore(h1, doc.body.firstChild);
+          }else{
+            doc.body.appendChild(h1);
+          }
+        }
+        h1.textContent = formData.h1;
+      }
+      const doctypeMatch = html.match(/<!doctype[^>]*>/i);
+      const doctype = doctypeMatch ? doctypeMatch[0] : "<!doctype html>";
+      return `${doctype}\n${doc.documentElement.outerHTML}`;
+    }
+
+    function extractFormFromHtml(html){
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const meta = doc.querySelector('meta[name="description"]');
+      return {
+        title: doc.title || "",
+        description: meta ? meta.getAttribute("content") || "" : "",
+        h1: (doc.querySelector("h1") || {}).textContent || ""
+      };
+    }
+
+    function syncFormInputs(html){
+      const data = extractFormFromHtml(html);
+      $("formTitle").value = data.title;
+      $("formDescription").value = data.description;
+      $("formH1").value = data.h1;
+    }
+
+    function updateModifiedState(){
+      const current = state.current?.url;
+      if(!current){
+        setStatus("ok", "Idle");
+        return;
+      }
+      const draft = loadDraft(current);
+      if(state.editorText !== state.originalText){
+        setStatus(draft ? "warn" : "warn", draft ? "Draft saved" : "Modified");
+      }else{
+        setStatus("ok", "Clean");
+      }
+    }
+
+    async function fetchFile(entry){
+      const url = entry.url + "?v=" + Date.now();
+      const res = await fetch(url, { cache: "no-store" });
+      if(!res.ok){
+        throw new Error(`Failed to load ${entry.url} (${res.status})`);
+      }
+      return res.text();
+    }
+
+    async function selectEntry(entry){
+      try{
+        state.current = entry;
+        $("previewTitle").textContent = entry.title || entry.url;
+        updatePreviewMeta(entry);
+        $("openLink").href = entry.url;
+        setStatus("ok", "Loading...");
+        const text = await fetchFile(entry);
+        state.originalText = text;
+        const draft = loadDraft(entry.url);
+        state.editorText = draft && draft !== text ? draft : text;
+        $("editorArea").value = state.editorText;
+        syncFormInputs(state.editorText);
+        const baseUrl = new URL(entry.url, location.href).href;
+        schedulePreview(state.editorText, baseUrl);
+        updateModifiedState();
+        renderList();
+      }catch(err){
+        setStatus("err", err?.message || "Load error");
+      }
+    }
+
+    function downloadCurrent(){
+      if(!state.current) return;
+      const blob = new Blob([state.editorText], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = state.current.url.split("/").pop() || "page.html";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function setupEditor(){
+      $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
+      $("reloadBtn").addEventListener("click", () => state.current && selectEntry(state.current));
+      $("revertBtn").addEventListener("click", () => {
+        if(!state.current) return;
+        clearDraft(state.current.url);
+        state.editorText = state.originalText;
+        $("editorArea").value = state.editorText;
+        syncFormInputs(state.editorText);
+        const baseUrl = new URL(state.current.url, location.href).href;
+        schedulePreview(state.editorText, baseUrl);
+        updateModifiedState();
+      });
+      $("downloadBtn").addEventListener("click", downloadCurrent);
+
+      $("editorArea").addEventListener("input", (e) => {
+        state.editorText = e.target.value;
+        updateModifiedState();
+        if(state.current){
+          const baseUrl = new URL(state.current.url, location.href).href;
+          schedulePreview(state.editorText, baseUrl);
+          if(state.saveTimer) clearTimeout(state.saveTimer);
+          state.saveTimer = setTimeout(() => {
+            saveDraft(state.current.url, state.editorText);
+            updateModifiedState();
+          }, SAVE_DELAY);
+        }
+      });
+
+      $("applyFormBtn").addEventListener("click", () => {
+        if(!state.current) return;
+        const data = {
+          title: $("formTitle").value.trim(),
+          description: $("formDescription").value.trim(),
+          h1: $("formH1").value.trim()
+        };
+        const updated = applyFormToHtml(state.editorText, data);
+        state.editorText = updated;
+        $("editorArea").value = updated;
+        const baseUrl = new URL(state.current.url, location.href).href;
+        schedulePreview(state.editorText, baseUrl);
+        saveDraft(state.current.url, state.editorText);
+        updateModifiedState();
+      });
+
+      $("syncFormBtn").addEventListener("click", () => {
+        if(!state.current) return;
+        syncFormInputs(state.editorText);
+      });
+    }
+
+    function init(){
+      try{
+        state.entries = listFromIndex();
+        state.filtered = state.entries.slice();
+        $("fileCount").textContent = `${state.filtered.length} files`;
+        setDataStatus(true, "Index: loaded");
+        renderList();
+      }catch(err){
+        setDataStatus(false, "Index: missing");
+      }
+    }
+
+    setupEditor();
+    init();
+  </script>
+</body>
+</html>
