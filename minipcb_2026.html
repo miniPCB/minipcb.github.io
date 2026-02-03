@@ -596,7 +596,6 @@
       currentFetch: null,
       mdIndex: [],
       currentMarkdownText: "",
-      descriptionStatus: "",
       descData: {}
     };
 
@@ -897,7 +896,7 @@
     async function aiRephraseIntro(entry, mdText, current){
       const api = getApiConfig();
       if(!api) throw new Error("API Base URL is not set.");
-      const prompt = `Rephrase the following circuit description into 3-5 concise sentences. Include function, performance characteristics (if available), and ideal applications.\\n\\n${current || mdText || ""}`;
+      const prompt = `Rephrase and improve the following circuit description into 3-5 concise sentences. Include function, performance characteristics (if available), and ideal applications. Be direct and technical.\n\n${current || mdText || ""}`;
       const payload = {
         model: api.model,
         input: [
@@ -1143,73 +1142,12 @@
       if(!panel) return;
       const rec = getDescRecord(entry);
       const doc = generateDescriptionMarkdown(entry, mdText, aiData || null, rec.intro || "");
-      const status = state.descriptionStatus ? `<span class="pill">${escapeHtml(state.descriptionStatus)}</span>` : "";
       panel.innerHTML = `
-        <div class="toolbarRow" style="margin-bottom:10px;">
-          <button class="btn" id="btnGenerateDescriptionAi">Generate AI Description</button>
-          <button class="btn" id="btnExportDescJson">Export JSON</button>
-          <button class="btn" id="btnImportDescJson">Import JSON</button>
-          ${status}
-        </div>
-        <div style="margin-bottom:12px;">
-          <div class="label">AI Maturity</div>
-          <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
-            <span class="pill">${escapeHtml(rec.maturity || "M0")}</span>
-            <select class="select" id="descMaturity">
-              <option value="M0">M0</option>
-              <option value="M1">M1</option>
-              <option value="M2">M2</option>
-              <option value="M3">M3</option>
-              <option value="M4">M4</option>
-            </select>
-          </div>
-        </div>
         <div style="margin-bottom:12px;">
           <div class="label">Circuit Description (3-5 sentences)</div>
           <textarea class="input" id="descIntro" rows="5" spellcheck="true" placeholder="Describe circuit function, performance characteristics, and ideal applications.">${escapeHtml(rec.intro || "")}</textarea>
         </div>
         <div class="md">${markdownToHtml(doc)}</div>`;
-      const btn = panel.querySelector("#btnGenerateDescriptionAi");
-      if(btn){
-        btn.addEventListener("click", async () => {
-          const targetPn = state.current?.pn || "";
-          if(!getApiConfig()){
-            state.descriptionStatus = "Set API preferences to enable AI.";
-            renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
-            openPreferencesDialog();
-            return;
-          }
-          btn.disabled = true;
-          state.descriptionStatus = "Generating...";
-          renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
-          openAiProgressDialog();
-          let count = 0;
-          const timer = setInterval(() => {
-            count += 1;
-            $("aiProgressCounter").textContent = String(count);
-            if(count % 3 === 0) appendAiProgressLog(`Step ${count}: still working...`);
-          }, 700);
-          try{
-            const ai = await generateAiDescriptionData(state.current, state.currentMarkdownText || "");
-            clearInterval(timer);
-            appendAiProgressLog("AI response received. Rendering...");
-            if((state.current?.pn || "") !== targetPn) return;
-            state.descriptionStatus = "AI description ready";
-            if(ai?.summary && (!getDescRecord(state.current).intro || getDescRecord(state.current).intro.trim().length < 5)){
-              setDescRecord(state.current, { intro: ai.summary });
-            }
-            renderDescriptionTab(state.current, state.currentMarkdownText || "", ai);
-            closeAiProgressDialog();
-          }catch(err){
-            clearInterval(timer);
-            appendAiProgressLog(`AI failed: ${err.message || err}`);
-            if((state.current?.pn || "") !== targetPn) return;
-            state.descriptionStatus = `AI failed: ${err.message || err}`;
-            renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
-            closeAiProgressDialog();
-          }
-        });
-      }
       const introEl = panel.querySelector("#descIntro");
       if(introEl){
         introEl.addEventListener("input", () => {
@@ -1225,18 +1163,6 @@
           menu.setAttribute("data-field", "descIntro");
         });
       }
-      const maturityEl = panel.querySelector("#descMaturity");
-      if(maturityEl){
-        maturityEl.value = rec.maturity || "M0";
-        maturityEl.addEventListener("change", () => {
-          setDescRecord(state.current, { maturity: maturityEl.value });
-          renderDescriptionTab(state.current, state.currentMarkdownText || "", aiData || null);
-        });
-      }
-      const exportBtn = panel.querySelector("#btnExportDescJson");
-      if(exportBtn) exportBtn.addEventListener("click", downloadDescJson);
-      const importBtn = panel.querySelector("#btnImportDescJson");
-      if(importBtn) importBtn.addEventListener("click", promptImportDescJson);
     }
 
     function renderImages(entry){
@@ -1535,13 +1461,12 @@
         path = await resolveMdPathForEntry(entry);
         const hashTarget = path || entry?.pn || entry?.filename || "";
         safeSetHashPath(hashTarget);
-        if(!path){
-          if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
-          state.currentMarkdownText = "";
-          state.descriptionStatus = "";
-          renderDescriptionTab(entry, "", null);
-          return;
-        }
+      if(!path){
+        if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
+        state.currentMarkdownText = "";
+        renderDescriptionTab(entry, "", null);
+        return;
+      }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
 
         if(state.currentFetch && typeof state.currentFetch.abort === "function"){
@@ -1571,7 +1496,6 @@
         const html = markdownToHtml(text);
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
         state.currentMarkdownText = text;
-        state.descriptionStatus = "";
         renderDescriptionTab(entry, text, null);
       }catch(err){
         const msg = err?.message || "Unknown error";
@@ -1579,13 +1503,11 @@
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
           state.currentMarkdownText = "";
-          state.descriptionStatus = "";
           renderDescriptionTab(entry, "", null);
           return;
         }
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         state.currentMarkdownText = "";
-        state.descriptionStatus = "";
         renderDescriptionTab(entry, "", null);
       }
 
