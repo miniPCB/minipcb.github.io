@@ -172,17 +172,9 @@
 
     .file-item .name{
       font-weight:600;
-      font-size:14px;
+      font-size:12px;
+      font-family: var(--mono);
       word-break: break-word;
-    }
-
-    .file-item .sub{
-      margin-top:6px;
-      display:flex;
-      gap:6px;
-      flex-wrap:wrap;
-      color: var(--muted);
-      font-size:11px;
     }
 
     main{
@@ -498,7 +490,7 @@
     </div>
   </div>
 
-  <script src="site_index.js"></script>
+  <script src="draft/html_index.js"></script>
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
     const LOCAL_PREFIX = "websiteEditorDraft::";
@@ -569,28 +561,19 @@
     }
 
     function listFromIndex(baseDir){
-      const src = Array.isArray(window.siteIndex) ? window.siteIndex : [];
-      const map = new Map();
-      src.forEach(entry => {
-        if(!entry || typeof entry.url !== "string") return;
-        const url = entry.url.replace(/^\.\//, "");
-        if(!url.toLowerCase().endsWith(".html")) return;
-        if(!map.has(url)){
-          map.set(url, {
-            url,
-            path: baseDir + url,
-            title: entry.title || url
-          });
-        }
-      });
-      if(!map.has("website_editor.html")){
-        map.set("website_editor.html", {
-          url: "website_editor.html",
-          path: baseDir + "website_editor.html",
-          title: "Website Editor"
-        });
-      }
-      return Array.from(map.values()).sort((a, b) => a.url.localeCompare(b.url));
+      const src = Array.isArray(window.DRAFT_HTML_INDEX) ? window.DRAFT_HTML_INDEX : [];
+      return src
+        .filter(path => typeof path === "string" && path.toLowerCase().endsWith(".html"))
+        .map(path => {
+          const rel = path.replace(/^\.\//, "");
+          return {
+            rel,
+            url: rel,
+            path: baseDir + rel,
+            title: rel
+          };
+        })
+        .sort((a, b) => a.rel.localeCompare(b.rel));
     }
 
     function renderList(){
@@ -604,12 +587,7 @@
       state.filtered.forEach(entry => {
         const item = document.createElement("div");
         item.className = "file-item" + (state.current && state.current.url === entry.url ? " active" : "");
-        item.innerHTML = `
-          <div class="name">${escapeHtml(entry.title || entry.url)}</div>
-          <div class="sub">
-            <span class="pill">${escapeHtml(entry.path)}</span>
-          </div>
-        `;
+        item.innerHTML = `<div class="name">${escapeHtml(entry.rel || entry.path)}</div>`;
         item.addEventListener("click", () => selectEntry(entry));
         list.appendChild(item);
       });
@@ -621,7 +599,7 @@
         state.filtered = state.entries.slice();
       }else{
         state.filtered = state.entries.filter(e => {
-          return [e.title, e.url].some(v => (v || "").toLowerCase().includes(q));
+          return (e.rel || "").toLowerCase().includes(q);
         });
       }
       $("fileCount").textContent = `${state.filtered.length} files`;
@@ -635,9 +613,8 @@
         return;
       }
       const parts = [
-        `<span class="pill">${escapeHtml(entry.path)}</span>`,
-        entry.title ? `<span class="pill">${escapeHtml(entry.title)}</span>` : ""
-      ].filter(Boolean);
+        `<span class="pill">${escapeHtml(entry.path)}</span>`
+      ];
       meta.innerHTML = parts.join("");
     }
 
@@ -710,7 +687,7 @@
     }
 
     function updateModifiedState(){
-      const current = state.current?.url;
+      const current = state.current?.path;
       if(!current){
         setStatus("ok", "Idle");
         return;
@@ -840,7 +817,7 @@
         state.entries = listFromIndex(state.baseDir);
         state.filtered = state.entries.slice();
         $("fileCount").textContent = `${state.filtered.length} files`;
-        setDataStatus(true, "Index: loaded");
+        setDataStatus(true, "Index: draft");
         renderList();
       }catch(err){
         setDataStatus(false, "Index: missing");
