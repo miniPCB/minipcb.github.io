@@ -351,6 +351,47 @@
       background: rgba(255,255,255,0.02);
     }
 
+    .modalBack{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+    }
+
+    .modalBack.open{
+      display:flex;
+    }
+
+    .modal{
+      width: min(520px, 96vw);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .modal h3{
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+
+    .modalGrid{
+      display: grid;
+      gap: 10px;
+    }
+
+    .modalActions{
+      margin-top: 14px;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
     @media (max-width: 1100px){
       .editor-grid{ grid-template-columns: 1fr; }
     }
@@ -395,6 +436,7 @@
             <button class="btn" id="reloadBtn" type="button">Reload Source</button>
             <button class="btn" id="revertBtn" type="button">Revert Draft</button>
             <button class="btn" id="downloadBtn" type="button">Download HTML</button>
+            <button class="btn secondary" id="prefsBtn" type="button">Preferences</button>
             <span class="status ok" id="editStatus">Idle</span>
           </div>
         </div>
@@ -437,8 +479,28 @@
     </div>
   </div>
 
+  <div class="modalBack" id="prefsModal">
+    <div class="modal">
+      <h3>Preferences</h3>
+      <div class="modalGrid">
+        <label>
+          Default directory
+          <input class="input" id="baseDirInput" type="text" placeholder="draft/" />
+        </label>
+        <div class="empty">
+          This path prefixes file loads and preview links. Default is <strong>draft/</strong>.
+        </div>
+      </div>
+      <div class="modalActions">
+        <button class="btn secondary" id="prefsCancel" type="button">Cancel</button>
+        <button class="btn" id="prefsSave" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="site_index.js"></script>
   <script>
+    const PREFS_KEY = "websiteEditorBaseDir";
     const LOCAL_PREFIX = "websiteEditorDraft::";
     const PREVIEW_DELAY = 500;
     const SAVE_DELAY = 600;
@@ -450,7 +512,8 @@
       originalText: "",
       editorText: "",
       previewTimer: null,
-      saveTimer: null
+      saveTimer: null,
+      baseDir: "draft/"
     };
 
     const $ = (id) => document.getElementById(id);
@@ -476,6 +539,23 @@
       el.className = ok ? "pill status ok" : "pill status err";
     }
 
+    function normalizeBaseDir(value){
+      const trimmed = String(value || "").trim();
+      if(!trimmed) return "";
+      return trimmed.endsWith("/") ? trimmed : trimmed + "/";
+    }
+
+    function getBaseDir(){
+      const stored = localStorage.getItem(PREFS_KEY);
+      return normalizeBaseDir(stored || state.baseDir);
+    }
+
+    function setBaseDir(next){
+      const normalized = normalizeBaseDir(next);
+      state.baseDir = normalized || "draft/";
+      localStorage.setItem(PREFS_KEY, state.baseDir);
+    }
+
     function loadDraft(path){
       return localStorage.getItem(LOCAL_PREFIX + path);
     }
@@ -488,7 +568,7 @@
       localStorage.removeItem(LOCAL_PREFIX + path);
     }
 
-    function listFromIndex(){
+    function listFromIndex(baseDir){
       const src = Array.isArray(window.siteIndex) ? window.siteIndex : [];
       const map = new Map();
       src.forEach(entry => {
@@ -498,12 +578,17 @@
         if(!map.has(url)){
           map.set(url, {
             url,
+            path: baseDir + url,
             title: entry.title || url
           });
         }
       });
       if(!map.has("website_editor.html")){
-        map.set("website_editor.html", { url: "website_editor.html", title: "Website Editor" });
+        map.set("website_editor.html", {
+          url: "website_editor.html",
+          path: baseDir + "website_editor.html",
+          title: "Website Editor"
+        });
       }
       return Array.from(map.values()).sort((a, b) => a.url.localeCompare(b.url));
     }
@@ -522,7 +607,7 @@
         item.innerHTML = `
           <div class="name">${escapeHtml(entry.title || entry.url)}</div>
           <div class="sub">
-            <span class="pill">${escapeHtml(entry.url)}</span>
+            <span class="pill">${escapeHtml(entry.path)}</span>
           </div>
         `;
         item.addEventListener("click", () => selectEntry(entry));
@@ -550,7 +635,7 @@
         return;
       }
       const parts = [
-        `<span class="pill">${escapeHtml(entry.url)}</span>`,
+        `<span class="pill">${escapeHtml(entry.path)}</span>`,
         entry.title ? `<span class="pill">${escapeHtml(entry.title)}</span>` : ""
       ].filter(Boolean);
       meta.innerHTML = parts.join("");
@@ -639,10 +724,10 @@
     }
 
     async function fetchFile(entry){
-      const url = entry.url + "?v=" + Date.now();
+      const url = entry.path + "?v=" + Date.now();
       const res = await fetch(url, { cache: "no-store" });
       if(!res.ok){
-        throw new Error(`Failed to load ${entry.url} (${res.status})`);
+        throw new Error(`Failed to load ${entry.path} (${res.status})`);
       }
       return res.text();
     }
@@ -652,15 +737,15 @@
         state.current = entry;
         $("previewTitle").textContent = entry.title || entry.url;
         updatePreviewMeta(entry);
-        $("openLink").href = entry.url;
+        $("openLink").href = entry.path;
         setStatus("ok", "Loading...");
         const text = await fetchFile(entry);
         state.originalText = text;
-        const draft = loadDraft(entry.url);
+        const draft = loadDraft(entry.path);
         state.editorText = draft && draft !== text ? draft : text;
         $("editorArea").value = state.editorText;
         syncFormInputs(state.editorText);
-        const baseUrl = new URL(entry.url, location.href).href;
+        const baseUrl = new URL(entry.path, location.href).href;
         schedulePreview(state.editorText, baseUrl);
         updateModifiedState();
         renderList();
@@ -687,11 +772,11 @@
       $("reloadBtn").addEventListener("click", () => state.current && selectEntry(state.current));
       $("revertBtn").addEventListener("click", () => {
         if(!state.current) return;
-        clearDraft(state.current.url);
+        clearDraft(state.current.path);
         state.editorText = state.originalText;
         $("editorArea").value = state.editorText;
         syncFormInputs(state.editorText);
-        const baseUrl = new URL(state.current.url, location.href).href;
+        const baseUrl = new URL(state.current.path, location.href).href;
         schedulePreview(state.editorText, baseUrl);
         updateModifiedState();
       });
@@ -701,11 +786,11 @@
         state.editorText = e.target.value;
         updateModifiedState();
         if(state.current){
-          const baseUrl = new URL(state.current.url, location.href).href;
+          const baseUrl = new URL(state.current.path, location.href).href;
           schedulePreview(state.editorText, baseUrl);
           if(state.saveTimer) clearTimeout(state.saveTimer);
           state.saveTimer = setTimeout(() => {
-            saveDraft(state.current.url, state.editorText);
+            saveDraft(state.current.path, state.editorText);
             updateModifiedState();
           }, SAVE_DELAY);
         }
@@ -721,9 +806,9 @@
         const updated = applyFormToHtml(state.editorText, data);
         state.editorText = updated;
         $("editorArea").value = updated;
-        const baseUrl = new URL(state.current.url, location.href).href;
+        const baseUrl = new URL(state.current.path, location.href).href;
         schedulePreview(state.editorText, baseUrl);
-        saveDraft(state.current.url, state.editorText);
+        saveDraft(state.current.path, state.editorText);
         updateModifiedState();
       });
 
@@ -731,11 +816,28 @@
         if(!state.current) return;
         syncFormInputs(state.editorText);
       });
+
+      $("prefsBtn").addEventListener("click", () => {
+        $("baseDirInput").value = state.baseDir || "draft/";
+        $("prefsModal").classList.add("open");
+      });
+
+      $("prefsCancel").addEventListener("click", () => {
+        $("prefsModal").classList.remove("open");
+      });
+
+      $("prefsSave").addEventListener("click", () => {
+        const next = $("baseDirInput").value;
+        setBaseDir(next);
+        $("prefsModal").classList.remove("open");
+        init();
+      });
     }
 
     function init(){
       try{
-        state.entries = listFromIndex();
+        state.baseDir = getBaseDir();
+        state.entries = listFromIndex(state.baseDir);
         state.filtered = state.entries.slice();
         $("fileCount").textContent = `${state.filtered.length} files`;
         setDataStatus(true, "Index: loaded");
