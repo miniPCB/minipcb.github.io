@@ -540,9 +540,9 @@ const keywords = [
     "slogan": "A versatile comparator design with adjustable hysteresis for noise immunity."
   },
   {
-    "keyword": "08H-03 | Voltate Level Detector",
+    "keyword": "08H-03 | Voltage Level Detector",
     "url": "08H/08H-03.html",
-    "meta": "Voltate Level Detector, 08H-03, Details, Schematic, Board Layout, miniPCB, Comparator Design, Adjustable Hysteresis, Noise Immunity, Electronic Components, Voltage Detection, Circuit Design, Electrical Schematics, PCB Layout, Voltage Comparator, Electronic Schematics, Electronic Board Design, Circuit Board, Electrical Noise Immunity, Voltage Level.",
+    "meta": "Voltage Level Detector, 08H-03, Details, Schematic, Board Layout, miniPCB, Comparator Design, Adjustable Hysteresis, Noise Immunity, Electronic Components, Voltage Detection, Circuit Design, Electrical Schematics, PCB Layout, Voltage Comparator, Electronic Schematics, Electronic Board Design, Circuit Board, Electrical Noise Immunity, Voltage Level.",
     "slogan": "A versatile comparator design with adjustable hysteresis for noise immunity."
   },
   {

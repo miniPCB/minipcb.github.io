@@ -455,9 +455,9 @@ const siteIndex = [
     "keywords": "Non-Inverting Comparator, Hysteresis, 08H-02, Details, Simulation, Schematic, Board Layout, Downloads, MiniPCB, Comparator Design, Adjustable Hysteresis, Noise Immunity, Electronic Components, Circuit Design, Circuit Simulation, Digital Electronics, Analog Electronics, Electrical Engineering, Comparator Circuit, Circuit Board Layout."
   },
   {
-    "title": "08H-03 | Voltate Level Detector",
+    "title": "08H-03 | Voltage Level Detector",
     "url": "08H/08H-03.html",
-    "keywords": "Voltate Level Detector, 08H-03, Details, Schematic, Board Layout, miniPCB, Comparator Design, Adjustable Hysteresis, Noise Immunity, Electronic Components, Voltage Detection, Circuit Design, Electrical Schematics, PCB Layout, Voltage Comparator, Electronic Schematics, Electronic Board Design, Circuit Board, Electrical Noise Immunity, Voltage Level."
+    "keywords": "Voltage Level Detector, 08H-03, Details, Schematic, Board Layout, miniPCB, Comparator Design, Adjustable Hysteresis, Noise Immunity, Electronic Components, Voltage Detection, Circuit Design, Electrical Schematics, PCB Layout, Voltage Comparator, Electronic Schematics, Electronic Board Design, Circuit Board, Electrical Noise Immunity, Voltage Level."
   },
   {
     "title": "08H-04 | Window Comparator",

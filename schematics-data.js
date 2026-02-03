@@ -71,7 +71,7 @@ window.SCHEMATICS = [
   { title: '08G-01 | Single to Differential Signal Converter', href: '08G/08G-01.html' },
   { title: '08H-01 | Inverting Comparator with Hysteresis', href: '08H/08H-01.html' },
   { title: '08H-02 | Non-Inverting Comparator with Hysteresis', href: '08H/08H-02.html' },
-  { title: '08H-03 | Voltate Level Detector', href: '08H/08H-03.html' },
+  { title: '08H-03 | Voltage Level Detector', href: '08H/08H-03.html' },
   { title: '08H-04 | Window Comparator', href: '08H/08H-04.html' },
   { title: '08H-05 | Zero Crossing Detector', href: '08H/08H-05.html' },
   { title: '08H-06 | Discrete Comparator', href: '08H/08H-06.html' },
