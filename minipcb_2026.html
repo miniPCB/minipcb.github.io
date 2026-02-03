@@ -568,6 +568,20 @@
       </div>
     </div>
   </div>
+  <div class="modalBack" id="aiProgressModal">
+    <div class="modal">
+      <h3>Generating Description</h3>
+      <div class="modalGrid">
+        <div class="label">Progress</div>
+        <div class="input" id="aiProgressCounter">0</div>
+        <div class="label">Log</div>
+        <div class="input" id="aiProgressLog" style="height:140px; overflow:auto; white-space:pre-wrap;"></div>
+      </div>
+      <div class="modalActions">
+        <button class="btn" id="btnCloseAiProgress" type="button">Hide</button>
+      </div>
+    </div>
+  </div>
   <div class="contextMenu" id="descContextMenu">
     <button id="btnDescAiRephrase" type="button">AI rephrase</button>
   </div>
@@ -928,6 +942,26 @@
       closePreferencesDialog();
     }
 
+    function openAiProgressDialog(){
+      const modal = $("aiProgressModal");
+      if(!modal) return;
+      $("aiProgressCounter").textContent = "0";
+      $("aiProgressLog").textContent = "Starting AI request...";
+      modal.style.display = "flex";
+    }
+
+    function closeAiProgressDialog(){
+      const modal = $("aiProgressModal");
+      if(modal) modal.style.display = "none";
+    }
+
+    function appendAiProgressLog(msg){
+      const log = $("aiProgressLog");
+      if(!log) return;
+      log.textContent = `${log.textContent}\n${msg}`.trim();
+      log.scrollTop = log.scrollHeight;
+    }
+
     function extractResponseText(resp){
       if(!resp || typeof resp !== "object") return "";
       if(typeof resp.output_text === "string" && resp.output_text.trim()) return resp.output_text.trim();
@@ -1148,15 +1182,31 @@
           btn.disabled = true;
           state.descriptionStatus = "Generating...";
           renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
+          openAiProgressDialog();
+          let count = 0;
+          const timer = setInterval(() => {
+            count += 1;
+            $("aiProgressCounter").textContent = String(count);
+            if(count % 3 === 0) appendAiProgressLog(`Step ${count}: still working...`);
+          }, 700);
           try{
             const ai = await generateAiDescriptionData(state.current, state.currentMarkdownText || "");
+            clearInterval(timer);
+            appendAiProgressLog("AI response received. Rendering...");
             if((state.current?.pn || "") !== targetPn) return;
             state.descriptionStatus = "AI description ready";
+            if(ai?.summary && (!getDescRecord(state.current).intro || getDescRecord(state.current).intro.trim().length < 5)){
+              setDescRecord(state.current, { intro: ai.summary });
+            }
             renderDescriptionTab(state.current, state.currentMarkdownText || "", ai);
+            closeAiProgressDialog();
           }catch(err){
+            clearInterval(timer);
+            appendAiProgressLog(`AI failed: ${err.message || err}`);
             if((state.current?.pn || "") !== targetPn) return;
             state.descriptionStatus = `AI failed: ${err.message || err}`;
             renderDescriptionTab(state.current, state.currentMarkdownText || "", null);
+            closeAiProgressDialog();
           }
         });
       }
@@ -1633,6 +1683,14 @@
         if(e.target === prefsModal) closePreferencesDialog();
       });
     }
+    const aiProgressModal = $("aiProgressModal");
+    if(aiProgressModal){
+      aiProgressModal.addEventListener("click", (e) => {
+        if(e.target === aiProgressModal) closeAiProgressDialog();
+      });
+    }
+    const closeAiBtn = $("btnCloseAiProgress");
+    if(closeAiBtn) closeAiBtn.addEventListener("click", closeAiProgressDialog);
     loadDescData();
     const descMenu = $("descContextMenu");
     document.addEventListener("click", (e) => {
