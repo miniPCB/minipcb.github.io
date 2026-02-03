@@ -300,6 +300,30 @@
       color: var(--muted);
     }
 
+    .badge-row{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .badge-pill{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:0.6px;
+      padding:3px 8px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .help{
+      font-size:11px;
+      color: var(--muted);
+      line-height:1.4;
+    }
+
     label{
       display:flex;
       flex-direction:column;
@@ -596,103 +620,179 @@
       meta.innerHTML = parts.join("");
     }
 
-    function applyFormToHtml(html, formData){
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      doc.title = formData.meta.title || doc.title || "";
+    function generateBoardHtml(formData){
+      const nav = formData.nav.map(item => `  <li><a href="${escapeHtml(item.href)}">${escapeHtml(item.text)}</a></li>`).join("\n");
+      const tabs = formData.sections.filter(section => section.tabLabel);
+      const firstTabId = tabs.length ? tabs[0].id : (formData.sections[0] ? formData.sections[0].id : "");
+      const tabButtons = tabs.map(section => {
+        const active = section.id === firstTabId ? " active" : "";
+        const selected = section.id === firstTabId ? "true" : "false";
+        return `  <button aria-controls="${escapeHtml(section.id)}" aria-selected="${selected}" class="tab${active}" data-tab="${escapeHtml(section.id)}" role="tab" type="button">${escapeHtml(section.tabLabel)}</button>`;
+      }).join("\n");
 
-      const metaDesc = doc.querySelector('meta[name="description"]') || doc.createElement("meta");
-      metaDesc.setAttribute("name", "description");
-      metaDesc.setAttribute("content", formData.meta.description || "");
-      doc.head.appendChild(metaDesc);
+      const sectionsHtml = formData.sections.map(section => {
+        const active = section.id === firstTabId ? " active" : "";
+        const hiddenAttr = section.hidden ? ' data-hidden="true"' : "";
+        if(section.type === "details"){
+          const rows = (section.rows || [])
+            .map(row => `<p><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}</p>`)
+            .join("\n");
+          return `<div aria-hidden="${section.id === firstTabId ? "false" : "true"}" class="tab-content${active}"${hiddenAttr} id="${escapeHtml(section.id)}">\n<h2>${escapeHtml(section.title)}</h2>\n${rows}\n</div>`;
+        }
+        if(section.type === "images"){
+          const images = (section.images || []).map(img => {
+            const full = img.full ? ` data-full="${escapeHtml(img.full)}"` : "";
+            return `<img alt="${escapeHtml(img.alt)}" class="zoomable" loading="lazy" src="${escapeHtml(img.src)}"${full} onclick="openLightbox(this)"/>`;
+          }).join("\n");
+          return `<div aria-hidden="${section.id === firstTabId ? "false" : "true"}" class="tab-content${active}"${hiddenAttr} id="${escapeHtml(section.id)}">\n<h2>${escapeHtml(section.title)}</h2>\n<div class="lightbox-container">\n${images}\n</div>\n</div>`;
+        }
+        if(section.type === "downloads"){
+          const items = (section.items || []).map(item => {
+            return `  <li><a href="${escapeHtml(item.href)}" rel="noopener noreferrer" target="_blank">${escapeHtml(item.label)}</a></li>`;
+          }).join("\n");
+          return `<div aria-hidden="${section.id === firstTabId ? "false" : "true"}" class="tab-content${active}"${hiddenAttr} id="${escapeHtml(section.id)}">\n<h2>${escapeHtml(section.title)}</h2>\n<ul class="download-list">\n${items}\n</ul>\n</div>`;
+        }
+        if(section.type === "videos"){
+          const items = (section.videos || []).map(video => {
+            return `<div class="video-wrapper">
+    <iframe src="${escapeHtml(video.src)}" title="${escapeHtml(video.title || "YouTube video player")}" width="${escapeHtml(video.width || "560")}" height="${escapeHtml(video.height || "315")}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen frameborder="0"></iframe>
+  </div>`;
+          }).join("\n");
+          return `<div aria-hidden="${section.id === firstTabId ? "false" : "true"}" class="tab-content${active}"${hiddenAttr} id="${escapeHtml(section.id)}">\n<h2>${escapeHtml(section.title)}</h2>\n${items}\n</div>`;
+        }
+        if(section.type === "revisions"){
+          const rows = (section.rows || []).map(row => {
+            return `<tr>
+<td>${escapeHtml(row.date)}</td>
+<td>${escapeHtml(row.rev)}</td>
+<td>${escapeHtml(row.desc)}</td>
+<td>${escapeHtml(row.by)}</td>
+</tr>`;
+          }).join("\n");
+          return `<div aria-hidden="${section.id === firstTabId ? "false" : "true"}" class="tab-content${active}"${hiddenAttr} id="${escapeHtml(section.id)}">\n<h2>${escapeHtml(section.title)}</h2>\n<table class="revisions-table"><thead><tr><th>Date</th><th>Revision</th><th>Description</th><th>By</th></tr></thead><tbody>\n${rows}\n</tbody></table>\n</div>`;
+        }
+        if(section.type === "ai-seeds"){
+          const jsonText = section.jsonText || "{}";
+          return `<div aria-hidden="true" class="tab-content" data-hidden="true" id="${escapeHtml(section.id)}">\n<script id="ai-seeds-json" type="application/json">${jsonText}</script>\n</div>`;
+        }
+        const body = section.bodyHtml || "";
+        return `<div aria-hidden="${section.id === firstTabId ? "false" : "true"}" class="tab-content${active}"${hiddenAttr} id="${escapeHtml(section.id)}">\n<h2>${escapeHtml(section.title)}</h2>\n${body}\n</div>`;
+      }).join("\n\n");
 
-      const metaKeywords = doc.querySelector('meta[name="keywords"]') || doc.createElement("meta");
-      metaKeywords.setAttribute("name", "keywords");
-      metaKeywords.setAttribute("content", formData.meta.keywords || "");
-      doc.head.appendChild(metaKeywords);
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"></script>
+<script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-9ZM2D6XGT2');
+    </script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>${escapeHtml(formData.meta.title || "")}</title>
+<link href="/styles.css" rel="stylesheet"/>
+<link href="/favicon.png" rel="icon" type="image/png"/>
+<meta content="${escapeHtml(formData.meta.keywords || "")}" name="keywords"/>
+<meta content="${escapeHtml(formData.meta.description || "")}" name="description"/>
+</head>
+<body>
+<nav>
+<div class="nav-container">
+<ul class="nav-links">
+${nav}
+</ul>
+</div>
+</nav>
+<header>
+<h1>${escapeHtml(formData.meta.h1 || "")}</h1>
+<p class="slogan">${escapeHtml(formData.meta.slogan || "")}</p>
+</header>
+<main>
+<div class="tab-container">
+<div aria-label="Sections" class="tabs" role="tablist">
+${tabButtons}
+</div>
 
-      const h1 = doc.querySelector("header h1") || doc.querySelector("h1") || doc.createElement("h1");
-      h1.textContent = formData.meta.h1 || "";
-      if(!h1.parentElement){
-        doc.body.insertBefore(h1, doc.body.firstChild);
-      }
-
-      const slogan = doc.querySelector("header .slogan") || doc.querySelector(".slogan");
-      if(slogan){
-        slogan.textContent = formData.meta.slogan || "";
-      }
-
-      const navList = doc.querySelector(".nav-links");
-      if(navList){
-        navList.innerHTML = formData.nav
-          .map(item => `<li><a href="${escapeHtml(item.href)}">${escapeHtml(item.text)}</a></li>`)
-          .join("");
-      }
-
-      const tabsHost = doc.querySelector(".tabs");
-      if(tabsHost){
-        const visibleTabs = formData.sections.filter(section => section.tabLabel);
-        const firstTabId = visibleTabs.length ? visibleTabs[0].id : "";
-        const tabButtons = visibleTabs.map(section => {
-          const active = section.id === firstTabId ? " active" : "";
-          return `<button class="tab${active}" onclick="showTab('${section.id}', this)">${escapeHtml(section.tabLabel)}</button>`;
-        }).join("");
-        tabsHost.innerHTML = tabButtons;
-      }
-
-      const tabContainer = doc.querySelector(".tab-container");
-      if(tabContainer){
-        const existing = Array.from(tabContainer.querySelectorAll(".tab-content"));
-        const byId = new Map(existing.map(el => [el.id, el]));
-        const firstTabSection = formData.sections.find(section => section.tabLabel) || formData.sections[0];
-        const activeId = firstTabSection ? firstTabSection.id : "";
-        formData.sections.forEach((section) => {
-          let el = byId.get(section.id);
-          if(!el){
-            el = doc.createElement("div");
-            el.id = section.id;
-            el.className = "tab-content";
-            tabContainer.appendChild(el);
-          }
-          el.className = "tab-content" + (section.id === activeId ? " active" : "");
-          if(section.hidden){
-            el.setAttribute("data-hidden", "true");
-          }else{
-            el.removeAttribute("data-hidden");
-          }
-
-          if(section.type === "details"){
-            const rows = section.rows
-              .map(row => `<p><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}</p>`)
-              .join("");
-            el.innerHTML = `<h2>${escapeHtml(section.title)}</h2>${rows}`;
-          }else if(section.type === "images"){
-            const images = section.images.map(img => {
-              const full = img.full ? ` data-full="${escapeHtml(img.full)}"` : "";
-              return `<img src="${escapeHtml(img.src)}" class="zoomable" alt="${escapeHtml(img.alt)}" onclick="openLightbox(this)"${full}>`;
-            }).join("");
-            el.innerHTML = `<h2>${escapeHtml(section.title)}</h2><div class="lightbox-container">${images}</div>`;
-          }else{
-            const body = section.bodyHtml ? section.bodyHtml : "";
-            el.innerHTML = `<h2>${escapeHtml(section.title)}</h2>${body}`;
-          }
-        });
-
-        existing.forEach(el => {
-          if(!formData.sections.find(section => section.id === el.id)){
-            el.remove();
-          }
-        });
-      }
-
-      const doctypeMatch = html.match(/<!doctype[^>]*>/i);
-      const doctype = doctypeMatch ? doctypeMatch[0] : "<!doctype html>";
-      return `${doctype}\n${doc.documentElement.outerHTML}`;
+${sectionsHtml}
+</div>
+</main>
+<footer>
+      Â© 2026 miniPCB. All rights reserved.
+    </footer>
+<div aria-hidden="true" aria-label="Image viewer" id="lightbox" role="dialog">
+<img alt="Expanded image" id="lightbox-img"/>
+</div>
+<script src="/js/minipcb.js"></script>
+</body>
+</html>`;
     }
 
-    function extractFormFromHtml(html){
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
+    function generateCollectionHtml(formData){
+      const nav = formData.nav.map(item => `  <li><a href="${escapeHtml(item.href)}">${escapeHtml(item.text)}</a></li>`).join("\n");
+      const rows = (formData.rows || []).map(row => {
+        return `<tr>
+<td>${escapeHtml(row.partNo || "")}</td>
+<td><a href="${escapeHtml(row.href || "")}">${escapeHtml(row.title || "")}</a></td>
+<td>${escapeHtml(row.pieces || "")}</td>
+</tr>`;
+      }).join("\n");
+
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"></script>
+<script>
+   window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-9ZM2D6XGT2');
+  </script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>${escapeHtml(formData.meta.title || "")}</title>
+<link href="../styles.css" rel="stylesheet"/>
+<link href="/favicon.png" rel="icon" type="image/png"/>
+<meta content="${escapeHtml(formData.meta.keywords || "")}" name="keywords"/>
+</head>
+<body>
+<nav>
+<div class="nav-container">
+<ul class="nav-links">
+${nav}
+</ul>
+</div>
+</nav>
+<header>
+<h1>${escapeHtml(formData.meta.h1 || "")}</h1>
+</header>
+<main>
+<section>
+<table>
+<thead>
+<tr>
+<th>Part No</th>
+<th>Title</th>
+<th>Pieces per Panel</th>
+</tr>
+</thead>
+<tbody>
+${rows}
+</tbody>
+</table>
+</section>
+</main>
+<footer>
+   Â© 2026 miniPCB. All rights reserved.
+  </footer>
+</body>
+</html>`;
+    }
+
+    function extractBoardFromHtml(doc){
       const metaDesc = doc.querySelector('meta[name="description"]');
       const metaKeywords = doc.querySelector('meta[name="keywords"]');
       const h1 = doc.querySelector("header h1") || doc.querySelector("h1");
@@ -730,6 +830,50 @@
           return { id, hidden, title, tabLabel, type: "details", rows };
         }
 
+        if(id === "downloads" || section.querySelector(".download-list")){
+          const items = Array.from(section.querySelectorAll(".download-list a")).map(link => ({
+            label: link.textContent.trim(),
+            href: link.getAttribute("href") || ""
+          }));
+          return { id, hidden, title, tabLabel, type: "downloads", items };
+        }
+
+        if(id === "revisions" || section.querySelector(".revisions-table")){
+          const rows = Array.from(section.querySelectorAll("tbody tr")).map(row => {
+            const cells = row.querySelectorAll("td");
+            return {
+              date: cells[0] ? cells[0].textContent.trim() : "",
+              rev: cells[1] ? cells[1].textContent.trim() : "",
+              desc: cells[2] ? cells[2].textContent.trim() : "",
+              by: cells[3] ? cells[3].textContent.trim() : ""
+            };
+          });
+          return { id, hidden, title, tabLabel, type: "revisions", rows };
+        }
+
+        if(id === "ai-seeds" || section.querySelector("#ai-seeds-json")){
+          const script = section.querySelector("#ai-seeds-json");
+          const text = script ? script.textContent.trim() : "{}";
+          return { id, hidden, title, tabLabel, type: "ai-seeds", jsonText: text || "{}" };
+        }
+
+        const videos = Array.from(section.querySelectorAll("iframe"));
+        if(id === "videos" || videos.length){
+          return {
+            id,
+            hidden,
+            title,
+            tabLabel,
+            type: "videos",
+            videos: videos.map(frame => ({
+              src: frame.getAttribute("src") || "",
+              title: frame.getAttribute("title") || "",
+              width: frame.getAttribute("width") || "560",
+              height: frame.getAttribute("height") || "315"
+            }))
+          };
+        }
+
         const images = Array.from(section.querySelectorAll("img"));
         if(images.length){
           return {
@@ -760,6 +904,7 @@
       });
 
       return {
+        type: "board",
         meta: {
           title: doc.title || "",
           description: metaDesc ? metaDesc.getAttribute("content") || "" : "",
@@ -770,6 +915,48 @@
         nav: navLinks,
         sections
       };
+    }
+
+    function extractCollectionFromHtml(doc){
+      const metaKeywords = doc.querySelector('meta[name="keywords"]');
+      const h1 = doc.querySelector("header h1") || doc.querySelector("h1");
+      const navLinks = Array.from(doc.querySelectorAll(".nav-links a")).map(link => ({
+        text: link.textContent.trim(),
+        href: link.getAttribute("href") || ""
+      }));
+
+      const rows = Array.from(doc.querySelectorAll("tbody tr")).map(row => {
+        const cells = row.querySelectorAll("td");
+        const partNo = cells[0] ? cells[0].textContent.trim() : "";
+        const titleLink = cells[1] ? cells[1].querySelector("a") : null;
+        const title = titleLink ? titleLink.textContent.trim() : (cells[1] ? cells[1].textContent.trim() : "");
+        const href = titleLink ? titleLink.getAttribute("href") || "" : "";
+        const pieces = cells[2] ? cells[2].textContent.trim() : "";
+        return { partNo, title, href, pieces };
+      });
+
+      return {
+        type: "collection",
+        meta: {
+          title: doc.title || "",
+          description: "",
+          keywords: metaKeywords ? metaKeywords.getAttribute("content") || "" : "",
+          h1: h1 ? h1.textContent.trim() : "",
+          slogan: ""
+        },
+        nav: navLinks,
+        rows
+      };
+    }
+
+    function extractFormFromHtml(html){
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const isBoard = !!doc.querySelector(".tab-container .tab-content");
+      if(isBoard){
+        return extractBoardFromHtml(doc);
+      }
+      return extractCollectionFromHtml(doc);
     }
 
     function syncFormInputs(html){
@@ -785,11 +972,14 @@
       metaCard.className = "panel-card";
       metaCard.innerHTML = `
         <div class="panel-title">Page Meta</div>
+        <div class="badge-row">
+          <span class="badge-pill">${escapeHtml(data.type || "unknown")}</span>
+        </div>
         <div class="form-grid">
           <label>Title<input class="input" data-field="meta-title" type="text"></label>
-          <label>Meta Description<input class="input" data-field="meta-description" type="text"></label>
           <label>Meta Keywords<input class="input" data-field="meta-keywords" type="text"></label>
           <label>Header H1<input class="input" data-field="meta-h1" type="text"></label>
+          <label>Meta Description<input class="input" data-field="meta-description" type="text"></label>
           <label>Slogan<input class="input" data-field="meta-slogan" type="text"></label>
         </div>
       `;
@@ -806,88 +996,214 @@
       `;
       container.appendChild(navCard);
 
-      const sectionsWrap = document.createElement("div");
-      sectionsWrap.className = "panel-card";
-      sectionsWrap.innerHTML = `<div class="panel-title">Sections</div>`;
-      container.appendChild(sectionsWrap);
+      const aiCard = document.createElement("div");
+      aiCard.className = "panel-card";
+      aiCard.innerHTML = `
+        <div class="panel-title">AI Assist</div>
+        <div class="help">Local helper only — no external AI API wired yet. Use this to draft text or paste a list to populate rows.</div>
+        <div class="form-grid">
+          <label>Target Section
+            <select class="input" data-field="ai-target"></select>
+          </label>
+          <label>Paste Draft / List
+            <textarea class="input" data-field="ai-input" placeholder="Paste notes or CSV: PartNo, Title, Href, Pieces"></textarea>
+          </label>
+        </div>
+        <div class="row-actions">
+          <button class="btn" data-action="ai-draft" type="button">Draft Section Text</button>
+          <button class="btn secondary" data-action="ai-rows" type="button">Populate Rows</button>
+        </div>
+      `;
+      container.appendChild(aiCard);
 
-      const sectionsStack = document.createElement("div");
-      sectionsStack.className = "form-stack";
-      sectionsWrap.appendChild(sectionsStack);
+      if(data.type === "board"){
+        const sectionsWrap = document.createElement("div");
+        sectionsWrap.className = "panel-card";
+        sectionsWrap.innerHTML = `<div class="panel-title">Sections</div>`;
+        container.appendChild(sectionsWrap);
 
-      (data.sections || []).forEach(section => {
-        const card = document.createElement("div");
-        card.className = "section-card";
-        card.dataset.sectionId = section.id;
-        card.dataset.sectionType = section.type;
-        card.innerHTML = `
-          <div class="inline-row">
-            <label>Section ID<input class="input" data-field="section-id" type="text" value="${escapeHtml(section.id)}" readonly></label>
-            <label>Tab Label<input class="input" data-field="section-tab" type="text" value="${escapeHtml(section.tabLabel || "")}"></label>
-          </div>
-          <div class="inline-row">
-            <label>Section Title<input class="input" data-field="section-title" type="text" value="${escapeHtml(section.title || "")}"></label>
-            <label>Visible<input class="input" data-field="section-visible" type="checkbox"${section.hidden ? "" : " checked"}></label>
-          </div>
+        const sectionsStack = document.createElement("div");
+        sectionsStack.className = "form-stack";
+        sectionsWrap.appendChild(sectionsStack);
+
+        (data.sections || []).forEach(section => {
+          const card = document.createElement("div");
+          card.className = "section-card";
+          card.dataset.sectionId = section.id;
+          card.dataset.sectionType = section.type;
+          card.innerHTML = `
+            <div class="inline-row">
+              <label>Section ID<input class="input" data-field="section-id" type="text" value="${escapeHtml(section.id)}" readonly></label>
+              <label>Tab Label<input class="input" data-field="section-tab" type="text" value="${escapeHtml(section.tabLabel || "")}"></label>
+            </div>
+            <div class="inline-row">
+              <label>Section Title<input class="input" data-field="section-title" type="text" value="${escapeHtml(section.title || "")}"></label>
+              <label>Visible<input class="input" data-field="section-visible" type="checkbox"${section.hidden ? "" : " checked"}></label>
+            </div>
+          `;
+
+          if(section.type === "details"){
+            const rows = document.createElement("div");
+            rows.className = "form-stack";
+            rows.dataset.detailList = "true";
+            (section.rows || []).forEach(row => {
+              const rowEl = document.createElement("div");
+              rowEl.className = "inline-row";
+              rowEl.dataset.detailRow = "true";
+              rowEl.innerHTML = `
+                <label>Label<input class="input" data-field="detail-label" type="text" value="${escapeHtml(row.label)}"></label>
+                <label>Value<input class="input" data-field="detail-value" type="text" value="${escapeHtml(row.value)}"></label>
+              `;
+              rows.appendChild(rowEl);
+            });
+            card.appendChild(rows);
+            const actions = document.createElement("div");
+            actions.className = "row-actions";
+            actions.innerHTML = `
+              <button class="btn secondary" data-action="add-detail" type="button">Add Detail Row</button>
+            `;
+            card.appendChild(actions);
+          }else if(section.type === "images"){
+            const rows = document.createElement("div");
+            rows.className = "form-stack";
+            rows.dataset.imageList = "true";
+            (section.images || []).forEach(img => {
+              const rowEl = document.createElement("div");
+              rowEl.className = "inline-row";
+              rowEl.dataset.imageRow = "true";
+              rowEl.innerHTML = `
+                <label>Image Src<input class="input" data-field="image-src" type="text" value="${escapeHtml(img.src)}"></label>
+                <label>Alt Text<input class="input" data-field="image-alt" type="text" value="${escapeHtml(img.alt)}"></label>
+                <label>Full Src<input class="input" data-field="image-full" type="text" value="${escapeHtml(img.full || "")}"></label>
+              `;
+              rows.appendChild(rowEl);
+            });
+            card.appendChild(rows);
+            const actions = document.createElement("div");
+            actions.className = "row-actions";
+            actions.innerHTML = `
+              <button class="btn secondary" data-action="add-image" type="button">Add Image</button>
+            `;
+            card.appendChild(actions);
+          }else if(section.type === "downloads"){
+            const rows = document.createElement("div");
+            rows.className = "form-stack";
+            rows.dataset.downloadList = "true";
+            (section.items || []).forEach(item => {
+              const rowEl = document.createElement("div");
+              rowEl.className = "inline-row";
+              rowEl.dataset.downloadRow = "true";
+              rowEl.innerHTML = `
+                <label>Label<input class="input" data-field="download-label" type="text" value="${escapeHtml(item.label || "")}"></label>
+                <label>Href<input class="input" data-field="download-href" type="text" value="${escapeHtml(item.href || "")}"></label>
+              `;
+              rows.appendChild(rowEl);
+            });
+            card.appendChild(rows);
+            const actions = document.createElement("div");
+            actions.className = "row-actions";
+            actions.innerHTML = `
+              <button class="btn secondary" data-action="add-download" type="button">Add Download</button>
+            `;
+            card.appendChild(actions);
+          }else if(section.type === "videos"){
+            const rows = document.createElement("div");
+            rows.className = "form-stack";
+            rows.dataset.videoList = "true";
+            (section.videos || []).forEach(video => {
+              const rowEl = document.createElement("div");
+              rowEl.className = "inline-row";
+              rowEl.dataset.videoRow = "true";
+              rowEl.innerHTML = `
+                <label>Video URL<input class="input" data-field="video-src" type="text" value="${escapeHtml(video.src || "")}"></label>
+                <label>Title<input class="input" data-field="video-title" type="text" value="${escapeHtml(video.title || "")}"></label>
+                <label>Width<input class="input" data-field="video-width" type="text" value="${escapeHtml(video.width || "")}"></label>
+                <label>Height<input class="input" data-field="video-height" type="text" value="${escapeHtml(video.height || "")}"></label>
+              `;
+              rows.appendChild(rowEl);
+            });
+            card.appendChild(rows);
+            const actions = document.createElement("div");
+            actions.className = "row-actions";
+            actions.innerHTML = `
+              <button class="btn secondary" data-action="add-video" type="button">Add Video</button>
+            `;
+            card.appendChild(actions);
+          }else if(section.type === "revisions"){
+            const rows = document.createElement("div");
+            rows.className = "form-stack";
+            rows.dataset.revisionList = "true";
+            (section.rows || []).forEach(row => {
+              const rowEl = document.createElement("div");
+              rowEl.className = "inline-row";
+              rowEl.dataset.revisionRow = "true";
+              rowEl.innerHTML = `
+                <label>Date<input class="input" data-field="rev-date" type="text" value="${escapeHtml(row.date || "")}"></label>
+                <label>Revision<input class="input" data-field="rev-id" type="text" value="${escapeHtml(row.rev || "")}"></label>
+                <label>Description<input class="input" data-field="rev-desc" type="text" value="${escapeHtml(row.desc || "")}"></label>
+                <label>By<input class="input" data-field="rev-by" type="text" value="${escapeHtml(row.by || "")}"></label>
+              `;
+              rows.appendChild(rowEl);
+            });
+            card.appendChild(rows);
+            const actions = document.createElement("div");
+            actions.className = "row-actions";
+            actions.innerHTML = `
+              <button class="btn secondary" data-action="add-revision" type="button">Add Revision</button>
+            `;
+            card.appendChild(actions);
+          }else if(section.type === "ai-seeds"){
+            const label = document.createElement("label");
+            label.innerHTML = `AI Seeds JSON<textarea class="input" data-field="ai-seeds">${escapeHtml(section.jsonText || "{}")}</textarea>`;
+            card.appendChild(label);
+          }else{
+            const label = document.createElement("label");
+            label.innerHTML = `Body HTML<textarea class="input" data-field="section-body">${escapeHtml(section.bodyHtml || "")}</textarea>`;
+            card.appendChild(label);
+          }
+
+          sectionsStack.appendChild(card);
+        });
+      }else if(data.type === "collection"){
+        const rowsWrap = document.createElement("div");
+        rowsWrap.className = "panel-card";
+        rowsWrap.innerHTML = `<div class="panel-title">Collection Table</div>`;
+        const rowsStack = document.createElement("div");
+        rowsStack.className = "form-stack";
+        rowsStack.dataset.collectionList = "true";
+        rowsWrap.appendChild(rowsStack);
+
+        (data.rows || []).forEach(row => {
+          const rowEl = document.createElement("div");
+          rowEl.className = "inline-row";
+          rowEl.dataset.collectionRow = "true";
+          rowEl.innerHTML = `
+            <label>Part No<input class="input" data-field="row-part" type="text" value="${escapeHtml(row.partNo || "")}"></label>
+            <label>Title<input class="input" data-field="row-title" type="text" value="${escapeHtml(row.title || "")}"></label>
+            <label>Link Href<input class="input" data-field="row-href" type="text" value="${escapeHtml(row.href || "")}"></label>
+            <label>Pieces/Panel<input class="input" data-field="row-pieces" type="text" value="${escapeHtml(row.pieces || "")}"></label>
+          `;
+          rowsStack.appendChild(rowEl);
+        });
+
+        const actions = document.createElement("div");
+        actions.className = "row-actions";
+        actions.innerHTML = `
+          <button class="btn secondary" data-action="add-collection-row" type="button">Add Row</button>
         `;
-
-        if(section.type === "details"){
-          const rows = document.createElement("div");
-          rows.className = "form-stack";
-          rows.dataset.detailList = "true";
-          (section.rows || []).forEach(row => {
-            const rowEl = document.createElement("div");
-            rowEl.className = "inline-row";
-            rowEl.dataset.detailRow = "true";
-            rowEl.innerHTML = `
-              <label>Label<input class="input" data-field="detail-label" type="text" value="${escapeHtml(row.label)}"></label>
-              <label>Value<input class="input" data-field="detail-value" type="text" value="${escapeHtml(row.value)}"></label>
-            `;
-            rows.appendChild(rowEl);
-          });
-          card.appendChild(rows);
-          const actions = document.createElement("div");
-          actions.className = "row-actions";
-          actions.innerHTML = `
-            <button class="btn secondary" data-action="add-detail" type="button">Add Detail Row</button>
-          `;
-          card.appendChild(actions);
-        }else if(section.type === "images"){
-          const rows = document.createElement("div");
-          rows.className = "form-stack";
-          rows.dataset.imageList = "true";
-          (section.images || []).forEach(img => {
-            const rowEl = document.createElement("div");
-            rowEl.className = "inline-row";
-            rowEl.dataset.imageRow = "true";
-            rowEl.innerHTML = `
-              <label>Image Src<input class="input" data-field="image-src" type="text" value="${escapeHtml(img.src)}"></label>
-              <label>Alt Text<input class="input" data-field="image-alt" type="text" value="${escapeHtml(img.alt)}"></label>
-              <label>Full Src<input class="input" data-field="image-full" type="text" value="${escapeHtml(img.full || "")}"></label>
-            `;
-            rows.appendChild(rowEl);
-          });
-          card.appendChild(rows);
-          const actions = document.createElement("div");
-          actions.className = "row-actions";
-          actions.innerHTML = `
-            <button class="btn secondary" data-action="add-image" type="button">Add Image</button>
-          `;
-          card.appendChild(actions);
-        }else{
-          const label = document.createElement("label");
-          label.innerHTML = `Body HTML<textarea class="input" data-field="section-body">${escapeHtml(section.bodyHtml || "")}</textarea>`;
-          card.appendChild(label);
-        }
-
-        sectionsStack.appendChild(card);
-      });
+        rowsWrap.appendChild(actions);
+        container.appendChild(rowsWrap);
+      }
 
       container.querySelector('[data-field="meta-title"]').value = data.meta.title || "";
       container.querySelector('[data-field="meta-description"]').value = data.meta.description || "";
       container.querySelector('[data-field="meta-keywords"]').value = data.meta.keywords || "";
       container.querySelector('[data-field="meta-h1"]').value = data.meta.h1 || "";
       container.querySelector('[data-field="meta-slogan"]').value = data.meta.slogan || "";
+      if(data.type !== "board"){
+        container.querySelector('[data-field="meta-slogan"]').closest("label").style.display = "none";
+        container.querySelector('[data-field="meta-description"]').closest("label").style.display = "none";
+      }
 
       const navList = container.querySelector("[data-nav-list]");
       (data.nav || []).forEach(item => {
@@ -900,6 +1216,20 @@
         `;
         navList.appendChild(row);
       });
+
+      const aiSelect = container.querySelector('[data-field="ai-target"]');
+      aiSelect.innerHTML = "";
+      if(data.type === "collection"){
+        aiSelect.innerHTML = `<option value="collection-rows">Collection Rows</option>`;
+      }else{
+        (data.sections || []).forEach(section => {
+          const label = section.tabLabel ? `${section.id} (${section.tabLabel})` : section.id;
+          const opt = document.createElement("option");
+          opt.value = section.id;
+          opt.textContent = label;
+          aiSelect.appendChild(opt);
+        });
+      }
     }
 
     function collectFormState(){
@@ -916,6 +1246,16 @@
         text: row.querySelector('[data-field="nav-text"]').value.trim(),
         href: row.querySelector('[data-field="nav-href"]').value.trim()
       })).filter(item => item.text || item.href);
+
+      if(state.formState?.type === "collection"){
+        const rows = Array.from(container.querySelectorAll("[data-collection-row]")).map(row => ({
+          partNo: row.querySelector('[data-field="row-part"]').value.trim(),
+          title: row.querySelector('[data-field="row-title"]').value.trim(),
+          href: row.querySelector('[data-field="row-href"]').value.trim(),
+          pieces: row.querySelector('[data-field="row-pieces"]').value.trim()
+        })).filter(row => row.partNo || row.title || row.href || row.pieces);
+        return { type: "collection", meta, nav, rows };
+      }
 
       const sections = Array.from(container.querySelectorAll(".section-card")).map(card => {
         const id = card.dataset.sectionId || card.querySelector('[data-field="section-id"]').value.trim();
@@ -938,11 +1278,40 @@
           })).filter(img => img.src || img.alt || img.full);
           return { id, title, tabLabel, hidden: !visible, type, images };
         }
+        if(type === "downloads"){
+          const items = Array.from(card.querySelectorAll("[data-download-row]")).map(row => ({
+            label: row.querySelector('[data-field="download-label"]').value.trim(),
+            href: row.querySelector('[data-field="download-href"]').value.trim()
+          })).filter(item => item.label || item.href);
+          return { id, title, tabLabel, hidden: !visible, type, items };
+        }
+        if(type === "videos"){
+          const videos = Array.from(card.querySelectorAll("[data-video-row]")).map(row => ({
+            src: row.querySelector('[data-field="video-src"]').value.trim(),
+            title: row.querySelector('[data-field="video-title"]').value.trim(),
+            width: row.querySelector('[data-field="video-width"]').value.trim(),
+            height: row.querySelector('[data-field="video-height"]').value.trim()
+          })).filter(video => video.src || video.title);
+          return { id, title, tabLabel, hidden: !visible, type, videos };
+        }
+        if(type === "revisions"){
+          const rows = Array.from(card.querySelectorAll("[data-revision-row]")).map(row => ({
+            date: row.querySelector('[data-field="rev-date"]').value.trim(),
+            rev: row.querySelector('[data-field="rev-id"]').value.trim(),
+            desc: row.querySelector('[data-field="rev-desc"]').value.trim(),
+            by: row.querySelector('[data-field="rev-by"]').value.trim()
+          })).filter(row => row.date || row.rev || row.desc || row.by);
+          return { id, title, tabLabel, hidden: !visible, type, rows };
+        }
+        if(type === "ai-seeds"){
+          const jsonText = card.querySelector('[data-field="ai-seeds"]').value.trim() || "{}";
+          return { id, title, tabLabel, hidden: true, type, jsonText };
+        }
         const bodyHtml = card.querySelector('[data-field="section-body"]').value;
         return { id, title, tabLabel, hidden: !visible, type, bodyHtml };
       });
 
-      return { meta, nav, sections };
+      return { type: "board", meta, nav, sections };
     }
 
     function updateModifiedState(){
@@ -1015,7 +1384,7 @@
       $("applyFormBtn").addEventListener("click", () => {
         if(!state.current) return;
         const data = collectFormState();
-        const updated = applyFormToHtml(state.editorText, data);
+        const updated = data.type === "collection" ? generateCollectionHtml(data) : generateBoardHtml(data);
         state.editorText = updated;
         saveDraft(state.current.path, state.editorText);
         updateModifiedState();
@@ -1065,6 +1434,107 @@
             <label>Full Src<input class="input" data-field="image-full" type="text"></label>
           `;
           list.appendChild(row);
+        }
+        if(action === "add-download"){
+          const card = target.closest(".section-card");
+          const list = card.querySelector("[data-download-list]");
+          const row = document.createElement("div");
+          row.className = "inline-row";
+          row.dataset.downloadRow = "true";
+          row.innerHTML = `
+            <label>Label<input class="input" data-field="download-label" type="text"></label>
+            <label>Href<input class="input" data-field="download-href" type="text"></label>
+          `;
+          list.appendChild(row);
+        }
+        if(action === "add-video"){
+          const card = target.closest(".section-card");
+          const list = card.querySelector("[data-video-list]");
+          const row = document.createElement("div");
+          row.className = "inline-row";
+          row.dataset.videoRow = "true";
+          row.innerHTML = `
+            <label>Video URL<input class="input" data-field="video-src" type="text"></label>
+            <label>Title<input class="input" data-field="video-title" type="text"></label>
+            <label>Width<input class="input" data-field="video-width" type="text" value="560"></label>
+            <label>Height<input class="input" data-field="video-height" type="text" value="315"></label>
+          `;
+          list.appendChild(row);
+        }
+        if(action === "add-revision"){
+          const card = target.closest(".section-card");
+          const list = card.querySelector("[data-revision-list]");
+          const row = document.createElement("div");
+          row.className = "inline-row";
+          row.dataset.revisionRow = "true";
+          row.innerHTML = `
+            <label>Date<input class="input" data-field="rev-date" type="text" placeholder="YYYY-MM-DD"></label>
+            <label>Revision<input class="input" data-field="rev-id" type="text"></label>
+            <label>Description<input class="input" data-field="rev-desc" type="text"></label>
+            <label>By<input class="input" data-field="rev-by" type="text"></label>
+          `;
+          list.appendChild(row);
+        }
+        if(action === "add-collection-row"){
+          const list = $("formContainer").querySelector("[data-collection-list]");
+          if(!list) return;
+          const row = document.createElement("div");
+          row.className = "inline-row";
+          row.dataset.collectionRow = "true";
+          row.innerHTML = `
+            <label>Part No<input class="input" data-field="row-part" type="text"></label>
+            <label>Title<input class="input" data-field="row-title" type="text"></label>
+            <label>Link Href<input class="input" data-field="row-href" type="text"></label>
+            <label>Pieces/Panel<input class="input" data-field="row-pieces" type="text"></label>
+          `;
+          list.appendChild(row);
+        }
+        if(action === "ai-draft"){
+          const input = $("formContainer").querySelector('[data-field="ai-input"]').value.trim();
+          const targetSelect = $("formContainer").querySelector('[data-field="ai-target"]');
+          const targetId = targetSelect ? targetSelect.value : "";
+          if(state.formState?.type === "collection"){
+            return;
+          }
+          const card = $("formContainer").querySelector(`.section-card[data-section-id="${CSS.escape(targetId)}"]`);
+          if(!card) return;
+          const type = card.dataset.sectionType;
+          if(type === "html"){
+            const area = card.querySelector('[data-field="section-body"]');
+            if(area){
+              const metaTitle = $("formContainer").querySelector('[data-field="meta-h1"]').value.trim();
+              const slogan = $("formContainer").querySelector('[data-field="meta-slogan"]').value.trim();
+              const details = Array.from($("formContainer").querySelectorAll('[data-detail-row]')).map(row => {
+                const label = row.querySelector('[data-field="detail-label"]').value.trim();
+                const value = row.querySelector('[data-field="detail-value"]').value.trim();
+                return label && value ? `${label}: ${value}` : "";
+              }).filter(Boolean);
+              const draft = input || `The ${metaTitle} board is designed for hands-on exploration. ${slogan} ${details.length ? "Key specs: " + details.join(", ") + "." : ""}`;
+              area.value = `<p>${escapeHtml(draft)}</p>`;
+            }
+          }
+        }
+        if(action === "ai-rows"){
+          const input = $("formContainer").querySelector('[data-field="ai-input"]').value.trim();
+          if(!input) return;
+          if(state.formState?.type === "collection"){
+            const list = $("formContainer").querySelector("[data-collection-list]");
+            if(!list) return;
+            const lines = input.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            lines.forEach(line => {
+              const parts = line.split(/[|,]/).map(p => p.trim());
+              const row = document.createElement("div");
+              row.className = "inline-row";
+              row.dataset.collectionRow = "true";
+              row.innerHTML = `
+                <label>Part No<input class="input" data-field="row-part" type="text" value="${escapeHtml(parts[0] || "")}"></label>
+                <label>Title<input class="input" data-field="row-title" type="text" value="${escapeHtml(parts[1] || "")}"></label>
+                <label>Link Href<input class="input" data-field="row-href" type="text" value="${escapeHtml(parts[2] || "")}"></label>
+                <label>Pieces/Panel<input class="input" data-field="row-pieces" type="text" value="${escapeHtml(parts[3] || "")}"></label>
+              `;
+              list.appendChild(row);
+            });
+          }
         }
       });
 
