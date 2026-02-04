@@ -831,6 +831,8 @@
   </div>
 
   <div class="context-menu" id="fileContextMenu">
+    <button type="button" id="fileAddBtn">Add New File</button>
+    <button type="button" id="fileAiLoadBtn">Load File in AI Context</button>
     <button type="button" id="fileDeleteBtn">Delete File</button>
   </div>
 
@@ -856,6 +858,8 @@
       fileIndex: null,
       fsRootHandle: null,
       fsRootPath: "",
+      aiContextPath: "",
+      aiContextText: "",
       formState: null,
       template: null,
       editingSectionCard: null
@@ -2188,6 +2192,21 @@ ${rows}
       return true;
     }
 
+    async function createFileInFolder(relPath){
+      const root = await ensureFolderHandleWrite();
+      if(!root) return null;
+      const cleaned = relPath.replace(/^[./\\]+/, "").replace(/\\/g, "/");
+      const parts = cleaned.split("/").filter(Boolean);
+      if(!parts.length) return null;
+      const fileName = parts.pop();
+      let dir = root;
+      for(const part of parts){
+        dir = await dir.getDirectoryHandle(part, { create: true });
+      }
+      const fileHandle = await dir.getFileHandle(fileName, { create: true });
+      return { dirHandle: dir, fileHandle, rel: cleaned, name: fileName };
+    }
+
     async function runSave(){
       if(!state.current) return;
       runUpdate();
@@ -2584,6 +2603,65 @@ ${rows}
           menu.style.display = "block";
           menu.style.left = `${e.clientX}px`;
           menu.style.top = `${e.clientY}px`;
+        }
+      });
+
+      $("fileAddBtn").addEventListener("click", async () => {
+        const menu = $("fileContextMenu");
+        if(menu) menu.style.display = "none";
+        if(!useFileSystemStore()){
+          logTerminal("error", "Select a folder to add files.");
+          return;
+        }
+        const relPath = window.prompt("New HTML file path (relative to folder):", "new-page.html");
+        if(!relPath) return;
+        const nextPath = relPath.toLowerCase().endsWith(".html") ? relPath : `${relPath}.html`;
+        try{
+          const created = await createFileInFolder(nextPath);
+          if(!created) throw new Error("Failed to create file");
+          const entry = {
+            rel: created.rel,
+            url: created.rel,
+            path: created.rel,
+            title: created.rel,
+            name: created.name,
+            fileHandle: created.fileHandle,
+            dirHandle: created.dirHandle
+          };
+          const initial = generateBoardHtml({
+            type: "board",
+            meta: { title: "", description: "", keywords: "", h1: "", slogan: "" },
+            nav: [],
+            sections: []
+          }, loadTemplate());
+          await writeEntryToDisk(entry, initial);
+          state.entries.push(entry);
+          state.entries.sort((a, b) => (a.rel || "").localeCompare(b.rel || ""));
+          state.filtered = state.entries.slice();
+          $("fileCount").textContent = `${state.filtered.length} files`;
+          renderList();
+          logTerminal("create", `Added ${entry.rel}`);
+        }catch(err){
+          logTerminal("error", "Failed to add file");
+        }
+      });
+
+      $("fileAiLoadBtn").addEventListener("click", async () => {
+        const entry = contextTargetFile;
+        const menu = $("fileContextMenu");
+        if(menu) menu.style.display = "none";
+        contextTargetFile = null;
+        if(!entry){
+          logTerminal("error", "No file selected.");
+          return;
+        }
+        try{
+          const text = await fetchFile(entry);
+          state.aiContextPath = entry.rel || entry.path || "";
+          state.aiContextText = text;
+          logTerminal("ai", `Loaded ${state.aiContextPath} into AI context`);
+        }catch(err){
+          logTerminal("error", `Failed to load ${entry.rel}`);
         }
       });
 
