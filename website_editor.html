@@ -593,16 +593,18 @@
         .replace(/'/g, "&#39;");
     }
 
-    const defaultTemplate = () => ({
-      analyticsHtml:
+    const defaultTemplate = () => {
+      const scriptClose = "</" + "script>";
+      return ({
+        analyticsHtml:
 `<!-- Google tag (gtag.js) -->
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"><\\/script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2">${scriptClose}
 <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-9ZM2D6XGT2');
-    <\\/script>`,
+    ${scriptClose}`,
       defaultKeywords: "",
       defaultDescription: "",
       footerText: "© 2026 miniPCB. All rights reserved.",
@@ -612,7 +614,8 @@
       faviconHref: "/favicon.png",
       versionStamp: "v2",
       dateStamp: "2026-02-04"
-    });
+      });
+    };
 
     function loadTemplate(){
       try{
@@ -759,6 +762,7 @@
 
     function generateBoardHtml(formData, template){
       const tpl = template || defaultTemplate();
+      const scriptClose = "</" + "script>";
       const nav = formData.nav.map(item => `  <li><a href="${escapeHtml(item.href)}">${escapeHtml(item.text)}</a></li>`).join("\n");
       const tabs = formData.sections.filter(section => section.tabLabel);
       const firstTabId = tabs.length ? tabs[0].id : (formData.sections[0] ? formData.sections[0].id : "");
@@ -811,7 +815,7 @@
         }
         if(section.type === "ai-seeds"){
           const jsonText = section.jsonText || "{}";
-          return `<div aria-hidden="true" class="tab-content" data-hidden="true" id="${escapeHtml(section.id)}">\n<script id="ai-seeds-json" type="application/json">${jsonText}</script>\n</div>`;
+          return `<div aria-hidden="true" class="tab-content" data-hidden="true" id="${escapeHtml(section.id)}">\n<script id="ai-seeds-json" type="application/json">${jsonText}${scriptClose}\n</div>`;
         }
         const body = section.bodyHtml || "";
         return `<div aria-hidden="${section.id === firstTabId ? "false" : "true"}" class="tab-content${active}"${hiddenAttr} id="${escapeHtml(section.id)}">\n<h2>${escapeHtml(section.title)}</h2>\n${body}\n</div>`;
@@ -865,7 +869,7 @@ ${sectionsHtml}
 <div aria-hidden="true" aria-label="Image viewer" id="lightbox" role="dialog">
 <img alt="Expanded image" id="lightbox-img"/>
 </div>
-${jsHref ? `<script src="${escapeHtml(jsHref)}"></script>` : ""}
+${jsHref ? `<script src="${escapeHtml(jsHref)}">${scriptClose}` : ""}
 </body>
 </html>`;
     }
