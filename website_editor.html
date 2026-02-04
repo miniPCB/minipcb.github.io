@@ -216,6 +216,61 @@
       align-items:center;
     }
 
+    .command-bar{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:16px;
+      padding:10px 12px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .command-bar .input{
+      min-width: 220px;
+    }
+
+    .terminal{
+      margin-top:10px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(8,12,18,0.65);
+      padding:10px;
+      min-height:160px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .terminal-log{
+      flex:1;
+      overflow:auto;
+      font-family: var(--mono);
+      font-size:12px;
+      color: var(--muted);
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+
+    .terminal-line{
+      display:flex;
+      gap:8px;
+      white-space:pre-wrap;
+    }
+
+    .terminal-line .tag{
+      color: var(--accent-2);
+    }
+
+    .terminal-input{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+
     .btn{
       border:1px solid var(--border);
       background: rgba(255,255,255,0.04);
@@ -458,17 +513,32 @@
           <div class="preview-meta" id="previewMeta"></div>
           <div class="toolbar">
             <a class="btn secondary" id="openLink" href="#" target="_blank" rel="noopener">Open</a>
-            <button class="btn" id="reloadBtn" type="button">Reload Source</button>
+            <button class="btn" id="reloadBtn" type="button">Reload</button>
             <button class="btn" id="revertBtn" type="button">Revert Draft</button>
-            <button class="btn" id="downloadBtn" type="button">Download HTML</button>
+            <button class="btn" id="exportBtn" type="button">Export</button>
+            <button class="btn" id="validateBtn" type="button">Validate</button>
+            <button class="btn" id="updateBtn" type="button">Update</button>
+            <button class="btn secondary" id="aiBtn" type="button">AI Assist</button>
             <button class="btn secondary" id="prefsBtn" type="button">Preferences</button>
-            <button class="btn" id="applyFormBtn" type="button">Apply Form to HTML</button>
-            <button class="btn secondary" id="syncFormBtn" type="button">Rebuild Form</button>
             <span class="status ok" id="editStatus">Idle</span>
           </div>
         </div>
         <div class="preview">
           <div class="form-stack" id="formContainer"></div>
+          <div class="command-bar">
+            <span class="badge-pill">Command</span>
+            <input class="input" id="commandInput" type="text" placeholder="update | reload | validate | export | ai ..." />
+            <button class="btn secondary" id="commandRunBtn" type="button">Run</button>
+            <span class="tiny">Tip: press Enter to run.</span>
+          </div>
+          <div class="terminal" id="terminalPane">
+            <div class="terminal-log" id="terminalLog"></div>
+            <div class="terminal-input">
+              <span class="badge-pill">AI</span>
+              <input class="input" id="terminalInput" type="text" placeholder="Ask the editor to draft or update a section..." />
+              <button class="btn secondary" id="terminalSendBtn" type="button">Send</button>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -496,6 +566,7 @@
   <script src="draft/html_index.js"></script>
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
+    const TEMPLATE_KEY = "websiteEditorTemplate";
     const LOCAL_PREFIX = "websiteEditorDraft::";
     const SAVE_DELAY = 600;
 
@@ -507,7 +578,8 @@
       editorText: "",
       saveTimer: null,
       baseDir: "draft/",
-      formState: null
+      formState: null,
+      template: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -521,6 +593,42 @@
         .replace(/'/g, "&#39;");
     }
 
+    const defaultTemplate = () => ({
+      analyticsHtml:
+`<!-- Google tag (gtag.js) -->
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"></script>
+<script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-9ZM2D6XGT2');
+    </script>`,
+      defaultKeywords: "",
+      defaultDescription: "",
+      footerText: "© 2026 miniPCB. All rights reserved.",
+      cssHrefBoard: "/styles.css",
+      cssHrefCollection: "../styles.css",
+      jsHrefBoard: "/js/minipcb.js",
+      faviconHref: "/favicon.png",
+      versionStamp: "v2",
+      dateStamp: "2026-02-04"
+    });
+
+    function loadTemplate(){
+      try{
+        const raw = localStorage.getItem(TEMPLATE_KEY);
+        if(raw){
+          return { ...defaultTemplate(), ...JSON.parse(raw) };
+        }
+      }catch(_){}
+      return defaultTemplate();
+    }
+
+    function saveTemplate(next){
+      state.template = { ...state.template, ...next };
+      localStorage.setItem(TEMPLATE_KEY, JSON.stringify(state.template));
+    }
+
     function setStatus(kind, message){
       const el = $("editStatus");
       el.textContent = message;
@@ -531,6 +639,17 @@
       const el = $("dataStatus");
       el.textContent = message;
       el.className = ok ? "pill status ok" : "pill status err";
+    }
+
+    function logTerminal(kind, message){
+      const log = $("terminalLog");
+      if(!log) return;
+      const line = document.createElement("div");
+      line.className = "terminal-line";
+      const stamp = new Date().toLocaleTimeString();
+      line.innerHTML = `<span class="tag">[${escapeHtml(kind)}]</span><span>${escapeHtml(stamp)} ${escapeHtml(message)}</span>`;
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
     }
 
     function normalizeBaseDir(value){
@@ -620,7 +739,8 @@
       meta.innerHTML = parts.join("");
     }
 
-    function generateBoardHtml(formData){
+    function generateBoardHtml(formData, template){
+      const tpl = template || defaultTemplate();
       const nav = formData.nav.map(item => `  <li><a href="${escapeHtml(item.href)}">${escapeHtml(item.text)}</a></li>`).join("\n");
       const tabs = formData.sections.filter(section => section.tabLabel);
       const firstTabId = tabs.length ? tabs[0].id : (formData.sections[0] ? formData.sections[0].id : "");
@@ -679,24 +799,26 @@
         return `<div aria-hidden="${section.id === firstTabId ? "false" : "true"}" class="tab-content${active}"${hiddenAttr} id="${escapeHtml(section.id)}">\n<h2>${escapeHtml(section.title)}</h2>\n${body}\n</div>`;
       }).join("\n\n");
 
+      const keywords = formData.meta.keywords || tpl.defaultKeywords || "";
+      const description = formData.meta.description || tpl.defaultDescription || "";
+      const headStamp = tpl.versionStamp || tpl.dateStamp ? `<!-- Generated: ${escapeHtml(tpl.dateStamp || "")} | Version: ${escapeHtml(tpl.versionStamp || "")} -->` : "";
+      const analytics = tpl.analyticsHtml ? tpl.analyticsHtml + "\n" : "";
+      const cssHref = tpl.cssHrefBoard || "/styles.css";
+      const jsHref = tpl.jsHrefBoard || "";
+      const faviconHref = tpl.faviconHref || "/favicon.png";
+      const footerText = tpl.footerText || "© 2026 miniPCB. All rights reserved.";
+
       return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"></script>
-<script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-9ZM2D6XGT2');
-    </script>
+${analytics}${headStamp}
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>${escapeHtml(formData.meta.title || "")}</title>
-<link href="/styles.css" rel="stylesheet"/>
-<link href="/favicon.png" rel="icon" type="image/png"/>
-<meta content="${escapeHtml(formData.meta.keywords || "")}" name="keywords"/>
-<meta content="${escapeHtml(formData.meta.description || "")}" name="description"/>
+<link href="${escapeHtml(cssHref)}" rel="stylesheet"/>
+<link href="${escapeHtml(faviconHref)}" rel="icon" type="image/png"/>
+<meta content="${escapeHtml(keywords)}" name="keywords"/>
+<meta content="${escapeHtml(description)}" name="description"/>
 </head>
 <body>
 <nav>
@@ -720,17 +842,18 @@ ${sectionsHtml}
 </div>
 </main>
 <footer>
-      Â© 2026 miniPCB. All rights reserved.
+      ${escapeHtml(footerText)}
     </footer>
 <div aria-hidden="true" aria-label="Image viewer" id="lightbox" role="dialog">
 <img alt="Expanded image" id="lightbox-img"/>
 </div>
-<script src="/js/minipcb.js"></script>
+${jsHref ? `<script src="${escapeHtml(jsHref)}"></script>` : ""}
 </body>
 </html>`;
     }
 
-    function generateCollectionHtml(formData){
+    function generateCollectionHtml(formData, template){
+      const tpl = template || defaultTemplate();
       const nav = formData.nav.map(item => `  <li><a href="${escapeHtml(item.href)}">${escapeHtml(item.text)}</a></li>`).join("\n");
       const rows = (formData.rows || []).map(row => {
         return `<tr>
@@ -740,23 +863,23 @@ ${sectionsHtml}
 </tr>`;
       }).join("\n");
 
+      const keywords = formData.meta.keywords || tpl.defaultKeywords || "";
+      const headStamp = tpl.versionStamp || tpl.dateStamp ? `<!-- Generated: ${escapeHtml(tpl.dateStamp || "")} | Version: ${escapeHtml(tpl.versionStamp || "")} -->` : "";
+      const analytics = tpl.analyticsHtml ? tpl.analyticsHtml + "\n" : "";
+      const cssHref = tpl.cssHrefCollection || "../styles.css";
+      const faviconHref = tpl.faviconHref || "/favicon.png";
+      const footerText = tpl.footerText || "© 2026 miniPCB. All rights reserved.";
+
       return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-9ZM2D6XGT2"></script>
-<script>
-   window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-9ZM2D6XGT2');
-  </script>
+${analytics}${headStamp}
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>${escapeHtml(formData.meta.title || "")}</title>
-<link href="../styles.css" rel="stylesheet"/>
-<link href="/favicon.png" rel="icon" type="image/png"/>
-<meta content="${escapeHtml(formData.meta.keywords || "")}" name="keywords"/>
+<link href="${escapeHtml(cssHref)}" rel="stylesheet"/>
+<link href="${escapeHtml(faviconHref)}" rel="icon" type="image/png"/>
+<meta content="${escapeHtml(keywords)}" name="keywords"/>
 </head>
 <body>
 <nav>
@@ -786,7 +909,7 @@ ${rows}
 </section>
 </main>
 <footer>
-   Â© 2026 miniPCB. All rights reserved.
+   ${escapeHtml(footerText)}
   </footer>
 </body>
 </html>`;
@@ -959,6 +1082,40 @@ ${rows}
       return extractCollectionFromHtml(doc);
     }
 
+    function extractTemplateFromHtml(html){
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const headScripts = Array.from(doc.querySelectorAll("head script"));
+      const analyticsScripts = headScripts.filter(script => {
+        const src = script.getAttribute("src") || "";
+        const text = script.textContent || "";
+        return src.includes("googletagmanager.com/gtag/js") || text.includes("gtag('config'");
+      });
+      const analyticsHtml = analyticsScripts.map(s => s.outerHTML).join("\n");
+
+      const stylesheet = doc.querySelector('link[rel="stylesheet"]');
+      const cssHref = stylesheet ? stylesheet.getAttribute("href") || "" : "";
+      const favicon = doc.querySelector('link[rel="icon"]');
+      const faviconHref = favicon ? favicon.getAttribute("href") || "" : "";
+
+      const scripts = Array.from(doc.querySelectorAll("script[src]"));
+      const jsHref = scripts.length ? scripts[scripts.length - 1].getAttribute("src") || "" : "";
+
+      const footer = doc.querySelector("footer");
+      const footerText = footer ? footer.textContent.trim().replace(/\s+/g, " ") : "";
+
+      const next = { ...defaultTemplate() };
+      if(analyticsHtml) next.analyticsHtml = analyticsHtml;
+      if(cssHref){
+        if(cssHref.startsWith("../")) next.cssHrefCollection = cssHref;
+        else next.cssHrefBoard = cssHref;
+      }
+      if(faviconHref) next.faviconHref = faviconHref;
+      if(jsHref) next.jsHrefBoard = jsHref;
+      if(footerText) next.footerText = footerText;
+      return next;
+    }
+
     function syncFormInputs(html){
       state.formState = extractFormFromHtml(html);
       renderForm(state.formState);
@@ -967,6 +1124,50 @@ ${rows}
     function renderForm(data){
       const container = $("formContainer");
       container.innerHTML = "";
+
+      const templateCard = document.createElement("div");
+      templateCard.className = "panel-card";
+      templateCard.innerHTML = `
+        <div class="panel-title">Template Editor</div>
+        <div class="help">Global defaults and includes used when Update generates full HTML.</div>
+        <div class="form-grid">
+          <label>Analytics HTML
+            <textarea class="input" data-field="tpl-analytics" placeholder="Paste analytics script(s)..."></textarea>
+          </label>
+          <label>Default Keywords
+            <input class="input" data-field="tpl-default-keywords" type="text" placeholder="Default keywords" />
+          </label>
+          <label>Default Description
+            <input class="input" data-field="tpl-default-description" type="text" placeholder="Default description" />
+          </label>
+          <label>Footer Text
+            <input class="input" data-field="tpl-footer" type="text" placeholder="© 2026 miniPCB. All rights reserved." />
+          </label>
+          <label>Stylesheet (Board)
+            <input class="input" data-field="tpl-css-board" type="text" placeholder="/styles.css" />
+          </label>
+          <label>Stylesheet (Collection)
+            <input class="input" data-field="tpl-css-collection" type="text" placeholder="../styles.css" />
+          </label>
+          <label>Script (Board)
+            <input class="input" data-field="tpl-js-board" type="text" placeholder="/js/minipcb.js" />
+          </label>
+          <label>Favicon Href
+            <input class="input" data-field="tpl-favicon" type="text" placeholder="/favicon.png" />
+          </label>
+          <label>Version Stamp
+            <input class="input" data-field="tpl-version" type="text" placeholder="v2" />
+          </label>
+          <label>Date Stamp
+            <input class="input" data-field="tpl-date" type="text" placeholder="2026-02-04" />
+          </label>
+        </div>
+        <div class="row-actions">
+          <button class="btn secondary" data-action="tpl-load" type="button">Load From File</button>
+          <button class="btn" data-action="tpl-save" type="button">Save Template</button>
+        </div>
+      `;
+      container.appendChild(templateCard);
 
       const metaCard = document.createElement("div");
       metaCard.className = "panel-card";
@@ -1195,6 +1396,18 @@ ${rows}
         container.appendChild(rowsWrap);
       }
 
+      const tpl = state.template || defaultTemplate();
+      container.querySelector('[data-field="tpl-analytics"]').value = tpl.analyticsHtml || "";
+      container.querySelector('[data-field="tpl-default-keywords"]').value = tpl.defaultKeywords || "";
+      container.querySelector('[data-field="tpl-default-description"]').value = tpl.defaultDescription || "";
+      container.querySelector('[data-field="tpl-footer"]').value = tpl.footerText || "";
+      container.querySelector('[data-field="tpl-css-board"]').value = tpl.cssHrefBoard || "";
+      container.querySelector('[data-field="tpl-css-collection"]').value = tpl.cssHrefCollection || "";
+      container.querySelector('[data-field="tpl-js-board"]').value = tpl.jsHrefBoard || "";
+      container.querySelector('[data-field="tpl-favicon"]').value = tpl.faviconHref || "";
+      container.querySelector('[data-field="tpl-version"]').value = tpl.versionStamp || "";
+      container.querySelector('[data-field="tpl-date"]').value = tpl.dateStamp || "";
+
       container.querySelector('[data-field="meta-title"]').value = data.meta.title || "";
       container.querySelector('[data-field="meta-description"]').value = data.meta.description || "";
       container.querySelector('[data-field="meta-keywords"]').value = data.meta.keywords || "";
@@ -1314,6 +1527,22 @@ ${rows}
       return { type: "board", meta, nav, sections };
     }
 
+    function collectTemplateState(){
+      const container = $("formContainer");
+      return {
+        analyticsHtml: container.querySelector('[data-field="tpl-analytics"]').value.trim(),
+        defaultKeywords: container.querySelector('[data-field="tpl-default-keywords"]').value.trim(),
+        defaultDescription: container.querySelector('[data-field="tpl-default-description"]').value.trim(),
+        footerText: container.querySelector('[data-field="tpl-footer"]').value.trim(),
+        cssHrefBoard: container.querySelector('[data-field="tpl-css-board"]').value.trim(),
+        cssHrefCollection: container.querySelector('[data-field="tpl-css-collection"]').value.trim(),
+        jsHrefBoard: container.querySelector('[data-field="tpl-js-board"]').value.trim(),
+        faviconHref: container.querySelector('[data-field="tpl-favicon"]').value.trim(),
+        versionStamp: container.querySelector('[data-field="tpl-version"]').value.trim(),
+        dateStamp: container.querySelector('[data-field="tpl-date"]').value.trim()
+      };
+    }
+
     function updateModifiedState(){
       const current = state.current?.path;
       if(!current){
@@ -1325,6 +1554,79 @@ ${rows}
         setStatus(draft ? "warn" : "warn", draft ? "Draft saved" : "Modified");
       }else{
         setStatus("ok", "Clean");
+      }
+    }
+
+    function runUpdate(){
+      if(!state.current) return;
+      const template = collectTemplateState();
+      saveTemplate(template);
+      const data = collectFormState();
+      const updated = data.type === "collection"
+        ? generateCollectionHtml(data, template)
+        : generateBoardHtml(data, template);
+      state.editorText = updated;
+      saveDraft(state.current.path, state.editorText);
+      updateModifiedState();
+      logTerminal("update", `Updated ${state.current.path}`);
+    }
+
+    function runValidate(){
+      if(!state.current) return;
+      const data = collectFormState();
+      const issues = [];
+      if(!data.meta.title) issues.push("Missing title");
+      if(!data.meta.h1) issues.push("Missing H1");
+      if(data.type === "collection"){
+        if(!data.rows || !data.rows.length) issues.push("No collection rows");
+      }else{
+        if(!data.sections || !data.sections.length) issues.push("No sections");
+      }
+      if(issues.length){
+        setStatus("warn", "Validation issues");
+        issues.forEach(msg => logTerminal("validate", msg));
+      }else{
+        setStatus("ok", "Validated");
+        logTerminal("validate", "All required fields present");
+      }
+    }
+
+    function runExport(){
+      if(!state.current) return;
+      downloadCurrent();
+      logTerminal("export", `Exported ${state.current.url}`);
+    }
+
+    function runReload(){
+      if(state.current) selectEntry(state.current);
+    }
+
+    function runCommand(input){
+      const raw = (input || "").trim();
+      if(!raw) return;
+      const [cmd, ...rest] = raw.split(" ");
+      const arg = rest.join(" ").trim();
+      switch(cmd.toLowerCase()){
+        case "update":
+          runUpdate();
+          break;
+        case "reload":
+          runReload();
+          break;
+        case "validate":
+          runValidate();
+          break;
+        case "export":
+          runExport();
+          break;
+        case "ai":
+          logTerminal("ai", arg ? `Received: ${arg}` : "AI not connected.");
+          break;
+        case "help":
+          logTerminal("help", "Commands: update, reload, validate, export, ai <text>");
+          break;
+        default:
+          logTerminal("error", `Unknown command: ${cmd}`);
       }
     }
 
@@ -1371,7 +1673,7 @@ ${rows}
 
     function setupEditor(){
       $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
-      $("reloadBtn").addEventListener("click", () => state.current && selectEntry(state.current));
+      $("reloadBtn").addEventListener("click", runReload);
       $("revertBtn").addEventListener("click", () => {
         if(!state.current) return;
         clearDraft(state.current.path);
@@ -1379,20 +1681,11 @@ ${rows}
         syncFormInputs(state.editorText);
         updateModifiedState();
       });
-      $("downloadBtn").addEventListener("click", downloadCurrent);
-
-      $("applyFormBtn").addEventListener("click", () => {
-        if(!state.current) return;
-        const data = collectFormState();
-        const updated = data.type === "collection" ? generateCollectionHtml(data) : generateBoardHtml(data);
-        state.editorText = updated;
-        saveDraft(state.current.path, state.editorText);
-        updateModifiedState();
-      });
-
-      $("syncFormBtn").addEventListener("click", () => {
-        if(!state.current) return;
-        syncFormInputs(state.editorText);
+      $("exportBtn").addEventListener("click", runExport);
+      $("validateBtn").addEventListener("click", runValidate);
+      $("updateBtn").addEventListener("click", runUpdate);
+      $("aiBtn").addEventListener("click", () => {
+        $("terminalInput").focus();
       });
 
       $("formContainer").addEventListener("click", (e) => {
@@ -1489,6 +1782,18 @@ ${rows}
           `;
           list.appendChild(row);
         }
+        if(action === "tpl-save"){
+          const next = collectTemplateState();
+          saveTemplate(next);
+          logTerminal("template", "Template saved");
+        }
+        if(action === "tpl-load"){
+          if(!state.current) return;
+          const next = extractTemplateFromHtml(state.editorText);
+          saveTemplate(next);
+          renderForm(state.formState);
+          logTerminal("template", "Template loaded from file");
+        }
         if(action === "ai-draft"){
           const input = $("formContainer").querySelector('[data-field="ai-input"]').value.trim();
           const targetSelect = $("formContainer").querySelector('[data-field="ai-target"]');
@@ -1538,6 +1843,36 @@ ${rows}
         }
       });
 
+      $("commandRunBtn").addEventListener("click", () => {
+        const input = $("commandInput");
+        runCommand(input.value);
+        input.value = "";
+      });
+
+      $("commandInput").addEventListener("keydown", (e) => {
+        if(e.key === "Enter"){
+          e.preventDefault();
+          const input = e.target;
+          runCommand(input.value);
+          input.value = "";
+        }
+      });
+
+      $("terminalSendBtn").addEventListener("click", () => {
+        const input = $("terminalInput");
+        runCommand(`ai ${input.value}`);
+        input.value = "";
+      });
+
+      $("terminalInput").addEventListener("keydown", (e) => {
+        if(e.key === "Enter"){
+          e.preventDefault();
+          const input = e.target;
+          runCommand(`ai ${input.value}`);
+          input.value = "";
+        }
+      });
+
       $("prefsBtn").addEventListener("click", () => {
         $("baseDirInput").value = state.baseDir || "draft/";
         $("prefsModal").classList.add("open");
@@ -1557,12 +1892,14 @@ ${rows}
 
     function init(){
       try{
+        state.template = loadTemplate();
         state.baseDir = getBaseDir();
         state.entries = listFromIndex(state.baseDir);
         state.filtered = state.entries.slice();
         $("fileCount").textContent = `${state.filtered.length} files`;
         setDataStatus(true, "Index: draft");
         renderList();
+        logTerminal("system", "Ready");
       }catch(err){
         setDataStatus(false, "Index: missing");
       }
