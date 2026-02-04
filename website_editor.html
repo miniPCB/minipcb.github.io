@@ -588,6 +588,10 @@
       justify-content: flex-end;
     }
 
+    .modalSmall{
+      width: min(460px, 96vw);
+    }
+
     @media (max-width: 980px){
       .layout{ grid-template-columns: 1fr; }
       aside{ order:2; }
@@ -699,6 +703,30 @@
     </div>
   </div>
 
+  <div class="modalBack" id="sectionModal">
+    <div class="modal modalSmall">
+      <h3>Edit Section</h3>
+      <div class="modalGrid">
+        <label>
+          Section ID
+          <input class="input" id="sectionIdInput" type="text" />
+        </label>
+        <label>
+          Tab Label
+          <input class="input" id="sectionTabInput" type="text" />
+        </label>
+        <label>
+          Section Title
+          <input class="input" id="sectionTitleInput" type="text" />
+        </label>
+      </div>
+      <div class="modalActions">
+        <button class="btn secondary" id="sectionCancel" type="button">Cancel</button>
+        <button class="btn" id="sectionSave" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="draft/html_index.js"></script>
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
@@ -716,7 +744,8 @@
       saveTimer: null,
       baseDir: "draft/",
       formState: null,
-      template: null
+      template: null,
+      editingSectionCard: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1480,13 +1509,13 @@ ${rows}
           card.className = "section-card";
           card.dataset.sectionId = section.id;
           card.dataset.sectionType = section.type;
+          card.dataset.sectionTitle = section.title || "";
+          card.dataset.sectionTab = section.tabLabel || "";
           card.innerHTML = `
-            <div class="inline-row">
-              <label>Section ID<input class="input" data-field="section-id" type="text" value="${escapeHtml(section.id)}" readonly></label>
-              <label>Tab Label<input class="input" data-field="section-tab" type="text" value="${escapeHtml(section.tabLabel || "")}"></label>
-            </div>
-            <div class="inline-row">
-              <label>Section Title<input class="input" data-field="section-title" type="text" value="${escapeHtml(section.title || "")}"></label>
+            <div class="badge-row">
+              <span class="badge-pill">${escapeHtml(section.id)}</span>
+              ${section.tabLabel ? `<span class="badge-pill">${escapeHtml(section.tabLabel)}</span>` : ""}
+              ${section.title ? `<span class="badge-pill">${escapeHtml(section.title)}</span>` : ""}
             </div>
           `;
 
@@ -1749,9 +1778,9 @@ ${rows}
       }
 
       const sections = Array.from(panelSections.querySelectorAll(".section-card")).map(card => {
-        const id = card.dataset.sectionId || card.querySelector('[data-field="section-id"]').value.trim();
-        const title = card.querySelector('[data-field="section-title"]').value.trim();
-        const tabLabel = card.querySelector('[data-field="section-tab"]').value.trim();
+        const id = card.dataset.sectionId || "";
+        const title = card.dataset.sectionTitle || "";
+        const tabLabel = card.dataset.sectionTab || "";
         const group = card.closest(".section-group");
         const visible = group ? group.dataset.visible !== "false" : true;
         const type = card.dataset.sectionType;
@@ -1971,8 +2000,15 @@ ${rows}
         const container = tabBtn.closest(".panel-card");
         if(!container) return;
         if(e.shiftKey && tabBtn.getAttribute("data-subtab") !== "add-new"){
-          const next = prompt("Rename section subtab:", tabBtn.textContent.trim());
-          if(next) tabBtn.textContent = next.trim();
+          const group = container.querySelector(`.section-group[data-subtab="${tabBtn.getAttribute("data-subtab")}"]`);
+          if(!group) return;
+          const card = group.querySelector(".section-card");
+          if(!card) return;
+          state.editingSectionCard = card;
+          $("sectionIdInput").value = card.dataset.sectionId || "";
+          $("sectionTabInput").value = card.dataset.sectionTab || "";
+          $("sectionTitleInput").value = card.dataset.sectionTitle || "";
+          $("sectionModal").classList.add("open");
           return;
         }
         if(tabBtn.getAttribute("data-subtab") === "add-new"){
@@ -2244,6 +2280,27 @@ ${rows}
         setTerminalDock($("terminalDockInput").value);
         $("prefsModal").classList.remove("open");
         init();
+      });
+
+      $("sectionCancel").addEventListener("click", () => {
+        state.editingSectionCard = null;
+        $("sectionModal").classList.remove("open");
+      });
+
+      $("sectionSave").addEventListener("click", () => {
+        const card = state.editingSectionCard;
+        if(!card) return;
+        card.dataset.sectionId = $("sectionIdInput").value.trim() || card.dataset.sectionId;
+        card.dataset.sectionTab = $("sectionTabInput").value.trim();
+        card.dataset.sectionTitle = $("sectionTitleInput").value.trim();
+        const pills = [];
+        if(card.dataset.sectionId) pills.push(`<span class="badge-pill">${escapeHtml(card.dataset.sectionId)}</span>`);
+        if(card.dataset.sectionTab) pills.push(`<span class="badge-pill">${escapeHtml(card.dataset.sectionTab)}</span>`);
+        if(card.dataset.sectionTitle) pills.push(`<span class="badge-pill">${escapeHtml(card.dataset.sectionTitle)}</span>`);
+        const badgeRow = card.querySelector(".badge-row");
+        if(badgeRow) badgeRow.innerHTML = pills.join("");
+        $("sectionModal").classList.remove("open");
+        state.editingSectionCard = null;
       });
     }
 
