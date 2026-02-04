@@ -756,9 +756,11 @@
       <div class="modalGrid">
         <label>
           HTML Folder
-          <input class="input" id="folderInput" type="file" webkitdirectory directory />
+          <div class="row-actions">
+            <button class="btn secondary" id="folderPickBtn" type="button">Choose Folder</button>
+            <span class="tiny" id="folderLabel">No folder selected.</span>
+          </div>
         </label>
-        <div class="tiny" id="folderLabel">No folder selected.</div>
         <label>
           Author
           <input class="input" id="authorInput" type="text" placeholder="Name" />
@@ -819,6 +821,10 @@
     <button type="button" data-table-action="ai-suggest">AI Suggest</button>
   </div>
 
+  <div class="context-menu" id="fileContextMenu">
+    <button type="button" id="fileDeleteBtn">Delete File</button>
+  </div>
+
   <script src="draft/html_index.js"></script>
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
@@ -827,6 +833,8 @@
     const AUTHOR_KEY = "websiteEditorAuthor";
     const LOCAL_PREFIX = "websiteEditorDraft::";
     const SAVE_DELAY = 600;
+    const FS_DB = "websiteEditorFs";
+    const FS_STORE = "handles";
 
     const state = {
       entries: [],
@@ -837,6 +845,8 @@
       saveTimer: null,
       baseDir: "draft/",
       fileIndex: null,
+      fsRootHandle: null,
+      fsRootPath: "",
       formState: null,
       template: null,
       editingSectionCard: null
@@ -844,6 +854,7 @@
 
     let contextTargetTab = null;
     let contextTableCell = null;
+    let contextTargetFile = null;
 
     const $ = (id) => document.getElementById(id);
 
@@ -979,6 +990,107 @@
       localStorage.setItem(PREFS_KEY, state.baseDir);
     }
 
+    function idbOpen(){
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(FS_DB, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if(!db.objectStoreNames.contains(FS_STORE)) db.createObjectStore(FS_STORE);
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function idbGet(key){
+      const db = await idbOpen();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(FS_STORE, "readonly");
+        const store = tx.objectStore(FS_STORE);
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function idbSet(key, value){
+      const db = await idbOpen();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(FS_STORE, "readwrite");
+        const store = tx.objectStore(FS_STORE);
+        const req = store.put(value, key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function loadFolderRoot(){
+      try{
+        const handle = await idbGet("htmlRootHandle");
+        if(handle) state.fsRootHandle = handle;
+        const path = await idbGet("htmlRootPath");
+        if(path) state.fsRootPath = String(path);
+      }catch{}
+    }
+
+    function updateFolderLabel(){
+      const label = $("folderLabel");
+      if(!label) return;
+      if(state.fsRootHandle){
+        label.textContent = state.fsRootPath || state.fsRootHandle.name || "Folder selected.";
+      }else{
+        label.textContent = "No folder selected.";
+      }
+    }
+
+    async function setFolderRoot(){
+      if(!window.showDirectoryPicker){
+        logTerminal("error", "Folder access not supported in this browser.");
+        return;
+      }
+      try{
+        const rootHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+        state.fsRootHandle = rootHandle;
+        state.fsRootPath = rootHandle.name || "Selected folder";
+        await idbSet("htmlRootHandle", rootHandle);
+        await idbSet("htmlRootPath", state.fsRootPath);
+        updateFolderLabel();
+        await ensureIndexLoaded();
+        state.entries = listFromIndex(state.baseDir);
+        state.filtered = state.entries.slice();
+        $("fileCount").textContent = `${state.filtered.length} files`;
+        setDataStatus(true, "Index: folder");
+        renderList();
+        logTerminal("system", "Folder selected");
+      }catch{
+        logTerminal("warn", "Folder selection canceled");
+      }
+    }
+
+    function useFileSystemStore(){
+      return !!state.fsRootHandle && !!window.showDirectoryPicker;
+    }
+
+    async function ensureFolderHandle(mode){
+      if(!state.fsRootHandle) return null;
+      try{
+        const perm = await state.fsRootHandle.queryPermission({ mode });
+        if(perm === "granted") return state.fsRootHandle;
+        const req = await state.fsRootHandle.requestPermission({ mode });
+        return req === "granted" ? state.fsRootHandle : null;
+      }catch{
+        return null;
+      }
+    }
+
+    async function ensureFolderHandleRead(){
+      return ensureFolderHandle("read");
+    }
+
+    async function ensureFolderHandleWrite(){
+      return ensureFolderHandle("readwrite");
+    }
+
     function loadDraft(path){
       return localStorage.getItem(LOCAL_PREFIX + path);
     }
@@ -1012,6 +1124,10 @@
 
     async function ensureIndexLoaded(){
       if(state.fileIndex && state.fileIndex.length) return true;
+      if(useFileSystemStore()){
+        const ok = await loadFileIndexFromFs();
+        return ok && state.fileIndex && state.fileIndex.length;
+      }
       if(Array.isArray(window.DRAFT_HTML_INDEX) && window.DRAFT_HTML_INDEX.length) return true;
       const candidate = `${state.baseDir}html_index.js`;
       try{
@@ -1027,6 +1143,36 @@
         logTerminal("error", err?.message || "Failed to load html_index.js");
       }
       return false;
+    }
+
+    async function loadFileIndexFromFs(){
+      const root = await ensureFolderHandleRead();
+      if(!root) return false;
+      const items = [];
+      const walk = async (dirHandle, relBase) => {
+        for await (const [name, handle] of dirHandle.entries()){
+          if(handle.kind === "file"){
+            if(name.toLowerCase().endsWith(".html")){
+              const rel = relBase ? `${relBase}/${name}` : name;
+              items.push({
+                rel,
+                url: rel,
+                path: rel,
+                title: rel,
+                name,
+                fileHandle: handle,
+                dirHandle
+              });
+            }
+          }else if(handle.kind === "directory"){
+            const nextBase = relBase ? `${relBase}/${name}` : name;
+            await walk(handle, nextBase);
+          }
+        }
+      };
+      await walk(root, "");
+      state.fileIndex = items.sort((a, b) => a.rel.localeCompare(b.rel));
+      return true;
     }
 
     function renderList(){
@@ -1049,6 +1195,7 @@
             isDirty = true;
           }
         }
+        item.dataset.rel = entry.rel || entry.path || entry.url || "";
         item.innerHTML = `
           <div class="name">${escapeHtml(entry.rel || entry.path)}</div>
           ${isDirty ? `<div class="tag">Modified</div>` : ""}
@@ -1973,16 +2120,38 @@ ${rows}
       logTerminal("update", `Updated ${state.current.path}`);
     }
 
-    function runSave(){
-      runUpdate();
+    async function writeEntryToDisk(entry, text){
+      if(!entry?.fileHandle) return false;
+      const root = await ensureFolderHandleWrite();
+      if(!root) return false;
+      const writable = await entry.fileHandle.createWritable();
+      await writable.write(text);
+      await writable.close();
+      return true;
     }
 
-    function runSaveAll(){
+    async function runSave(){
+      if(!state.current) return;
+      runUpdate();
+      if(useFileSystemStore() && state.current.fileHandle){
+        try{
+          await writeEntryToDisk(state.current, state.editorText);
+          clearDraft(state.current.path);
+          state.originalText = state.editorText;
+          updateModifiedState();
+          logTerminal("save", `Saved ${state.current.path}`);
+        }catch(err){
+          logTerminal("error", `Save failed for ${state.current.path}`);
+        }
+      }
+    }
+
+    async function runSaveAll(){
       const template = collectTemplateState();
       saveTemplate(template);
-      state.entries.forEach(entry => {
+      for(const entry of state.entries){
         const draft = loadDraft(entry.path);
-        if(!draft) return;
+        if(!draft) continue;
         const savedCurrent = state.current;
         const savedOriginal = state.originalText;
         const savedEditor = state.editorText;
@@ -1991,6 +2160,9 @@ ${rows}
           const updated = data.type === "collection"
             ? generateCollectionHtml(data, template)
             : generateBoardHtml(data, template);
+          if(useFileSystemStore() && entry.fileHandle){
+            await writeEntryToDisk(entry, updated);
+          }
           clearDraft(entry.path);
           if(savedCurrent && savedCurrent.path === entry.path){
             state.editorText = updated;
@@ -2003,7 +2175,7 @@ ${rows}
           state.originalText = savedOriginal;
           state.editorText = savedEditor;
         }
-      });
+      }
       updateModifiedState();
       logTerminal("save", "Saved all draft files");
     }
@@ -2029,6 +2201,12 @@ ${rows}
     }
 
     async function fetchFile(entry){
+      if(entry.fileHandle){
+        const root = await ensureFolderHandleRead();
+        if(!root) throw new Error("Folder access denied");
+        const file = await entry.fileHandle.getFile();
+        return file.text();
+      }
       if(entry.file){
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -2199,6 +2377,10 @@ ${rows}
         if(tableMenu && tableMenu.style.display === "block" && !tableMenu.contains(e.target)){
           tableMenu.style.display = "none";
         }
+        const fileMenu = $("fileContextMenu");
+        if(fileMenu && fileMenu.style.display === "block" && !fileMenu.contains(e.target)){
+          fileMenu.style.display = "none";
+        }
       });
 
       $("sectionDeleteBtn").addEventListener("click", () => {
@@ -2310,6 +2492,60 @@ ${rows}
         const menu = $("tableContextMenu");
         menu.style.display = "none";
         contextTableCell = null;
+      });
+      document.addEventListener("contextmenu", (e) => {
+        const item = e.target.closest(".file-item");
+        if(!item) return;
+        e.preventDefault();
+        const rel = item.dataset.rel || "";
+        contextTargetFile = state.entries.find(entry => (entry.rel || entry.path) === rel) || null;
+        const menu = $("fileContextMenu");
+        if(menu){
+          menu.style.display = "block";
+          menu.style.left = `${e.clientX}px`;
+          menu.style.top = `${e.clientY}px`;
+        }
+      });
+
+      $("fileDeleteBtn").addEventListener("click", async () => {
+        const entry = contextTargetFile;
+        if(!entry) return;
+        const menu = $("fileContextMenu");
+        if(menu) menu.style.display = "none";
+        contextTargetFile = null;
+        if(!useFileSystemStore() || !entry.dirHandle){
+          logTerminal("error", "Delete requires folder access.");
+          return;
+        }
+        const root = await ensureFolderHandleWrite();
+        if(!root){
+          logTerminal("error", "Folder access denied.");
+          return;
+        }
+        try{
+          await entry.dirHandle.removeEntry(entry.name, { recursive: true });
+          clearDraft(entry.path);
+          state.entries = state.entries.filter(item => item !== entry);
+          state.filtered = state.filtered.filter(item => item !== entry);
+          $("fileCount").textContent = `${state.filtered.length} files`;
+          if(state.current && state.current.path === entry.path){
+            state.current = null;
+            state.originalText = "";
+            state.editorText = "";
+            $("previewTitle").textContent = "Select an HTML file";
+            updatePreviewMeta(null);
+            ["panel-template", "panel-content", "panel-sections", "panel-collection"].forEach(id => {
+              const panel = $(id);
+              if(panel) panel.innerHTML = "";
+            });
+            setStatus("ok", "CLEAN");
+            setSaveDirty(false);
+          }
+          renderList();
+          logTerminal("delete", `Deleted ${entry.rel}`);
+        }catch(err){
+          logTerminal("error", `Delete failed for ${entry.rel}`);
+        }
       });
       $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
       $("saveBtn").addEventListener("click", runSave);
@@ -2508,18 +2744,16 @@ ${rows}
       });
 
       $("prefsBtn").addEventListener("click", () => {
-        const label = $("folderLabel");
-        if(label) label.textContent = state.fileIndex && state.fileIndex.length ? "Folder selected." : "No folder selected.";
+        updateFolderLabel();
         $("authorInput").value = getAuthor();
         $("terminalDockInput").value = getTerminalDock();
         $("prefsModal").classList.add("open");
       });
 
-      const folderInput = $("folderInput");
-      if(folderInput){
-        folderInput.addEventListener("change", () => {
-          const label = $("folderLabel");
-          if(label) label.textContent = folderInput.files && folderInput.files.length ? "Folder selected." : "No folder selected.";
+      const folderPickBtn = $("folderPickBtn");
+      if(folderPickBtn){
+        folderPickBtn.addEventListener("click", async () => {
+          await setFolderRoot();
         });
       }
 
@@ -2528,20 +2762,6 @@ ${rows}
       });
 
       $("prefsSave").addEventListener("click", () => {
-        const files = $("folderInput").files;
-        if(files && files.length){
-          state.fileIndex = Array.from(files)
-            .filter(file => file.name.toLowerCase().endsWith(".html"))
-            .map(file => ({
-              rel: file.webkitRelativePath || file.name,
-              url: file.name,
-              path: file.webkitRelativePath || file.name,
-              title: file.name,
-              file
-            }));
-        }else{
-          state.fileIndex = null;
-        }
         setBaseDir("draft/");
         setAuthor($("authorInput").value);
         setTerminalDock($("terminalDockInput").value);
@@ -2575,12 +2795,14 @@ ${rows}
       try{
         state.template = loadTemplate();
         state.baseDir = getBaseDir();
+        await loadFolderRoot();
+        updateFolderLabel();
         const ok = await ensureIndexLoaded();
         state.entries = listFromIndex(state.baseDir);
         state.filtered = state.entries.slice();
         $("fileCount").textContent = `${state.filtered.length} files`;
         if(ok && state.entries.length){
-          setDataStatus(true, "Index: draft");
+          setDataStatus(true, useFileSystemStore() ? "Index: folder" : "Index: draft");
         }else{
           setDataStatus(false, "Index: missing");
         }
