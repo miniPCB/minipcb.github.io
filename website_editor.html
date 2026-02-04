@@ -1807,8 +1807,7 @@ ${rows}
               rowEl.className = "inline-row";
               rowEl.dataset.detailRow = "true";
               rowEl.innerHTML = `
-                <label>${escapeHtml(detailLabelFor(row.label))}<input class="input" data-field="detail-label" type="text" value="${escapeHtml(row.label)}"></label>
-                <label>Value<input class="input" data-field="detail-value" type="text" value="${escapeHtml(row.value)}"></label>
+                <label><span class="detail-label" data-field="detail-label">${escapeHtml(detailLabelFor(row.label))}</span><input class="input" data-field="detail-value" type="text" value="${escapeHtml(row.value)}"></label>
               `;
               rows.appendChild(rowEl);
             });
@@ -2024,17 +2023,17 @@ ${rows}
         return { type: "collection", meta, nav, rows };
       }
 
-      const sections = Array.from(panelSections.querySelectorAll(".section-card")).map(card => {
-        const id = card.dataset.sectionId || "";
-        const title = card.dataset.sectionTitle || "";
-        const tabLabel = card.dataset.sectionTab || "";
-        const active = card.dataset.sectionActive === "true";
-        const group = card.closest(".section-group");
-        const visible = group ? group.dataset.visible !== "false" : true;
-        const type = card.dataset.sectionType;
+        const sections = Array.from(panelSections.querySelectorAll(".section-card")).map(card => {
+          const id = card.dataset.sectionId || "";
+          const title = card.dataset.sectionTitle || "";
+          const tabLabel = card.dataset.sectionTab || "";
+          const active = card.dataset.sectionActive === "true";
+          const group = card.closest(".section-group");
+          const visible = group ? group.dataset.visible !== "false" : true;
+          const type = card.dataset.sectionType;
         if(type === "details"){
           const rows = Array.from(card.querySelectorAll("[data-detail-row]")).map(row => ({
-            label: row.querySelector('[data-field="detail-label"]').value.trim(),
+            label: (row.querySelector('[data-field="detail-label"]')?.textContent || "").trim(),
             value: row.querySelector('[data-field="detail-value"]').value.trim()
           })).filter(row => row.label || row.value);
           return { id, title, tabLabel, active, hidden: !visible, type, rows };
@@ -2173,6 +2172,42 @@ ${rows}
         saveDraft(state.current.path, state.editorText);
         updateModifiedState();
       }, SAVE_DELAY);
+    }
+
+    function editDetailLabel(span){
+      if(!span) return;
+      const current = span.textContent.trim();
+      const input = document.createElement("input");
+      input.className = "input";
+      input.type = "text";
+      input.value = current;
+      span.replaceWith(input);
+      input.focus();
+      input.select();
+      const commit = () => {
+        const next = input.value.trim() || "Label";
+        const newSpan = document.createElement("span");
+        newSpan.className = "detail-label";
+        newSpan.dataset.field = "detail-label";
+        newSpan.textContent = next;
+        input.replaceWith(newSpan);
+        queueDraftUpdate();
+      };
+      input.addEventListener("blur", commit, { once: true });
+      input.addEventListener("keydown", (e) => {
+        if(e.key === "Enter"){
+          e.preventDefault();
+          input.blur();
+        }
+        if(e.key === "Escape"){
+          e.preventDefault();
+          const newSpan = document.createElement("span");
+          newSpan.className = "detail-label";
+          newSpan.dataset.field = "detail-label";
+          newSpan.textContent = current || "Label";
+          input.replaceWith(newSpan);
+        }
+      });
     }
 
     function runUpdate(){
@@ -2498,6 +2533,12 @@ ${rows}
         group.dataset.visible = nextVisible ? "true" : "false";
         tabBtn.classList.toggle("visible", nextVisible);
         tabBtn.classList.toggle("hidden", !nextVisible);
+      });
+
+      document.addEventListener("dblclick", (e) => {
+        const label = e.target.closest(".detail-label");
+        if(!label) return;
+        editDetailLabel(label);
       });
 
       document.addEventListener("contextmenu", (e) => {
