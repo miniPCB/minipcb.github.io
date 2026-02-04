@@ -832,6 +832,7 @@
 
   <div class="context-menu" id="fileContextMenu">
     <button type="button" id="fileAddBtn">Add New File</button>
+    <button type="button" id="fileDuplicateBtn">Duplicate File</button>
     <button type="button" id="fileAiLoadBtn">Load File in AI Context</button>
     <button type="button" id="fileDeleteBtn">Delete File</button>
   </div>
@@ -2238,6 +2239,18 @@ ${rows}
       return true;
     }
 
+    function suggestDuplicateName(rel){
+      const cleaned = rel.replace(/\\/g, "/");
+      const parts = cleaned.split("/");
+      const fileName = parts.pop() || "copy.html";
+      const dot = fileName.lastIndexOf(".");
+      const base = dot > 0 ? fileName.slice(0, dot) : fileName;
+      const ext = dot > 0 ? fileName.slice(dot) : ".html";
+      const nextBase = base.endsWith("-copy") ? `${base}` : `${base}-copy`;
+      parts.push(`${nextBase}${ext}`);
+      return parts.join("/");
+    }
+
     async function runSave(){
       if(!state.current) return;
       runUpdate();
@@ -2674,6 +2687,48 @@ ${rows}
           logTerminal("create", `Added ${entry.rel}`);
         }catch(err){
           logTerminal("error", "Failed to add file");
+        }
+      });
+
+      $("fileDuplicateBtn").addEventListener("click", async () => {
+        const entry = contextTargetFile;
+        const menu = $("fileContextMenu");
+        if(menu) menu.style.display = "none";
+        contextTargetFile = null;
+        if(!entry){
+          logTerminal("error", "No file selected.");
+          return;
+        }
+        if(!useFileSystemStore()){
+          logTerminal("error", "Select a folder to duplicate files.");
+          return;
+        }
+        try{
+          const text = await fetchFile(entry);
+          const suggested = suggestDuplicateName(entry.rel || entry.path || "copy.html");
+          const next = window.prompt("Duplicate file as:", suggested);
+          if(!next) return;
+          const nextPath = next.toLowerCase().endsWith(".html") ? next : `${next}.html`;
+          const created = await createFileInFolder(nextPath);
+          if(!created) throw new Error("Failed to create file");
+          const newEntry = {
+            rel: created.rel,
+            url: created.rel,
+            path: created.rel,
+            title: created.rel,
+            name: created.name,
+            fileHandle: created.fileHandle,
+            dirHandle: created.dirHandle
+          };
+          await writeEntryToDisk(newEntry, text);
+          state.entries.push(newEntry);
+          state.entries.sort((a, b) => (a.rel || "").localeCompare(b.rel || ""));
+          state.filtered = state.entries.slice();
+          $("fileCount").textContent = `${state.filtered.length} files`;
+          renderList();
+          logTerminal("duplicate", `Duplicated to ${newEntry.rel}`);
+        }catch(err){
+          logTerminal("error", "Duplicate failed");
         }
       });
 
