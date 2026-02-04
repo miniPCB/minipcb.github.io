@@ -386,6 +386,11 @@
       background: rgba(102,163,255,0.18);
     }
 
+    .section-tab.current{
+      font-weight:700;
+      box-shadow: 0 0 0 2px rgba(123,220,181,0.55);
+    }
+
     .section-tab.visible{
       color: var(--accent);
       border-color: rgba(123,220,181,0.8);
@@ -1235,7 +1240,8 @@
       const scriptClose = "</" + "script>";
       const nav = formData.nav.map(item => `  <li><a href="${escapeHtml(item.href)}">${escapeHtml(item.text)}</a></li>`).join("\n");
       const tabs = formData.sections.filter(section => section.tabLabel);
-      const firstTabId = tabs.length ? tabs[0].id : (formData.sections[0] ? formData.sections[0].id : "");
+      const activeTab = formData.sections.find(section => section.active && section.tabLabel);
+      const firstTabId = activeTab ? activeTab.id : (tabs.length ? tabs[0].id : (formData.sections[0] ? formData.sections[0].id : ""));
       const tabButtons = tabs.map(section => {
         const active = section.id === firstTabId ? " active" : "";
         const selected = section.id === firstTabId ? "true" : "false";
@@ -1427,6 +1433,17 @@ ${rows}
         };
       });
       const tabById = new Map(tabs.map(tab => [tab.id, tab.label]));
+      let activeTabId = "";
+      const activeTabBtn = doc.querySelector(".tabs .tab.active") || doc.querySelector('.tabs .tab[aria-selected="true"]');
+      if(activeTabBtn){
+        const onclick = activeTabBtn.getAttribute("onclick") || "";
+        const match = onclick.match(/showTab\('([^']+)'/);
+        activeTabId = match ? match[1] : activeTabBtn.dataset.tab || "";
+      }
+      if(!activeTabId){
+        const activeContent = doc.querySelector(".tab-content.active");
+        if(activeContent) activeTabId = activeContent.id || "";
+      }
 
       const sections = Array.from(doc.querySelectorAll(".tab-content")).map((section, idx) => {
         const id = section.id || `section-${idx + 1}`;
@@ -1434,6 +1451,7 @@ ${rows}
         const h2 = section.querySelector("h2");
         const title = h2 ? h2.textContent.trim() : id;
         const tabLabel = tabById.get(id) || "";
+        const active = !!(activeTabId && id === activeTabId);
         if(id === "details"){
           const rows = Array.from(section.querySelectorAll("p")).map(p => {
             const strong = p.querySelector("strong");
@@ -1442,7 +1460,7 @@ ${rows}
             const value = p.textContent.replace(strong.textContent, "").trim();
             return { label, value };
           }).filter(Boolean);
-          return { id, hidden, title, tabLabel, type: "details", rows };
+          return { id, hidden, title, tabLabel, active, type: "details", rows };
         }
 
         if(id === "downloads" || section.querySelector(".download-list")){
@@ -1450,7 +1468,7 @@ ${rows}
             label: link.textContent.trim(),
             href: link.getAttribute("href") || ""
           }));
-          return { id, hidden, title, tabLabel, type: "downloads", items };
+          return { id, hidden, title, tabLabel, active, type: "downloads", items };
         }
 
         if(id === "revisions" || section.querySelector(".revisions-table")){
@@ -1463,13 +1481,13 @@ ${rows}
               by: cells[3] ? cells[3].textContent.trim() : ""
             };
           });
-          return { id, hidden, title, tabLabel, type: "revisions", rows };
+          return { id, hidden, title, tabLabel, active, type: "revisions", rows };
         }
 
         if(id === "ai-seeds" || section.querySelector("#ai-seeds-json")){
           const script = section.querySelector("#ai-seeds-json");
           const text = script ? script.textContent.trim() : "{}";
-          return { id, hidden, title, tabLabel, type: "ai-seeds", jsonText: text || "{}" };
+          return { id, hidden, title, tabLabel, active, type: "ai-seeds", jsonText: text || "{}" };
         }
 
         const videos = Array.from(section.querySelectorAll("iframe"));
@@ -1479,6 +1497,7 @@ ${rows}
             hidden,
             title,
             tabLabel,
+            active,
             type: "videos",
             videos: videos.map(frame => ({
               src: frame.getAttribute("src") || "",
@@ -1496,6 +1515,7 @@ ${rows}
             hidden,
             title,
             tabLabel,
+            active,
             type: "images",
             images: images.map(img => ({
               src: img.getAttribute("src") || "",
@@ -1513,6 +1533,7 @@ ${rows}
           hidden,
           title,
           tabLabel,
+          active,
           type: "html",
           bodyHtml: clone.innerHTML.trim()
         };
@@ -1726,18 +1747,22 @@ ${rows}
         data.sections = defaults.map(def => existing.get(def.id) || def).concat(
           (data.sections || []).filter(section => !defaults.find(def => def.id === section.id))
         );
+        if(!(data.sections || []).some(section => section.active) && data.sections.length){
+          data.sections[0].active = true;
+        }
+        const activeId = (data.sections || []).find(section => section.active)?.id || (data.sections[0] ? data.sections[0].id : "");
 
         (data.sections || []).forEach((section, idx) => {
           const tabLabel = section.tabLabel || section.title || section.id;
           const tabBtn = document.createElement("button");
-          tabBtn.className = "section-tab" + (idx === 0 ? " active" : "");
+          tabBtn.className = "section-tab" + (section.id === activeId ? " active" : "") + (section.active ? " current" : "");
           tabBtn.type = "button";
           tabBtn.dataset.subtab = section.id;
           tabBtn.textContent = tabLabel;
           tabsRow.appendChild(tabBtn);
 
           const group = document.createElement("div");
-          group.className = "section-group" + (idx === 0 ? " active" : "");
+          group.className = "section-group" + (section.id === activeId ? " active" : "");
           group.dataset.subtab = section.id;
           group.dataset.visible = section.hidden ? "false" : "true";
           sectionsStack.appendChild(group);
@@ -1749,6 +1774,7 @@ ${rows}
           card.dataset.sectionType = section.type;
           card.dataset.sectionTitle = section.title || "";
           card.dataset.sectionTab = section.tabLabel || "";
+          card.dataset.sectionActive = section.active ? "true" : "false";
           card.innerHTML = `
             <div class="badge-row">
               <span class="badge-pill">${escapeHtml(section.id)}</span>
@@ -1987,6 +2013,7 @@ ${rows}
         const id = card.dataset.sectionId || "";
         const title = card.dataset.sectionTitle || "";
         const tabLabel = card.dataset.sectionTab || "";
+        const active = card.dataset.sectionActive === "true";
         const group = card.closest(".section-group");
         const visible = group ? group.dataset.visible !== "false" : true;
         const type = card.dataset.sectionType;
@@ -1995,7 +2022,7 @@ ${rows}
             label: row.querySelector('[data-field="detail-label"]').value.trim(),
             value: row.querySelector('[data-field="detail-value"]').value.trim()
           })).filter(row => row.label || row.value);
-          return { id, title, tabLabel, hidden: !visible, type, rows };
+          return { id, title, tabLabel, active, hidden: !visible, type, rows };
         }
         if(type === "images"){
           const images = Array.from(card.querySelectorAll("[data-image-row]")).map(row => ({
@@ -2003,7 +2030,7 @@ ${rows}
             alt: row.querySelector('[data-field="image-alt"]').value.trim(),
             full: row.querySelector('[data-field="image-full"]').value.trim()
           })).filter(img => img.src || img.alt || img.full);
-          return { id, title, tabLabel, hidden: !visible, type, images };
+          return { id, title, tabLabel, active, hidden: !visible, type, images };
         }
         if(type === "downloads"){
           const table = card.querySelector("table.table-editor");
@@ -2011,7 +2038,7 @@ ${rows}
             label: (tr.querySelector('td[data-col-key="label"]')?.textContent || "").trim(),
             href: (tr.querySelector('td[data-col-key="href"]')?.textContent || "").trim()
           })).filter(item => item.label || item.href) : [];
-          return { id, title, tabLabel, hidden: !visible, type, items };
+          return { id, title, tabLabel, active, hidden: !visible, type, items };
         }
         if(type === "videos"){
           const table = card.querySelector("table.table-editor");
@@ -2021,7 +2048,7 @@ ${rows}
             width: (tr.querySelector('td[data-col-key="width"]')?.textContent || "").trim(),
             height: (tr.querySelector('td[data-col-key="height"]')?.textContent || "").trim()
           })).filter(video => video.src || video.title) : [];
-          return { id, title, tabLabel, hidden: !visible, type, videos };
+          return { id, title, tabLabel, active, hidden: !visible, type, videos };
         }
         if(type === "revisions"){
           const table = card.querySelector("table.table-editor");
@@ -2031,14 +2058,14 @@ ${rows}
             desc: (tr.querySelector('td[data-col-key="desc"]')?.textContent || "").trim(),
             by: (tr.querySelector('td[data-col-key="by"]')?.textContent || "").trim()
           })).filter(row => row.date || row.rev || row.desc || row.by) : [];
-          return { id, title, tabLabel, hidden: !visible, type, rows };
+          return { id, title, tabLabel, active, hidden: !visible, type, rows };
         }
         if(type === "ai-seeds"){
           const jsonText = card.querySelector('[data-field="ai-seeds"]').value.trim() || "{}";
-          return { id, title, tabLabel, hidden: true, type, jsonText };
+          return { id, title, tabLabel, active, hidden: true, type, jsonText };
         }
         const bodyHtml = card.querySelector('[data-field="section-body"]').value;
-        return { id, title, tabLabel, hidden: !visible, type, bodyHtml };
+        return { id, title, tabLabel, active, hidden: !visible, type, bodyHtml };
       });
 
       return { type: "board", meta, nav, sections };
@@ -2104,6 +2131,33 @@ ${rows}
         setSaveDirty(false);
       }
       renderList();
+    }
+
+    function setDefaultSectionTab(container, targetId){
+      if(!container || !targetId) return;
+      container.querySelectorAll(".section-tab").forEach(tab => {
+        const isTarget = tab.getAttribute("data-subtab") === targetId;
+        tab.classList.toggle("current", isTarget);
+      });
+      container.querySelectorAll(".section-card").forEach(card => {
+        card.dataset.sectionActive = card.dataset.sectionId === targetId ? "true" : "false";
+      });
+    }
+
+    function queueDraftUpdate(){
+      if(!state.current) return;
+      if(state.saveTimer) clearTimeout(state.saveTimer);
+      state.saveTimer = setTimeout(() => {
+        const data = collectFormState();
+        const template = collectTemplateState();
+        saveTemplate(template);
+        const updated = data.type === "collection"
+          ? generateCollectionHtml(data, template)
+          : generateBoardHtml(data, template);
+        state.editorText = updated;
+        saveDraft(state.current.path, state.editorText);
+        updateModifiedState();
+      }, SAVE_DELAY);
     }
 
     function runUpdate(){
@@ -2327,6 +2381,7 @@ ${rows}
           card.dataset.sectionType = "html";
           card.dataset.sectionTitle = "New Section";
           card.dataset.sectionTab = "New Section";
+          card.dataset.sectionActive = "false";
           card.innerHTML = `
             <div class="badge-row">
               <span class="badge-pill">${escapeHtml(newId)}</span>
@@ -2347,6 +2402,10 @@ ${rows}
           return;
         }
         const target = tabBtn.getAttribute("data-subtab");
+        if(e.ctrlKey){
+          setDefaultSectionTab(container, target);
+          queueDraftUpdate();
+        }
         container.querySelectorAll(".section-tab").forEach(b => b.classList.remove("active"));
         tabBtn.classList.add("active");
         container.querySelectorAll(".section-group").forEach(group => {
@@ -2402,6 +2461,7 @@ ${rows}
         const target = tabBtn.getAttribute("data-subtab");
         const container = tabBtn.closest(".panel-card");
         if(!container) return;
+        const wasCurrent = tabBtn.classList.contains("current");
         const group = container.querySelector(`.section-group[data-subtab="${target}"]`);
         if(group) group.remove();
         tabBtn.remove();
@@ -2415,6 +2475,9 @@ ${rows}
           container.querySelectorAll(".section-group").forEach(el => {
             el.classList.toggle("active", el.dataset.subtab === nextTarget);
           });
+          if(wasCurrent){
+            setDefaultSectionTab(container, nextTarget);
+          }
         }
       });
 
@@ -2570,19 +2633,7 @@ ${rows}
         const target = e.target;
         if(!target) return;
         if(!document.querySelector(".preview")?.contains(target)) return;
-        if(!state.current) return;
-        if(state.saveTimer) clearTimeout(state.saveTimer);
-        state.saveTimer = setTimeout(() => {
-          const data = collectFormState();
-          const template = collectTemplateState();
-          saveTemplate(template);
-          const updated = data.type === "collection"
-            ? generateCollectionHtml(data, template)
-            : generateBoardHtml(data, template);
-          state.editorText = updated;
-          saveDraft(state.current.path, state.editorText);
-          updateModifiedState();
-        }, SAVE_DELAY);
+        queueDraftUpdate();
       });
 
       document.addEventListener("keydown", (e) => {
