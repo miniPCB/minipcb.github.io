@@ -363,6 +363,18 @@
       background: rgba(102,163,255,0.18);
     }
 
+    .section-tab.visible{
+      color: var(--accent);
+      border-color: rgba(123,220,181,0.8);
+      background: rgba(123,220,181,0.15);
+    }
+
+    .section-tab.hidden{
+      color: #ffd27b;
+      border-color: rgba(255,210,123,0.9);
+      background: rgba(255,210,123,0.16);
+    }
+
     .section-group{
       display:none;
     }
@@ -1430,10 +1442,21 @@ ${rows}
           other: document.createElement("div")
         };
 
+        const visibility = {
+          details: true,
+          media: true,
+          downloads: true,
+          videos: true,
+          revisions: false,
+          "ai-seeds": false,
+          other: true
+        };
+
         Object.entries(groups).forEach(([key, el]) => {
           el.className = "section-group" + (key === "details" ? " active" : "");
           el.dataset.subtab = key;
           sectionsStack.appendChild(el);
+          el.dataset.visible = visibility[key] === false ? "false" : "true";
         });
 
         (data.sections || []).forEach(section => {
@@ -1581,6 +1604,16 @@ ${rows}
           else if(section.type === "ai-seeds") bucket = "ai-seeds";
           groups[bucket].appendChild(card);
         });
+
+        const tabRow = sectionsWrap.querySelector("#sectionTabs");
+        if(tabRow){
+          tabRow.querySelectorAll(".section-tab").forEach(btn => {
+            const key = btn.getAttribute("data-subtab");
+            const isVisible = groups[key]?.dataset.visible !== "false";
+            btn.classList.toggle("visible", isVisible);
+            btn.classList.toggle("hidden", !isVisible);
+          });
+        }
       }else if(data.type === "collection"){
         const rowsWrap = document.createElement("div");
         rowsWrap.className = "panel-card";
@@ -1926,6 +1959,20 @@ ${rows}
         container.querySelectorAll(".section-group").forEach(group => {
           group.classList.toggle("active", group.dataset.subtab === target);
         });
+      });
+
+      document.addEventListener("dblclick", (e) => {
+        const tabBtn = e.target.closest(".section-tab");
+        if(!tabBtn) return;
+        const container = tabBtn.closest(".panel-card");
+        if(!container) return;
+        const target = tabBtn.getAttribute("data-subtab");
+        const group = container.querySelector(`.section-group[data-subtab="${target}"]`);
+        if(!group) return;
+        const nextVisible = group.dataset.visible === "false";
+        group.dataset.visible = nextVisible ? "true" : "false";
+        tabBtn.classList.toggle("visible", nextVisible);
+        tabBtn.classList.toggle("hidden", !nextVisible);
       });
       $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
       $("reloadBtn").addEventListener("click", runReload);
