@@ -2149,6 +2149,19 @@ ${rows}
     async function runSaveAll(){
       const template = collectTemplateState();
       saveTemplate(template);
+      if(state.current){
+        const data = collectFormState();
+        const updated = data.type === "collection"
+          ? generateCollectionHtml(data, template)
+          : generateBoardHtml(data, template);
+        state.editorText = updated;
+        saveDraft(state.current.path, state.editorText);
+      }
+      if(!useFileSystemStore()){
+        logTerminal("error", "Select a folder to save to disk.");
+        updateModifiedState();
+        return;
+      }
       for(const entry of state.entries){
         const draft = loadDraft(entry.path);
         if(!draft) continue;
