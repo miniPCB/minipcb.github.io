@@ -303,6 +303,40 @@
       align-items:center;
     }
 
+    .form-tabs{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-bottom:12px;
+    }
+
+    .form-tab{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      padding:6px 12px;
+      border-radius:10px;
+      font-size:12px;
+      letter-spacing:0.4px;
+      text-transform:uppercase;
+      cursor:pointer;
+      transition: all 0.12s ease;
+    }
+
+    .form-tab.active{
+      color: var(--text);
+      border-color: rgba(102,163,255,0.8);
+      background: rgba(102,163,255,0.18);
+    }
+
+    .form-panel{
+      display:none;
+    }
+
+    .form-panel.active{
+      display:block;
+    }
+
     .btn{
       border:1px solid var(--border);
       background: rgba(255,255,255,0.04);
@@ -559,12 +593,24 @@
           </div>
         </div>
         <div class="preview">
-          <div class="form-stack" id="formContainer"></div>
-          <div class="command-bar">
-            <span class="badge-pill">Command</span>
-            <input class="input" id="commandInput" type="text" placeholder="update | reload | validate | export | ai ..." />
-            <button class="btn secondary" id="commandRunBtn" type="button">Run</button>
-            <span class="tiny">Tip: press Enter to run.</span>
+          <div class="form-tabs" id="formTabs">
+            <button class="form-tab active" data-tab="template" type="button">Template</button>
+            <button class="form-tab" data-tab="content" type="button">Content</button>
+            <button class="form-tab" data-tab="sections" type="button">Sections</button>
+            <button class="form-tab" data-tab="collection" type="button">Collection</button>
+            <button class="form-tab" data-tab="assist" type="button">Assist</button>
+          </div>
+          <div class="form-panel active" id="panel-template"></div>
+          <div class="form-panel" id="panel-content"></div>
+          <div class="form-panel" id="panel-sections"></div>
+          <div class="form-panel" id="panel-collection"></div>
+          <div class="form-panel" id="panel-assist">
+            <div class="command-bar">
+              <span class="badge-pill">Command</span>
+              <input class="input" id="commandInput" type="text" placeholder="update | reload | validate | export | ai ..." />
+              <button class="btn secondary" id="commandRunBtn" type="button">Run</button>
+              <span class="tiny">Tip: press Enter to run.</span>
+            </div>
           </div>
         </div>
       </main>
@@ -1218,8 +1264,14 @@ ${rows}
     }
 
     function renderForm(data){
-      const container = $("formContainer");
-      container.innerHTML = "";
+      const panelTemplate = $("panel-template");
+      const panelContent = $("panel-content");
+      const panelSections = $("panel-sections");
+      const panelCollection = $("panel-collection");
+      const panelAssist = $("panel-assist");
+      [panelTemplate, panelContent, panelSections, panelCollection, panelAssist].forEach(panel => {
+        if(panel) panel.innerHTML = "";
+      });
 
       const templateCard = document.createElement("div");
       templateCard.className = "panel-card";
@@ -1263,7 +1315,7 @@ ${rows}
           <button class="btn" data-action="tpl-save" type="button">Save Template</button>
         </div>
       `;
-      container.appendChild(templateCard);
+      panelTemplate.appendChild(templateCard);
 
       const metaCard = document.createElement("div");
       metaCard.className = "panel-card";
@@ -1280,7 +1332,7 @@ ${rows}
           <label>Slogan<input class="input" data-field="meta-slogan" type="text"></label>
         </div>
       `;
-      container.appendChild(metaCard);
+      panelContent.appendChild(metaCard);
 
       const navCard = document.createElement("div");
       navCard.className = "panel-card";
@@ -1291,7 +1343,7 @@ ${rows}
           <button class="btn secondary" data-action="add-nav" type="button">Add Link</button>
         </div>
       `;
-      container.appendChild(navCard);
+      panelContent.appendChild(navCard);
 
       const aiCard = document.createElement("div");
       aiCard.className = "panel-card";
@@ -1311,13 +1363,13 @@ ${rows}
           <button class="btn secondary" data-action="ai-rows" type="button">Populate Rows</button>
         </div>
       `;
-      container.appendChild(aiCard);
+      panelAssist.appendChild(aiCard);
 
       if(data.type === "board"){
         const sectionsWrap = document.createElement("div");
         sectionsWrap.className = "panel-card";
         sectionsWrap.innerHTML = `<div class="panel-title">Sections</div>`;
-        container.appendChild(sectionsWrap);
+        panelSections.appendChild(sectionsWrap);
 
         const sectionsStack = document.createElement("div");
         sectionsStack.className = "form-stack";
@@ -1489,32 +1541,32 @@ ${rows}
           <button class="btn secondary" data-action="add-collection-row" type="button">Add Row</button>
         `;
         rowsWrap.appendChild(actions);
-        container.appendChild(rowsWrap);
+        panelCollection.appendChild(rowsWrap);
       }
 
       const tpl = state.template || defaultTemplate();
-      container.querySelector('[data-field="tpl-analytics"]').value = tpl.analyticsHtml || "";
-      container.querySelector('[data-field="tpl-default-keywords"]').value = tpl.defaultKeywords || "";
-      container.querySelector('[data-field="tpl-default-description"]').value = tpl.defaultDescription || "";
-      container.querySelector('[data-field="tpl-footer"]').value = tpl.footerText || "";
-      container.querySelector('[data-field="tpl-css-board"]').value = tpl.cssHrefBoard || "";
-      container.querySelector('[data-field="tpl-css-collection"]').value = tpl.cssHrefCollection || "";
-      container.querySelector('[data-field="tpl-js-board"]').value = tpl.jsHrefBoard || "";
-      container.querySelector('[data-field="tpl-favicon"]').value = tpl.faviconHref || "";
-      container.querySelector('[data-field="tpl-version"]').value = tpl.versionStamp || "";
-      container.querySelector('[data-field="tpl-date"]').value = tpl.dateStamp || "";
+      panelTemplate.querySelector('[data-field="tpl-analytics"]').value = tpl.analyticsHtml || "";
+      panelTemplate.querySelector('[data-field="tpl-default-keywords"]').value = tpl.defaultKeywords || "";
+      panelTemplate.querySelector('[data-field="tpl-default-description"]').value = tpl.defaultDescription || "";
+      panelTemplate.querySelector('[data-field="tpl-footer"]').value = tpl.footerText || "";
+      panelTemplate.querySelector('[data-field="tpl-css-board"]').value = tpl.cssHrefBoard || "";
+      panelTemplate.querySelector('[data-field="tpl-css-collection"]').value = tpl.cssHrefCollection || "";
+      panelTemplate.querySelector('[data-field="tpl-js-board"]').value = tpl.jsHrefBoard || "";
+      panelTemplate.querySelector('[data-field="tpl-favicon"]').value = tpl.faviconHref || "";
+      panelTemplate.querySelector('[data-field="tpl-version"]').value = tpl.versionStamp || "";
+      panelTemplate.querySelector('[data-field="tpl-date"]').value = tpl.dateStamp || "";
 
-      container.querySelector('[data-field="meta-title"]').value = data.meta.title || "";
-      container.querySelector('[data-field="meta-description"]').value = data.meta.description || "";
-      container.querySelector('[data-field="meta-keywords"]').value = data.meta.keywords || "";
-      container.querySelector('[data-field="meta-h1"]').value = data.meta.h1 || "";
-      container.querySelector('[data-field="meta-slogan"]').value = data.meta.slogan || "";
+      panelContent.querySelector('[data-field="meta-title"]').value = data.meta.title || "";
+      panelContent.querySelector('[data-field="meta-description"]').value = data.meta.description || "";
+      panelContent.querySelector('[data-field="meta-keywords"]').value = data.meta.keywords || "";
+      panelContent.querySelector('[data-field="meta-h1"]').value = data.meta.h1 || "";
+      panelContent.querySelector('[data-field="meta-slogan"]').value = data.meta.slogan || "";
       if(data.type !== "board"){
-        container.querySelector('[data-field="meta-slogan"]').closest("label").style.display = "none";
-        container.querySelector('[data-field="meta-description"]').closest("label").style.display = "none";
+        panelContent.querySelector('[data-field="meta-slogan"]').closest("label").style.display = "none";
+        panelContent.querySelector('[data-field="meta-description"]').closest("label").style.display = "none";
       }
 
-      const navList = container.querySelector("[data-nav-list]");
+      const navList = panelContent.querySelector("[data-nav-list]");
       (data.nav || []).forEach(item => {
         const row = document.createElement("div");
         row.className = "inline-row";
@@ -1526,7 +1578,7 @@ ${rows}
         navList.appendChild(row);
       });
 
-      const aiSelect = container.querySelector('[data-field="ai-target"]');
+      const aiSelect = panelAssist.querySelector('[data-field="ai-target"]');
       aiSelect.innerHTML = "";
       if(data.type === "collection"){
         aiSelect.innerHTML = `<option value="collection-rows">Collection Rows</option>`;
@@ -1539,25 +1591,38 @@ ${rows}
           aiSelect.appendChild(opt);
         });
       }
+
+      const tabs = $("formTabs");
+      if(data.type === "collection"){
+        tabs.querySelector('[data-tab="sections"]').style.display = "none";
+        tabs.querySelector('[data-tab="collection"]').style.display = "inline-flex";
+      }else{
+        tabs.querySelector('[data-tab="sections"]').style.display = "inline-flex";
+        tabs.querySelector('[data-tab="collection"]').style.display = "none";
+      }
     }
 
     function collectFormState(){
-      const container = $("formContainer");
+      const panelTemplate = $("panel-template");
+      const panelContent = $("panel-content");
+      const panelSections = $("panel-sections");
+      const panelCollection = $("panel-collection");
+      const panelAssist = $("panel-assist");
       const meta = {
-        title: container.querySelector('[data-field="meta-title"]').value.trim(),
-        description: container.querySelector('[data-field="meta-description"]').value.trim(),
-        keywords: container.querySelector('[data-field="meta-keywords"]').value.trim(),
-        h1: container.querySelector('[data-field="meta-h1"]').value.trim(),
-        slogan: container.querySelector('[data-field="meta-slogan"]').value.trim()
+        title: panelContent.querySelector('[data-field="meta-title"]').value.trim(),
+        description: panelContent.querySelector('[data-field="meta-description"]').value.trim(),
+        keywords: panelContent.querySelector('[data-field="meta-keywords"]').value.trim(),
+        h1: panelContent.querySelector('[data-field="meta-h1"]').value.trim(),
+        slogan: panelContent.querySelector('[data-field="meta-slogan"]').value.trim()
       };
 
-      const nav = Array.from(container.querySelectorAll("[data-nav-item]")).map(row => ({
+      const nav = Array.from(panelContent.querySelectorAll("[data-nav-item]")).map(row => ({
         text: row.querySelector('[data-field="nav-text"]').value.trim(),
         href: row.querySelector('[data-field="nav-href"]').value.trim()
       })).filter(item => item.text || item.href);
 
       if(state.formState?.type === "collection"){
-        const rows = Array.from(container.querySelectorAll("[data-collection-row]")).map(row => ({
+        const rows = Array.from(panelCollection.querySelectorAll("[data-collection-row]")).map(row => ({
           partNo: row.querySelector('[data-field="row-part"]').value.trim(),
           title: row.querySelector('[data-field="row-title"]').value.trim(),
           href: row.querySelector('[data-field="row-href"]').value.trim(),
@@ -1566,7 +1631,7 @@ ${rows}
         return { type: "collection", meta, nav, rows };
       }
 
-      const sections = Array.from(container.querySelectorAll(".section-card")).map(card => {
+      const sections = Array.from(panelSections.querySelectorAll(".section-card")).map(card => {
         const id = card.dataset.sectionId || card.querySelector('[data-field="section-id"]').value.trim();
         const title = card.querySelector('[data-field="section-title"]').value.trim();
         const tabLabel = card.querySelector('[data-field="section-tab"]').value.trim();
@@ -1624,18 +1689,18 @@ ${rows}
     }
 
     function collectTemplateState(){
-      const container = $("formContainer");
+      const panelTemplate = $("panel-template");
       return {
-        analyticsHtml: container.querySelector('[data-field="tpl-analytics"]').value.trim(),
-        defaultKeywords: container.querySelector('[data-field="tpl-default-keywords"]').value.trim(),
-        defaultDescription: container.querySelector('[data-field="tpl-default-description"]').value.trim(),
-        footerText: container.querySelector('[data-field="tpl-footer"]').value.trim(),
-        cssHrefBoard: container.querySelector('[data-field="tpl-css-board"]').value.trim(),
-        cssHrefCollection: container.querySelector('[data-field="tpl-css-collection"]').value.trim(),
-        jsHrefBoard: container.querySelector('[data-field="tpl-js-board"]').value.trim(),
-        faviconHref: container.querySelector('[data-field="tpl-favicon"]').value.trim(),
-        versionStamp: container.querySelector('[data-field="tpl-version"]').value.trim(),
-        dateStamp: container.querySelector('[data-field="tpl-date"]').value.trim()
+        analyticsHtml: panelTemplate.querySelector('[data-field="tpl-analytics"]').value.trim(),
+        defaultKeywords: panelTemplate.querySelector('[data-field="tpl-default-keywords"]').value.trim(),
+        defaultDescription: panelTemplate.querySelector('[data-field="tpl-default-description"]').value.trim(),
+        footerText: panelTemplate.querySelector('[data-field="tpl-footer"]').value.trim(),
+        cssHrefBoard: panelTemplate.querySelector('[data-field="tpl-css-board"]').value.trim(),
+        cssHrefCollection: panelTemplate.querySelector('[data-field="tpl-css-collection"]').value.trim(),
+        jsHrefBoard: panelTemplate.querySelector('[data-field="tpl-js-board"]').value.trim(),
+        faviconHref: panelTemplate.querySelector('[data-field="tpl-favicon"]').value.trim(),
+        versionStamp: panelTemplate.querySelector('[data-field="tpl-version"]').value.trim(),
+        dateStamp: panelTemplate.querySelector('[data-field="tpl-date"]').value.trim()
       };
     }
 
@@ -1768,6 +1833,19 @@ ${rows}
     }
 
     function setupEditor(){
+      const tabs = $("formTabs");
+      if(tabs){
+        tabs.addEventListener("click", (e) => {
+          const btn = e.target.closest(".form-tab");
+          if(!btn) return;
+          const target = btn.getAttribute("data-tab");
+          tabs.querySelectorAll(".form-tab").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          document.querySelectorAll(".form-panel").forEach(panel => {
+            panel.classList.toggle("active", panel.id === `panel-${target}`);
+          });
+        });
+      }
       $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
       $("reloadBtn").addEventListener("click", runReload);
       $("revertBtn").addEventListener("click", () => {
