@@ -716,20 +716,12 @@
             <button class="form-tab" data-tab="content" type="button">Content</button>
             <button class="form-tab" data-tab="sections" type="button">Sections</button>
             <button class="form-tab" data-tab="collection" type="button">Collection</button>
-            <button class="form-tab" data-tab="assist" type="button">Update HTML</button>
+            <button class="btn save" id="updateHtmlBtn" type="button">Update HTML</button>
           </div>
           <div class="form-panel active" id="panel-template"></div>
           <div class="form-panel" id="panel-content"></div>
           <div class="form-panel" id="panel-sections"></div>
           <div class="form-panel" id="panel-collection"></div>
-          <div class="form-panel" id="panel-assist">
-            <div class="command-bar">
-              <span class="badge-pill">Command</span>
-              <input class="input" id="commandInput" type="text" placeholder="save | ai ..." />
-              <button class="btn secondary" id="commandRunBtn" type="button">Run</button>
-              <span class="tiny">Tip: press Enter to run.</span>
-            </div>
-          </div>
         </div>
       </main>
       <aside class="terminal-pane" id="terminalDockRight" aria-hidden="true"></aside>
@@ -1435,8 +1427,7 @@ ${rows}
       const panelContent = $("panel-content");
       const panelSections = $("panel-sections");
       const panelCollection = $("panel-collection");
-      const panelAssist = $("panel-assist");
-      [panelTemplate, panelContent, panelSections, panelCollection, panelAssist].forEach(panel => {
+      [panelTemplate, panelContent, panelSections, panelCollection].forEach(panel => {
         if(panel) panel.innerHTML = "";
       });
 
@@ -1530,7 +1521,7 @@ ${rows}
           <button class="btn secondary" data-action="ai-rows" type="button">Populate Rows</button>
         </div>
       `;
-      panelAssist.appendChild(aiCard);
+      panelSections.appendChild(aiCard);
 
       if(data.type === "board"){
         const sectionsWrap = document.createElement("div");
@@ -1768,7 +1759,7 @@ ${rows}
         navList.appendChild(row);
       });
 
-      const aiSelect = panelAssist.querySelector('[data-field="ai-target"]');
+      const aiSelect = panelSections.querySelector('[data-field="ai-target"]');
       aiSelect.innerHTML = "";
       if(data.type === "collection"){
         aiSelect.innerHTML = `<option value="collection-rows">Collection Rows</option>`;
@@ -2033,9 +2024,6 @@ ${rows}
           document.querySelectorAll(".form-panel").forEach(panel => {
             panel.classList.toggle("active", panel.id === `panel-${target}`);
           });
-          if(target === "assist"){
-            runSave();
-          }
         });
       }
 
@@ -2261,6 +2249,8 @@ ${rows}
       });
       $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
       $("saveBtn").addEventListener("click", runSave);
+      const updateBtn = $("updateHtmlBtn");
+      if(updateBtn) updateBtn.addEventListener("click", runSave);
 
       document.addEventListener("click", (e) => {
         const target = e.target.closest("[data-action]");
@@ -2369,8 +2359,8 @@ ${rows}
           logTerminal("template", "Template loaded from file");
         }
         if(action === "ai-draft"){
-          const input = $("panel-assist").querySelector('[data-field="ai-input"]').value.trim();
-          const targetSelect = $("panel-assist").querySelector('[data-field="ai-target"]');
+          const input = $("panel-sections").querySelector('[data-field="ai-input"]').value.trim();
+          const targetSelect = $("panel-sections").querySelector('[data-field="ai-target"]');
           const targetId = targetSelect ? targetSelect.value : "";
           if(state.formState?.type === "collection"){
             return;
@@ -2394,7 +2384,7 @@ ${rows}
           }
         }
         if(action === "ai-rows"){
-          const input = $("panel-assist").querySelector('[data-field="ai-input"]').value.trim();
+          const input = $("panel-sections").querySelector('[data-field="ai-input"]').value.trim();
           if(!input) return;
           if(state.formState?.type === "collection"){
             const list = $("panel-collection").querySelector("[data-collection-list]");
