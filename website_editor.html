@@ -592,6 +592,32 @@
       width: min(460px, 96vw);
     }
 
+    .context-menu{
+      position: fixed;
+      z-index: 80;
+      display: none;
+      min-width: 140px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .context-menu button{
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    .context-menu button:hover{
+      background: rgba(102,163,255,0.15);
+    }
+
     @media (max-width: 980px){
       .layout{ grid-template-columns: 1fr; }
       aside{ order:2; }
@@ -727,6 +753,10 @@
     </div>
   </div>
 
+  <div class="context-menu" id="sectionContextMenu">
+    <button type="button" id="sectionDeleteBtn">Delete Section</button>
+  </div>
+
   <script src="draft/html_index.js"></script>
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
@@ -747,6 +777,8 @@
       template: null,
       editingSectionCard: null
     };
+
+    let contextTargetTab = null;
 
     const $ = (id) => document.getElementById(id);
 
@@ -2062,13 +2094,32 @@ ${rows}
         const target = tabBtn.getAttribute("data-subtab");
         if(target === "add-new") return;
         e.preventDefault();
+        contextTargetTab = tabBtn;
+        const menu = $("sectionContextMenu");
+        menu.style.display = "block";
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+      });
+
+      document.addEventListener("click", (e) => {
+        const menu = $("sectionContextMenu");
+        if(menu && menu.style.display === "block" && !menu.contains(e.target)){
+          menu.style.display = "none";
+        }
+      });
+
+      $("sectionDeleteBtn").addEventListener("click", () => {
+        if(!contextTargetTab) return;
+        const tabBtn = contextTargetTab;
+        const target = tabBtn.getAttribute("data-subtab");
         const container = tabBtn.closest(".panel-card");
         if(!container) return;
         const group = container.querySelector(`.section-group[data-subtab="${target}"]`);
-        const label = tabBtn.textContent.trim() || target;
-        if(!confirm(`Delete section "${label}"? This removes its HTML.`)) return;
         if(group) group.remove();
         tabBtn.remove();
+        contextTargetTab = null;
+        const menu = $("sectionContextMenu");
+        if(menu) menu.style.display = "none";
         const nextTab = container.querySelector(".section-tab");
         if(nextTab){
           nextTab.classList.add("active");
