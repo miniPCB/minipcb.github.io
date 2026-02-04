@@ -716,7 +716,7 @@
             <button class="form-tab" data-tab="content" type="button">Content</button>
             <button class="form-tab" data-tab="sections" type="button">Sections</button>
             <button class="form-tab" data-tab="collection" type="button">Collection</button>
-            <button class="form-tab" data-tab="assist" type="button">Assist</button>
+            <button class="form-tab" data-tab="assist" type="button">Update HTML</button>
           </div>
           <div class="form-panel active" id="panel-template"></div>
           <div class="form-panel" id="panel-content"></div>
@@ -1548,17 +1548,22 @@ ${rows}
         const tabsRow = sectionsWrap.querySelector("#sectionTabs");
         const groups = new Map();
 
-        const hasDescription = (data.sections || []).some(section => section.id === "description");
-        if(!hasDescription){
-          data.sections = (data.sections || []).concat([{
-            id: "description",
-            title: "Description",
-            tabLabel: "Description",
-            hidden: false,
-            type: "html",
-            bodyHtml: "<p>Describe this board.</p>"
-          }]);
-        }
+        const defaults = [
+          { id: "details", title: "Details", tabLabel: "Details", hidden: false, type: "details", rows: [] },
+          { id: "description", title: "Description", tabLabel: "Description", hidden: false, type: "html", bodyHtml: "<p>Describe this board.</p>" },
+          { id: "schematic", title: "Schematic", tabLabel: "Schematic", hidden: false, type: "images", images: [] },
+          { id: "layout", title: "Layout", tabLabel: "Layout", hidden: false, type: "images", images: [] },
+          { id: "videos", title: "Videos", tabLabel: "Videos", hidden: false, type: "videos", videos: [] },
+          { id: "downloads", title: "Downloads", tabLabel: "Downloads", hidden: false, type: "downloads", items: [] },
+          { id: "resources", title: "Additional Resources", tabLabel: "Additional Resources", hidden: false, type: "videos", videos: [] },
+          { id: "revisions", title: "Revision History", tabLabel: "Revision History", hidden: false, type: "revisions", rows: [] },
+          { id: "ai-seeds", title: "ai-seeds", tabLabel: "ai-seeds", hidden: true, type: "ai-seeds", jsonText: "{}" }
+        ];
+
+        const existing = new Map((data.sections || []).map(section => [section.id, section]));
+        data.sections = defaults.map(def => existing.get(def.id) || def).concat(
+          (data.sections || []).filter(section => !defaults.find(def => def.id === section.id))
+        );
 
         (data.sections || []).forEach((section, idx) => {
           const tabLabel = section.tabLabel || section.title || section.id;
