@@ -1424,6 +1424,7 @@ ${rows}
             <button class="section-tab" data-subtab="revisions" type="button">Revisions</button>
             <button class="section-tab" data-subtab="ai-seeds" type="button">AI Seeds</button>
             <button class="section-tab" data-subtab="other" type="button">Other</button>
+            <button class="section-tab" data-subtab="add-new" type="button">Add New</button>
           </div>
         `;
         panelSections.appendChild(sectionsWrap);
@@ -1953,6 +1954,42 @@ ${rows}
         if(!tabBtn) return;
         const container = tabBtn.closest(".panel-card");
         if(!container) return;
+        if(e.shiftKey && tabBtn.getAttribute("data-subtab") !== "add-new"){
+          const next = prompt("Rename section subtab:", tabBtn.textContent.trim());
+          if(next) tabBtn.textContent = next.trim();
+          return;
+        }
+        if(tabBtn.getAttribute("data-subtab") === "add-new"){
+          const groups = container.querySelectorAll(".section-group");
+          const otherGroup = container.querySelector('.section-group[data-subtab="other"]');
+          if(!otherGroup) return;
+          const count = otherGroup.querySelectorAll(".section-card").length + 1;
+          const newId = `section-${Date.now().toString(36)}-${count}`;
+          const card = document.createElement("div");
+          card.className = "section-card";
+          card.dataset.sectionId = newId;
+          card.dataset.sectionType = "html";
+          card.innerHTML = `
+            <div class="inline-row">
+              <label>Section ID<input class="input" data-field="section-id" type="text" value="${escapeHtml(newId)}" readonly></label>
+              <label>Tab Label<input class="input" data-field="section-tab" type="text" value="New Section"></label>
+            </div>
+            <div class="inline-row">
+              <label>Section Title<input class="input" data-field="section-title" type="text" value="New Section"></label>
+            </div>
+          `;
+          const label = document.createElement("label");
+          label.innerHTML = `Body HTML<textarea class="input" data-field="section-body"><p>New section content.</p></textarea>`;
+          card.appendChild(label);
+          otherGroup.appendChild(card);
+          container.querySelectorAll(".section-tab").forEach(b => b.classList.remove("active"));
+          const otherTab = container.querySelector('.section-tab[data-subtab="other"]');
+          if(otherTab) otherTab.classList.add("active");
+          groups.forEach(group => {
+            group.classList.toggle("active", group.dataset.subtab === "other");
+          });
+          return;
+        }
         const target = tabBtn.getAttribute("data-subtab");
         container.querySelectorAll(".section-tab").forEach(b => b.classList.remove("active"));
         tabBtn.classList.add("active");
