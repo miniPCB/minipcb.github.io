@@ -249,6 +249,16 @@
       align-items:center;
     }
 
+    .top-actions{
+      position: absolute;
+      top: 18px;
+      right: 22px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      z-index: 12;
+    }
+
     .command-bar{
       display:flex;
       align-items:center;
@@ -403,6 +413,17 @@
 
     .btn.secondary{
       color: var(--muted);
+    }
+
+    .btn.save{
+      border-color: rgba(123,220,181,0.6);
+      color: var(--accent);
+    }
+
+    .btn.save.dirty{
+      background: rgba(123,220,181,0.18);
+      border-color: rgba(123,220,181,0.9);
+      color: #dff7ee;
     }
 
     .preview{
@@ -633,6 +654,10 @@
         <span class="badge">Form + HTML</span>
       </div>
     </header>
+    <div class="top-actions">
+      <button class="btn save" id="saveBtn" type="button">Save</button>
+      <button class="btn secondary" id="prefsBtn" type="button">Preferences</button>
+    </div>
 
     <div class="layout" id="layoutRoot">
       <aside>
@@ -657,15 +682,7 @@
           <div class="preview-title" id="previewTitle">Select an HTML file</div>
           <div class="preview-meta" id="previewMeta"></div>
           <div class="toolbar">
-            <a class="btn secondary" id="openLink" href="#" target="_blank" rel="noopener">Open</a>
-            <button class="btn" id="reloadBtn" type="button">Reload</button>
-            <button class="btn" id="revertBtn" type="button">Revert Draft</button>
-            <button class="btn" id="exportBtn" type="button">Export</button>
-            <button class="btn" id="validateBtn" type="button">Validate</button>
-            <button class="btn" id="updateBtn" type="button">Update</button>
-            <button class="btn secondary" id="aiBtn" type="button">AI Assist</button>
-            <button class="btn secondary" id="prefsBtn" type="button">Preferences</button>
-            <span class="status ok" id="editStatus">Idle</span>
+            <span class="status ok" id="editStatus">CLEAN</span>
           </div>
         </div>
         <div class="preview">
@@ -683,7 +700,7 @@
           <div class="form-panel" id="panel-assist">
             <div class="command-bar">
               <span class="badge-pill">Command</span>
-              <input class="input" id="commandInput" type="text" placeholder="update | reload | validate | export | ai ..." />
+              <input class="input" id="commandInput" type="text" placeholder="save | ai ..." />
               <button class="btn secondary" id="commandRunBtn" type="button">Run</button>
               <span class="tiny">Tip: press Enter to run.</span>
             </div>
@@ -863,6 +880,12 @@
       const el = $("editStatus");
       el.textContent = message;
       el.className = "status " + kind;
+    }
+
+    function setSaveDirty(isDirty){
+      const btn = $("saveBtn");
+      if(!btn) return;
+      btn.classList.toggle("dirty", !!isDirty);
     }
 
     function setDataStatus(ok, message){
@@ -1862,14 +1885,16 @@ ${rows}
     function updateModifiedState(){
       const current = state.current?.path;
       if(!current){
-        setStatus("ok", "Idle");
+        setStatus("ok", "CLEAN");
         return;
       }
       const draft = loadDraft(current);
       if(state.editorText !== state.originalText){
         setStatus(draft ? "warn" : "warn", draft ? "Draft saved" : "Modified");
+        setSaveDirty(true);
       }else{
-        setStatus("ok", "Clean");
+        setStatus("ok", "CLEAN");
+        setSaveDirty(false);
       }
     }
 
@@ -1887,34 +1912,8 @@ ${rows}
       logTerminal("update", `Updated ${state.current.path}`);
     }
 
-    function runValidate(){
-      if(!state.current) return;
-      const data = collectFormState();
-      const issues = [];
-      if(!data.meta.title) issues.push("Missing title");
-      if(!data.meta.h1) issues.push("Missing H1");
-      if(data.type === "collection"){
-        if(!data.rows || !data.rows.length) issues.push("No collection rows");
-      }else{
-        if(!data.sections || !data.sections.length) issues.push("No sections");
-      }
-      if(issues.length){
-        setStatus("warn", "Validation issues");
-        issues.forEach(msg => logTerminal("validate", msg));
-      }else{
-        setStatus("ok", "Validated");
-        logTerminal("validate", "All required fields present");
-      }
-    }
-
-    function runExport(){
-      if(!state.current) return;
-      downloadCurrent();
-      logTerminal("export", `Exported ${state.current.url}`);
-    }
-
-    function runReload(){
-      if(state.current) selectEntry(state.current);
+    function runSave(){
+      runUpdate();
     }
 
     function runCommand(input){
@@ -1923,23 +1922,14 @@ ${rows}
       const [cmd, ...rest] = raw.split(" ");
       const arg = rest.join(" ").trim();
       switch(cmd.toLowerCase()){
-        case "update":
-          runUpdate();
-          break;
-        case "reload":
-          runReload();
-          break;
-        case "validate":
-          runValidate();
-          break;
-        case "export":
-          runExport();
+        case "save":
+          runSave();
           break;
         case "ai":
           logTerminal("ai", arg ? `Received: ${arg}` : "AI not connected.");
           break;
         case "help":
-          logTerminal("help", "Commands: update, reload, validate, export, ai <text>");
+          logTerminal("help", "Commands: save, ai <text>");
           break;
         default:
           logTerminal("error", `Unknown command: ${cmd}`);
@@ -2130,20 +2120,7 @@ ${rows}
         }
       });
       $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
-      $("reloadBtn").addEventListener("click", runReload);
-      $("revertBtn").addEventListener("click", () => {
-        if(!state.current) return;
-        clearDraft(state.current.path);
-        state.editorText = state.originalText;
-        syncFormInputs(state.editorText);
-        updateModifiedState();
-      });
-      $("exportBtn").addEventListener("click", runExport);
-      $("validateBtn").addEventListener("click", runValidate);
-      $("updateBtn").addEventListener("click", runUpdate);
-      $("aiBtn").addEventListener("click", () => {
-        $("terminalInput").focus();
-      });
+      $("saveBtn").addEventListener("click", runSave);
 
       document.addEventListener("click", (e) => {
         const target = e.target.closest("[data-action]");
