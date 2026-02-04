@@ -91,6 +91,39 @@
       overflow:hidden;
     }
 
+    .layout.with-terminal-pane{
+      grid-template-columns: 320px 1fr 320px;
+    }
+
+    .sidebar-body{
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      flex:1;
+      overflow:hidden;
+    }
+
+    .dock-left .file-list{
+      flex: 1 1 auto;
+      max-height: 50%;
+    }
+
+    .dock-left .terminal{
+      flex: 1 1 auto;
+      max-height: 50%;
+    }
+
+    .terminal-pane{
+      background: var(--panel);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      overflow:hidden;
+    }
+
     .sidebar-head{
       padding:16px 16px 12px;
       border-bottom:1px solid var(--border);
@@ -233,7 +266,6 @@
     }
 
     .terminal{
-      margin-top:10px;
       border:1px solid var(--border);
       border-radius:12px;
       background: rgba(8,12,18,0.65);
@@ -492,7 +524,7 @@
       </div>
     </header>
 
-    <div class="layout">
+    <div class="layout" id="layoutRoot">
       <aside>
         <div class="sidebar-head">
           <div class="label">HTML Files</div>
@@ -504,7 +536,10 @@
             <span class="pill" id="dataStatus">Index: pending</span>
           </div>
         </div>
-        <div class="file-list" id="fileList"></div>
+        <div class="sidebar-body">
+          <div class="file-list" id="fileList"></div>
+          <div id="terminalDockLeft"></div>
+        </div>
       </aside>
 
       <main>
@@ -531,16 +566,18 @@
             <button class="btn secondary" id="commandRunBtn" type="button">Run</button>
             <span class="tiny">Tip: press Enter to run.</span>
           </div>
-          <div class="terminal" id="terminalPane">
-            <div class="terminal-log" id="terminalLog"></div>
-            <div class="terminal-input">
-              <span class="badge-pill">AI</span>
-              <input class="input" id="terminalInput" type="text" placeholder="Ask the editor to draft or update a section..." />
-              <button class="btn secondary" id="terminalSendBtn" type="button">Send</button>
-            </div>
-          </div>
         </div>
       </main>
+      <aside class="terminal-pane" id="terminalDockRight" aria-hidden="true"></aside>
+    </div>
+  </div>
+
+  <div class="terminal" id="terminalPane">
+    <div class="terminal-log" id="terminalLog"></div>
+    <div class="terminal-input">
+      <span class="badge-pill">AI</span>
+      <input class="input" id="terminalInput" type="text" placeholder="Ask the editor to draft or update a section..." />
+      <button class="btn secondary" id="terminalSendBtn" type="button">Send</button>
     </div>
   </div>
 
@@ -551,6 +588,13 @@
         <label>
           Default directory
           <input class="input" id="baseDirInput" type="text" placeholder="draft/" />
+        </label>
+        <label>
+          Terminal Dock
+          <select class="input" id="terminalDockInput">
+            <option value="left-bottom">Left Pane (Lower Half)</option>
+            <option value="right-pane">Right Pane</option>
+          </select>
         </label>
         <div class="empty">
           This path prefixes file loads and preview links. Default is <strong>draft/</strong>.
@@ -567,6 +611,7 @@
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
     const TEMPLATE_KEY = "websiteEditorTemplate";
+    const TERMINAL_DOCK_KEY = "websiteEditorTerminalDock";
     const LOCAL_PREFIX = "websiteEditorDraft::";
     const SAVE_DELAY = 600;
 
@@ -630,6 +675,35 @@
     function saveTemplate(next){
       state.template = { ...state.template, ...next };
       localStorage.setItem(TEMPLATE_KEY, JSON.stringify(state.template));
+    }
+
+    function getTerminalDock(){
+      return localStorage.getItem(TERMINAL_DOCK_KEY) || "left-bottom";
+    }
+
+    function setTerminalDock(mode){
+      localStorage.setItem(TERMINAL_DOCK_KEY, mode);
+      applyTerminalDock(mode);
+    }
+
+    function applyTerminalDock(mode){
+      const layout = $("layoutRoot");
+      const leftDock = $("terminalDockLeft");
+      const rightDock = $("terminalDockRight");
+      const terminal = $("terminalPane");
+      if(!layout || !leftDock || !rightDock || !terminal) return;
+
+      if(mode === "right-pane"){
+        layout.classList.add("with-terminal-pane");
+        document.body.classList.remove("dock-left");
+        rightDock.setAttribute("aria-hidden", "false");
+        rightDock.appendChild(terminal);
+      }else{
+        layout.classList.remove("with-terminal-pane");
+        document.body.classList.add("dock-left");
+        rightDock.setAttribute("aria-hidden", "true");
+        leftDock.appendChild(terminal);
+      }
     }
 
     function setStatus(kind, message){
@@ -1897,6 +1971,7 @@ ${rows}
 
       $("prefsBtn").addEventListener("click", () => {
         $("baseDirInput").value = state.baseDir || "draft/";
+        $("terminalDockInput").value = getTerminalDock();
         $("prefsModal").classList.add("open");
       });
 
@@ -1907,6 +1982,7 @@ ${rows}
       $("prefsSave").addEventListener("click", () => {
         const next = $("baseDirInput").value;
         setBaseDir(next);
+        setTerminalDock($("terminalDockInput").value);
         $("prefsModal").classList.remove("open");
         init();
       });
@@ -1926,6 +2002,7 @@ ${rows}
           setDataStatus(false, "Index: missing");
         }
         renderList();
+        applyTerminalDock(getTerminalDock());
         logTerminal("system", "Ready");
       }catch(err){
         setDataStatus(false, "Index: missing");
