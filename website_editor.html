@@ -847,6 +847,8 @@
     const SAVE_DELAY = 600;
     const FS_DB = "websiteEditorFs";
     const FS_STORE = "handles";
+    const VIEW_TAB_KEY = "websiteEditorViewTab";
+    const VIEW_SECTION_TAB_KEY = "websiteEditorSectionSubtab";
 
     const state = {
       entries: [],
@@ -991,6 +993,22 @@
 
     function setAuthor(value){
       localStorage.setItem(AUTHOR_KEY, String(value || ""));
+    }
+
+    function getViewTab(){
+      return localStorage.getItem(VIEW_TAB_KEY) || "template";
+    }
+
+    function setViewTab(value){
+      localStorage.setItem(VIEW_TAB_KEY, String(value || "template"));
+    }
+
+    function getViewSectionTab(){
+      return localStorage.getItem(VIEW_SECTION_TAB_KEY) || "";
+    }
+
+    function setViewSectionTab(value){
+      localStorage.setItem(VIEW_SECTION_TAB_KEY, String(value || ""));
     }
 
     function getBaseDir(){
@@ -1910,6 +1928,17 @@ ${rows}
         addBtn.textContent = "Add New";
         tabsRow.appendChild(addBtn);
 
+        const savedSubtab = getViewSectionTab();
+        if(savedSubtab && groups.has(savedSubtab)){
+          tabsRow.querySelectorAll(".section-tab").forEach(btn => {
+            const key = btn.getAttribute("data-subtab");
+            btn.classList.toggle("active", key === savedSubtab);
+          });
+          sectionsStack.querySelectorAll(".section-group").forEach(group => {
+            group.classList.toggle("active", group.dataset.subtab === savedSubtab);
+          });
+        }
+
         tabsRow.querySelectorAll(".section-tab").forEach(btn => {
           const key = btn.getAttribute("data-subtab");
           if(key === "add-new") return;
@@ -2411,6 +2440,12 @@ ${rows}
         syncFormInputs(state.editorText);
         updateModifiedState();
         renderList();
+        const viewTab = getViewTab();
+        const tabs = $("formTabs");
+        const btn = tabs ? tabs.querySelector(`[data-tab="${viewTab}"]`) : null;
+        if(btn && btn.style.display !== "none"){
+          btn.click();
+        }
       }catch(err){
         setStatus("err", err?.message || "Load error");
       }
@@ -2441,6 +2476,7 @@ ${rows}
           document.querySelectorAll(".form-panel").forEach(panel => {
             panel.classList.toggle("active", panel.id === `panel-${target}`);
           });
+          setViewTab(target);
         });
       }
 
@@ -2513,6 +2549,9 @@ ${rows}
         if(e.ctrlKey){
           setDefaultSectionTab(container, target);
           queueDraftUpdate();
+        }
+        if(target !== "add-new"){
+          setViewSectionTab(target);
         }
         container.querySelectorAll(".section-tab").forEach(b => b.classList.remove("active"));
         tabBtn.classList.add("active");
