@@ -2055,6 +2055,29 @@ ${rows}
         tabBtn.classList.toggle("visible", nextVisible);
         tabBtn.classList.toggle("hidden", !nextVisible);
       });
+
+      document.addEventListener("contextmenu", (e) => {
+        const tabBtn = e.target.closest(".section-tab");
+        if(!tabBtn) return;
+        const target = tabBtn.getAttribute("data-subtab");
+        if(target === "add-new") return;
+        e.preventDefault();
+        const container = tabBtn.closest(".panel-card");
+        if(!container) return;
+        const group = container.querySelector(`.section-group[data-subtab="${target}"]`);
+        const label = tabBtn.textContent.trim() || target;
+        if(!confirm(`Delete section "${label}"? This removes its HTML.`)) return;
+        if(group) group.remove();
+        tabBtn.remove();
+        const nextTab = container.querySelector(".section-tab");
+        if(nextTab){
+          nextTab.classList.add("active");
+          const nextTarget = nextTab.getAttribute("data-subtab");
+          container.querySelectorAll(".section-group").forEach(el => {
+            el.classList.toggle("active", el.dataset.subtab === nextTarget);
+          });
+        }
+      });
       $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
       $("reloadBtn").addEventListener("click", runReload);
       $("revertBtn").addEventListener("click", () => {
