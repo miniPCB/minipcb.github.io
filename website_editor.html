@@ -2207,6 +2207,37 @@ ${rows}
       return { dirHandle: dir, fileHandle, rel: cleaned, name: fileName };
     }
 
+    async function renameEntryFile(entry, newRel){
+      if(!useFileSystemStore() || !entry?.fileHandle) return false;
+      const cleaned = newRel.replace(/^[./\\]+/, "").replace(/\\/g, "/");
+      if(!cleaned) return false;
+      if(cleaned === entry.rel) return true;
+      const newEntry = await createFileInFolder(cleaned);
+      if(!newEntry) return false;
+      const text = state.editorText || (await fetchFile(entry));
+      await writeEntryToDisk({ ...entry, fileHandle: newEntry.fileHandle }, text);
+      await entry.dirHandle.removeEntry(entry.name, { recursive: true });
+      const oldPath = entry.path;
+      entry.rel = newEntry.rel;
+      entry.url = newEntry.rel;
+      entry.path = newEntry.rel;
+      entry.title = newEntry.rel;
+      entry.name = newEntry.name;
+      entry.fileHandle = newEntry.fileHandle;
+      entry.dirHandle = newEntry.dirHandle;
+      if(oldPath){
+        const draft = loadDraft(oldPath);
+        if(draft){
+          saveDraft(entry.path, draft);
+          clearDraft(oldPath);
+        }
+      }
+      if(state.aiContextPath === oldPath || state.aiContextPath === entry.rel){
+        state.aiContextPath = entry.rel;
+      }
+      return true;
+    }
+
     async function runSave(){
       if(!state.current) return;
       runUpdate();
@@ -2716,6 +2747,31 @@ ${rows}
         if(!target) return;
         if(!document.querySelector(".preview")?.contains(target)) return;
         queueDraftUpdate();
+      });
+
+      $("previewTitle").addEventListener("dblclick", async () => {
+        if(!state.current) return;
+        if(!useFileSystemStore()){
+          logTerminal("error", "Select a folder to rename files.");
+          return;
+        }
+        const currentName = state.current.rel || state.current.path || "";
+        const next = window.prompt("Rename HTML file (relative to folder):", currentName);
+        if(!next || next === currentName) return;
+        try{
+          const nextPath = next.toLowerCase().endsWith(".html") ? next : `${next}.html`;
+          const ok = await renameEntryFile(state.current, nextPath);
+          if(!ok) throw new Error("Rename failed");
+          $("previewTitle").textContent = state.current.title || state.current.url;
+          updatePreviewMeta(state.current);
+          state.entries.sort((a, b) => (a.rel || "").localeCompare(b.rel || ""));
+          state.filtered = state.entries.slice();
+          $("fileCount").textContent = `${state.filtered.length} files`;
+          renderList();
+          logTerminal("rename", `Renamed to ${state.current.rel}`);
+        }catch(err){
+          logTerminal("error", "Rename failed");
+        }
       });
 
       document.addEventListener("keydown", (e) => {
