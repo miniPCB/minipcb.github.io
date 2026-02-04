@@ -697,6 +697,24 @@
         .sort((a, b) => a.rel.localeCompare(b.rel));
     }
 
+    async function ensureIndexLoaded(){
+      if(Array.isArray(window.DRAFT_HTML_INDEX) && window.DRAFT_HTML_INDEX.length) return true;
+      const candidate = `${state.baseDir}html_index.js`;
+      try{
+        const res = await fetch(candidate, { cache: "no-store" });
+        if(!res.ok) throw new Error(`Failed to fetch ${candidate}`);
+        const text = await res.text();
+        const loader = new Function(text + "\nreturn window.DRAFT_HTML_INDEX;");
+        const list = loader();
+        if(Array.isArray(list) && list.length){
+          return true;
+        }
+      }catch(err){
+        logTerminal("error", err?.message || "Failed to load html_index.js");
+      }
+      return false;
+    }
+
     function renderList(){
       const list = $("fileList");
       list.innerHTML = "";
@@ -1890,14 +1908,19 @@ ${rows}
       });
     }
 
-    function init(){
+    async function init(){
       try{
         state.template = loadTemplate();
         state.baseDir = getBaseDir();
+        const ok = await ensureIndexLoaded();
         state.entries = listFromIndex(state.baseDir);
         state.filtered = state.entries.slice();
         $("fileCount").textContent = `${state.filtered.length} files`;
-        setDataStatus(true, "Index: draft");
+        if(ok && state.entries.length){
+          setDataStatus(true, "Index: draft");
+        }else{
+          setDataStatus(false, "Index: missing");
+        }
         renderList();
         logTerminal("system", "Ready");
       }catch(err){
