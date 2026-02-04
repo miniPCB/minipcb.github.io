@@ -1418,6 +1418,7 @@ ${rows}
           <div class="panel-title">Sections</div>
           <div class="section-tabs" id="sectionTabs">
             <button class="section-tab active" data-subtab="details" type="button">Details</button>
+            <button class="section-tab" data-subtab="description" type="button">Description</button>
             <button class="section-tab" data-subtab="media" type="button">Media</button>
             <button class="section-tab" data-subtab="downloads" type="button">Downloads</button>
             <button class="section-tab" data-subtab="videos" type="button">Videos</button>
@@ -1435,6 +1436,7 @@ ${rows}
 
         const groups = {
           details: document.createElement("div"),
+          description: document.createElement("div"),
           media: document.createElement("div"),
           downloads: document.createElement("div"),
           videos: document.createElement("div"),
@@ -1445,6 +1447,7 @@ ${rows}
 
         const visibility = {
           details: true,
+          description: true,
           media: true,
           downloads: true,
           videos: true,
@@ -1459,6 +1462,18 @@ ${rows}
           sectionsStack.appendChild(el);
           el.dataset.visible = visibility[key] === false ? "false" : "true";
         });
+
+        const hasDescription = (data.sections || []).some(section => section.id === "description");
+        if(!hasDescription){
+          data.sections = (data.sections || []).concat([{
+            id: "description",
+            title: "Description",
+            tabLabel: "Description",
+            hidden: false,
+            type: "html",
+            bodyHtml: "<p>Describe this board.</p>"
+          }]);
+        }
 
         (data.sections || []).forEach(section => {
           const card = document.createElement("div");
@@ -1597,6 +1612,7 @@ ${rows}
 
           let bucket = "other";
           if(section.type === "details") bucket = "details";
+          else if(section.id === "description") bucket = "description";
           else if(section.type === "images") bucket = "media";
           else if(section.type === "downloads") bucket = "downloads";
           else if(section.type === "videos") bucket = "videos";
