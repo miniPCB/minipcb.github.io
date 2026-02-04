@@ -210,6 +210,19 @@
       word-break: break-word;
     }
 
+    .file-item .tag{
+      margin-top:6px;
+      display:inline-block;
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:0.6px;
+      padding:2px 6px;
+      border-radius:999px;
+      border:1px solid rgba(255,205,123,0.5);
+      color:#ffd27b;
+      background: rgba(255,205,123,0.12);
+    }
+
     main{
       background: var(--panel);
       border:1px solid var(--border);
@@ -1021,7 +1034,19 @@
       state.filtered.forEach(entry => {
         const item = document.createElement("div");
         item.className = "file-item" + (state.current && state.current.url === entry.url ? " active" : "");
-        item.innerHTML = `<div class="name">${escapeHtml(entry.rel || entry.path)}</div>`;
+        const draft = loadDraft(entry.path);
+        let isDirty = false;
+        if(draft){
+          if(state.current && state.current.path === entry.path){
+            isDirty = state.editorText !== state.originalText;
+          }else{
+            isDirty = true;
+          }
+        }
+        item.innerHTML = `
+          <div class="name">${escapeHtml(entry.rel || entry.path)}</div>
+          ${isDirty ? `<div class="tag">Modified</div>` : ""}
+        `;
         item.addEventListener("click", () => selectEntry(entry));
         list.appendChild(item);
       });
@@ -1925,6 +1950,7 @@ ${rows}
         setStatus("ok", "CLEAN");
         setSaveDirty(false);
       }
+      renderList();
     }
 
     function runUpdate(){
