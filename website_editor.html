@@ -1503,25 +1503,6 @@ ${rows}
       `;
       panelContent.appendChild(navCard);
 
-      const aiCard = document.createElement("div");
-      aiCard.className = "panel-card";
-      aiCard.innerHTML = `
-        <div class="panel-title">AI Assist</div>
-        <div class="help">Local helper only — no external AI API wired yet. Use this to draft text or paste a list to populate rows.</div>
-        <div class="form-grid">
-          <label>Target Section
-            <select class="input" data-field="ai-target"></select>
-          </label>
-          <label>Paste Draft / List
-            <textarea class="input" data-field="ai-input" placeholder="Paste notes or CSV: PartNo, Title, Href, Pieces"></textarea>
-          </label>
-        </div>
-        <div class="row-actions">
-          <button class="btn" data-action="ai-draft" type="button">Draft Section Text</button>
-          <button class="btn secondary" data-action="ai-rows" type="button">Populate Rows</button>
-        </div>
-      `;
-      panelSections.appendChild(aiCard);
 
       if(data.type === "board"){
         const sectionsWrap = document.createElement("div");
@@ -1759,19 +1740,7 @@ ${rows}
         navList.appendChild(row);
       });
 
-      const aiSelect = panelSections.querySelector('[data-field="ai-target"]');
-      aiSelect.innerHTML = "";
-      if(data.type === "collection"){
-        aiSelect.innerHTML = `<option value="collection-rows">Collection Rows</option>`;
-      }else{
-        (data.sections || []).forEach(section => {
-          const label = section.tabLabel ? `${section.id} (${section.tabLabel})` : section.id;
-          const opt = document.createElement("option");
-          opt.value = section.id;
-          opt.textContent = label;
-          aiSelect.appendChild(opt);
-        });
-      }
+      // AI Assist panel removed.
 
       const tabs = $("formTabs");
       if(data.type === "collection"){
@@ -2358,53 +2327,7 @@ ${rows}
           renderForm(state.formState);
           logTerminal("template", "Template loaded from file");
         }
-        if(action === "ai-draft"){
-          const input = $("panel-sections").querySelector('[data-field="ai-input"]').value.trim();
-          const targetSelect = $("panel-sections").querySelector('[data-field="ai-target"]');
-          const targetId = targetSelect ? targetSelect.value : "";
-          if(state.formState?.type === "collection"){
-            return;
-          }
-          const card = $("panel-sections").querySelector(`.section-card[data-section-id="${CSS.escape(targetId)}"]`);
-          if(!card) return;
-          const type = card.dataset.sectionType;
-          if(type === "html"){
-            const area = card.querySelector('[data-field="section-body"]');
-            if(area){
-              const metaTitle = $("panel-content").querySelector('[data-field="meta-h1"]').value.trim();
-              const slogan = $("panel-content").querySelector('[data-field="meta-slogan"]').value.trim();
-              const details = Array.from($("panel-sections").querySelectorAll('[data-detail-row]')).map(row => {
-                const label = row.querySelector('[data-field="detail-label"]').value.trim();
-                const value = row.querySelector('[data-field="detail-value"]').value.trim();
-                return label && value ? `${label}: ${value}` : "";
-              }).filter(Boolean);
-              const draft = input || `The ${metaTitle} board is designed for hands-on exploration. ${slogan} ${details.length ? "Key specs: " + details.join(", ") + "." : ""}`;
-              area.value = `<p>${escapeHtml(draft)}</p>`;
-            }
-          }
-        }
-        if(action === "ai-rows"){
-          const input = $("panel-sections").querySelector('[data-field="ai-input"]').value.trim();
-          if(!input) return;
-          if(state.formState?.type === "collection"){
-            const list = $("panel-collection").querySelector("[data-collection-list]");
-            if(!list) return;
-            const lines = input.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-            lines.forEach(line => {
-              const parts = line.split(/[|,]/).map(p => p.trim());
-              const row = document.createElement("div");
-              row.className = "inline-row";
-              row.dataset.collectionRow = "true";
-              row.innerHTML = `
-                <label>Part No<input class="input" data-field="row-part" type="text" value="${escapeHtml(parts[0] || "")}"></label>
-                <label>Title<input class="input" data-field="row-title" type="text" value="${escapeHtml(parts[1] || "")}"></label>
-                <label>Link Href<input class="input" data-field="row-href" type="text" value="${escapeHtml(parts[2] || "")}"></label>
-                <label>Pieces/Panel<input class="input" data-field="row-pieces" type="text" value="${escapeHtml(parts[3] || "")}"></label>
-              `;
-              list.appendChild(row);
-            });
-          }
-        }
+        // AI Assist actions removed.
       });
 
       const commandBtn = $("commandRunBtn");
