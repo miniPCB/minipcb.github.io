@@ -755,9 +755,10 @@
       <h3>Preferences</h3>
       <div class="modalGrid">
         <label>
-          Default directory
-          <input class="input" id="baseDirInput" type="text" placeholder="draft/" />
+          HTML Folder
+          <input class="input" id="folderInput" type="file" webkitdirectory directory />
         </label>
+        <div class="tiny" id="folderLabel">No folder selected.</div>
         <label>
           Author
           <input class="input" id="authorInput" type="text" placeholder="Name" />
@@ -770,7 +771,7 @@
           </select>
         </label>
         <div class="empty">
-          This path prefixes file loads and preview links. Default is <strong>draft/</strong>.
+          Pick a folder to scan for HTML files. If none selected, defaults to draft/.
         </div>
       </div>
       <div class="modalActions">
@@ -835,6 +836,7 @@
       editorText: "",
       saveTimer: null,
       baseDir: "draft/",
+      fileIndex: null,
       formState: null,
       template: null,
       editingSectionCard: null
@@ -990,6 +992,9 @@
     }
 
     function listFromIndex(baseDir){
+      if(state.fileIndex && state.fileIndex.length){
+        return state.fileIndex.slice().sort((a, b) => a.rel.localeCompare(b.rel));
+      }
       const src = Array.isArray(window.DRAFT_HTML_INDEX) ? window.DRAFT_HTML_INDEX : [];
       return src
         .filter(path => typeof path === "string" && path.toLowerCase().endsWith(".html"))
@@ -1006,6 +1011,7 @@
     }
 
     async function ensureIndexLoaded(){
+      if(state.fileIndex && state.fileIndex.length) return true;
       if(Array.isArray(window.DRAFT_HTML_INDEX) && window.DRAFT_HTML_INDEX.length) return true;
       const candidate = `${state.baseDir}html_index.js`;
       try{
@@ -2023,6 +2029,14 @@ ${rows}
     }
 
     async function fetchFile(entry){
+      if(entry.file){
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Failed to read file"));
+          reader.readAsText(entry.file);
+        });
+      }
       const url = entry.path + "?v=" + Date.now();
       const res = await fetch(url, { cache: "no-store" });
       if(!res.ok){
@@ -2494,19 +2508,41 @@ ${rows}
       });
 
       $("prefsBtn").addEventListener("click", () => {
-        $("baseDirInput").value = state.baseDir || "draft/";
+        const label = $("folderLabel");
+        if(label) label.textContent = state.fileIndex && state.fileIndex.length ? "Folder selected." : "No folder selected.";
         $("authorInput").value = getAuthor();
         $("terminalDockInput").value = getTerminalDock();
         $("prefsModal").classList.add("open");
       });
+
+      const folderInput = $("folderInput");
+      if(folderInput){
+        folderInput.addEventListener("change", () => {
+          const label = $("folderLabel");
+          if(label) label.textContent = folderInput.files && folderInput.files.length ? "Folder selected." : "No folder selected.";
+        });
+      }
 
       $("prefsCancel").addEventListener("click", () => {
         $("prefsModal").classList.remove("open");
       });
 
       $("prefsSave").addEventListener("click", () => {
-        const next = $("baseDirInput").value;
-        setBaseDir(next);
+        const files = $("folderInput").files;
+        if(files && files.length){
+          state.fileIndex = Array.from(files)
+            .filter(file => file.name.toLowerCase().endsWith(".html"))
+            .map(file => ({
+              rel: file.webkitRelativePath || file.name,
+              url: file.name,
+              path: file.webkitRelativePath || file.name,
+              title: file.name,
+              file
+            }));
+        }else{
+          state.fileIndex = null;
+        }
+        setBaseDir("draft/");
         setAuthor($("authorInput").value);
         setTerminalDock($("terminalDockInput").value);
         $("prefsModal").classList.remove("open");
