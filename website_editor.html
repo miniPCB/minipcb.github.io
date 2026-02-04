@@ -1445,17 +1445,7 @@ ${rows}
         sectionsWrap.className = "panel-card";
         sectionsWrap.innerHTML = `
           <div class="panel-title">Sections</div>
-          <div class="section-tabs" id="sectionTabs">
-            <button class="section-tab active" data-subtab="details" type="button">Details</button>
-            <button class="section-tab" data-subtab="description" type="button">Description</button>
-            <button class="section-tab" data-subtab="media" type="button">Media</button>
-            <button class="section-tab" data-subtab="downloads" type="button">Downloads</button>
-            <button class="section-tab" data-subtab="videos" type="button">Videos</button>
-            <button class="section-tab" data-subtab="revisions" type="button">Revisions</button>
-            <button class="section-tab" data-subtab="ai-seeds" type="button">AI Seeds</button>
-            <button class="section-tab" data-subtab="other" type="button">Other</button>
-            <button class="section-tab" data-subtab="add-new" type="button">Add New</button>
-          </div>
+          <div class="section-tabs" id="sectionTabs"></div>
         `;
         panelSections.appendChild(sectionsWrap);
 
@@ -1463,34 +1453,8 @@ ${rows}
         sectionsStack.className = "form-stack";
         sectionsWrap.appendChild(sectionsStack);
 
-        const groups = {
-          details: document.createElement("div"),
-          description: document.createElement("div"),
-          media: document.createElement("div"),
-          downloads: document.createElement("div"),
-          videos: document.createElement("div"),
-          revisions: document.createElement("div"),
-          "ai-seeds": document.createElement("div"),
-          other: document.createElement("div")
-        };
-
-        const visibility = {
-          details: true,
-          description: true,
-          media: true,
-          downloads: true,
-          videos: true,
-          revisions: false,
-          "ai-seeds": false,
-          other: true
-        };
-
-        Object.entries(groups).forEach(([key, el]) => {
-          el.className = "section-group" + (key === "details" ? " active" : "");
-          el.dataset.subtab = key;
-          sectionsStack.appendChild(el);
-          el.dataset.visible = visibility[key] === false ? "false" : "true";
-        });
+        const tabsRow = sectionsWrap.querySelector("#sectionTabs");
+        const groups = new Map();
 
         const hasDescription = (data.sections || []).some(section => section.id === "description");
         if(!hasDescription){
@@ -1504,7 +1468,22 @@ ${rows}
           }]);
         }
 
-        (data.sections || []).forEach(section => {
+        (data.sections || []).forEach((section, idx) => {
+          const tabLabel = section.tabLabel || section.title || section.id;
+          const tabBtn = document.createElement("button");
+          tabBtn.className = "section-tab" + (idx === 0 ? " active" : "");
+          tabBtn.type = "button";
+          tabBtn.dataset.subtab = section.id;
+          tabBtn.textContent = tabLabel;
+          tabsRow.appendChild(tabBtn);
+
+          const group = document.createElement("div");
+          group.className = "section-group" + (idx === 0 ? " active" : "");
+          group.dataset.subtab = section.id;
+          group.dataset.visible = section.hidden ? "false" : "true";
+          sectionsStack.appendChild(group);
+          groups.set(section.id, group);
+
           const card = document.createElement("div");
           card.className = "section-card";
           card.dataset.sectionId = section.id;
@@ -1639,26 +1618,23 @@ ${rows}
             card.appendChild(label);
           }
 
-          let bucket = "other";
-          if(section.type === "details") bucket = "details";
-          else if(section.id === "description") bucket = "description";
-          else if(section.type === "images") bucket = "media";
-          else if(section.type === "downloads") bucket = "downloads";
-          else if(section.type === "videos") bucket = "videos";
-          else if(section.type === "revisions") bucket = "revisions";
-          else if(section.type === "ai-seeds") bucket = "ai-seeds";
-          groups[bucket].appendChild(card);
+          group.appendChild(card);
         });
 
-        const tabRow = sectionsWrap.querySelector("#sectionTabs");
-        if(tabRow){
-          tabRow.querySelectorAll(".section-tab").forEach(btn => {
-            const key = btn.getAttribute("data-subtab");
-            const isVisible = groups[key]?.dataset.visible !== "false";
-            btn.classList.toggle("visible", isVisible);
-            btn.classList.toggle("hidden", !isVisible);
-          });
-        }
+        const addBtn = document.createElement("button");
+        addBtn.className = "section-tab";
+        addBtn.type = "button";
+        addBtn.dataset.subtab = "add-new";
+        addBtn.textContent = "Add New";
+        tabsRow.appendChild(addBtn);
+
+        tabsRow.querySelectorAll(".section-tab").forEach(btn => {
+          const key = btn.getAttribute("data-subtab");
+          if(key === "add-new") return;
+          const isVisible = groups.get(key)?.dataset.visible !== "false";
+          btn.classList.toggle("visible", isVisible);
+          btn.classList.toggle("hidden", !isVisible);
+        });
       }else if(data.type === "collection"){
         const rowsWrap = document.createElement("div");
         rowsWrap.className = "panel-card";
@@ -2013,33 +1989,49 @@ ${rows}
         }
         if(tabBtn.getAttribute("data-subtab") === "add-new"){
           const groups = container.querySelectorAll(".section-group");
-          const otherGroup = container.querySelector('.section-group[data-subtab="other"]');
-          if(!otherGroup) return;
-          const count = otherGroup.querySelectorAll(".section-card").length + 1;
+          const count = groups.length + 1;
           const newId = `section-${Date.now().toString(36)}-${count}`;
+          const tabsRow = container.querySelector("#sectionTabs");
+          const newTab = document.createElement("button");
+          newTab.className = "section-tab active visible";
+          newTab.type = "button";
+          newTab.dataset.subtab = newId;
+          newTab.textContent = "New Section";
+          const addNew = container.querySelector('.section-tab[data-subtab="add-new"]');
+          if(addNew && tabsRow){
+            tabsRow.insertBefore(newTab, addNew.nextSibling);
+          }
+
+          const newGroup = document.createElement("div");
+          newGroup.className = "section-group active";
+          newGroup.dataset.subtab = newId;
+          newGroup.dataset.visible = "true";
+          const stack = container.querySelector(".form-stack");
+          if(stack) stack.appendChild(newGroup);
+
           const card = document.createElement("div");
           card.className = "section-card";
           card.dataset.sectionId = newId;
           card.dataset.sectionType = "html";
+          card.dataset.sectionTitle = "New Section";
+          card.dataset.sectionTab = "New Section";
           card.innerHTML = `
-            <div class="inline-row">
-              <label>Section ID<input class="input" data-field="section-id" type="text" value="${escapeHtml(newId)}" readonly></label>
-              <label>Tab Label<input class="input" data-field="section-tab" type="text" value="New Section"></label>
-            </div>
-            <div class="inline-row">
-              <label>Section Title<input class="input" data-field="section-title" type="text" value="New Section"></label>
+            <div class="badge-row">
+              <span class="badge-pill">${escapeHtml(newId)}</span>
+              <span class="badge-pill">New Section</span>
+              <span class="badge-pill">New Section</span>
             </div>
           `;
           const label = document.createElement("label");
           label.innerHTML = `Body HTML<textarea class="input" data-field="section-body"><p>New section content.</p></textarea>`;
           card.appendChild(label);
-          otherGroup.appendChild(card);
+          newGroup.appendChild(card);
           container.querySelectorAll(".section-tab").forEach(b => b.classList.remove("active"));
-          const otherTab = container.querySelector('.section-tab[data-subtab="other"]');
-          if(otherTab) otherTab.classList.add("active");
+          newTab.classList.add("active");
           groups.forEach(group => {
-            group.classList.toggle("active", group.dataset.subtab === "other");
+            group.classList.toggle("active", group.dataset.subtab === newId);
           });
+          newGroup.classList.add("active");
           return;
         }
         const target = tabBtn.getAttribute("data-subtab");
