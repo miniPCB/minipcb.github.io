@@ -863,6 +863,7 @@
       fsRootPath: "",
       aiContextPath: "",
       aiContextText: "",
+      lastPartNo: "",
       formState: null,
       template: null,
       editingSectionCard: null
@@ -1670,6 +1671,7 @@ ${rows}
     function syncFormInputs(html){
       state.formState = extractFormFromHtml(html);
       renderForm(state.formState);
+      state.lastPartNo = readPartNoFromForm();
     }
 
     function renderForm(data){
@@ -2212,6 +2214,86 @@ ${rows}
         saveDraft(state.current.path, state.editorText);
         updateModifiedState();
       }, SAVE_DELAY);
+    }
+
+    function normalizeLabelKey(label){
+      return String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    }
+
+    function readPartNoFromForm(){
+      const panelSections = $("panel-sections");
+      if(!panelSections) return "";
+      const rows = panelSections.querySelectorAll("[data-detail-row]");
+      for(const row of rows){
+        const label = row.querySelector(".detail-label");
+        if(label && normalizeLabelKey(label.textContent) === "partno"){
+          const input = row.querySelector('[data-field="detail-value"]');
+          return input ? input.value.trim() : "";
+        }
+      }
+      return "";
+    }
+
+    function updateLinkedPartNo(newPartNo){
+      const next = (newPartNo || "").trim();
+      const prev = (state.lastPartNo || "").trim();
+      if(!next || next === prev) return;
+
+      const panelSections = $("panel-sections");
+      if(!panelSections) return;
+
+      const schematicCard = panelSections.querySelector('.section-card[data-section-id="schematic"]');
+      const layoutCard = panelSections.querySelector('.section-card[data-section-id="layout"]');
+      const downloadsCard = panelSections.querySelector('.section-card[data-section-id="downloads"]');
+
+      const updateImageSection = (card, type) => {
+        if(!card) return;
+        const rows = card.querySelectorAll("[data-image-row]");
+        rows.forEach(row => {
+          const srcInput = row.querySelector('[data-field="image-src"]');
+          const altInput = row.querySelector('[data-field="image-alt"]');
+          if(srcInput){
+            const src = srcInput.value.trim();
+            const isPattern = type === "schematic"
+              ? /_schematic_01\.png$/i.test(src)
+              : /_components_top\.png$/i.test(src);
+            if(!src || src.includes(prev) || isPattern){
+              srcInput.value = type === "schematic"
+                ? `../images/${next}_schematic_01.png`
+                : `../images/${next}_components_top.png`;
+            }
+          }
+          if(altInput){
+            const alt = altInput.value.trim();
+            if(!alt || alt.includes(prev)){
+              altInput.value = type === "schematic"
+                ? `Schematic for miniPCB ${next}`
+                : `Top view of miniPCB ${next}`;
+            }
+          }
+        });
+      };
+
+      updateImageSection(schematicCard, "schematic");
+      updateImageSection(layoutCard, "layout");
+
+      if(downloadsCard){
+        const hrefCells = downloadsCard.querySelectorAll('td[data-col-key="href"]');
+        hrefCells.forEach(cell => {
+          const text = (cell.textContent || "").trim();
+          if(!text) return;
+          if(prev && text.includes(prev)){
+            cell.textContent = text.replaceAll(prev, next);
+          }else if(/\/datasheets\/[^\/]+\.pdf$/i.test(text)){
+            cell.textContent = text.replace(/\/datasheets\/[^\/]+\.pdf$/i, `/datasheets/${next}.pdf`);
+          }else if(/\/ltspice\/[^\/]+\.asc$/i.test(text)){
+            cell.textContent = text.replace(/\/ltspice\/[^\/]+\.asc$/i, `/ltspice/${next}.asc`);
+          }
+        });
+      }
+
+      state.lastPartNo = next;
+      queueDraftUpdate();
     }
 
     function editDetailLabel(span){
@@ -2899,6 +2981,10 @@ ${rows}
         const target = e.target;
         if(!target) return;
         if(!document.querySelector(".preview")?.contains(target)) return;
+        const label = target.closest("label")?.querySelector(".detail-label");
+        if(target.matches('[data-field="detail-value"]') && label && normalizeLabelKey(label.textContent) === "partno"){
+          updateLinkedPartNo(target.value);
+        }
         queueDraftUpdate();
       });
 
