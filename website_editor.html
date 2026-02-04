@@ -746,6 +746,10 @@
           <input class="input" id="baseDirInput" type="text" placeholder="draft/" />
         </label>
         <label>
+          Author
+          <input class="input" id="authorInput" type="text" placeholder="Name" />
+        </label>
+        <label>
           Terminal Dock
           <select class="input" id="terminalDockInput">
             <option value="left-bottom">Left Pane (Lower Half)</option>
@@ -806,6 +810,7 @@
     const PREFS_KEY = "websiteEditorBaseDir";
     const TEMPLATE_KEY = "websiteEditorTemplate";
     const TERMINAL_DOCK_KEY = "websiteEditorTerminalDock";
+    const AUTHOR_KEY = "websiteEditorAuthor";
     const LOCAL_PREFIX = "websiteEditorDraft::";
     const SAVE_DELAY = 600;
 
@@ -938,6 +943,14 @@
       const trimmed = String(value || "").trim();
       if(!trimmed) return "";
       return trimmed.endsWith("/") ? trimmed : trimmed + "/";
+    }
+
+    function getAuthor(){
+      return localStorage.getItem(AUTHOR_KEY) || "";
+    }
+
+    function setAuthor(value){
+      localStorage.setItem(AUTHOR_KEY, String(value || ""));
     }
 
     function getBaseDir(){
@@ -2328,6 +2341,9 @@ ${rows}
               if(td.dataset.colKey === "width") td.textContent = "560";
               if(td.dataset.colKey === "height") td.textContent = "315";
             }
+            if(table.dataset.tableType === "revisions"){
+              if(td.dataset.colKey === "by") td.textContent = getAuthor();
+            }
             tr.appendChild(td);
           });
           tbody.appendChild(tr);
@@ -2395,6 +2411,7 @@ ${rows}
 
       $("prefsBtn").addEventListener("click", () => {
         $("baseDirInput").value = state.baseDir || "draft/";
+        $("authorInput").value = getAuthor();
         $("terminalDockInput").value = getTerminalDock();
         $("prefsModal").classList.add("open");
       });
@@ -2406,6 +2423,7 @@ ${rows}
       $("prefsSave").addEventListener("click", () => {
         const next = $("baseDirInput").value;
         setBaseDir(next);
+        setAuthor($("authorInput").value);
         setTerminalDock($("terminalDockInput").value);
         $("prefsModal").classList.remove("open");
         init();
