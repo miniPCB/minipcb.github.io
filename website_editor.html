@@ -1971,6 +1971,37 @@ ${rows}
       runUpdate();
     }
 
+    function runSaveAll(){
+      const template = collectTemplateState();
+      saveTemplate(template);
+      state.entries.forEach(entry => {
+        const draft = loadDraft(entry.path);
+        if(!draft) return;
+        const savedCurrent = state.current;
+        const savedOriginal = state.originalText;
+        const savedEditor = state.editorText;
+        try{
+          const data = extractFormFromHtml(draft);
+          const updated = data.type === "collection"
+            ? generateCollectionHtml(data, template)
+            : generateBoardHtml(data, template);
+          saveDraft(entry.path, updated);
+          if(savedCurrent && savedCurrent.path === entry.path){
+            state.editorText = updated;
+            state.originalText = updated;
+          }
+        }catch(err){
+          logTerminal("error", `Save all failed for ${entry.path}`);
+        }finally{
+          state.current = savedCurrent;
+          state.originalText = savedOriginal;
+          state.editorText = savedEditor;
+        }
+      });
+      updateModifiedState();
+      logTerminal("save", "Saved all draft files");
+    }
+
     function runCommand(input){
       const raw = (input || "").trim();
       if(!raw) return;
@@ -2270,6 +2301,13 @@ ${rows}
       $("saveBtn").addEventListener("click", runSave);
       const updateBtn = $("updateHtmlBtn");
       if(updateBtn) updateBtn.addEventListener("click", runSave);
+
+      document.addEventListener("keydown", (e) => {
+        if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s"){
+          e.preventDefault();
+          runSaveAll();
+        }
+      });
 
       document.addEventListener("click", (e) => {
         const target = e.target.closest("[data-action]");
