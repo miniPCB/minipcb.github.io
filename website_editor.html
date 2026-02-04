@@ -2302,6 +2302,26 @@ ${rows}
       const updateBtn = $("updateHtmlBtn");
       if(updateBtn) updateBtn.addEventListener("click", runSave);
 
+      const formRoot = $("panel-template");
+      document.addEventListener("input", (e) => {
+        const target = e.target;
+        if(!target) return;
+        if(!document.querySelector(".preview")?.contains(target)) return;
+        if(!state.current) return;
+        if(state.saveTimer) clearTimeout(state.saveTimer);
+        state.saveTimer = setTimeout(() => {
+          const data = collectFormState();
+          const template = collectTemplateState();
+          saveTemplate(template);
+          const updated = data.type === "collection"
+            ? generateCollectionHtml(data, template)
+            : generateBoardHtml(data, template);
+          state.editorText = updated;
+          saveDraft(state.current.path, state.editorText);
+          updateModifiedState();
+        }, SAVE_DELAY);
+      });
+
       document.addEventListener("keydown", (e) => {
         if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s"){
           e.preventDefault();
