@@ -639,6 +639,34 @@
       background: rgba(102,163,255,0.15);
     }
 
+    .table-editor{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .table-editor th,
+    .table-editor td{
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .table-editor th{
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      font-size: 11px;
+    }
+
+    .table-editor td{
+      background: rgba(255,255,255,0.02);
+      color: var(--text);
+      min-width: 120px;
+    }
+
     @media (max-width: 980px){
       .layout{ grid-template-columns: 1fr; }
       aside{ order:2; }
@@ -771,6 +799,16 @@
     <button type="button" id="sectionDeleteBtn">Delete Section</button>
   </div>
 
+  <div class="context-menu" id="tableContextMenu">
+    <button type="button" data-table-action="row-above">Add Row Above</button>
+    <button type="button" data-table-action="row-below">Add Row Below</button>
+    <button type="button" data-table-action="col-left">Add Column Left</button>
+    <button type="button" data-table-action="col-right">Add Column Right</button>
+    <button type="button" data-table-action="row-delete">Delete Row</button>
+    <button type="button" data-table-action="col-delete">Delete Column</button>
+    <button type="button" data-table-action="ai-suggest">AI Suggest</button>
+  </div>
+
   <script src="draft/html_index.js"></script>
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
@@ -793,6 +831,7 @@
     };
 
     let contextTargetTab = null;
+    let contextTableCell = null;
 
     const $ = (id) => document.getElementById(id);
 
@@ -1595,72 +1634,43 @@ ${rows}
             `;
             card.appendChild(actions);
           }else if(section.type === "downloads"){
-            const rows = document.createElement("div");
-            rows.className = "form-stack";
-            rows.dataset.downloadList = "true";
-            (section.items || []).forEach(item => {
-              const rowEl = document.createElement("div");
-              rowEl.className = "inline-row";
-              rowEl.dataset.downloadRow = "true";
-              rowEl.innerHTML = `
-                <label>Label<input class="input" data-field="download-label" type="text" value="${escapeHtml(item.label || "")}"></label>
-                <label>Href<input class="input" data-field="download-href" type="text" value="${escapeHtml(item.href || "")}"></label>
-              `;
-              rows.appendChild(rowEl);
-            });
-            card.appendChild(rows);
-            const actions = document.createElement("div");
-            actions.className = "row-actions";
-            actions.innerHTML = `
-              <button class="btn secondary" data-action="add-download" type="button">Add Download</button>
-            `;
-            card.appendChild(actions);
+            const table = buildEditableTable([
+              { key: "label", label: "Label" },
+              { key: "href", label: "Href" }
+            ], (section.items || []).map(item => ({
+              label: item.label || "",
+              href: item.href || ""
+            })));
+            table.dataset.tableType = "downloads";
+            card.appendChild(table);
           }else if(section.type === "videos"){
-            const rows = document.createElement("div");
-            rows.className = "form-stack";
-            rows.dataset.videoList = "true";
-            (section.videos || []).forEach(video => {
-              const rowEl = document.createElement("div");
-              rowEl.className = "inline-row";
-              rowEl.dataset.videoRow = "true";
-              rowEl.innerHTML = `
-                <label>Video URL<input class="input" data-field="video-src" type="text" value="${escapeHtml(video.src || "")}"></label>
-                <label>Title<input class="input" data-field="video-title" type="text" value="${escapeHtml(video.title || "")}"></label>
-                <label>Width<input class="input" data-field="video-width" type="text" value="${escapeHtml(video.width || "")}"></label>
-                <label>Height<input class="input" data-field="video-height" type="text" value="${escapeHtml(video.height || "")}"></label>
-              `;
-              rows.appendChild(rowEl);
-            });
-            card.appendChild(rows);
-            const actions = document.createElement("div");
-            actions.className = "row-actions";
-            actions.innerHTML = `
-              <button class="btn secondary" data-action="add-video" type="button">Add Video</button>
-            `;
-            card.appendChild(actions);
+            const table = buildEditableTable([
+              { key: "src", label: "URL" },
+              { key: "title", label: "Title" },
+              { key: "width", label: "Width" },
+              { key: "height", label: "Height" }
+            ], (section.videos || []).map(video => ({
+              src: video.src || "",
+              title: video.title || "",
+              width: video.width || "",
+              height: video.height || ""
+            })));
+            table.dataset.tableType = "videos";
+            card.appendChild(table);
           }else if(section.type === "revisions"){
-            const rows = document.createElement("div");
-            rows.className = "form-stack";
-            rows.dataset.revisionList = "true";
-            (section.rows || []).forEach(row => {
-              const rowEl = document.createElement("div");
-              rowEl.className = "inline-row";
-              rowEl.dataset.revisionRow = "true";
-              rowEl.innerHTML = `
-                <label>Date<input class="input" data-field="rev-date" type="text" value="${escapeHtml(row.date || "")}"></label>
-                <label>Revision<input class="input" data-field="rev-id" type="text" value="${escapeHtml(row.rev || "")}"></label>
-                <label>Description<input class="input" data-field="rev-desc" type="text" value="${escapeHtml(row.desc || "")}"></label>
-                <label>By<input class="input" data-field="rev-by" type="text" value="${escapeHtml(row.by || "")}"></label>
-              `;
-              rows.appendChild(rowEl);
-            });
-            card.appendChild(rows);
-            const actions = document.createElement("div");
-            actions.className = "row-actions";
-            actions.innerHTML = `
-              <button class="btn secondary" data-action="add-revision" type="button">Add Revision</button>
-            `;
-            card.appendChild(actions);
+            const table = buildEditableTable([
+              { key: "date", label: "Date" },
+              { key: "rev", label: "Revision" },
+              { key: "desc", label: "Description" },
+              { key: "by", label: "By" }
+            ], (section.rows || []).map(row => ({
+              date: row.date || "",
+              rev: row.rev || "",
+              desc: row.desc || "",
+              by: row.by || ""
+            })));
+            table.dataset.tableType = "revisions";
+            card.appendChild(table);
           }else if(section.type === "ai-seeds"){
             const label = document.createElement("label");
             label.innerHTML = `AI Seeds JSON<textarea class="input" data-field="ai-seeds">${escapeHtml(section.jsonText || "{}")}</textarea>`;
@@ -1829,28 +1839,31 @@ ${rows}
           return { id, title, tabLabel, hidden: !visible, type, images };
         }
         if(type === "downloads"){
-          const items = Array.from(card.querySelectorAll("[data-download-row]")).map(row => ({
-            label: row.querySelector('[data-field="download-label"]').value.trim(),
-            href: row.querySelector('[data-field="download-href"]').value.trim()
-          })).filter(item => item.label || item.href);
+          const table = card.querySelector("table.table-editor");
+          const items = table ? Array.from(table.querySelectorAll("tbody tr")).map(tr => ({
+            label: (tr.querySelector('td[data-col-key="label"]')?.textContent || "").trim(),
+            href: (tr.querySelector('td[data-col-key="href"]')?.textContent || "").trim()
+          })).filter(item => item.label || item.href) : [];
           return { id, title, tabLabel, hidden: !visible, type, items };
         }
         if(type === "videos"){
-          const videos = Array.from(card.querySelectorAll("[data-video-row]")).map(row => ({
-            src: row.querySelector('[data-field="video-src"]').value.trim(),
-            title: row.querySelector('[data-field="video-title"]').value.trim(),
-            width: row.querySelector('[data-field="video-width"]').value.trim(),
-            height: row.querySelector('[data-field="video-height"]').value.trim()
-          })).filter(video => video.src || video.title);
+          const table = card.querySelector("table.table-editor");
+          const videos = table ? Array.from(table.querySelectorAll("tbody tr")).map(tr => ({
+            src: (tr.querySelector('td[data-col-key="src"]')?.textContent || "").trim(),
+            title: (tr.querySelector('td[data-col-key="title"]')?.textContent || "").trim(),
+            width: (tr.querySelector('td[data-col-key="width"]')?.textContent || "").trim(),
+            height: (tr.querySelector('td[data-col-key="height"]')?.textContent || "").trim()
+          })).filter(video => video.src || video.title) : [];
           return { id, title, tabLabel, hidden: !visible, type, videos };
         }
         if(type === "revisions"){
-          const rows = Array.from(card.querySelectorAll("[data-revision-row]")).map(row => ({
-            date: row.querySelector('[data-field="rev-date"]').value.trim(),
-            rev: row.querySelector('[data-field="rev-id"]').value.trim(),
-            desc: row.querySelector('[data-field="rev-desc"]').value.trim(),
-            by: row.querySelector('[data-field="rev-by"]').value.trim()
-          })).filter(row => row.date || row.rev || row.desc || row.by);
+          const table = card.querySelector("table.table-editor");
+          const rows = table ? Array.from(table.querySelectorAll("tbody tr")).map(tr => ({
+            date: (tr.querySelector('td[data-col-key="date"]')?.textContent || "").trim(),
+            rev: (tr.querySelector('td[data-col-key="rev"]')?.textContent || "").trim(),
+            desc: (tr.querySelector('td[data-col-key="desc"]')?.textContent || "").trim(),
+            by: (tr.querySelector('td[data-col-key="by"]')?.textContent || "").trim()
+          })).filter(row => row.date || row.rev || row.desc || row.by) : [];
           return { id, title, tabLabel, hidden: !visible, type, rows };
         }
         if(type === "ai-seeds"){
@@ -1878,6 +1891,35 @@ ${rows}
         versionStamp: panelTemplate.querySelector('[data-field="tpl-version"]').value.trim(),
         dateStamp: panelTemplate.querySelector('[data-field="tpl-date"]').value.trim()
       };
+    }
+
+    function buildEditableTable(columns, rows){
+      const table = document.createElement("table");
+      table.className = "table-editor";
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      columns.forEach(col => {
+        const th = document.createElement("th");
+        th.textContent = col.label;
+        th.dataset.colKey = col.key;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+      const tbody = document.createElement("tbody");
+      (rows || []).forEach(row => {
+        const tr = document.createElement("tr");
+        columns.forEach(col => {
+          const td = document.createElement("td");
+          td.contentEditable = "true";
+          td.dataset.colKey = col.key;
+          td.textContent = row[col.key] || "";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      return table;
     }
 
     function updateModifiedState(){
@@ -2093,6 +2135,10 @@ ${rows}
         if(menu && menu.style.display === "block" && !menu.contains(e.target)){
           menu.style.display = "none";
         }
+        const tableMenu = $("tableContextMenu");
+        if(tableMenu && tableMenu.style.display === "block" && !tableMenu.contains(e.target)){
+          tableMenu.style.display = "none";
+        }
       });
 
       $("sectionDeleteBtn").addEventListener("click", () => {
@@ -2115,6 +2161,95 @@ ${rows}
             el.classList.toggle("active", el.dataset.subtab === nextTarget);
           });
         }
+      });
+
+      document.addEventListener("contextmenu", (e) => {
+        const cell = e.target.closest("table.table-editor td");
+        if(!cell) return;
+        e.preventDefault();
+        contextTableCell = cell;
+        const menu = $("tableContextMenu");
+        menu.style.display = "block";
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+      });
+
+      $("tableContextMenu").addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-table-action]");
+        if(!btn || !contextTableCell) return;
+        const action = btn.getAttribute("data-table-action");
+        const cell = contextTableCell;
+        const table = cell.closest("table");
+        const row = cell.parentElement;
+        const colIndex = Array.from(row.children).indexOf(cell);
+        const rows = Array.from(table.querySelectorAll("tbody tr"));
+
+        if(action === "row-above" || action === "row-below"){
+          const newRow = document.createElement("tr");
+          Array.from(row.children).forEach(td => {
+            const newTd = document.createElement("td");
+            newTd.contentEditable = "true";
+            newTd.dataset.colKey = td.dataset.colKey || "";
+            newRow.appendChild(newTd);
+          });
+          if(action === "row-above"){
+            row.parentElement.insertBefore(newRow, row);
+          }else{
+            row.parentElement.insertBefore(newRow, row.nextSibling);
+          }
+        }
+
+        if(action === "col-left" || action === "col-right"){
+          const allRows = table.querySelectorAll("tr");
+          allRows.forEach(tr => {
+            const ref = tr.children[colIndex];
+            const el = document.createElement(tr.parentElement.tagName === "THEAD" ? "th" : "td");
+            if(el.tagName === "TD"){
+              el.contentEditable = "true";
+            }
+            el.dataset.colKey = "";
+            el.textContent = el.tagName === "TH" ? "New" : "";
+            if(action === "col-left"){
+              tr.insertBefore(el, ref);
+            }else{
+              tr.insertBefore(el, ref ? ref.nextSibling : null);
+            }
+          });
+        }
+
+        if(action === "row-delete"){
+          if(rows.length > 1){
+            row.remove();
+          }
+        }
+
+        if(action === "col-delete"){
+          const allRows = table.querySelectorAll("tr");
+          allRows.forEach(tr => {
+            if(tr.children[colIndex]) tr.children[colIndex].remove();
+          });
+        }
+
+        if(action === "ai-suggest"){
+          const key = cell.dataset.colKey || "";
+          let suggestion = "AI suggestion";
+          if(key === "label") suggestion = "New download";
+          if(key === "href") suggestion = "https://example.com/file.pdf";
+          if(key === "src") suggestion = "https://www.youtube.com/embed/VIDEO_ID";
+          if(key === "title") suggestion = "Video title";
+          if(key === "width") suggestion = "560";
+          if(key === "height") suggestion = "315";
+          if(key === "date") suggestion = new Date().toISOString().slice(0, 10);
+          if(key === "rev") suggestion = "A1-01";
+          if(key === "desc") suggestion = "Update description";
+          if(key === "by") suggestion = "miniPCB";
+          cell.textContent = suggestion;
+          logTerminal("ai", `Suggested ${key || "cell"} content`);
+        }
+
+        const menu = $("tableContextMenu");
+        menu.style.display = "none";
+        contextTableCell = null;
       });
       $("searchInput").addEventListener("input", (e) => filterList(e.target.value));
       $("saveBtn").addEventListener("click", runSave);
