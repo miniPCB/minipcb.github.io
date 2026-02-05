@@ -2465,6 +2465,9 @@ ${rows}
       const table = cell.closest("table");
       const isMeta = table?.dataset.metaTable === "true";
       const isNav = table?.dataset.navTable === "true";
+      const metaTitle = getMetaValue("title");
+      const metaH1 = getMetaValue("h1");
+      const metaSlogan = getMetaValue("slogan");
       if(tableType === "details"){
         if(colKey === "label") return "Detail";
         if(colKey === "value"){
@@ -2496,11 +2499,21 @@ ${rows}
         if(colKey === "by") return getAuthor();
       }
       if(isMeta){
-        if(colKey === "title") return getMetaValue("title");
-        if(colKey === "h1") return getMetaValue("h1");
-        if(colKey === "slogan") return getMetaValue("slogan");
-        if(colKey === "keywords") return getMetaValue("keywords");
-        if(colKey === "description") return getMetaValue("description");
+        if(colKey === "title") return metaTitle || partNo || "miniPCB Board";
+        if(colKey === "h1") return metaH1 || metaTitle || partNo || "miniPCB Board";
+        if(colKey === "slogan") return metaSlogan || "A miniPCB project board.";
+        if(colKey === "keywords"){
+          const tokens = [partNo, metaTitle, metaH1, "miniPCB", "Schematic", "Board Layout", "Downloads"]
+            .map(v => String(v || "").trim())
+            .filter(Boolean);
+          const unique = Array.from(new Set(tokens));
+          return unique.join(", ");
+        }
+        if(colKey === "description"){
+          const base = metaTitle || metaH1 || partNo || "miniPCB board";
+          const extra = metaSlogan ? ` ${metaSlogan}` : "";
+          return `${base} is a miniPCB board.${extra}`.trim();
+        }
       }
       if(isNav){
         if(colKey === "text") return "New link";
