@@ -981,6 +981,7 @@
     const FS_STORE = "handles";
     const VIEW_TAB_KEY = "websiteEditorViewTab";
     const VIEW_SECTION_TAB_KEY = "websiteEditorSectionSubtab";
+    const COLUMN_WIDTH_KEY = "websiteEditorColumnWidths";
 
     const state = {
       entries: [],
@@ -2562,8 +2563,46 @@ ${rows}
       queueDraftUpdate();
     }
 
+    function loadColumnWidths(){
+      try{
+        const raw = localStorage.getItem(COLUMN_WIDTH_KEY);
+        return raw ? JSON.parse(raw) : {};
+      }catch{
+        return {};
+      }
+    }
+
+    function saveColumnWidths(map){
+      try{
+        localStorage.setItem(COLUMN_WIDTH_KEY, JSON.stringify(map || {}));
+      }catch{}
+    }
+
+    function tableStorageKey(table){
+      const type = table?.dataset.tableType || "table";
+      const panel = table?.closest(".form-panel");
+      const panelId = panel ? panel.id : "panel";
+      const sectionId = table?.closest(".section-card")?.dataset.sectionId || "section";
+      return `${panelId}:${sectionId}:${type}`;
+    }
+
     function enableColumnResize(table){
       if(!table) return;
+      const widths = loadColumnWidths();
+      const key = tableStorageKey(table);
+      const saved = widths[key];
+      if(saved){
+        Object.keys(saved).forEach(index => {
+          const width = saved[index];
+          const idx = Number(index);
+          const th = table.querySelectorAll("thead th")[idx];
+          if(th) th.style.width = `${width}px`;
+          table.querySelectorAll("tr").forEach(row => {
+            const cell = row.children[idx];
+            if(cell) cell.style.width = `${width}px`;
+          });
+        });
+      }
       const headers = table.querySelectorAll("thead th");
       headers.forEach((th, index) => {
         if(th.querySelector(".col-resizer")) return;
@@ -2587,6 +2626,10 @@ ${rows}
           const onUp = () => {
             document.removeEventListener("mousemove", onMove);
             document.removeEventListener("mouseup", onUp);
+            const next = loadColumnWidths();
+            if(!next[key]) next[key] = {};
+            next[key][index] = th.offsetWidth;
+            saveColumnWidths(next);
           };
           document.addEventListener("mousemove", onMove);
           document.addEventListener("mouseup", onUp);
