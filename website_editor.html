@@ -706,6 +706,31 @@
       min-width: 120px;
     }
 
+    .meta-table th,
+    .meta-table td{
+      border-color: rgba(255,255,255,0.08);
+    }
+
+    .meta-table tbody th{
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 12px;
+      width: 1%;
+      white-space: nowrap;
+      background: transparent;
+      color: var(--text);
+    }
+
+    .meta-table td[contenteditable="true"]{
+      background: transparent;
+      border: none;
+      padding: 6px 8px;
+      min-height: 0;
+      font-size: 12px;
+      color: var(--text);
+      outline: none;
+    }
+
     @media (max-width: 980px){
       .layout{ grid-template-columns: 1fr; }
       aside{ order:2; }
@@ -1747,7 +1772,7 @@ ${rows}
       metaCard.className = "panel-card";
       metaCard.innerHTML = `
         <div class="panel-title">Page Meta</div>
-        <table class="table-editor meta-table">
+        <table class="table-editor meta-table" data-meta-table="true">
           <thead>
             <tr>
               <th>Field</th>
@@ -1757,23 +1782,23 @@ ${rows}
           <tbody>
             <tr>
               <th>1. Title</th>
-              <td><input class="input" data-field="meta-title" type="text"></td>
+              <td data-meta-key="title" contenteditable="true"></td>
             </tr>
             <tr>
               <th>2. Header H1</th>
-              <td><input class="input" data-field="meta-h1" type="text"></td>
+              <td data-meta-key="h1" contenteditable="true"></td>
             </tr>
             <tr>
               <th>3. Slogan</th>
-              <td><input class="input" data-field="meta-slogan" type="text"></td>
+              <td data-meta-key="slogan" contenteditable="true"></td>
             </tr>
             <tr>
               <th>4. Meta Keywords</th>
-              <td><textarea class="input" data-field="meta-keywords" rows="3"></textarea></td>
+              <td data-meta-key="keywords" contenteditable="true"></td>
             </tr>
             <tr>
               <th>5. Meta Description</th>
-              <td><textarea class="input" data-field="meta-description" rows="3"></textarea></td>
+              <td data-meta-key="description" contenteditable="true"></td>
             </tr>
           </tbody>
         </table>
@@ -2041,14 +2066,21 @@ ${rows}
       panelTemplate.querySelector('[data-field="tpl-version"]').value = tpl.versionStamp || "";
       panelTemplate.querySelector('[data-field="tpl-date"]').value = tpl.dateStamp || "";
 
-      panelPageMeta.querySelector('[data-field="meta-title"]').value = data.meta.title || "";
-      panelPageMeta.querySelector('[data-field="meta-description"]').value = data.meta.description || "";
-      panelPageMeta.querySelector('[data-field="meta-keywords"]').value = data.meta.keywords || "";
-      panelPageMeta.querySelector('[data-field="meta-h1"]').value = data.meta.h1 || "";
-      panelPageMeta.querySelector('[data-field="meta-slogan"]').value = data.meta.slogan || "";
+      const metaTable = panelPageMeta.querySelector('[data-meta-table="true"]');
+      if(metaTable){
+        metaTable.querySelector('[data-meta-key="title"]').textContent = data.meta.title || "";
+        metaTable.querySelector('[data-meta-key="description"]').textContent = data.meta.description || "";
+        metaTable.querySelector('[data-meta-key="keywords"]').textContent = data.meta.keywords || "";
+        metaTable.querySelector('[data-meta-key="h1"]').textContent = data.meta.h1 || "";
+        metaTable.querySelector('[data-meta-key="slogan"]').textContent = data.meta.slogan || "";
+      }
       if(data.type !== "board"){
-        panelPageMeta.querySelector('[data-field="meta-slogan"]').closest("label").style.display = "none";
-        panelPageMeta.querySelector('[data-field="meta-description"]').closest("label").style.display = "none";
+        if(metaTable){
+          const sloganRow = metaTable.querySelector('[data-meta-key="slogan"]')?.closest("tr");
+          const descRow = metaTable.querySelector('[data-meta-key="description"]')?.closest("tr");
+          if(sloganRow) sloganRow.style.display = "none";
+          if(descRow) descRow.style.display = "none";
+        }
       }
 
       const navList = panelNav.querySelector("[data-nav-list]");
@@ -2084,12 +2116,13 @@ ${rows}
       const panelSections = $("panel-sections");
       const panelCollection = $("panel-collection");
       const panelAssist = $("panel-assist");
+      const metaTable = panelPageMeta.querySelector('[data-meta-table="true"]');
       const meta = {
-        title: panelPageMeta.querySelector('[data-field="meta-title"]').value.trim(),
-        description: panelPageMeta.querySelector('[data-field="meta-description"]').value.trim(),
-        keywords: panelPageMeta.querySelector('[data-field="meta-keywords"]').value.trim(),
-        h1: panelPageMeta.querySelector('[data-field="meta-h1"]').value.trim(),
-        slogan: panelPageMeta.querySelector('[data-field="meta-slogan"]').value.trim()
+        title: metaTable?.querySelector('[data-meta-key="title"]')?.textContent.trim() || "",
+        description: metaTable?.querySelector('[data-meta-key="description"]')?.textContent.trim() || "",
+        keywords: metaTable?.querySelector('[data-meta-key="keywords"]')?.textContent.trim() || "",
+        h1: metaTable?.querySelector('[data-meta-key="h1"]')?.textContent.trim() || "",
+        slogan: metaTable?.querySelector('[data-meta-key="slogan"]')?.textContent.trim() || ""
       };
 
       const nav = Array.from(panelNav.querySelectorAll("[data-nav-item]")).map(row => ({
