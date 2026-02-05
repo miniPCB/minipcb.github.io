@@ -1032,6 +1032,7 @@
     const API_BASE_DEFAULT = "https://minipcb-github-io.vercel.app/api";
     const API_BASE_KEY = "websiteEditorApiBase";
     const AI_JOB_DELAY = 150;
+    const AI_CANCEL_WORDS = ["stop", "cancel", "quit", "end now", "end", "abort", "halt"];
 
     const state = {
       entries: [],
@@ -1049,6 +1050,7 @@
       lastPartNo: "",
       aiQueue: [],
       aiRunning: false,
+      aiCancelRequested: false,
       formState: null,
       template: null,
       editingSectionCard: null
@@ -2987,6 +2989,16 @@ ${rows}
     }
 
     async function runAiBatch(message){
+      const lower = message.toLowerCase().trim();
+      if(AI_CANCEL_WORDS.some(word => lower.includes(word))){
+        if(state.aiRunning){
+          state.aiCancelRequested = true;
+          logTerminal("ai", "Cancel requested. Stopping after current file.");
+        }else{
+          logTerminal("ai", "No AI job running.");
+        }
+        return;
+      }
       const { targets, query } = parseAiTargets(message);
       const actions = parseAiActions(query);
       const entries = resolveAiTargets(targets);
@@ -2999,7 +3011,9 @@ ${rows}
         return;
       }
       state.aiRunning = true;
+      state.aiCancelRequested = false;
       for(const entry of entries){
+        if(state.aiCancelRequested) break;
         try{
           await runAiOnEntry(entry, actions, query);
         }catch(err){
@@ -3008,6 +3022,7 @@ ${rows}
         await new Promise(resolve => setTimeout(resolve, AI_JOB_DELAY));
       }
       state.aiRunning = false;
+      state.aiCancelRequested = false;
       logTerminal("ai", "AI job complete.");
     }
 
