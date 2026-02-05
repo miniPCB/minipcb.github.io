@@ -309,19 +309,43 @@
       color: var(--muted);
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:10px;
       padding:6px 4px 0;
       justify-content:flex-end;
     }
 
     .terminal-line{
       display:flex;
-      gap:8px;
+      gap:6px;
       white-space:pre-wrap;
+      max-width: 90%;
+      padding:8px 10px;
+      border-radius:12px;
+      background: rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.08);
     }
 
     .terminal-line .tag{
       color: var(--accent-2);
+    }
+
+    .terminal-line.user{
+      align-self:flex-end;
+      background: rgba(102,163,255,0.2);
+      border-color: rgba(102,163,255,0.45);
+      color: #e6f0ff;
+    }
+
+    .terminal-line.ai{
+      background: rgba(123,220,181,0.12);
+      border-color: rgba(123,220,181,0.35);
+      color: #e9fff4;
+    }
+
+    .terminal-line.error{
+      background: rgba(255,120,120,0.12);
+      border-color: rgba(255,120,120,0.4);
+      color: #ffe3e3;
     }
 
     .terminal-input{
@@ -1137,9 +1161,13 @@
       const log = $("terminalLog");
       if(!log) return;
       const line = document.createElement("div");
-      line.className = "terminal-line";
+      line.className = `terminal-line ${kind}`;
       const stamp = new Date().toLocaleTimeString();
-      line.innerHTML = `<span class="tag">[${escapeHtml(kind)}]</span><span>${escapeHtml(stamp)} ${escapeHtml(message)}</span>`;
+      if(kind === "user"){
+        line.innerHTML = `<span>${escapeHtml(message)}</span>`;
+      }else{
+        line.innerHTML = `<span class="tag">[${escapeHtml(kind)}]</span><span>${escapeHtml(stamp)} ${escapeHtml(message)}</span>`;
+      }
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
     }
@@ -3943,7 +3971,11 @@ ${rows}
 
       $("terminalSendBtn").addEventListener("click", () => {
         const input = $("terminalInput");
-        runCommand(`ai ${input.value}`);
+        const value = input.value.trim();
+        if(value){
+          logTerminal("user", value);
+          runCommand(value.startsWith("@") ? value : `ai ${value}`);
+        }
         input.value = "";
       });
 
@@ -3951,7 +3983,11 @@ ${rows}
         if(e.key === "Enter"){
           e.preventDefault();
           const input = e.target;
-          runCommand(`ai ${input.value}`);
+          const value = input.value.trim();
+          if(value){
+            logTerminal("user", value);
+            runCommand(value.startsWith("@") ? value : `ai ${value}`);
+          }
           input.value = "";
         }
       });
