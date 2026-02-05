@@ -1928,30 +1928,18 @@ ${rows}
           `;
 
           if(section.type === "details"){
-            const rows = document.createElement("div");
-            rows.className = "form-stack";
-            rows.dataset.detailList = "true";
-            const detailLabelFor = (label) => {
-              const clean = String(label || "").trim();
-              if(!clean) return "Label";
-              if(clean.toLowerCase().replace(/\s+/g, "") === "partno") return "Part No";
-              return clean;
-            };
-            (section.rows || []).forEach(row => {
-              const rowEl = document.createElement("div");
-              rowEl.className = "inline-row";
-              rowEl.dataset.detailRow = "true";
-              rowEl.innerHTML = `
-                <label><span class="detail-label" data-field="detail-label">${escapeHtml(detailLabelFor(row.label))}</span><input class="input" data-field="detail-value" type="text" value="${escapeHtml(row.value)}"></label>
-              `;
-              rows.appendChild(rowEl);
-            });
-            card.appendChild(rows);
+            const table = buildEditableTable([
+              { key: "label", label: "Label" },
+              { key: "value", label: "Value" }
+            ], (section.rows || []).map(row => ({
+              label: row.label || "",
+              value: row.value || ""
+            })));
+            table.dataset.tableType = "details";
+            card.appendChild(table);
             const actions = document.createElement("div");
             actions.className = "row-actions";
-            actions.innerHTML = `
-              <button class="btn secondary" data-action="add-detail" type="button">Add Detail Row</button>
-            `;
+            actions.innerHTML = `<button class="btn secondary" data-action="table-add-row" type="button">Add Row</button>`;
             card.appendChild(actions);
           }else if(section.type === "images"){
             const rows = document.createElement("div");
@@ -2179,19 +2167,20 @@ ${rows}
         return { type: "collection", meta, nav, rows };
       }
 
-        const sections = Array.from(panelSections.querySelectorAll(".section-card")).map(card => {
-          const id = card.dataset.sectionId || "";
-          const title = card.dataset.sectionTitle || "";
-          const tabLabel = card.dataset.sectionTab || "";
-          const active = card.dataset.sectionActive === "true";
-          const group = card.closest(".section-group");
-          const visible = group ? group.dataset.visible !== "false" : true;
-          const type = card.dataset.sectionType;
+      const sections = Array.from(panelSections.querySelectorAll(".section-card")).map(card => {
+        const id = card.dataset.sectionId || "";
+        const title = card.dataset.sectionTitle || "";
+        const tabLabel = card.dataset.sectionTab || "";
+        const active = card.dataset.sectionActive === "true";
+        const group = card.closest(".section-group");
+        const visible = group ? group.dataset.visible !== "false" : true;
+        const type = card.dataset.sectionType;
         if(type === "details"){
-          const rows = Array.from(card.querySelectorAll("[data-detail-row]")).map(row => ({
-            label: (row.querySelector('[data-field="detail-label"]')?.textContent || "").trim(),
-            value: row.querySelector('[data-field="detail-value"]').value.trim()
-          })).filter(row => row.label || row.value);
+          const table = card.querySelector("table.table-editor");
+          const rows = table ? Array.from(table.querySelectorAll("tbody tr")).map(tr => ({
+            label: (tr.querySelector('td[data-col-key="label"]')?.textContent || "").trim(),
+            value: (tr.querySelector('td[data-col-key="value"]')?.textContent || "").trim()
+          })).filter(row => row.label || row.value) : [];
           return { id, title, tabLabel, active, hidden: !visible, type, rows };
         }
         if(type === "images"){
@@ -2337,12 +2326,15 @@ ${rows}
     function readPartNoFromForm(){
       const panelSections = $("panel-sections");
       if(!panelSections) return "";
-      const rows = panelSections.querySelectorAll("[data-detail-row]");
+      const detailsCard = panelSections.querySelector('.section-card[data-section-id="details"]');
+      const table = detailsCard ? detailsCard.querySelector("table.table-editor") : null;
+      if(!table) return "";
+      const rows = table.querySelectorAll("tbody tr");
       for(const row of rows){
-        const label = row.querySelector(".detail-label");
-        if(label && normalizeLabelKey(label.textContent) === "partno"){
-          const input = row.querySelector('[data-field="detail-value"]');
-          return input ? input.value.trim() : "";
+        const labelCell = row.querySelector('td[data-col-key="label"]');
+        if(labelCell && normalizeLabelKey(labelCell.textContent) === "partno"){
+          const valueCell = row.querySelector('td[data-col-key="value"]');
+          return valueCell ? valueCell.textContent.trim() : "";
         }
       }
       return "";
@@ -3129,9 +3121,16 @@ ${rows}
         const target = e.target;
         if(!target) return;
         if(!document.querySelector(".preview")?.contains(target)) return;
-        const label = target.closest("label")?.querySelector(".detail-label");
-        if(target.matches('[data-field="detail-value"]') && label && normalizeLabelKey(label.textContent) === "partno"){
-          updateLinkedPartNo(target.value);
+        if(target.matches('table.table-editor td')){
+          const table = target.closest("table.table-editor");
+          if(table && table.dataset.tableType === "details"){
+            const row = target.closest("tr");
+            const labelCell = row ? row.querySelector('td[data-col-key="label"]') : null;
+            if(labelCell && normalizeLabelKey(labelCell.textContent) === "partno"){
+              const valueCell = row.querySelector('td[data-col-key="value"]');
+              updateLinkedPartNo(valueCell ? valueCell.textContent : "");
+            }
+          }
         }
         queueDraftUpdate();
       });
@@ -3192,18 +3191,6 @@ ${rows}
           row.innerHTML = `
             <td><input class="input" data-field="nav-text" type="text"></td>
             <td><input class="input" data-field="nav-href" type="text" list="navHrefOptions"></td>
-          `;
-          list.appendChild(row);
-        }
-        if(action === "add-detail"){
-          const card = target.closest(".section-card");
-          const list = card.querySelector("[data-detail-list]");
-          const row = document.createElement("div");
-          row.className = "inline-row";
-          row.dataset.detailRow = "true";
-          row.innerHTML = `
-            <label>Label<input class="input" data-field="detail-label" type="text"></label>
-            <label>Value<input class="input" data-field="detail-value" type="text"></label>
           `;
           list.appendChild(row);
         }
