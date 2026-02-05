@@ -2451,6 +2451,14 @@ ${rows}
       }, SAVE_DELAY);
     }
 
+    function queueSaveAll(){
+      if(state.saveTimer) clearTimeout(state.saveTimer);
+      queueDraftUpdate();
+      setTimeout(() => {
+        runSaveAll();
+      }, SAVE_DELAY + 50);
+    }
+
     function normalizeLabelKey(label){
       return String(label || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
     }
@@ -2790,7 +2798,7 @@ ${rows}
         const text = extractResponseText(data) || "";
         cell.textContent = text || current || "";
         logTerminal("ai", "Generated description");
-        queueDraftUpdate();
+        queueSaveAll();
       }catch(err){
         cell.textContent = current || "";
         logTerminal("error", err?.message || "AI request failed");
@@ -3309,7 +3317,7 @@ ${rows}
               cell.textContent = suggestion;
             }
             logTerminal("ai", `Suggested ${cell.dataset.colKey || "cell"} content`);
-            queueDraftUpdate();
+            queueSaveAll();
           }
         }
 
