@@ -2454,6 +2454,47 @@ ${rows}
       queueDraftUpdate();
     }
 
+    function getMetaValue(key){
+      const table = $("panel-page-meta")?.querySelector('[data-meta-table="true"]');
+      return (table?.querySelector(`[data-meta-key="${key}"]`)?.textContent || "").trim();
+    }
+
+    function suggestCellValue(cell, tableType){
+      const partNo = readPartNoFromForm();
+      const colKey = cell.dataset.colKey || "";
+      if(tableType === "details"){
+        if(colKey === "label") return "Detail";
+        if(colKey === "value"){
+          const row = cell.closest("tr");
+          const labelCell = row ? row.querySelector('td[data-col-key="label"]') : null;
+          const labelKey = normalizeLabelKey(labelCell ? labelCell.textContent : "");
+          if(labelKey === "partno") return partNo || (state.current?.rel || "").replace(/\.html$/i, "");
+          if(labelKey === "title") return getMetaValue("title");
+          if(labelKey === "boardsize") return "TBD";
+          if(labelKey === "piecesperpanel") return "TBD";
+          if(labelKey === "panelsize") return "TBD";
+          return "TBD";
+        }
+      }
+      if(tableType === "downloads"){
+        if(colKey === "label") return partNo ? `${partNo} Datasheet (PDF)` : "Datasheet (PDF)";
+        if(colKey === "href") return partNo ? `../datasheets/${partNo}.pdf` : "../datasheets/FILE.pdf";
+      }
+      if(tableType === "videos"){
+        if(colKey === "src") return "https://www.youtube.com/embed/VIDEO_ID";
+        if(colKey === "title") return "YouTube video player";
+        if(colKey === "width") return "560";
+        if(colKey === "height") return "315";
+      }
+      if(tableType === "revisions"){
+        if(colKey === "date") return new Date().toISOString().slice(0, 10);
+        if(colKey === "rev") return "A1-01";
+        if(colKey === "desc") return "Initial release";
+        if(colKey === "by") return getAuthor();
+      }
+      return "AI suggestion";
+    }
+
     function editDetailLabel(span){
       if(!span) return;
       const current = span.textContent.trim();
@@ -2954,20 +2995,10 @@ ${rows}
         }
 
         if(action === "ai-suggest"){
-          const key = cell.dataset.colKey || "";
-          let suggestion = "AI suggestion";
-          if(key === "label") suggestion = "New download";
-          if(key === "href") suggestion = "https://example.com/file.pdf";
-          if(key === "src") suggestion = "https://www.youtube.com/embed/VIDEO_ID";
-          if(key === "title") suggestion = "Video title";
-          if(key === "width") suggestion = "560";
-          if(key === "height") suggestion = "315";
-          if(key === "date") suggestion = new Date().toISOString().slice(0, 10);
-          if(key === "rev") suggestion = "A1-01";
-          if(key === "desc") suggestion = "Update description";
-          if(key === "by") suggestion = "miniPCB";
+          const tableType = table?.dataset.tableType || "";
+          const suggestion = suggestCellValue(cell, tableType);
           cell.textContent = suggestion;
-          logTerminal("ai", `Suggested ${key || "cell"} content`);
+          logTerminal("ai", `Suggested ${cell.dataset.colKey || "cell"} content`);
         }
 
         const menu = $("tableContextMenu");
