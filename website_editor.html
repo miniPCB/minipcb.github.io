@@ -2342,8 +2342,10 @@ ${rows}
         }
         if(id === "description"){
           const table = card.querySelector('table.table-editor[data-table-type="description"]');
-          const seedText = (table?.querySelector('td[data-col-key="seed"]')?.textContent || "").trim();
-          const generatedText = (table?.querySelector('td[data-col-key="generated"]')?.textContent || "").trim();
+          const seedCell = table?.querySelector('td[data-col-key="seed"]');
+          const genCell = table?.querySelector('td[data-col-key="generated"]');
+          const seedText = (seedCell?.textContent || seedCell?.innerText || "").trim();
+          const generatedText = (genCell?.textContent || genCell?.innerText || "").trim();
           const bodyHtml = buildDescriptionBody(seedText, generatedText);
           return { id, title, tabLabel, active, hidden: !visible, type, bodyHtml, seedText, generatedText };
         }
@@ -2420,7 +2422,9 @@ ${rows}
       const seed = String(seedText || "").trim();
       const generated = String(generatedText || "").trim();
       const seedHtml = seed ? `<p>${escapeHtml(seed)}</p>` : "<p></p>";
-      const genHtml = generated ? `<p>${escapeHtml(generated)}</p>` : "<p><br></p>";
+      const genHtml = generated
+        ? escapeHtml(generated).split(/\n+/).map(line => `<p>${line}</p>`).join("\n")
+        : "<p><br></p>";
       return `<h3>Human-Written Seed</h3>\n${seedHtml}\n<h3>AI Generated Description</h3>\n<div class="generated">\n${genHtml}\n</div>`;
     }
 
@@ -2956,17 +2960,23 @@ ${rows}
         updateModifiedState();
         return;
       }
+      const currentPath = state.current?.path || "";
       for(const entry of state.entries){
         const draft = loadDraft(entry.path);
-        if(!draft) continue;
+        if(!draft && entry.path !== currentPath) continue;
         const savedCurrent = state.current;
         const savedOriginal = state.originalText;
         const savedEditor = state.editorText;
         try{
-          const data = extractFormFromHtml(draft);
-          const updated = data.type === "collection"
-            ? generateCollectionHtml(data, template)
-            : generateBoardHtml(data, template);
+          let updated = draft || "";
+          if(entry.path === currentPath && state.editorText){
+            updated = state.editorText;
+          }else{
+            const data = extractFormFromHtml(updated);
+            updated = data.type === "collection"
+              ? generateCollectionHtml(data, template)
+              : generateBoardHtml(data, template);
+          }
           if(useFileSystemStore() && entry.fileHandle){
             await writeEntryToDisk(entry, updated);
           }
