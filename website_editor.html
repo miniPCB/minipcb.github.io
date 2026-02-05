@@ -749,13 +749,15 @@
         <div class="preview">
           <div class="form-tabs" id="formTabs">
             <button class="form-tab active" data-tab="template" type="button">Template</button>
-            <button class="form-tab" data-tab="content" type="button">Content</button>
+            <button class="form-tab" data-tab="page-meta" type="button">Page Meta</button>
+            <button class="form-tab" data-tab="nav" type="button">Navigation Links</button>
             <button class="form-tab" data-tab="sections" type="button">Sections</button>
             <button class="form-tab" data-tab="collection" type="button">Collection</button>
             <button class="btn save" id="updateHtmlBtn" type="button">Update HTML</button>
           </div>
           <div class="form-panel active" id="panel-template"></div>
-          <div class="form-panel" id="panel-content"></div>
+          <div class="form-panel" id="panel-page-meta"></div>
+          <div class="form-panel" id="panel-nav"></div>
           <div class="form-panel" id="panel-sections"></div>
           <div class="form-panel" id="panel-collection"></div>
         </div>
@@ -1015,7 +1017,9 @@
     }
 
     function getViewTab(){
-      return localStorage.getItem(VIEW_TAB_KEY) || "template";
+      const stored = localStorage.getItem(VIEW_TAB_KEY) || "";
+      if(stored === "content") return "page-meta";
+      return stored || "template";
     }
 
     function setViewTab(value){
@@ -1685,10 +1689,11 @@ ${rows}
 
     function renderForm(data){
       const panelTemplate = $("panel-template");
-      const panelContent = $("panel-content");
+      const panelPageMeta = $("panel-page-meta");
+      const panelNav = $("panel-nav");
       const panelSections = $("panel-sections");
       const panelCollection = $("panel-collection");
-      [panelTemplate, panelContent, panelSections, panelCollection].forEach(panel => {
+      [panelTemplate, panelPageMeta, panelNav, panelSections, panelCollection].forEach(panel => {
         if(panel) panel.innerHTML = "";
       });
 
@@ -1751,7 +1756,7 @@ ${rows}
           <label>Slogan<input class="input" data-field="meta-slogan" type="text"></label>
         </div>
       `;
-      panelContent.appendChild(metaCard);
+      panelPageMeta.appendChild(metaCard);
 
       const navCard = document.createElement("div");
       navCard.className = "panel-card";
@@ -1762,7 +1767,7 @@ ${rows}
           <button class="btn secondary" data-action="add-nav" type="button">Add Link</button>
         </div>
       `;
-      panelContent.appendChild(navCard);
+      panelNav.appendChild(navCard);
 
 
       if(data.type === "board"){
@@ -2047,19 +2052,20 @@ ${rows}
 
     function collectFormState(){
       const panelTemplate = $("panel-template");
-      const panelContent = $("panel-content");
+      const panelPageMeta = $("panel-page-meta");
+      const panelNav = $("panel-nav");
       const panelSections = $("panel-sections");
       const panelCollection = $("panel-collection");
       const panelAssist = $("panel-assist");
       const meta = {
-        title: panelContent.querySelector('[data-field="meta-title"]').value.trim(),
-        description: panelContent.querySelector('[data-field="meta-description"]').value.trim(),
-        keywords: panelContent.querySelector('[data-field="meta-keywords"]').value.trim(),
-        h1: panelContent.querySelector('[data-field="meta-h1"]').value.trim(),
-        slogan: panelContent.querySelector('[data-field="meta-slogan"]').value.trim()
+        title: panelPageMeta.querySelector('[data-field="meta-title"]').value.trim(),
+        description: panelPageMeta.querySelector('[data-field="meta-description"]').value.trim(),
+        keywords: panelPageMeta.querySelector('[data-field="meta-keywords"]').value.trim(),
+        h1: panelPageMeta.querySelector('[data-field="meta-h1"]').value.trim(),
+        slogan: panelPageMeta.querySelector('[data-field="meta-slogan"]').value.trim()
       };
 
-      const nav = Array.from(panelContent.querySelectorAll("[data-nav-item]")).map(row => ({
+      const nav = Array.from(panelNav.querySelectorAll("[data-nav-item]")).map(row => ({
         text: row.querySelector('[data-field="nav-text"]').value.trim(),
         href: row.querySelector('[data-field="nav-href"]').value.trim()
       })).filter(item => item.text || item.href);
@@ -2967,7 +2973,7 @@ ${rows}
             state.editorText = "";
             $("previewTitle").textContent = "Select an HTML file";
             updatePreviewMeta(null);
-            ["panel-template", "panel-content", "panel-sections", "panel-collection"].forEach(id => {
+            ["panel-template", "panel-page-meta", "panel-nav", "panel-sections", "panel-collection"].forEach(id => {
               const panel = $(id);
               if(panel) panel.innerHTML = "";
             });
@@ -3033,7 +3039,7 @@ ${rows}
         if(!target) return;
         const action = target.getAttribute("data-action");
         if(action === "add-nav"){
-          const list = $("panel-content").querySelector("[data-nav-list]");
+          const list = $("panel-nav").querySelector("[data-nav-list]");
           const row = document.createElement("div");
           row.className = "inline-row";
           row.dataset.navItem = "true";
