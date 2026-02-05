@@ -2263,7 +2263,7 @@ ${rows}
         const full = entry.path || entry.rel || "";
         if(!full) return;
         const opt = document.createElement("option");
-        opt.value = full;
+        opt.value = full.startsWith("../") ? full : `../${full}`;
         list.appendChild(opt);
       });
     }
@@ -2276,13 +2276,14 @@ ${rows}
       let best = "";
       let bestScore = 0;
       for(const entry of (state.entries || [])){
-        const full = (entry.path || entry.rel || "").toLowerCase();
+        const fullRaw = entry.path || entry.rel || "";
+        const full = fullRaw.toLowerCase();
         if(!full) continue;
         let score = 0;
         tokens.forEach(token => { if(full.includes(token)) score += 1; });
         if(score > bestScore){
           bestScore = score;
-          best = entry.path || entry.rel || "";
+          best = fullRaw.startsWith("../") ? fullRaw : `../${fullRaw}`;
         }
       }
       return bestScore ? best : "";
