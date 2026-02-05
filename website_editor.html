@@ -982,6 +982,8 @@
     const VIEW_TAB_KEY = "websiteEditorViewTab";
     const VIEW_SECTION_TAB_KEY = "websiteEditorSectionSubtab";
     const COLUMN_WIDTH_KEY = "websiteEditorColumnWidths";
+    const API_BASE_DEFAULT = "https://minipcb-github-io.vercel.app/api";
+    const API_BASE_KEY = "websiteEditorApiBase";
 
     const state = {
       entries: [],
@@ -1132,6 +1134,10 @@
 
     function setAuthor(value){
       localStorage.setItem(AUTHOR_KEY, String(value || ""));
+    }
+
+    function getApiBase(){
+      return localStorage.getItem(API_BASE_KEY) || API_BASE_DEFAULT;
     }
 
     function getViewTab(){
@@ -2688,7 +2694,10 @@ ${rows}
           const seedCell = row ? row.querySelector('td[data-col-key="seed"]') : null;
           const seed = (seedCell?.textContent || "").trim();
           const base = seed || metaTitle || metaH1 || partNo || "This miniPCB board";
-          return `${base} is a compact miniPCB design.`;
+          const extra = partNo
+            ? ` It includes the ${partNo} board assets and documentation.`
+            : " It includes schematics, layout, and downloads for quick reference.";
+          return `${base} is a compact miniPCB design.${extra}`;
         }
       }
       if(isMeta){
@@ -2713,6 +2722,79 @@ ${rows}
         if(colKey === "href") return suggestHrefFromText("index") || "../index.html";
       }
       return "AI suggestion";
+    }
+
+    function extractResponseText(payload){
+      if(!payload) return "";
+      if(typeof payload.output_text === "string") return payload.output_text;
+      if(Array.isArray(payload.output)){
+        const parts = [];
+        payload.output.forEach(item => {
+          if(item?.type === "message" && Array.isArray(item.content)){
+            item.content.forEach(chunk => {
+              if(chunk?.type === "output_text" && typeof chunk.text === "string"){
+                parts.push(chunk.text);
+              }
+            });
+          }
+        });
+        return parts.join("\n").trim();
+      }
+      return "";
+    }
+
+    async function aiSuggestDescription(cell){
+      if(!cell) return;
+      const table = cell.closest("table");
+      const seedCell = table ? table.querySelector('td[data-col-key="seed"]') : null;
+      const seed = (seedCell?.textContent || "").trim();
+      const partNo = readPartNoFromForm();
+      const metaTitle = getMetaValue("title");
+      const metaH1 = getMetaValue("h1");
+      const metaSlogan = getMetaValue("slogan");
+      const metaKeywords = getMetaValue("keywords");
+      const metaDescription = getMetaValue("description");
+      const current = cell.textContent.trim();
+
+      const prompt = [
+        "Write a professional product description (5-10 sentences).",
+        "Use the Human-Written Seed as gospel.",
+        "Add at least one new, additive detail that is consistent with the seed (do not contradict it).",
+        "No markdown, no bullet points.",
+        "",
+        `Human-Written Seed: ${seed || "(none)"}`,
+        `Part No: ${partNo || "(unknown)"}`,
+        `Title: ${metaTitle || "(empty)"}`,
+        `Header H1: ${metaH1 || "(empty)"}`,
+        `Slogan: ${metaSlogan || "(empty)"}`,
+        `Meta Keywords: ${metaKeywords || "(empty)"}`,
+        `Existing Meta Description: ${metaDescription || "(empty)"}`,
+        `Current Generated Description: ${current || "(empty)"}`
+      ].join("\n");
+
+      const base = getApiBase().replace(/\/+$/, "");
+      cell.textContent = "Generating…";
+      try{
+        const res = await fetch(`${base}/suggest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            input: prompt
+          })
+        });
+        if(!res.ok){
+          throw new Error(`AI request failed (${res.status})`);
+        }
+        const data = await res.json();
+        const text = extractResponseText(data) || "";
+        cell.textContent = text || current || "";
+        logTerminal("ai", "Generated description");
+        queueDraftUpdate();
+      }catch(err){
+        cell.textContent = current || "";
+        logTerminal("error", err?.message || "AI request failed");
+      }
     }
 
     function editDetailLabel(span){
@@ -3216,15 +3298,19 @@ ${rows}
 
         if(action === "ai-suggest"){
           const tableType = table?.dataset.tableType || "";
-          const suggestion = suggestCellValue(cell, tableType);
-          const input = cell.querySelector("input");
-          if(input){
-            input.value = suggestion;
+          if(tableType === "description" && cell.dataset.colKey === "generated"){
+            aiSuggestDescription(cell);
           }else{
-            cell.textContent = suggestion;
+            const suggestion = suggestCellValue(cell, tableType);
+            const input = cell.querySelector("input");
+            if(input){
+              input.value = suggestion;
+            }else{
+              cell.textContent = suggestion;
+            }
+            logTerminal("ai", `Suggested ${cell.dataset.colKey || "cell"} content`);
+            queueDraftUpdate();
           }
-          logTerminal("ai", `Suggested ${cell.dataset.colKey || "cell"} content`);
-          queueDraftUpdate();
         }
 
         const menu = $("tableContextMenu");
