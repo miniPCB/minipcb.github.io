@@ -2439,21 +2439,26 @@ ${rows}
       if(!state.current) return;
       if(state.saveTimer) clearTimeout(state.saveTimer);
       state.saveTimer = setTimeout(() => {
-        const data = collectFormState();
-        const template = collectTemplateState();
-        saveTemplate(template);
-        const updated = data.type === "collection"
-          ? generateCollectionHtml(data, template)
-          : generateBoardHtml(data, template);
-        state.editorText = updated;
-        saveDraft(state.current.path, state.editorText);
-        updateModifiedState();
+        saveDraftNow();
       }, SAVE_DELAY);
+    }
+
+    function saveDraftNow(){
+      if(!state.current) return;
+      const data = collectFormState();
+      const template = collectTemplateState();
+      saveTemplate(template);
+      const updated = data.type === "collection"
+        ? generateCollectionHtml(data, template)
+        : generateBoardHtml(data, template);
+      state.editorText = updated;
+      saveDraft(state.current.path, state.editorText);
+      updateModifiedState();
     }
 
     function queueSaveAll(){
       if(state.saveTimer) clearTimeout(state.saveTimer);
-      queueDraftUpdate();
+      saveDraftNow();
       setTimeout(() => {
         runSaveAll();
       }, SAVE_DELAY + 50);
@@ -2943,12 +2948,7 @@ ${rows}
       const template = collectTemplateState();
       saveTemplate(template);
       if(state.current){
-        const data = collectFormState();
-        const updated = data.type === "collection"
-          ? generateCollectionHtml(data, template)
-          : generateBoardHtml(data, template);
-        state.editorText = updated;
-        saveDraft(state.current.path, state.editorText);
+        saveDraftNow();
       }
       if(!useFileSystemStore()){
         logTerminal("error", "Select a folder to save to disk.");
