@@ -837,6 +837,7 @@
       </div>
     </header>
     <div class="top-actions">
+      <button class="btn secondary" id="helpBtn" type="button">Help</button>
       <button class="btn secondary" id="prefsBtn" type="button">Preferences</button>
     </div>
 
@@ -969,6 +970,24 @@
     <button type="button" id="fileDeleteBtn">Delete File</button>
   </div>
 
+  <div class="modalBack" id="helpModal">
+    <div class="modal">
+      <h3>AI Command Help</h3>
+      <div class="modalGrid">
+        <div class="help">
+          Use the terminal to run batch AI commands. Format:
+          <div class="tiny" style="margin-top:6px;">@targets instruction</div>
+        </div>
+        <div class="help">Targets: @all, @current, @modified, @folder 00A, @match "probe", @list 1,3,7</div>
+        <div class="help">Actions: rewrite Description Generated, update keywords, update slogan, update title, update h1, update description</div>
+        <div class="help">Examples: @all rewrite Description Generated · @folder 00A update keywords · @match "probe" update slogan</div>
+      </div>
+      <div class="modalActions">
+        <button class="btn" id="helpClose" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script src="draft/html_index.js"></script>
   <script>
     const PREFS_KEY = "websiteEditorBaseDir";
@@ -984,6 +1003,7 @@
     const COLUMN_WIDTH_KEY = "websiteEditorColumnWidths";
     const API_BASE_DEFAULT = "https://minipcb-github-io.vercel.app/api";
     const API_BASE_KEY = "websiteEditorApiBase";
+    const AI_JOB_DELAY = 150;
 
     const state = {
       entries: [],
@@ -999,6 +1019,8 @@
       aiContextPath: "",
       aiContextText: "",
       lastPartNo: "",
+      aiQueue: [],
+      aiRunning: false,
       formState: null,
       template: null,
       editingSectionCard: null
@@ -2741,6 +2763,222 @@ ${rows}
       return "AI suggestion";
     }
 
+    function parseAiTargets(text){
+      const targets = [];
+      const remaining = [];
+      const tokens = text.split(/\s+/).filter(Boolean);
+      for(let i = 0; i < tokens.length; i++){
+        const token = tokens[i];
+        if(token === "@all" || token === "@current" || token === "@modified"){
+          targets.push({ type: token.slice(1) });
+          continue;
+        }
+        if(token === "@folder" && tokens[i + 1]){
+          targets.push({ type: "folder", value: tokens[i + 1] });
+          i++;
+          continue;
+        }
+        if(token === "@match" && tokens[i + 1]){
+          targets.push({ type: "match", value: tokens[i + 1].replace(/^\"|\"$/g, "") });
+          i++;
+          continue;
+        }
+        if(token === "@list" && tokens[i + 1]){
+          targets.push({ type: "list", value: tokens[i + 1] });
+          i++;
+          continue;
+        }
+        remaining.push(token);
+      }
+      return { targets, query: remaining.join(" ").trim() };
+    }
+
+    function parseAiActions(text){
+      const t = text.toLowerCase();
+      const actions = [];
+      if(t.includes("rewrite description") || t.includes("description generated")){
+        actions.push("description_generated");
+      }
+      if(t.includes("update keywords") || t.includes("keywords")){
+        actions.push("meta_keywords");
+      }
+      if(t.includes("update slogan") || t.includes("slogan")){
+        actions.push("meta_slogan");
+      }
+      if(t.includes("update title") || t.includes("title")){
+        actions.push("meta_title");
+      }
+      if(t.includes("update h1") || t.includes("header h1") || t.includes("h1")){
+        actions.push("meta_h1");
+      }
+      if(t.includes("update description") && !actions.includes("description_generated")){
+        actions.push("meta_description");
+      }
+      if(!actions.length) actions.push("auto");
+      return actions;
+    }
+
+    function getModifiedEntries(){
+      const modified = [];
+      state.entries.forEach(entry => {
+        const draft = loadDraft(entry.path);
+        if(draft) return modified.push(entry);
+        if(state.current && state.current.path === entry.path && state.editorText !== state.originalText){
+          modified.push(entry);
+        }
+      });
+      return modified;
+    }
+
+    function resolveAiTargets(targets){
+      if(!targets.length) return state.current ? [state.current] : [];
+      const seen = new Set();
+      const list = [];
+      const add = (entry) => {
+        if(!entry || seen.has(entry.path)) return;
+        seen.add(entry.path);
+        list.push(entry);
+      };
+      targets.forEach(target => {
+        if(target.type === "all"){
+          state.entries.forEach(add);
+        }else if(target.type === "current"){
+          add(state.current);
+        }else if(target.type === "modified"){
+          getModifiedEntries().forEach(add);
+        }else if(target.type === "folder"){
+          const prefix = `${target.value}/`;
+          state.entries.filter(e => (e.rel || e.path || "").startsWith(prefix)).forEach(add);
+        }else if(target.type === "match"){
+          const q = target.value.toLowerCase();
+          state.entries.filter(e => (e.rel || e.path || "").toLowerCase().includes(q)).forEach(add);
+        }else if(target.type === "list"){
+          const indexes = target.value.split(",").map(v => parseInt(v.trim(), 10)).filter(v => !isNaN(v));
+          indexes.forEach(i => {
+            const entry = state.filtered[i - 1];
+            add(entry);
+          });
+        }
+      });
+      return list;
+    }
+
+    function buildAiPromptForFile(entry, data, actions, instruction){
+      const partNo = (data.sections || []).find(s => s.id === "details")?.rows?.find(r => normalizeLabelKey(r.label) === "partno")?.value || "";
+      const descSection = (data.sections || []).find(s => s.id === "description");
+      const seed = descSection?.seedText || "";
+      const generated = descSection?.generatedText || "";
+      return [
+        "You are editing a miniPCB HTML file.",
+        "Return JSON only with the keys you are asked to update.",
+        "Use the Human-Written Seed as gospel; add at least one additive detail.",
+        "",
+        `File: ${entry.rel || entry.path || ""}`,
+        `Part No: ${partNo}`,
+        `Title: ${data.meta?.title || ""}`,
+        `Header H1: ${data.meta?.h1 || ""}`,
+        `Slogan: ${data.meta?.slogan || ""}`,
+        `Meta Keywords: ${data.meta?.keywords || ""}`,
+        `Meta Description: ${data.meta?.description || ""}`,
+        `Human-Written Seed: ${seed}`,
+        `Current Generated Description: ${generated}`,
+        "",
+        `Requested Updates: ${actions.join(", ")}`,
+        `User Instruction: ${instruction || ""}`,
+        "",
+        "Allowed JSON keys:",
+        "description_generated, meta_keywords, meta_slogan, meta_title, meta_h1, meta_description"
+      ].join("\n");
+    }
+
+    async function callAi(prompt){
+      const base = getApiBase().replace(/\/+$/, "");
+      const res = await fetch(`${base}/suggest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          input: prompt
+        })
+      });
+      if(!res.ok) throw new Error(`AI request failed (${res.status})`);
+      const data = await res.json();
+      const text = extractResponseText(data);
+      if(!text) throw new Error("AI returned empty response");
+      return text.trim();
+    }
+
+    function applyAiEdits(data, edits){
+      if(edits.meta_title != null) data.meta.title = String(edits.meta_title);
+      if(edits.meta_h1 != null) data.meta.h1 = String(edits.meta_h1);
+      if(edits.meta_slogan != null) data.meta.slogan = String(edits.meta_slogan);
+      if(edits.meta_keywords != null) data.meta.keywords = String(edits.meta_keywords);
+      if(edits.meta_description != null) data.meta.description = String(edits.meta_description);
+      if(edits.description_generated != null){
+        const desc = data.sections.find(s => s.id === "description");
+        if(desc){
+          desc.generatedText = String(edits.description_generated);
+          desc.bodyHtml = buildDescriptionBody(desc.seedText || "", desc.generatedText);
+        }
+      }
+      return data;
+    }
+
+    async function runAiOnEntry(entry, actions, instruction){
+      logTerminal("ai", `Working on ${entry.rel || entry.path || "file"}`);
+      const html = await fetchFile(entry);
+      const data = extractFormFromHtml(html);
+      const prompt = buildAiPromptForFile(entry, data, actions, instruction);
+      const response = await callAi(prompt);
+      let edits = {};
+      try{
+        edits = JSON.parse(response);
+      }catch{
+        edits = {};
+      }
+      const updatedData = applyAiEdits(data, edits);
+      const template = state.template || loadTemplate();
+      const updatedHtml = updatedData.type === "collection"
+        ? generateCollectionHtml(updatedData, template)
+        : generateBoardHtml(updatedData, template);
+      if(useFileSystemStore() && entry.fileHandle){
+        await writeEntryToDisk(entry, updatedHtml);
+      }else{
+        saveDraft(entry.path, updatedHtml);
+      }
+      if(state.current && state.current.path === entry.path){
+        state.editorText = updatedHtml;
+        state.originalText = updatedHtml;
+        syncFormInputs(updatedHtml);
+      }
+      logTerminal("ai", `Finished ${entry.rel || entry.path || "file"}`);
+    }
+
+    async function runAiBatch(message){
+      const { targets, query } = parseAiTargets(message);
+      const actions = parseAiActions(query);
+      const entries = resolveAiTargets(targets);
+      if(!entries.length){
+        logTerminal("error", "No files matched for AI job.");
+        return;
+      }
+      if(state.aiRunning){
+        logTerminal("ai", "AI job already running.");
+        return;
+      }
+      state.aiRunning = true;
+      for(const entry of entries){
+        try{
+          await runAiOnEntry(entry, actions, query);
+        }catch(err){
+          logTerminal("error", err?.message || "AI job failed");
+        }
+        await new Promise(resolve => setTimeout(resolve, AI_JOB_DELAY));
+      }
+      state.aiRunning = false;
+      logTerminal("ai", "AI job complete.");
+    }
+
     function extractResponseText(payload){
       if(!payload) return "";
       if(typeof payload.output_text === "string") return payload.output_text;
@@ -3007,13 +3245,17 @@ ${rows}
           runSave();
           break;
         case "ai":
-          logTerminal("ai", arg ? `Received: ${arg}` : "AI not connected.");
+          runAiBatch(arg);
           break;
         case "help":
-          logTerminal("help", "Commands: save, ai <text>");
+          logTerminal("help", "Commands: save, ai <targets> <instruction>");
           break;
         default:
-          logTerminal("error", `Unknown command: ${cmd}`);
+          if(raw.startsWith("@")){
+            runAiBatch(raw);
+          }else{
+            logTerminal("error", `Unknown command: ${cmd}`);
+          }
       }
     }
 
@@ -3719,6 +3961,14 @@ ${rows}
         $("authorInput").value = getAuthor();
         $("terminalDockInput").value = getTerminalDock();
         $("prefsModal").classList.add("open");
+      });
+
+      $("helpBtn").addEventListener("click", () => {
+        $("helpModal").classList.add("open");
+      });
+
+      $("helpClose").addEventListener("click", () => {
+        $("helpModal").classList.remove("open");
       });
 
       const folderPickBtn = $("folderPickBtn");
