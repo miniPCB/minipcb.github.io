@@ -1768,6 +1768,9 @@ ${rows}
         </div>
       `;
       panelNav.appendChild(navCard);
+      const navDatalist = document.createElement("datalist");
+      navDatalist.id = "navHrefOptions";
+      panelNav.appendChild(navDatalist);
 
 
       if(data.type === "board"){
@@ -2033,7 +2036,7 @@ ${rows}
         row.dataset.navItem = "true";
         row.innerHTML = `
           <label>Link Text<input class="input" data-field="nav-text" type="text" value="${escapeHtml(item.text)}"></label>
-          <label>Link Href<input class="input" data-field="nav-href" type="text" value="${escapeHtml(item.href)}"></label>
+          <label>Link Href<input class="input" data-field="nav-href" type="text" list="navHrefOptions" value="${escapeHtml(item.href)}"></label>
         `;
         navList.appendChild(row);
       });
@@ -2048,6 +2051,8 @@ ${rows}
         tabs.querySelector('[data-tab="sections"]').style.display = "inline-flex";
         tabs.querySelector('[data-tab="collection"]').style.display = "none";
       }
+
+      updateNavHrefOptions();
     }
 
     function collectFormState(){
@@ -2247,6 +2252,40 @@ ${rows}
         }
       }
       return "";
+    }
+
+    function updateNavHrefOptions(){
+      const list = $("navHrefOptions");
+      if(!list) return;
+      list.innerHTML = "";
+      const entries = Array.isArray(state.entries) ? state.entries : [];
+      entries.forEach(entry => {
+        const full = entry.path || entry.rel || "";
+        if(!full) return;
+        const opt = document.createElement("option");
+        opt.value = full;
+        list.appendChild(opt);
+      });
+    }
+
+    function suggestHrefFromText(text){
+      const value = String(text || "").toLowerCase().trim();
+      if(!value) return "";
+      const tokens = value.split(/[^a-z0-9]+/).filter(Boolean);
+      if(!tokens.length) return "";
+      let best = "";
+      let bestScore = 0;
+      for(const entry of (state.entries || [])){
+        const full = (entry.path || entry.rel || "").toLowerCase();
+        if(!full) continue;
+        let score = 0;
+        tokens.forEach(token => { if(full.includes(token)) score += 1; });
+        if(score > bestScore){
+          bestScore = score;
+          best = entry.path || entry.rel || "";
+        }
+      }
+      return bestScore ? best : "";
     }
 
     function updateLinkedPartNo(newPartNo){
@@ -3002,6 +3041,19 @@ ${rows}
         queueDraftUpdate();
       });
 
+      document.addEventListener("blur", (e) => {
+        const target = e.target;
+        if(!target || !target.matches('[data-field="nav-href"]')) return;
+        if(target.value.trim()) return;
+        const row = target.closest("[data-nav-item]");
+        const textInput = row ? row.querySelector('[data-field="nav-text"]') : null;
+        const suggestion = suggestHrefFromText(textInput ? textInput.value : "");
+        if(suggestion){
+          target.value = suggestion;
+          queueDraftUpdate();
+        }
+      }, true);
+
       $("previewTitle").addEventListener("dblclick", async () => {
         if(!state.current) return;
         if(!useFileSystemStore()){
@@ -3045,7 +3097,7 @@ ${rows}
           row.dataset.navItem = "true";
           row.innerHTML = `
             <label>Link Text<input class="input" data-field="nav-text" type="text"></label>
-            <label>Link Href<input class="input" data-field="nav-href" type="text"></label>
+            <label>Link Href<input class="input" data-field="nav-href" type="text" list="navHrefOptions"></label>
           `;
           list.appendChild(row);
         }
