@@ -1575,6 +1575,23 @@ ${rows}
         const title = h2 ? h2.textContent.trim() : id;
         const tabLabel = tabById.get(id) || "";
         const active = !!(activeTabId && id === activeTabId);
+        if(id === "description"){
+          const seedHeading = Array.from(section.querySelectorAll("h3")).find(h3 => /seed/i.test(h3.textContent || ""));
+          const generatedHeading = Array.from(section.querySelectorAll("h3")).find(h3 => /generated/i.test(h3.textContent || ""));
+          const seedPara = seedHeading ? seedHeading.nextElementSibling : null;
+          const generatedBlock = generatedHeading ? (generatedHeading.nextElementSibling || null) : null;
+          const seedText = seedPara ? seedPara.textContent.trim() : "";
+          let generatedText = "";
+          if(generatedBlock){
+            generatedText = generatedBlock.textContent.trim();
+          }else{
+            const clone = section.cloneNode(true);
+            const cloneH2 = clone.querySelector("h2");
+            if(cloneH2) cloneH2.remove();
+            generatedText = clone.textContent.trim();
+          }
+          return { id, hidden, title, tabLabel, active, type: "html", seedText, generatedText };
+        }
         if(id === "details"){
           const rows = Array.from(section.querySelectorAll("p")).map(p => {
             const strong = p.querySelector("strong");
@@ -2035,9 +2052,34 @@ ${rows}
             label.innerHTML = `AI Seeds JSON<textarea class="input" data-field="ai-seeds">${escapeHtml(section.jsonText || "{}")}</textarea>`;
             card.appendChild(label);
           }else{
-            const label = document.createElement("label");
-            label.innerHTML = `Body HTML<textarea class="input" data-field="section-body">${escapeHtml(section.bodyHtml || "")}</textarea>`;
-            card.appendChild(label);
+            if(section.id === "description"){
+              const table = document.createElement("table");
+              table.className = "table-editor";
+              table.dataset.tableType = "description";
+              table.innerHTML = `
+                <thead>
+                  <tr>
+                    <th data-col-key="field">Field</th>
+                    <th data-col-key="value">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th>1. Human-Written Seed</th>
+                    <td data-col-key="seed" contenteditable="true">${escapeHtml(section.seedText || "")}</td>
+                  </tr>
+                  <tr>
+                    <th>2. AI Generated Description</th>
+                    <td data-col-key="generated" contenteditable="true">${escapeHtml(section.generatedText || "")}</td>
+                  </tr>
+                </tbody>
+              `;
+              card.appendChild(table);
+            }else{
+              const label = document.createElement("label");
+              label.innerHTML = `Body HTML<textarea class="input" data-field="section-body">${escapeHtml(section.bodyHtml || "")}</textarea>`;
+              card.appendChild(label);
+            }
           }
 
           group.appendChild(card);
@@ -2240,6 +2282,13 @@ ${rows}
           const jsonText = card.querySelector('[data-field="ai-seeds"]').value.trim() || "{}";
           return { id, title, tabLabel, active, hidden: true, type, jsonText };
         }
+        if(id === "description"){
+          const table = card.querySelector('table.table-editor[data-table-type="description"]');
+          const seedText = (table?.querySelector('td[data-col-key="seed"]')?.textContent || "").trim();
+          const generatedText = (table?.querySelector('td[data-col-key="generated"]')?.textContent || "").trim();
+          const bodyHtml = buildDescriptionBody(seedText, generatedText);
+          return { id, title, tabLabel, active, hidden: !visible, type, bodyHtml, seedText, generatedText };
+        }
         const bodyHtml = card.querySelector('[data-field="section-body"]').value;
         return { id, title, tabLabel, active, hidden: !visible, type, bodyHtml };
       });
@@ -2307,6 +2356,14 @@ ${rows}
         setSaveDirty(false);
       }
       renderList();
+    }
+
+    function buildDescriptionBody(seedText, generatedText){
+      const seed = String(seedText || "").trim();
+      const generated = String(generatedText || "").trim();
+      const seedHtml = seed ? `<p>${escapeHtml(seed)}</p>` : "<p></p>";
+      const genHtml = generated ? `<p>${escapeHtml(generated)}</p>` : "<p><br></p>";
+      return `<h3>Human-Written Seed</h3>\n${seedHtml}\n<h3>AI Generated Description</h3>\n<div class="generated">\n${genHtml}\n</div>`;
     }
 
     function setDefaultSectionTab(container, targetId){
@@ -2497,6 +2554,16 @@ ${rows}
         if(colKey === "rev") return "A1-01";
         if(colKey === "desc") return "Initial release";
         if(colKey === "by") return getAuthor();
+      }
+      if(tableType === "description"){
+        if(colKey === "seed") return metaTitle || metaH1 || partNo || "Describe the board in one or two sentences.";
+        if(colKey === "generated"){
+          const row = cell.closest("tr");
+          const seedCell = row ? row.querySelector('td[data-col-key="seed"]') : null;
+          const seed = (seedCell?.textContent || "").trim();
+          const base = seed || metaTitle || metaH1 || partNo || "This miniPCB board";
+          return `${base} is a compact miniPCB design.`;
+        }
       }
       if(isMeta){
         if(colKey === "title") return metaTitle || partNo || "miniPCB Board";
