@@ -698,12 +698,33 @@
       font-size: 11px;
       width: 1%;
       white-space: nowrap;
+      position: relative;
     }
 
     .table-editor td{
       background: rgba(255,255,255,0.02);
       color: var(--text);
       min-width: 120px;
+    }
+
+    .col-resizer{
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      user-select: none;
+    }
+
+    .col-resizer::after{
+      content: "";
+      position: absolute;
+      right: 2px;
+      top: 20%;
+      bottom: 20%;
+      width: 2px;
+      background: rgba(255,255,255,0.12);
     }
 
     .details-table{
@@ -2222,6 +2243,7 @@ ${rows}
       }
 
       updateNavHrefOptions();
+      document.querySelectorAll("table.table-editor").forEach(enableColumnResize);
     }
 
     function collectFormState(){
@@ -2538,6 +2560,38 @@ ${rows}
 
       state.lastPartNo = next;
       queueDraftUpdate();
+    }
+
+    function enableColumnResize(table){
+      if(!table) return;
+      const headers = table.querySelectorAll("thead th");
+      headers.forEach((th, index) => {
+        if(th.querySelector(".col-resizer")) return;
+        const resizer = document.createElement("span");
+        resizer.className = "col-resizer";
+        th.appendChild(resizer);
+        resizer.addEventListener("mousedown", (e) => {
+          if(e.button !== 0) return;
+          e.preventDefault();
+          const startX = e.clientX;
+          const startWidth = th.offsetWidth;
+          const onMove = (evt) => {
+            const delta = evt.clientX - startX;
+            const nextWidth = Math.max(60, startWidth + delta);
+            th.style.width = `${nextWidth}px`;
+            table.querySelectorAll("tr").forEach(row => {
+              const cell = row.children[index];
+              if(cell) cell.style.width = `${nextWidth}px`;
+            });
+          };
+          const onUp = () => {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+          };
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        });
+      });
     }
 
     function getMetaValue(key){
