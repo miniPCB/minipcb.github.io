@@ -1830,23 +1830,23 @@ ${rows}
           <tbody>
             <tr>
               <th>1. Title</th>
-              <td data-meta-key="title" contenteditable="true"></td>
+          <td data-meta-key="title" data-col-key="title" contenteditable="true"></td>
             </tr>
             <tr>
               <th>2. Header H1</th>
-              <td data-meta-key="h1" contenteditable="true"></td>
+          <td data-meta-key="h1" data-col-key="h1" contenteditable="true"></td>
             </tr>
             <tr>
               <th>3. Slogan</th>
-              <td data-meta-key="slogan" contenteditable="true"></td>
+          <td data-meta-key="slogan" data-col-key="slogan" contenteditable="true"></td>
             </tr>
             <tr>
               <th>4. Meta Keywords</th>
-              <td data-meta-key="keywords" contenteditable="true"></td>
+          <td data-meta-key="keywords" data-col-key="keywords" contenteditable="true"></td>
             </tr>
             <tr>
               <th>5. Meta Description</th>
-              <td data-meta-key="description" contenteditable="true"></td>
+          <td data-meta-key="description" data-col-key="description" contenteditable="true"></td>
             </tr>
           </tbody>
         </table>
@@ -2133,8 +2133,8 @@ ${rows}
         const row = document.createElement("tr");
         row.dataset.navItem = "true";
         row.innerHTML = `
-          <td><input class="input" data-field="nav-text" type="text" value="${escapeHtml(item.text)}"></td>
-          <td><input class="input" data-field="nav-href" type="text" list="navHrefOptions" value="${escapeHtml(item.href)}"></td>
+          <td data-col-key="text"><input class="input" data-field="nav-text" type="text" value="${escapeHtml(item.text)}"></td>
+          <td data-col-key="href"><input class="input" data-field="nav-href" type="text" list="navHrefOptions" value="${escapeHtml(item.href)}"></td>
         `;
         navList.appendChild(row);
       });
@@ -2462,6 +2462,9 @@ ${rows}
     function suggestCellValue(cell, tableType){
       const partNo = readPartNoFromForm();
       const colKey = cell.dataset.colKey || "";
+      const table = cell.closest("table");
+      const isMeta = table?.dataset.metaTable === "true";
+      const isNav = table?.dataset.navTable === "true";
       if(tableType === "details"){
         if(colKey === "label") return "Detail";
         if(colKey === "value"){
@@ -2491,6 +2494,17 @@ ${rows}
         if(colKey === "rev") return "A1-01";
         if(colKey === "desc") return "Initial release";
         if(colKey === "by") return getAuthor();
+      }
+      if(isMeta){
+        if(colKey === "title") return getMetaValue("title");
+        if(colKey === "h1") return getMetaValue("h1");
+        if(colKey === "slogan") return getMetaValue("slogan");
+        if(colKey === "keywords") return getMetaValue("keywords");
+        if(colKey === "description") return getMetaValue("description");
+      }
+      if(isNav){
+        if(colKey === "text") return "New link";
+        if(colKey === "href") return suggestHrefFromText("index") || "../index.html";
       }
       return "AI suggestion";
     }
@@ -2997,7 +3011,12 @@ ${rows}
         if(action === "ai-suggest"){
           const tableType = table?.dataset.tableType || "";
           const suggestion = suggestCellValue(cell, tableType);
-          cell.textContent = suggestion;
+          const input = cell.querySelector("input");
+          if(input){
+            input.value = suggestion;
+          }else{
+            cell.textContent = suggestion;
+          }
           logTerminal("ai", `Suggested ${cell.dataset.colKey || "cell"} content`);
         }
 
@@ -3237,8 +3256,8 @@ ${rows}
           const row = document.createElement("tr");
           row.dataset.navItem = "true";
           row.innerHTML = `
-            <td><input class="input" data-field="nav-text" type="text"></td>
-            <td><input class="input" data-field="nav-href" type="text" list="navHrefOptions"></td>
+            <td data-col-key="text"><input class="input" data-field="nav-text" type="text"></td>
+            <td data-col-key="href"><input class="input" data-field="nav-href" type="text" list="navHrefOptions"></td>
           `;
           list.appendChild(row);
         }
