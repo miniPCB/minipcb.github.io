@@ -6,6 +6,7 @@
     var tabs  = document.querySelectorAll('.tabs .tab');
 
     panes.forEach(function (el) {
+      if (el.getAttribute('data-hidden') === 'true') return;
       var isActive = el.id === id;
       el.classList.toggle('active', isActive);
       el.setAttribute('aria-hidden', isActive ? 'false' : 'true');
@@ -45,17 +46,18 @@
 
     // On load: if URL hash matches a pane, open it; else keep any .tab.active/.tab-content.active
     var hash = (location.hash || '').replace('#', '');
-    if (hash && document.getElementById(hash)) {
+    var hashPane = hash ? document.getElementById(hash) : null;
+    if (hashPane && hashPane.getAttribute('data-hidden') !== 'true') {
       showTab(hash);
       return;
     }
     var currentActive = document.querySelector('.tab-content.active');
-    if (currentActive) {
+    if (currentActive && currentActive.getAttribute('data-hidden') !== 'true') {
       showTab(currentActive.id);
       return;
     }
     // Fallback: first tab/pane
-    var firstPane = document.querySelector('.tab-content');
+    var firstPane = document.querySelector('.tab-content:not([data-hidden="true"])');
     if (firstPane) showTab(firstPane.id);
   }
 
