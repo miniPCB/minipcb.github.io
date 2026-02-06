@@ -1739,7 +1739,30 @@ ${rows}
         if(id === "ai-seeds" || section.querySelector("#ai-seeds-json")){
           const script = section.querySelector("#ai-seeds-json");
           const text = script ? script.textContent.trim() : "{}";
-          return { id, hidden, title, tabLabel, active, type: "ai-seeds", jsonText: text || "{}" };
+          let seedMap = {};
+          try{
+            seedMap = text ? JSON.parse(text) : {};
+          }catch{
+            seedMap = {};
+          }
+          const defaults = {
+            description_seed: "",
+            fmea_seed: "",
+            epsa_seed: "",
+            developmental_test_plan_seed: "",
+            automated_test_plan_seed: ""
+          };
+          seedMap = { ...defaults, ...seedMap };
+          return {
+            id,
+            hidden,
+            title,
+            tabLabel,
+            active,
+            type: "ai-seeds",
+            seedMap,
+            jsonText: JSON.stringify(seedMap, null, 2)
+          };
         }
 
         const videos = Array.from(section.querySelectorAll("iframe"));
@@ -2160,9 +2183,34 @@ ${rows}
             actions.innerHTML = `<button class="btn secondary" data-action="table-add-row" type="button">Add Row</button>`;
             card.appendChild(actions);
           }else if(section.type === "ai-seeds"){
-            const label = document.createElement("label");
-            label.innerHTML = `AI Seeds JSON<textarea class="input" data-field="ai-seeds">${escapeHtml(section.jsonText || "{}")}</textarea>`;
-            card.appendChild(label);
+            const seedKeys = [
+              "description_seed",
+              "fmea_seed",
+              "epsa_seed",
+              "developmental_test_plan_seed",
+              "automated_test_plan_seed"
+            ];
+            const seedMap = section.seedMap || {};
+            const table = document.createElement("table");
+            table.className = "table-editor";
+            table.dataset.tableType = "ai-seeds";
+            table.innerHTML = `
+              <thead>
+                <tr>
+                  <th>Seed</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${seedKeys.map(key => `
+                  <tr data-seed-key="${key}">
+                    <th>${escapeHtml(key)}</th>
+                    <td data-col-key="value" contenteditable="true">${escapeHtml(seedMap[key] || "")}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            `;
+            card.appendChild(table);
           }else{
             if(section.id === "description"){
               const table = document.createElement("table");
@@ -2396,8 +2444,23 @@ ${rows}
           return { id, title, tabLabel, active, hidden: !visible, type, rows };
         }
         if(type === "ai-seeds"){
-          const jsonText = card.querySelector('[data-field="ai-seeds"]').value.trim() || "{}";
-          return { id, title, tabLabel, active, hidden: true, type, jsonText };
+          const rows = Array.from(card.querySelectorAll("tr[data-seed-key]"));
+          const seedMap = {};
+          rows.forEach(row => {
+            const key = row.dataset.seedKey || "";
+            const value = (row.querySelector('td[data-col-key="value"]')?.textContent || "").trim();
+            if(key) seedMap[key] = value;
+          });
+          const defaults = {
+            description_seed: "",
+            fmea_seed: "",
+            epsa_seed: "",
+            developmental_test_plan_seed: "",
+            automated_test_plan_seed: ""
+          };
+          const merged = { ...defaults, ...seedMap };
+          const jsonText = JSON.stringify(merged, null, 2);
+          return { id, title, tabLabel, active, hidden: true, type, jsonText, seedMap: merged };
         }
         if(id === "description"){
           const table = card.querySelector('table.table-editor[data-table-type="description"]');
