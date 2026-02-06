@@ -3185,6 +3185,58 @@ ${rows}
       }
     }
 
+    async function aiSuggestSeed(cell){
+      if(!cell) return;
+      const row = cell.closest("tr");
+      const key = row?.dataset.seedKey || "seed";
+      const current = cell.textContent.trim();
+      const partNo = readPartNoFromForm();
+      const metaTitle = getMetaValue("title");
+      const metaH1 = getMetaValue("h1");
+      const metaSlogan = getMetaValue("slogan");
+      const metaKeywords = getMetaValue("keywords");
+      const metaDescription = getMetaValue("description");
+      const prompt = [
+        "Improve the seed content by adding details. Do not remove existing content.",
+        "Return a single paragraph. No bullets, no headings.",
+        "If current seed is empty, create a strong first draft.",
+        "",
+        `Seed Key: ${key}`,
+        `Current Seed: ${current || "(empty)"}`,
+        `Part No: ${partNo || "(unknown)"}`,
+        `Title: ${metaTitle || "(empty)"}`,
+        `Header H1: ${metaH1 || "(empty)"}`,
+        `Slogan: ${metaSlogan || "(empty)"}`,
+        `Meta Keywords: ${metaKeywords || "(empty)"}`,
+        `Meta Description: ${metaDescription || "(empty)"}`
+      ].join("\n");
+
+      const base = getApiBase().replace(/\/+$/, "");
+      cell.textContent = "Generating…";
+      try{
+        const res = await fetch(`${base}/suggest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            input: prompt
+          })
+        });
+        if(!res.ok){
+          throw new Error(`AI request failed (${res.status})`);
+        }
+        const data = await res.json();
+        const text = extractResponseText(data) || "";
+        cell.textContent = text || current || "";
+        logTerminal("ai", `Generated ${key}`);
+        saveDraftNow();
+        await runSaveAll();
+      }catch(err){
+        cell.textContent = current || "";
+        logTerminal("error", err?.message || "AI request failed");
+      }
+    }
+
     function editDetailLabel(span){
       if(!span) return;
       const current = span.textContent.trim();
@@ -3693,6 +3745,8 @@ ${rows}
           const tableType = table?.dataset.tableType || "";
           if(tableType === "description" && cell.dataset.colKey === "generated"){
             aiSuggestDescription(cell);
+          }else if(tableType === "ai-seeds"){
+            aiSuggestSeed(cell);
           }else{
             const suggestion = suggestCellValue(cell, tableType);
             const input = cell.querySelector("input");
