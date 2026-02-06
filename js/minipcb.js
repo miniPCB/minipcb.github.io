@@ -6,7 +6,11 @@
     var tabs  = document.querySelectorAll('.tabs .tab');
 
     panes.forEach(function (el) {
-      if (el.getAttribute('data-hidden') === 'true') return;
+      if (el.getAttribute('data-hidden') === 'true') {
+        el.classList.remove('active');
+        el.setAttribute('aria-hidden', 'true');
+        return;
+      }
       var isActive = el.id === id;
       el.classList.toggle('active', isActive);
       el.setAttribute('aria-hidden', isActive ? 'false' : 'true');
