@@ -727,122 +727,6 @@
 
       return blocks.join("\n");
     }
-
-      const refList = rows.map(r => `${r.refdes}|${r.partType}|${r.value || ""}`).join("\n");
-      const userBlocks = [
-        {
-          type: "input_text",
-          text:
-            `Part number: ${pn}\n` +
-            `Revision: ${entry?.rev || "unknown"}\n\n` +
-            `Partlist rows (refdes|type|value):\n${refList}\n\n` +
-            `Markdown source:\n${mdText}`
-        }
-      ];
-      for(const url of imageUrls){
-        userBlocks.push({ type: "input_image", image_url: url });
-      }
-
-      const payload = {
-        model: api.model,
-        input: [
-          {
-            role: "system",
-            content: [
-              {
-                type: "input_text",
-                text:
-                  "You analyze circuits. Return strict JSON only. " +
-                  "Schema: {\"summary\":\"...\",\"components\":[{\"refdes\":\"R1\",\"likely_function\":\"...\",\"confidence\":\"high|medium|low\",\"tradeoffs\":\"...\"}]}. " +
-                  "Use markdown netlist/partlist/testpoints and schematic images to infer each component's role and value tradeoffs."
-              }
-            ]
-          },
-          { role: "user", content: userBlocks }
-        ]
-      };
-
-      const headers = { "Content-Type": "application/json" };
-      if(api.proxyKey) headers["X-Proxy-Key"] = api.proxyKey;
-      const resp = await fetch(api.chatUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload)
-      });
-      if(!resp.ok){
-        const txt = await resp.text();
-        throw new Error(`AI request failed (${resp.status}): ${txt.slice(0, 180)}`);
-      }
-      const data = await resp.json();
-      const text = extractResponseText(data);
-      if(!text) throw new Error("AI returned an empty response.");
-      let parsed = null;
-      try{
-        parsed = JSON.parse(text);
-      }catch(_){
-        const m = text.match(/\{[\s\S]*\}/);
-        if(m) parsed = JSON.parse(m[0]);
-      }
-      if(!parsed || !Array.isArray(parsed.components)){
-        throw new Error("AI response JSON did not match expected schema.");
-      }
-      localStorage.setItem(cacheKey, JSON.stringify(parsed));
-      return parsed;
-    }
-
-      const groups = new Map();
-      for(const row of rows){
-        const key = (row.partType || "Other").trim();
-        if(!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(row);
-      }
-
-      lines.push("## Quick Summary");
-      lines.push("");
-      lines.push(`- Total listed parts: **${rows.length}**`);
-      lines.push(`- Distinct part categories: **${groups.size}**`);
-      lines.push("- Use the table and grouped sections below to find reference-specific tradeoffs quickly.");
-      lines.push("");
-
-      lines.push("## Components by Reference Designator");
-      lines.push("");
-      lines.push("| RefDes | Type | Nominal | Likely Function | Confidence |");
-      lines.push("| --- | --- | --- | --- | --- |");
-      for(const row of rows){
-        const ref = row.refdes || "(unknown)";
-        const kind = row.partType || "Component";
-        const val = row.value || "not specified";
-        const ai = aiMap.get(String(ref).toUpperCase());
-        const fn = ai?.likely_function || componentRoleHint(ref, kind);
-        const conf = ai?.confidence || "-";
-        lines.push(`| ${ref} | ${kind} | ${val} | ${fn} | ${conf} |`);
-      }
-      lines.push("");
-
-      lines.push("## Value Ranges and Tradeoffs by Component Type");
-      lines.push("");
-      for(const [kind, items] of groups.entries()){
-        const groupedRefs = items.map(x => String(x.refdes || "").toUpperCase());
-        const aiNotes = groupedRefs
-          .map(r => aiMap.get(r)?.tradeoffs)
-          .filter(Boolean);
-        const tradeoffText = aiNotes.length ? aiNotes[0] : valueRangeHint(kind, items[0]?.value || "");
-        lines.push(`### ${kind}`);
-        lines.push("");
-        lines.push(`- Reference designators: ${items.map(x => x.refdes || "?").join(", ")}`);
-        lines.push(`- Typical range guidance: ${tradeoffText}`);
-        lines.push("");
-      }
-
-      lines.push("## Cross-Cutting Selection Notes");
-      lines.push("");
-      lines.push("- Tighter tolerances improve repeatability but increase BOM cost.");
-      lines.push("- Higher bandwidth choices improve response speed but may increase noise/EMI sensitivity.");
-      lines.push("- Larger safety margins improve robustness but can reduce efficiency or dynamic performance.");
-      lines.push("- Derating and temperature margins usually improve reliability at the expense of size/cost.");
-      return lines.join("\n");
-    }
-
     function renderImages(entry){
       const schematicPanel = document.querySelector('.tabPanel[data-panel="schematic"]');
       const layoutPanel = document.querySelector('.tabPanel[data-panel="layout"]');
@@ -1005,15 +889,15 @@
     }
 
     async function resolveMdPathForEntry(entry){
-      if(entry?.mdPath) return entry.mdPath;
-      const pn = entry?.pn || "";
+      if((entry && entry.mdPath)) return entry.mdPath;
+      const pn = (entry && entry.pn) || "";
       if(!pn) return "";
 
       const existing = (state.mdIndex || []).filter(x => x && x.pn === pn);
       if(existing.length){
         existing.sort((a, b) => compareRevDesc(a.rev, b.rev));
         const best = existing[0];
-        if(best?.path){
+        if((best && best.path)){
           entry.mdPath = best.path;
           entry.filename = best.filename || entry.filename || "";
           entry.rev = best.rev || entry.rev || "";
@@ -1130,17 +1014,17 @@
       try{
         state.current = entry;
         const requestId = ++state.requestId;
-        $("previewTitle").textContent = entry?.title || entry?.pn || entry?.filename || "";
+        $("previewTitle").textContent = (entry && entry.title) || (entry && entry.pn) || (entry && entry.filename) || "";
         updateMeta(entry);
         renderImages(entry);
         const emptyState = $("emptyState");
         if(emptyState) emptyState.style.display = "none";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
         path = await resolveMdPathForEntry(entry);
-        const hashTarget = path || entry?.pn || entry?.filename || "";
+        const hashTarget = path || (entry && entry.pn) || (entry && entry.filename) || "";
         safeSetHashPath(hashTarget);
       if(!path){
-        if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
+        if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml((entry && entry.href) || "#")}" target="_blank" rel="noopener">${escapeHtml((entry && entry.href) || "link")}</a>.</div>`;
         state.currentMarkdownText = "";
         return;
       }
@@ -1174,10 +1058,10 @@
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
         state.currentMarkdownText = text;
       }catch(err){
-        const msg = err?.message || "Unknown error";
+        const msg = (err && err.message) || "Unknown error";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
         if(!path){
-          if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml(entry?.href || "#")}" target="_blank" rel="noopener">${escapeHtml(entry?.href || "link")}</a>.</div>`;
+          if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml((entry && entry.href) || "#")}" target="_blank" rel="noopener">${escapeHtml((entry && entry.href) || "link")}</a>.</div>`;
           state.currentMarkdownText = "";
           return;
         }
