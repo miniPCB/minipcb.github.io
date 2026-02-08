@@ -994,6 +994,7 @@
     <button type="button" id="fileAddBtn">Add New File</button>
     <button type="button" id="fileDuplicateBtn">Duplicate File</button>
     <button type="button" id="fileAiLoadBtn">Load File in AI Context</button>
+    <button type="button" id="fileRenameBtn">Rename File</button>
     <button type="button" id="fileDeleteBtn">Delete File</button>
   </div>
 
@@ -3899,6 +3900,40 @@ ${rows}
           logTerminal("ai", `Loaded ${state.aiContextPath} into AI context`);
         }catch(err){
           logTerminal("error", `Failed to load ${entry.rel}`);
+        }
+      });
+
+      $("fileRenameBtn").addEventListener("click", async () => {
+        const entry = contextTargetFile;
+        const menu = $("fileContextMenu");
+        if(menu) menu.style.display = "none";
+        contextTargetFile = null;
+        if(!entry){
+          logTerminal("error", "No file selected.");
+          return;
+        }
+        if(!useFileSystemStore()){
+          logTerminal("error", "Select a folder to rename files.");
+          return;
+        }
+        const currentName = entry.rel || entry.path || "";
+        const next = window.prompt("Rename HTML file (relative to folder):", currentName);
+        if(!next || next === currentName) return;
+        try{
+          const nextPath = next.toLowerCase().endsWith(".html") ? next : `${next}.html`;
+          const ok = await renameEntryFile(entry, nextPath);
+          if(!ok) throw new Error("Rename failed");
+          if(state.current && state.current.path === entry.path){
+            $("previewTitle").textContent = state.current.title || state.current.url;
+            updatePreviewMeta(state.current);
+          }
+          state.entries.sort((a, b) => (a.rel || "").localeCompare(b.rel || ""));
+          state.filtered = state.entries.slice();
+          $("fileCount").textContent = `${state.filtered.length} files`;
+          renderList();
+          logTerminal("rename", `Renamed to ${entry.rel}`);
+        }catch(err){
+          logTerminal("error", "Rename failed");
         }
       });
 
