@@ -132,7 +132,7 @@ BOARD_TEMPLATE_TABBED = """<!doctype html>
       </div>
     </nav>
     <header>
-      <h1>{partno} – {title}</h1>
+      <h1>{partno} - {title}</h1>
       <p class="slogan">{slogan}</p>
     </header>
     <main>
@@ -508,7 +508,7 @@ class PdfViewerTab(QtWidgets.QWidget):
     def __init__(self, path: Path):
         super().__init__(); self.path=path; self._zoom=1.0
         v=QtWidgets.QVBoxLayout(self); v.setContentsMargins(6,6,6,6)
-        top=QtWidgets.QHBoxLayout(); self.zoom_out=QtWidgets.QPushButton("–"); self.zoom_in=QtWidgets.QPushButton("+")
+        top=QtWidgets.QHBoxLayout(); self.zoom_out=QtWidgets.QPushButton("-"); self.zoom_in=QtWidgets.QPushButton("+")
         self.open_external=QtWidgets.QPushButton("Open Externally")
         top.addWidget(self.zoom_out); top.addWidget(self.zoom_in); top.addStretch(1); top.addWidget(self.open_external)
         v.addLayout(top)
@@ -1172,7 +1172,7 @@ class BoardForms(QtWidgets.QTabWidget):
         topBar.addWidget(self.d_edit_seeds_btn); topBar.addStretch(1)
         dwrap.addLayout(topBar)
         dform = QtWidgets.QFormLayout()
-        self.d_maturity = QtWidgets.QComboBox(); self.d_maturity.addItems(["0 – Placeholder","1 – Immature","2 – Mature","3 – Locked"])
+        self.d_maturity = QtWidgets.QComboBox(); self.d_maturity.addItems(["0 - Placeholder","1 - Immature","2 - Mature","3 - Locked"])
         self.d_text = QtWidgets.QPlainTextEdit(); self.d_text.setPlaceholderText("Generated Description (HTML)…")
         dform.addRow("Maturity Level", self.d_maturity)
         dform.addRow("Description (generated)", self.d_text)
@@ -1576,13 +1576,13 @@ class BoardForms(QtWidgets.QTabWidget):
         m = re.search(r"(?is)<title>\s*(.*?)\s*</title>", html_text)
         if m: head_title = html_lib.unescape(m.group(1).strip())
         pn, title_only = "", head_title
-        m2 = re.match(r"\s*([A-Za-z0-9]{2,4}[A-Za-z]?-?\d{2,4})\s*[\|\-–]\s*(.+)", head_title)
+        m2 = re.match(r"\s*([A-Za-z0-9]{2,4}[A-Za-z]?-?\d{2,4})\s*[\|\--]\s*(.+)", head_title)
         if m2:
             pn, title_only = m2.group(1).strip(), m2.group(2).strip()
         h1 = re.search(r"(?is)<h1[^>]*>(.*?)</h1>", html_text)
         if (not pn or not title_only) and h1:
             h1_text = html_lib.unescape(re.sub(r"<[^>]+>","", h1.group(1))).strip()
-            m3 = re.match(r"\s*([A-Za-z0-9]{2,4}[A-Za-z]?-?\d{2,4})\s*[–\-]\s*(.+)", h1_text)
+            m3 = re.match(r"\s*([A-Za-z0-9]{2,4}[A-Za-z]?-?\d{2,4})\s*[-\-]\s*(.+)", h1_text)
             if m3:
                 pn = pn or m3.group(1).strip()
                 title_only = title_only or m3.group(2).strip()
@@ -1737,13 +1737,13 @@ class BoardForms(QtWidgets.QTabWidget):
                                              self.s_img.text().strip(),
                                              alt=self.s_alt.text().strip() or "Schematic (PLACEHOLDER)")
         else:
-            html_text = self._set_div_inner(html_text, "schematic", '<h2>Schematic</h2><p class="placeholder">PLACEHOLDER – schematic image not set</p>')
+            html_text = self._set_div_inner(html_text, "schematic", '<h2>Schematic</h2><p class="placeholder">PLACEHOLDER - schematic image not set</p>')
         if self.l_img.text().strip():
             html_text = self._set_img_in_div(html_text, "layout",
                                              self.l_img.text().strip(),
                                              alt=self.l_alt.text().strip() or "Top view of miniPCB")
         else:
-            html_text = self._set_div_inner(html_text, "layout", '<h2>Layout</h2><p class="placeholder">PLACEHOLDER – layout image not set</p>')
+            html_text = self._set_div_inner(html_text, "layout", '<h2>Layout</h2><p class="placeholder">PLACEHOLDER - layout image not set</p>')
 
         # Resources & Downloads
         res_items=[]
@@ -1864,7 +1864,7 @@ class BoardForms(QtWidgets.QTabWidget):
             html = re.sub(r'(?is)<title>.*?</title>', f'<title>{new_title}</title>', html, count=1)
         else:
             html = re.sub(r'(?is)<head>', f'<head>\n<title>{new_title}</title>', html, count=1)
-        h1_text = f"{self._esc(pn)} – {self._esc(title)}" if pn else self._esc(title)
+        h1_text = f"{self._esc(pn)} - {self._esc(title)}" if pn else self._esc(title)
         if re.search(r'(?is)<h1[^>]*>.*?</h1>', html):
             html = re.sub(r'(?is)<h1[^>]*>.*?</h1>', f'<h1>{h1_text}</h1>', html, count=1)
         else:
@@ -1934,7 +1934,7 @@ class NavAddDialog(QtWidgets.QDialog):
             txt = chosen.read_text(encoding="utf-8")
             m = re.search(r"(?is)<title>\s*(.*?)\s*</title>", txt)
             title = html_lib.unescape(m.group(1).strip()) if m else ""
-            m2 = re.match(r"\s*[A-Za-z0-9]{2,4}[A-Za-z]?-?\d{2,4}\s*[\|\-–]\s*(.+)", title)
+            m2 = re.match(r"\s*[A-Za-z0-9]{2,4}[A-Za-z]?-?\d{2,4}\s*[\|\--]\s*(.+)", title)
             if m2: title = m2.group(1).strip()
         except Exception:
             pass

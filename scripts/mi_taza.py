@@ -6,7 +6,7 @@ Features:
 - Welcome screen: Scan Markdown (schematic/compiled), Scan HTML (part pages/all), or go straight to scripts.
 - Repo-wide HTML discovery (no PART_DIR_PREFIXES).
 - Part-page finder:
-    * Matches 1–2 digit families with optional letters (02, 02A, 09H, etc.).
+    * Matches 1-2 digit families with optional letters (02, 02A, 09H, etc.).
     * Accepts .htm/.html (any case).
     * Ancestor folder match allows numeric-root families and decorated folder names.
     * Works for files like 02A-00.html under 02/.
@@ -43,7 +43,7 @@ SCRIPTS_GLOB_DEFAULT = "taza_*.py,tava_*.py"  # no generate_*.py by default
 DS_RE = re.compile(r"^(?P<pn>[^_/\\]+)_(?P<rev>[^_/\\]+)\.md$", re.IGNORECASE)
 
 # Part-number in HTML filenames:
-# - prefix: 1–2 digits + optional letters (e.g., 02, 2, 04A, 09H)
+# - prefix: 1-2 digits + optional letters (e.g., 02, 2, 04A, 09H)
 # - dash, then digits (part number), then optional tokens before extension.
 PN_HTML_RE = re.compile(
     r"^(?P<prefix>\d{1,2}(?:[A-Z]+)?)-(?P<num>\d+)(?:[A-Z0-9._-]*)?\.(?:html?|HTML?)$",

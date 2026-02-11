@@ -118,10 +118,10 @@ MATURITY_WEIGHTS: Final[Dict[str, int]] = {
 }
 
 # Level thresholds
-#   0–24 → Level 0 (Placeholder)
-#  25–59 → Level 1 (Immature)
-#  60–84 → Level 2 (Mature)
-#  85–100 (+ locked) → Level 3 (Locked)
+#   0-24 → Level 0 (Placeholder)
+#  25-59 → Level 1 (Immature)
+#  60-84 → Level 2 (Mature)
+#  85-100 (+ locked) → Level 3 (Locked)
 MATURITY_LEVEL_THRESHOLDS: Final[Dict[int, int]] = {
     0: 0,
     1: 25,
@@ -135,7 +135,7 @@ RECENT_EDIT_DAYS: Final[int] = 90
 # ---- Footer/year normalization (shared pattern) ----------------------------
 
 YEAR_RE: Final[re.Pattern[str]] = re.compile(r"(?:19|20)\d{2}")
-RANGE_SEP_CLASS: Final[str] = r"(?:\u2013|–|—|-)"  # en/em dashes and hyphen
+RANGE_SEP_CLASS: Final[str] = r"(?:\u2013|-|—|-)"  # en/em dashes and hyphen
 
 # ---- Defaults / settings scaffold -----------------------------------------
 

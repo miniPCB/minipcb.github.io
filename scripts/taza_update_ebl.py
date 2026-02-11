@@ -44,7 +44,7 @@ def clean_title(raw_title: str, pn: str) -> str:
         if right:
             return right
     if t.upper().startswith(pn.upper()):
-        t2 = t[len(pn):].lstrip(" -–|:").strip()
+        t2 = t[len(pn):].lstrip(" --|:").strip()
         if t2:
             return t2
     return t

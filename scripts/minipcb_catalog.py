@@ -4,7 +4,7 @@
 miniPCB Catalog — PyQt5
 - FMEA Seeds moved to dialog (no inline seed editors on the FMEA tab)
 - Description Seed moved to dialog (no inline seed editor on the Description tab)
-- All seeds (Description, FMEA L0–L3, Testing DTP/ATP) saved as hidden JSON
+- All seeds (Description, FMEA L0-L3, Testing DTP/ATP) saved as hidden JSON
   inside a hidden tab-content <div id="ai-seeds" data-hidden="true"> (not listed in tab buttons)
 - Testing tab: dedicated AI ETA + progress (separate for DTP and ATP)
 - Clean, compact HTML formatter (tables one <tr> per line)
@@ -337,10 +337,10 @@ class LinkPickerDialog(QDialog):
     def selected(self) -> List[str]:
         return [it.data(Qt.UserRole) for it in self.listw.selectedItems()]
 
-# ---------- Seed Builder dialog (L0–L3) ----------
+# ---------- Seed Builder dialog (L0-L3) ----------
 class SeedBuilderDialog(QDialog):
     """
-    Matrix of sources (rows) × levels (L0..L3) with checkboxes + custom prompts per level.
+    Matrix of sources (rows) x levels (L0..L3) with checkboxes + custom prompts per level.
     Enforces: L1 seed usable by L2/L3; L2 seed by L3; L3 seed not used as source.
     """
     def __init__(self, parent, sources: Dict[str, str], defaults: Dict[str, List[str]]):
@@ -444,7 +444,7 @@ class DescriptionSeedDialog(QDialog):
 # ---------- FMEA Seeds dialog (updated; dialog-only) ----------
 class FMEASeedsDialog(QDialog):
     """
-    Editor for L0–L3 seeds + matrix builder, snapshots, Save→HTML.
+    Editor for L0-L3 seeds + matrix builder, snapshots, Save→HTML.
     """
     def __init__(self, parent, initial: Dict[str, str], get_sources_callable):
         super().__init__(parent)
@@ -514,7 +514,7 @@ class FMEASeedsDialog(QDialog):
                 if "Seed L1" in used: bundle.append(f"Seed L1 (current):\n{outputs.get('L1','')}")
                 if "Seed L2" in used: bundle.append(f"Seed L2 (current):\n{outputs.get('L2','')}")
                 sys_prompt = ("You are assisting with an FMEA planning workflow. Produce a compact, neutral SEED NOTE.\n"
-                              "Keep to 120–220 words. Plain text or minimal bullets. No HTML.")
+                              "Keep to 120-220 words. Plain text or minimal bullets. No HTML.")
                 user = f"LEVEL: {lv}\nCUSTOM PROMPT:\n{prompts.get(lv,'')}\n\nMATERIAL:\n" + ("\n\n".join(bundle) if bundle else "(none)")
                 worker = BaseAIWorker(self.parent().openai_key, self.parent().openai_model, sys_prompt, user, timeout=120)
                 out = self.parent()._run_worker_blocking(worker)
@@ -1735,7 +1735,7 @@ class CatalogWindow(QMainWindow):
 
                 sys_prompt = (
                     "You are assisting with an FMEA planning workflow. Produce a compact, neutral SEED NOTE for the given level.\n"
-                    "Keep to 120–220 words. Use plain text or minimal bullets. No HTML, no styling."
+                    "Keep to 120-220 words. Use plain text or minimal bullets. No HTML, no styling."
                 )
                 user = (
                     f"LEVEL: {lv}\n"
@@ -1890,7 +1890,7 @@ class CatalogWindow(QMainWindow):
         Persist the current seed fields to the HTML file:
           - Description seed -> <script id="ai-seed-description" type="application/json">…</script>
           - DTP / ATP seeds -> <script id="ai-seed-dtp|ai-seed-atp" type="application/json">…</script>
-          - FMEA L0–L3     -> <script id="ai-seeds-fmea" type="application/json">{"L0":..., ...}</script>
+          - FMEA L0-L3     -> <script id="ai-seeds-fmea" type="application/json">{"L0":..., ...}</script>
         These are written inside a hidden 'seeds' tab-content div (data-hidden="true") and the tab
         is never listed in the tab header.
         """
@@ -1923,7 +1923,7 @@ class CatalogWindow(QMainWindow):
             self.refresh_file_icons(light=True)
 
             # Notify
-            self._info("Seeds Saved", "All seeds (Description, DTP, ATP, FMEA L0–L3) saved as hidden JSON in the HTML.")
+            self._info("Seeds Saved", "All seeds (Description, DTP, ATP, FMEA L0-L3) saved as hidden JSON in the HTML.")
         except Exception as e:
             try:
                 if 'tmp' in locals() and tmp.exists():
@@ -2589,8 +2589,8 @@ class CatalogWindow(QMainWindow):
         user = (
             f"PAGE CONTEXT:\n- Page Title: {page_title}\n- H1: {h1}\n- Part No: {part_no}\n\n"
             f"SEED:\n{seed}\n\n"
-            "TASK:\n• 2–4 short paragraphs + (optional) one bullet list (3–6 items).\n"
-            "• 180–260 words; neutral, technical; no marketing fluff.\n"
+            "TASK:\n• 2-4 short paragraphs + (optional) one bullet list (3-6 items).\n"
+            "• 180-260 words; neutral, technical; no marketing fluff.\n"
             "• Output ONLY an HTML fragment; no <html>/<body>; no inline styles."
         )
         self._kick_ai(sys_prompt, user, target="desc")
@@ -2615,7 +2615,7 @@ class CatalogWindow(QMainWindow):
         sys_prompt = (
             "You are an expert test engineer. Generate a compact HTML <table> (no inline styles) for an FMEA.\n"
             "Headers: ID | Item | Failure Mode | Effect | Detection (TP#…) | Test ID | Severity | Occurrence | Detectability | RPN.\n"
-            "Use concise sentences; numeric S/O/D 1–10; compute RPN = S*O*D. No extra text around the table."
+            "Use concise sentences; numeric S/O/D 1-10; compute RPN = S*O*D. No extra text around the table."
         )
         user = (
             f"{pagectx}\nDETAILS:\n{json.dumps(details, ensure_ascii=False)}\n"
@@ -2646,7 +2646,7 @@ class CatalogWindow(QMainWindow):
 
         sys_prompt = (
             "You are a hardware test engineer. Produce a concise Markdown checklist of tests.\n"
-            "- Each test as a bullet: **Test ID** – short name: 1-line purpose; Steps: 2–5 compact steps; Expected: one line.\n"
+            "- Each test as a bullet: **Test ID** - short name: 1-line purpose; Steps: 2-5 compact steps; Expected: one line.\n"
             "- Keep it crisp and hardware-focused; avoid tables and code unless essential.\n"
             f"Context: Generate a {'Developmental' if kind=='dtp' else 'Production-Automated'} Test Plan."
         )

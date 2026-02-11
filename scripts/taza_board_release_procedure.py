@@ -11,7 +11,7 @@ Runs, in order:
   4) generate_site_index.py        (writes site_index.js in site root)
 
 Notes:
-- Steps (2–4) expect to run from the SITE ROOT (cwd="root"), so we set cwd=root for them.
+- Steps (2-4) expect to run from the SITE ROOT (cwd="root"), so we set cwd=root for them.
 - Step (1) writes output relative to the script folder's parent; cwd doesn't matter, but we set cwd=root anyway for consistency.
 - Use --skip or --only to control which steps run.
 
