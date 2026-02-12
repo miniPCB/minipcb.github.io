@@ -570,6 +570,17 @@
     .chatMsg{ padding:8px 10px; border-radius:10px; max-width:85%; }
     .chatMsg.user{ align-self:flex-end; background: rgba(68,140,255,.18); border:1px solid rgba(68,140,255,.35); }
     .chatMsg.ai{ align-self:flex-start; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); }
+    .chatMsg.chatMatch,
+    .chatTrace.chatMatch{
+      box-shadow: 0 0 0 1px rgba(255,211,124,.45) inset;
+      background: rgba(255,211,124,.08);
+    }
+    .chatMark{
+      background: rgba(255,211,124,.55);
+      color: #111;
+      border-radius: 3px;
+      padding: 0 1px;
+    }
     .chatTrace{
       align-self: stretch;
       border:1px solid var(--border);
@@ -606,6 +617,10 @@
       display:none;
     }
     .chatInput{ min-height:90px; height:90px; resize:none; }
+    .chatSearch{
+      height:30px;
+      font-size:12px;
+    }
     .engineerTrace{
       border:1px solid var(--border);
       border-radius:12px;
@@ -1085,6 +1100,7 @@
                 <button class="btn primary" id="btnAiChatSend">Send</button>
                 <button class="btn" id="btnAiChatClear">Clear</button>
               </div>
+              <input class="input chatSearch" id="aiChatSearch" placeholder="Search messages..." />
               <div class="engineerTrace" id="engineerTrace"></div>
               <div class="hr"></div>
               <div class="row">
@@ -3762,8 +3778,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!log) return;
     const msg = document.createElement("div");
     msg.className = `chatMsg ${role}`;
-    msg.textContent = text;
+    msg.setAttribute("data-raw", String(text || ""));
+    msg.textContent = String(text || "");
     log.appendChild(msg);
+    applyChatSearch();
     log.scrollTop = log.scrollHeight;
   }
 
@@ -3779,7 +3797,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         <span>${escapeHtml(label)}</span>
         <span>${escapeHtml(time)}</span>
       </div>
-      <pre class="chatTraceBody">${escapeHtml(body)}</pre>
+      <pre class="chatTraceBody" data-raw="${escapeHtml(body)}">${escapeHtml(body)}</pre>
     `;
     const head = card.querySelector(".chatTraceHead");
     if(head){
@@ -3788,7 +3806,43 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       });
     }
     log.appendChild(card);
+    applyChatSearch();
     log.scrollTop = log.scrollHeight;
+  }
+
+  function escapeRegExp(s){
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function buildHighlightedHtml(raw, query){
+    const q = String(query || "").trim();
+    if(!q) return escapeHtml(raw);
+    const rx = new RegExp(`(${escapeRegExp(q)})`, "ig");
+    return String(raw).split(rx).map(part => {
+      if(new RegExp(`^${escapeRegExp(q)}$`, "i").test(part)){
+        return `<span class="chatMark">${escapeHtml(part)}</span>`;
+      }
+      return escapeHtml(part);
+    }).join("");
+  }
+
+  function applyChatSearch(){
+    const q = String($("aiChatSearch")?.value || "").trim();
+    const log = $("aiChatLog");
+    if(!log) return;
+    log.querySelectorAll(".chatMsg").forEach(el => {
+      const raw = el.getAttribute("data-raw") || el.textContent || "";
+      const hit = q && raw.toLowerCase().includes(q.toLowerCase());
+      el.classList.toggle("chatMatch", !!hit);
+      el.innerHTML = buildHighlightedHtml(raw, q);
+    });
+    log.querySelectorAll(".chatTrace").forEach(card => {
+      const bodyEl = card.querySelector(".chatTraceBody");
+      const raw = bodyEl?.getAttribute("data-raw") || "";
+      const hit = q && raw.toLowerCase().includes(q.toLowerCase());
+      card.classList.toggle("chatMatch", !!hit);
+      if(bodyEl) bodyEl.innerHTML = buildHighlightedHtml(raw, q);
+    });
   }
 
   function extractJsonBlock(text){
@@ -12446,7 +12500,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const chatSend = $("btnAiChatSend");
     if(chatSend) chatSend.addEventListener("click", () => runAsync(aiChatSend()));
     const chatClear = $("btnAiChatClear");
-    if(chatClear) chatClear.addEventListener("click", () => { const log = $("aiChatLog"); if(log) log.innerHTML = ""; });
+    if(chatClear) chatClear.addEventListener("click", () => {
+      const log = $("aiChatLog");
+      if(log) log.innerHTML = "";
+      const search = $("aiChatSearch");
+      if(search) search.value = "";
+    });
+    const chatSearch = $("aiChatSearch");
+    if(chatSearch){
+      chatSearch.addEventListener("input", applyChatSearch);
+    }
     const chatInput = $("aiChatInput");
     if(chatInput){
       chatInput.addEventListener("contextmenu", (e) => {
