@@ -570,6 +570,41 @@
     .chatMsg{ padding:8px 10px; border-radius:10px; max-width:85%; }
     .chatMsg.user{ align-self:flex-end; background: rgba(68,140,255,.18); border:1px solid rgba(68,140,255,.35); }
     .chatMsg.ai{ align-self:flex-start; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); }
+    .chatTrace{
+      align-self: stretch;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background: rgba(255,255,255,.03);
+      overflow:hidden;
+    }
+    .chatTrace.req{ border-color: rgba(124,196,255,.35); }
+    .chatTrace.res{ border-color: rgba(124,255,176,.35); }
+    .chatTrace.err{ border-color: rgba(255,124,124,.35); }
+    .chatTraceHead{
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      padding:7px 9px;
+      font-size:11px;
+      border-bottom:1px solid rgba(42,52,71,.7);
+      cursor:pointer;
+      user-select:none;
+      background: rgba(255,255,255,.03);
+    }
+    .chatTraceBody{
+      margin:0;
+      padding:8px;
+      white-space:pre-wrap;
+      word-break:break-word;
+      font-family: var(--mono);
+      font-size:11px;
+      line-height:1.35;
+      max-height:220px;
+      overflow:auto;
+    }
+    .chatTrace.collapsed .chatTraceBody{
+      display:none;
+    }
     .chatInput{ min-height:90px; height:90px; resize:none; }
     .engineerTrace{
       border:1px solid var(--border);
@@ -3732,6 +3767,30 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     log.scrollTop = log.scrollHeight;
   }
 
+  function appendChatTrace(kind, label, payload){
+    const log = $("aiChatLog");
+    if(!log) return;
+    const card = document.createElement("div");
+    card.className = `chatTrace ${kind}`;
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const body = formatTraceBody(payload);
+    card.innerHTML = `
+      <div class="chatTraceHead" title="Double-click to collapse/expand">
+        <span>${escapeHtml(label)}</span>
+        <span>${escapeHtml(time)}</span>
+      </div>
+      <pre class="chatTraceBody">${escapeHtml(body)}</pre>
+    `;
+    const head = card.querySelector(".chatTraceHead");
+    if(head){
+      head.addEventListener("dblclick", () => {
+        card.classList.toggle("collapsed");
+      });
+    }
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
+  }
+
   function extractJsonBlock(text){
     const s = String(text || "");
     const fenced = s.match(/```json\s*([\s\S]*?)```/i);
@@ -3993,7 +4052,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         ],
         max_output_tokens: 600
       };
-      pushEngineerTrace("req", "LLM /chat request", requestBody);
+      if(state.engineerMode) appendChatTrace("req", "LLM /chat request", requestBody);
       const resp = await fetch(apiUrl("/chat"), {
         method: "POST",
         headers: apiHeaders(),
@@ -4001,11 +4060,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       });
       if(!resp.ok){
         const ttxt = await resp.text().catch(()=> "");
-        pushEngineerTrace("err", "LLM /chat error", { status: resp.status, body: ttxt });
+        if(state.engineerMode) appendChatTrace("err", "LLM /chat error", { status: resp.status, body: ttxt });
         throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
       }
       const data = await resp.json();
-      pushEngineerTrace("res", "LLM /chat response", data);
+      if(state.engineerMode) appendChatTrace("res", "LLM /chat response", data);
       const raw = extractResponseText(data);
       let parsed = null;
       if(typeof raw === "string"){
