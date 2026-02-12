@@ -309,6 +309,18 @@
     .gridEditor.matrixExpanded{
       grid-template-columns: 0 1fr 520px;
     }
+    .gridEditor.engineerMode{
+      grid-template-columns: 0 0 1fr;
+    }
+    .gridEditor.engineerMode .listPanel{
+      display:none;
+    }
+    .gridEditor.engineerMode .editorPanel{
+      display:none;
+    }
+    .gridEditor.engineerMode .aiPanel{
+      grid-column: 1 / -1;
+    }
     .gridEditor.matrixExpanded .listPanel{
       display:none;
     }
@@ -559,6 +571,48 @@
     .chatMsg.user{ align-self:flex-end; background: rgba(68,140,255,.18); border:1px solid rgba(68,140,255,.35); }
     .chatMsg.ai{ align-self:flex-start; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); }
     .chatInput{ min-height:90px; height:90px; resize:none; }
+    .engineerTrace{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,.02);
+      padding:8px;
+      max-height: 280px;
+      overflow:auto;
+      display:none;
+      flex-direction:column;
+      gap:8px;
+    }
+    .engineerTrace.active{ display:flex; }
+    .traceCard{
+      border:1px solid var(--border);
+      border-radius:10px;
+      overflow:hidden;
+      background: rgba(255,255,255,.02);
+    }
+    .traceCard.req{ border-color: rgba(124,196,255,.35); }
+    .traceCard.res{ border-color: rgba(124,255,176,.35); }
+    .traceCard.err{ border-color: rgba(255,124,124,.35); }
+    .traceHead{
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      padding:6px 8px;
+      font-size:11px;
+      background: rgba(255,255,255,.04);
+      border-bottom:1px solid rgba(42,52,71,.7);
+    }
+    .traceBody{
+      margin:0;
+      padding:8px;
+      white-space:pre-wrap;
+      word-break:break-word;
+      font-family: var(--mono);
+      font-size:11px;
+      line-height:1.35;
+      color: var(--text);
+      max-height: 180px;
+      overflow:auto;
+    }
     .fieldSelected{
       outline:2px solid #4fb66a;
       box-shadow: inset 0 0 0 1px rgba(79,182,106,.45);
@@ -996,6 +1050,7 @@
                 <button class="btn primary" id="btnAiChatSend">Send</button>
                 <button class="btn" id="btnAiChatClear">Clear</button>
               </div>
+              <div class="engineerTrace" id="engineerTrace"></div>
               <div class="hr"></div>
               <div class="row">
                 <button class="btn mini" id="btnAiReviewPlan">AI Review</button>
@@ -1017,6 +1072,7 @@
       <div class="toolbarRow">
         <button class="btn mini" id="btnCopyLog">Copy</button>
         <button class="btn mini" id="btnClearLog">Clear</button>
+        <button class="btn mini" id="btnEngineerMode">Engineer Mode</button>
       </div>
     </div>
     <div class="log" id="log"></div>
@@ -2762,6 +2818,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     aiChatContextFiles: [],
     matrixPanKey: false,
     matrixExpanded: false,
+    engineerMode: false,
     aiReviewControl: { running: false, paused: false, cancelled: false }
   };
 
@@ -2818,6 +2875,48 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     div.innerHTML = `<span class="time">[${time}]</span> <span class="${cls}">${escapeHtml(msg)}</span>`;
     $("log").appendChild(div);
     $("log").scrollTop = $("log").scrollHeight;
+  }
+
+  function updateEngineerModeUI(){
+    const grid = document.querySelector(".gridEditor");
+    if(grid) grid.classList.toggle("engineerMode", !!state.engineerMode);
+    const trace = $("engineerTrace");
+    if(trace) trace.classList.toggle("active", !!state.engineerMode);
+    const btn = $("btnEngineerMode");
+    if(btn) btn.classList.toggle("attn", !!state.engineerMode);
+  }
+
+  function formatTraceBody(value){
+    if(value == null) return "";
+    if(typeof value === "string") return value;
+    try{
+      return JSON.stringify(value, null, 2);
+    }catch{
+      return String(value);
+    }
+  }
+
+  function pushEngineerTrace(kind, label, payload){
+    if(!state.engineerMode) return;
+    const trace = $("engineerTrace");
+    if(!trace) return;
+    const card = document.createElement("div");
+    card.className = `traceCard ${kind}`;
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const body = formatTraceBody(payload);
+    card.innerHTML = `
+      <div class="traceHead">
+        <span>${escapeHtml(label)}</span>
+        <span>${escapeHtml(time)}</span>
+      </div>
+      <pre class="traceBody">${escapeHtml(body)}</pre>
+    `;
+    trace.appendChild(card);
+    const maxCards = 120;
+    while(trace.children.length > maxCards){
+      trace.removeChild(trace.firstChild);
+    }
+    trace.scrollTop = trace.scrollHeight;
   }
 
   function updateAiReviewControls(){
@@ -3146,23 +3245,27 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
               try{
                 if(!(await aiReviewWaitIfPaused())) return;
                 logLine(`AI Review: persona ${persona?.label || personaId} reviewing ${test.data.section_no || test.id.slice(0,6)}.${field}...`, "ok");
+                const requestBody = {
+                  model,
+                  input: [
+                  { role:"system", content:getAiPrompt(plan, "review_persona", { personaLabel: persona?.label || personaId, focus, guidanceLine: `${guidanceLine}${personaGuidance}` }) },
+                    { role:"user", content: JSON.stringify(prompt, null, 2) }
+                  ],
+                  max_output_tokens: 120
+                };
+                pushEngineerTrace("req", "LLM /review request (persona)", requestBody);
                 const resp = await fetch(apiUrl("/review"), {
                   method: "POST",
                   headers: apiHeaders(),
-                  body: JSON.stringify({
-                    model,
-                    input: [
-                    { role:"system", content:getAiPrompt(plan, "review_persona", { personaLabel: persona?.label || personaId, focus, guidanceLine: `${guidanceLine}${personaGuidance}` }) },
-                      { role:"user", content: JSON.stringify(prompt, null, 2) }
-                    ],
-                    max_output_tokens: 120
-                  })
+                  body: JSON.stringify(requestBody)
                 });
                 if(!resp.ok){
                   const ttxt = await resp.text().catch(()=> "");
+                  pushEngineerTrace("err", "LLM /review error (persona)", { status: resp.status, body: ttxt });
                   throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
                 }
                 const data = await resp.json();
+                pushEngineerTrace("res", "LLM /review response (persona)", data);
                 let val = String(extractResponseText(data) || "").trim();
                 if((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))){
                   val = val.slice(1, -1).trim();
@@ -3436,23 +3539,27 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 if(state.prefs.ai_review_debug){
                   logLine(`AI Review debug payload: ${JSON.stringify(payload).slice(0, 800)}...`, "warn");
                 }
+                const requestBody = {
+                  model,
+                  input: [
+                  { role:"system", content:getAiPrompt(plan, isMatrixCell ? "review_matrix_cell" : "review_field", { guidanceLine }) },
+                    { role:"user", content: JSON.stringify(payload, null, 2) }
+                  ],
+                  max_output_tokens: 120
+                };
+                pushEngineerTrace("req", "LLM /review request", requestBody);
                 const resp = await fetch(apiUrl("/review"), {
                   method: "POST",
                   headers: apiHeaders(),
-                  body: JSON.stringify({
-                    model,
-                    input: [
-                    { role:"system", content:getAiPrompt(plan, isMatrixCell ? "review_matrix_cell" : "review_field", { guidanceLine }) },
-                      { role:"user", content: JSON.stringify(payload, null, 2) }
-                    ],
-                    max_output_tokens: 120
-                  })
+                  body: JSON.stringify(requestBody)
                 });
                 if(!resp.ok){
                   const ttxt = await resp.text().catch(()=> "");
+                  pushEngineerTrace("err", "LLM /review error", { status: resp.status, body: ttxt });
                   throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
                 }
                 const data = await resp.json();
+                pushEngineerTrace("res", "LLM /review response", data);
                 const raw = extractResponseText(data);
                 if(state.prefs.ai_review_debug){
                   logLine(`AI Review debug response: ${String(raw).slice(0, 800)}...`, "warn");
@@ -3878,23 +3985,27 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       request: text
     };
     try{
+      const requestBody = {
+        model,
+        input: [
+          { role:"system", content:getAiPrompt(plan, "chat_edit", { permLabel, perm }) },
+          { role:"user", content: JSON.stringify(payload) }
+        ],
+        max_output_tokens: 600
+      };
+      pushEngineerTrace("req", "LLM /chat request", requestBody);
       const resp = await fetch(apiUrl("/chat"), {
         method: "POST",
         headers: apiHeaders(),
-        body: JSON.stringify({
-          model,
-          input: [
-            { role:"system", content:getAiPrompt(plan, "chat_edit", { permLabel, perm }) },
-            { role:"user", content: JSON.stringify(payload) }
-          ],
-          max_output_tokens: 600
-        })
+        body: JSON.stringify(requestBody)
       });
       if(!resp.ok){
         const ttxt = await resp.text().catch(()=> "");
+        pushEngineerTrace("err", "LLM /chat error", { status: resp.status, body: ttxt });
         throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
       }
       const data = await resp.json();
+      pushEngineerTrace("res", "LLM /chat response", data);
       const raw = extractResponseText(data);
       let parsed = null;
       if(typeof raw === "string"){
@@ -4226,6 +4337,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     renderReviewNotes();
     refreshMarkdownUI();
     drawFlowchart();
+    updateEngineerModeUI();
   }
 
   function renderReviewNotes(){
@@ -6479,20 +6591,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 partlist: mdData?.partlist || [],
                 circuit_identification: mdData?.circuitId || []
               };
-                const resp = await fetch(apiUrl("/create"), {
-                  method: "POST",
-                  headers: apiHeaders(),
-                  body: JSON.stringify({
+                const requestBody = {
                   model,
                   input: [
                     { role:"system", content:getAiPrompt(null, "create_plan", { testCount: count, schemaKeys: Object.keys(TEST_SCHEMA_DEFAULT).filter(k=>k!=="_ai").join(", ") }) },
                     { role:"user", content: JSON.stringify(payload) }
                   ],
                   max_output_tokens: 1400
-                })
-              });
+                };
+                pushEngineerTrace("req", "LLM /create request", requestBody);
+                const resp = await fetch(apiUrl("/create"), {
+                  method: "POST",
+                  headers: apiHeaders(),
+                  body: JSON.stringify(requestBody)
+                });
               if(resp.ok){
                 const data = await resp.json();
+                pushEngineerTrace("res", "LLM /create response", data);
                 const raw = extractResponseText(data);
                 let parsed = null;
                 if(typeof raw === "string"){
@@ -6557,6 +6672,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
                 }
               }
             }catch(e){
+              pushEngineerTrace("err", "LLM /create error", String(e?.message || e));
               logLine(`AI Create failed: ${e.message || e}`, "warn");
             }
           }
@@ -8863,24 +8979,28 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const limitsNote = isLimitField
           ? getAiPrompt(plan, "suggest_limits_note")
           : "";
+        const requestBody = {
+          model,
+          input: [
+            { role:"system", content: system },
+            { role:"user", content: JSON.stringify(payload, null, 2) },
+            ...(limitsNote ? [{ role:"system", content: limitsNote }] : [])
+          ],
+          max_output_tokens: 500
+        };
+        pushEngineerTrace("req", "LLM /suggest request", requestBody);
         const resp = await fetch(apiUrl("/suggest"), {
           method: "POST",
           headers: apiHeaders(),
-          body: JSON.stringify({
-            model,
-            input: [
-              { role:"system", content: system },
-              { role:"user", content: JSON.stringify(payload, null, 2) },
-              ...(limitsNote ? [{ role:"system", content: limitsNote }] : [])
-            ],
-            max_output_tokens: 500
-          })
+          body: JSON.stringify(requestBody)
         });
         if(!resp.ok){
           const t = await resp.text().catch(()=> "");
+          pushEngineerTrace("err", "LLM /suggest error", { status: resp.status, body: t });
           throw new Error(`HTTP ${resp.status}: ${t.slice(0,160)}`);
         }
         const data = await resp.json();
+        pushEngineerTrace("res", "LLM /suggest response", data);
         const raw = extractResponseText(data);
         if(!raw) throw new Error("No text returned");
         let parsed = null;
@@ -12316,7 +12436,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         toast("Copy failed", "Clipboard permission denied.", "warn");
       }
     });
-    $("btnClearLog").addEventListener("click", () => $("log").innerHTML = "");
+    $("btnClearLog").addEventListener("click", () => {
+      $("log").innerHTML = "";
+      const trace = $("engineerTrace");
+      if(trace) trace.innerHTML = "";
+    });
+    const engineerBtn = $("btnEngineerMode");
+    if(engineerBtn){
+      engineerBtn.addEventListener("click", () => {
+        state.engineerMode = !state.engineerMode;
+        if(!state.engineerMode){
+          const trace = $("engineerTrace");
+          if(trace) trace.innerHTML = "";
+        }
+        updateEngineerModeUI();
+      });
+    }
 
     const modalClose = $("modalClose");
     if(modalClose) modalClose.addEventListener("click", hideModal);
