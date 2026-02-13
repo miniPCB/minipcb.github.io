@@ -3957,6 +3957,24 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     try{ return JSON.parse(text); }catch{ return null; }
   }
 
+  function extractValueFieldFromJsonLike(raw){
+    const s = String(raw || "");
+    const m = s.match(/"value"\s*:\s*"([\s\S]*)/);
+    if(!m || !m[1]) return "";
+    let tail = m[1];
+    const cut1 = tail.search(/"\s*,\s*"rationale"\s*:/);
+    const cut2 = tail.search(/"\s*[}\]]\s*$/);
+    const cuts = [cut1, cut2].filter(n => n >= 0);
+    if(cuts.length) tail = tail.slice(0, Math.min(...cuts));
+    return tail
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\t/g, "\t")
+      .replace(/\\"/g, "\"")
+      .replace(/\\\\/g, "\\")
+      .trim();
+  }
+
   function pickAiChatTargetSection(plan, requestText){
     const req = String(requestText || "");
     const tests = Array.isArray(plan?.tests) ? plan.tests : [];
@@ -9503,8 +9521,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             if(fallback && typeof fallback === "object" && Object.keys(fallback).length){
               parsed = fallback;
             }else{
-              // only fallback to raw string if we cannot recover a JSON object
-              parsed = { value: raw, rationale: "Suggested improvement from AI." };
+              // salvage "value" from truncated JSON-like text before raw fallback
+              const rescuedValue = extractValueFieldFromJsonLike(raw);
+              if(rescuedValue){
+                parsed = { value: rescuedValue, rationale: "Suggested improvement from AI (recovered value)." };
+              }else{
+                // only fallback to raw string if we cannot recover a JSON object/value
+                parsed = { value: raw, rationale: "Suggested improvement from AI." };
+              }
             }
           }
         }else if(raw && typeof raw === "object"){
