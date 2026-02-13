@@ -9483,11 +9483,40 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const raw = extractResponseText(data);
         if(!raw) throw new Error("No text returned");
         let parsed = null;
-        try{
-          parsed = JSON.parse(raw);
-        }catch{
-          // fallback: treat as value, attach generic rationale
-          parsed = { value: raw, rationale: "Suggested improvement from AI." };
+        if(typeof raw === "string"){
+          const candidates = [];
+          const balanced = extractBalancedJsonObject(raw);
+          if(balanced) candidates.push(balanced);
+          const extracted = extractJsonBlock(raw);
+          if(extracted && extracted !== balanced) candidates.push(extracted);
+          candidates.push(raw);
+          for(const cand of candidates){
+            const strictRaw = tryParseJson(cand);
+            if(strictRaw){ parsed = strictRaw; break; }
+            const repaired = repairJsonText(cand);
+            const strict = tryParseJson(repaired);
+            if(strict){ parsed = strict; break; }
+          }
+          if(!parsed){
+            const fallbackCandidate = repairJsonText(candidates[0] || raw);
+            const fallback = safeParseJson(fallbackCandidate, "AI Suggest");
+            if(fallback && typeof fallback === "object" && Object.keys(fallback).length){
+              parsed = fallback;
+            }else{
+              // only fallback to raw string if we cannot recover a JSON object
+              parsed = { value: raw, rationale: "Suggested improvement from AI." };
+            }
+          }
+        }else if(raw && typeof raw === "object"){
+          parsed = raw;
+        }
+        if(parsed && typeof parsed === "object" && typeof parsed.value !== "string"){
+          // sometimes model wraps the payload as text JSON in another field
+          const nestedText = typeof parsed.text === "string" ? parsed.text : "";
+          if(nestedText){
+            const nested = tryParseJson(nestedText) || tryParseJson(repairJsonText(nestedText));
+            if(nested && typeof nested === "object") parsed = nested;
+          }
         }
         let value = parsed.value;
         if(value && typeof value === "object"){
