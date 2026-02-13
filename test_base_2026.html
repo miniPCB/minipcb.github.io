@@ -3989,7 +3989,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(Array.isArray(payload?.tests)){
       for(const item of payload.tests){
         const testNo = String(item?.section_no || "").trim();
-        const set = item?.set || {};
+        const rawSet = item?.set || {};
+        const set = (rawSet && typeof rawSet === "object") ? { ...rawSet } : {};
+        // Accept common legacy/alternate keys from model outputs.
+        if(set.section_title == null && typeof set.section_name === "string") set.section_title = set.section_name;
+        if(set.section_type == null && typeof set.test_type === "string") set.section_type = set.test_type;
+        if(set.section_no == null && typeof set.test_no === "string") set.section_no = set.test_no;
+        if(set.section_title == null && typeof set.test_name === "string") set.section_title = set.test_name;
         const wantsDelete = perm >= 2 && item?.delete === true;
         if(wantsDelete && testNo){
           deleteSet.add(testNo);
