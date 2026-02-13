@@ -558,7 +558,7 @@
       flex:1;
       min-height:0;
     }
-    .chatWrap{ display:flex; flex-direction:column; gap:10px; min-height:0; min-width:0; height:100%; flex:1; }
+    .chatWrap{ display:flex; flex-direction:column; gap:10px; min-height:0; min-width:0; height:100%; flex:1; position:relative; }
     .chatLog{
       flex:1;
       min-height:0;
@@ -573,6 +573,10 @@
       gap:8px;
       font-size:12px;
       line-height:1.4;
+    }
+    .chatLog > .chatMsg,
+    .chatLog > .chatTrace{
+      flex: 0 0 auto;
     }
     .chatMsg{ padding:8px 10px; border-radius:10px; max-width:85%; overflow-wrap:anywhere; }
     .chatMsg.user{ align-self:flex-end; background: rgba(68,140,255,.18); border:1px solid rgba(68,140,255,.35); }
@@ -618,11 +622,53 @@
       font-family: var(--mono);
       font-size:11px;
       line-height:1.35;
-      max-height:220px;
-      overflow:auto;
+      max-height:none;
+      overflow:visible;
     }
     .chatTrace.collapsed .chatTraceBody{
       display:none;
+    }
+    .chatFocusOverlay{
+      position:absolute;
+      inset:0;
+      z-index:20;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(11, 16, 24, .98);
+      display:none;
+      flex-direction:column;
+      min-height:0;
+    }
+    .chatFocusOverlay.active{
+      display:flex;
+    }
+    .chatFocusHead{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      border-bottom:1px solid var(--border);
+      background: rgba(255,255,255,.03);
+    }
+    .chatFocusTitle{
+      font-size:12px;
+      font-weight:700;
+      color: var(--text);
+    }
+    .chatFocusBody{
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      margin:0;
+      padding:12px;
+      white-space:pre-wrap;
+      word-break:break-word;
+      overflow-wrap:anywhere;
+      font-family: var(--mono);
+      font-size:12px;
+      line-height:1.4;
+      color: var(--text);
     }
     .chatInput{ min-height:90px; height:90px; resize:none; }
     .chatSearch{
@@ -1061,6 +1107,13 @@
           <div class="panelBody chatPanelBody">
             <div class="chatWrap">
               <div class="chatLog" id="aiChatLog"></div>
+              <div class="chatFocusOverlay" id="chatFocusOverlay">
+                <div class="chatFocusHead">
+                  <div class="chatFocusTitle" id="chatFocusTitle">Focused message</div>
+                  <button class="btn mini" id="btnChatFocusClose">Close Focus</button>
+                </div>
+                <pre class="chatFocusBody" id="chatFocusBody"></pre>
+              </div>
               <textarea class="input chatInput" id="aiChatInput" placeholder="Tell the AI what to change in the document…"></textarea>
               <div class="row">
                 <button class="btn primary" id="btnAiChatSend">Send</button>
@@ -3767,6 +3820,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     log.scrollTop = log.scrollHeight;
   }
 
+  function openChatFocus(title, body){
+    const overlay = $("chatFocusOverlay");
+    const titleEl = $("chatFocusTitle");
+    const bodyEl = $("chatFocusBody");
+    if(!overlay || !titleEl || !bodyEl) return;
+    titleEl.textContent = String(title || "Focused message");
+    bodyEl.textContent = String(body || "");
+    overlay.classList.add("active");
+  }
+
+  function closeChatFocus(){
+    const overlay = $("chatFocusOverlay");
+    if(!overlay) return;
+    overlay.classList.remove("active");
+  }
+
   function appendChatTrace(kind, label, payload){
     const log = $("aiChatLog");
     if(!log) return;
@@ -3784,7 +3853,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const head = card.querySelector(".chatTraceHead");
     if(head){
       head.addEventListener("dblclick", () => {
-        card.classList.toggle("collapsed");
+        openChatFocus(label, body);
       });
     }
     card.addEventListener("contextmenu", (e) => {
@@ -12527,6 +12596,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const chatSearch = $("aiChatSearch");
     if(chatSearch){
       chatSearch.addEventListener("input", applyChatSearch);
+    }
+    const chatFocusClose = $("btnChatFocusClose");
+    if(chatFocusClose){
+      chatFocusClose.addEventListener("click", closeChatFocus);
     }
     const chatInput = $("aiChatInput");
     if(chatInput){
