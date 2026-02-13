@@ -2887,6 +2887,29 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     $("log").scrollTop = $("log").scrollHeight;
   }
 
+  async function copyTextToClipboard(text){
+    const value = String(text || "");
+    try{
+      await navigator.clipboard.writeText(value);
+      return true;
+    }catch{
+      try{
+        const ta = document.createElement("textarea");
+        ta.value = value;
+        ta.setAttribute("readonly", "readonly");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return !!ok;
+      }catch{
+        return false;
+      }
+    }
+  }
+
   function updateEngineerModeUI(){
     const grid = document.querySelector(".gridEditor");
     if(grid) grid.classList.toggle("engineerMode", !!state.engineerMode);
@@ -3719,6 +3742,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     msg.className = `chatMsg ${role}`;
     msg.setAttribute("data-raw", String(text || ""));
     msg.textContent = String(text || "");
+    msg.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const raw = msg.getAttribute("data-raw") || "";
+      showContextMenu(e.clientX, e.clientY, [
+        {
+          id: "copy_message",
+          label: "Copy message",
+          onClick: () => runAsync((async () => {
+            const ok = await copyTextToClipboard(raw);
+            if(ok) toast("Copied", "Message copied.", "ok");
+            else toast("Copy failed", "Clipboard permission denied.", "warn");
+          })())
+        }
+      ]);
+    });
     log.appendChild(msg);
     applyChatSearch();
     log.scrollTop = log.scrollHeight;
@@ -3744,6 +3782,20 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         card.classList.toggle("collapsed");
       });
     }
+    card.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showContextMenu(e.clientX, e.clientY, [
+        {
+          id: "copy_message",
+          label: "Copy message",
+          onClick: () => runAsync((async () => {
+            const ok = await copyTextToClipboard(body);
+            if(ok) toast("Copied", "Message copied.", "ok");
+            else toast("Copy failed", "Clipboard permission denied.", "warn");
+          })())
+        }
+      ]);
+    });
     log.appendChild(card);
     applyChatSearch();
     log.scrollTop = log.scrollHeight;
