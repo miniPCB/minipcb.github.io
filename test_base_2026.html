@@ -4094,27 +4094,49 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       request: text
     };
     try{
-      const requestBody = {
-        model,
-        input: [
-          { role:"system", content:getAiPrompt(plan, "chat_edit", { permLabel, perm }) },
-          { role:"user", content: JSON.stringify(payload) }
-        ],
-        max_output_tokens: 600
-      };
-      if(state.engineerMode) appendChatTrace("req", "LLM /chat request", requestBody);
-      const resp = await fetch(apiUrl("/chat"), {
-        method: "POST",
-        headers: apiHeaders(),
-        body: JSON.stringify(requestBody)
-      });
-      if(!resp.ok){
-        const ttxt = await resp.text().catch(()=> "");
-        if(state.engineerMode) appendChatTrace("err", "LLM /chat error", { status: resp.status, body: ttxt });
-        throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
+      let data = null;
+      const tokenBudgets = [600, 1800];
+      for(let attempt = 0; attempt < tokenBudgets.length; attempt++){
+        const maxOutput = tokenBudgets[attempt];
+        const requestBody = {
+          model,
+          input: [
+            {
+              role:"system",
+              content:getAiPrompt(plan, "chat_edit", { permLabel, perm }) +
+                (attempt > 0 ? " Keep output concise. Prefer short strings over long lists." : "")
+            },
+            { role:"user", content: JSON.stringify(payload) }
+          ],
+          max_output_tokens: maxOutput
+        };
+        if(state.engineerMode){
+          appendChatTrace("req", `LLM /chat request${attempt > 0 ? " (retry)" : ""}`, requestBody);
+        }
+        const resp = await fetch(apiUrl("/chat"), {
+          method: "POST",
+          headers: apiHeaders(),
+          body: JSON.stringify(requestBody)
+        });
+        if(!resp.ok){
+          const ttxt = await resp.text().catch(()=> "");
+          if(state.engineerMode) appendChatTrace("err", "LLM /chat error", { status: resp.status, body: ttxt });
+          throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
+        }
+        data = await resp.json();
+        if(state.engineerMode){
+          appendChatTrace("res", `LLM /chat response${attempt > 0 ? " (retry)" : ""}`, data);
+        }
+        const isTruncated = data?.status === "incomplete" &&
+          data?.incomplete_details?.reason === "max_output_tokens";
+        if(!isTruncated) break;
+        if(attempt < tokenBudgets.length - 1){
+          logLine(`AI Chat response truncated at ${maxOutput} tokens; retrying with ${tokenBudgets[attempt + 1]}.`, "warn");
+          continue;
+        }
+        appendChatMessage("ai", "AI response was truncated before valid JSON was complete. Please retry, or shorten the request.");
+        return;
       }
-      const data = await resp.json();
-      if(state.engineerMode) appendChatTrace("res", "LLM /chat response", data);
       const raw = extractResponseText(data);
       let parsed = null;
       if(typeof raw === "string"){
