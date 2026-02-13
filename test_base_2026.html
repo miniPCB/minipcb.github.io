@@ -3797,16 +3797,19 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     updateAiReviewControls();
   }
 
-  function appendChatMessage(role, text){
+  function appendChatMessage(role, text, opts){
     const log = $("aiChatLog");
     if(!log) return;
     const msg = document.createElement("div");
     msg.className = `chatMsg ${role}`;
-    msg.setAttribute("data-raw", String(text || ""));
-    msg.textContent = String(text || "");
+    const displayText = String(text || "");
+    const copyText = (opts && opts.copyText != null) ? String(opts.copyText) : displayText;
+    msg.setAttribute("data-raw", displayText);
+    msg.setAttribute("data-copy", copyText);
+    msg.textContent = displayText;
     msg.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      const raw = msg.getAttribute("data-raw") || "";
+      const raw = msg.getAttribute("data-copy") || msg.getAttribute("data-raw") || "";
       showContextMenu(e.clientX, e.clientY, [
         {
           id: "copy_message",
@@ -4276,6 +4279,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         };
         if(state.engineerMode){
           appendChatTrace("req", `LLM /chat request${attempt > 0 ? " (retry)" : ""}`, requestBody);
+        }else{
+          appendChatMessage("ai", `AI prompt${attempt > 0 ? " (retry)" : ""}`, { copyText: formatTraceBody(requestBody) });
         }
         const resp = await fetch(apiUrl("/chat"), {
           method: "POST",
@@ -4285,11 +4290,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!resp.ok){
           const ttxt = await resp.text().catch(()=> "");
           if(state.engineerMode) appendChatTrace("err", "LLM /chat error", { status: resp.status, body: ttxt });
+          else appendChatMessage("ai", "AI response error", { copyText: formatTraceBody({ status: resp.status, body: ttxt }) });
           throw new Error(`HTTP ${resp.status}: ${ttxt.slice(0,160)}`);
         }
         data = await resp.json();
         if(state.engineerMode){
           appendChatTrace("res", `LLM /chat response${attempt > 0 ? " (retry)" : ""}`, data);
+        }else{
+          appendChatMessage("ai", `AI response${attempt > 0 ? " (retry)" : ""}`, { copyText: formatTraceBody(data) });
         }
         const isTruncated = data?.status === "incomplete" &&
           data?.incomplete_details?.reason === "max_output_tokens";
