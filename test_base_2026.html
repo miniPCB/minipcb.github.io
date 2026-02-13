@@ -1763,7 +1763,11 @@
 
   function getAiPrompt(plan, key, vars){
     const raw = plan?.ai_prompts?.[key] || DEFAULT_AI_PROMPTS[key] || "";
-    return applyPromptTemplate(raw, vars);
+    const rendered = applyPromptTemplate(raw, vars);
+    if(key === "chat_edit"){
+      return `${rendered} If target_section is provided in the user payload, use target_section.editable_fields and target_section.fields as the authoritative editable schema context for that section. Do not ask for missing schema fields when target_section is present.`;
+    }
+    return rendered;
   }
 
   function syncPlanReviewPersonalities(plan){
@@ -3948,6 +3952,53 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     try{ return JSON.parse(text); }catch{ return null; }
   }
 
+  function pickAiChatTargetSection(plan, requestText){
+    const req = String(requestText || "");
+    const tests = Array.isArray(plan?.tests) ? plan.tests : [];
+    for(const t of tests){
+      const no = String(t?.data?.section_no || "").trim();
+      if(no && req.includes(no)) return t;
+    }
+    if(state.currentTestId){
+      const current = tests.find(t => t.id === state.currentTestId);
+      if(current) return current;
+    }
+    return tests[0] || null;
+  }
+
+  function buildAiChatSectionContext(test){
+    if(!test || !test.data) return null;
+    const data = test.data || {};
+    const fields = {};
+    const editableFields = [];
+    for(const k of Object.keys(data)){
+      if(k === "_ai") continue;
+      const maturity = getFieldMaturity(test, k);
+      if(maturity >= 3) continue;
+      editableFields.push(k);
+      const v = data[k];
+      if(v && typeof v === "object"){
+        if(Array.isArray(v)) fields[k] = v;
+        else if(String(test.data?._ai?.field_types?.[k] || "").toLowerCase().includes("matrix")){
+          const rows = Array.isArray(v.rows) ? v.rows.length : 0;
+          const cols = Array.isArray(v.cols) ? v.cols.length : 0;
+          fields[k] = `[matrix ${rows}x${cols}]`;
+        }else{
+          fields[k] = JSON.stringify(v);
+        }
+      }else{
+        fields[k] = v ?? "";
+      }
+    }
+    return {
+      section_no: data.section_no || "",
+      section_title: data.section_title || "",
+      section_type: data.section_type || "",
+      editable_fields: editableFields,
+      fields
+    };
+  }
+
   function normalizeAiSetForAllowedKeys(rawSet, allowedKeys){
     const src = (rawSet && typeof rawSet === "object") ? rawSet : {};
     const allowed = new Set(Array.from(allowedKeys || []));
@@ -4165,6 +4216,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const model = state.prefs.ai_model || "gpt-4.1-mini";
     const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
     const permLabel = aiChatPermissionLabel(perm);
+    const targetSection = pickAiChatTargetSection(plan, text);
+    const targetSectionContext = buildAiChatSectionContext(targetSection);
     const partlistMeta = (state.aiChatContextFiles || []).reduce((acc, f) => {
       if(acc.headers.length) return acc;
       if(!f?.text) return acc;
@@ -4191,6 +4244,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         section_name: t.data?.section_title || "",
         section_type: t.data?.section_type || ""
       })),
+      target_section: targetSectionContext,
       permission: { level: perm, label: permLabel },
       partlist_headers: partlistMeta.headers,
       partlist_row_count: partlistMeta.rowCount,
