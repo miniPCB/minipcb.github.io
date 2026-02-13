@@ -624,55 +624,6 @@
       height:30px;
       font-size:12px;
     }
-    .engineerTrace{
-      border:1px solid var(--border);
-      border-radius:12px;
-      background: rgba(255,255,255,.02);
-      padding:8px;
-      max-height: 280px;
-      overflow:auto;
-      display:none;
-      flex-direction:column;
-      gap:8px;
-    }
-    .engineerTrace.active{ display:flex; }
-    .engineerTrace.active:empty{
-      display:none !important;
-      padding:0;
-      border:0;
-    }
-    .engineerTraceDivider{ display:none; }
-    .gridEditor.engineerMode .engineerTrace:not(:empty) + .engineerTraceDivider{ display:block; }
-    .traceCard{
-      border:1px solid var(--border);
-      border-radius:10px;
-      overflow:hidden;
-      background: rgba(255,255,255,.02);
-    }
-    .traceCard.req{ border-color: rgba(124,196,255,.35); }
-    .traceCard.res{ border-color: rgba(124,255,176,.35); }
-    .traceCard.err{ border-color: rgba(255,124,124,.35); }
-    .traceHead{
-      display:flex;
-      justify-content:space-between;
-      gap:8px;
-      padding:6px 8px;
-      font-size:11px;
-      background: rgba(255,255,255,.04);
-      border-bottom:1px solid rgba(42,52,71,.7);
-    }
-    .traceBody{
-      margin:0;
-      padding:8px;
-      white-space:pre-wrap;
-      word-break:break-word;
-      font-family: var(--mono);
-      font-size:11px;
-      line-height:1.35;
-      color: var(--text);
-      max-height: 180px;
-      overflow:auto;
-    }
     .fieldSelected{
       outline:2px solid #4fb66a;
       box-shadow: inset 0 0 0 1px rgba(79,182,106,.45);
@@ -1111,8 +1062,6 @@
                 <button class="btn" id="btnAiChatClear">Clear</button>
               </div>
               <input class="input chatSearch" id="aiChatSearch" placeholder="Search messages..." />
-              <div class="engineerTrace" id="engineerTrace"></div>
-              <div class="hr engineerTraceDivider"></div>
               <div class="row">
                 <button class="btn mini" id="btnAiReviewPlan">AI Review</button>
                 <button class="btn mini" id="btnAiReviewPause" disabled>Pause</button>
@@ -2941,8 +2890,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
   function updateEngineerModeUI(){
     const grid = document.querySelector(".gridEditor");
     if(grid) grid.classList.toggle("engineerMode", !!state.engineerMode);
-    const trace = $("engineerTrace");
-    if(trace) trace.classList.toggle("active", !!state.engineerMode);
     const btn = $("btnEngineerMode");
     if(btn) btn.classList.toggle("attn", !!state.engineerMode);
   }
@@ -2959,25 +2906,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
 
   function pushEngineerTrace(kind, label, payload){
     if(!state.engineerMode) return;
-    const trace = $("engineerTrace");
-    if(!trace) return;
-    const card = document.createElement("div");
-    card.className = `traceCard ${kind}`;
-    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    const body = formatTraceBody(payload);
-    card.innerHTML = `
-      <div class="traceHead">
-        <span>${escapeHtml(label)}</span>
-        <span>${escapeHtml(time)}</span>
-      </div>
-      <pre class="traceBody">${escapeHtml(body)}</pre>
-    `;
-    trace.appendChild(card);
-    const maxCards = 120;
-    while(trace.children.length > maxCards){
-      trace.removeChild(trace.firstChild);
-    }
-    trace.scrollTop = trace.scrollHeight;
+    appendChatTrace(kind, label, payload);
   }
 
   function updateAiReviewControls(){
@@ -12570,17 +12499,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     });
     $("btnClearLog").addEventListener("click", () => {
       $("log").innerHTML = "";
-      const trace = $("engineerTrace");
-      if(trace) trace.innerHTML = "";
     });
     const engineerBtn = $("btnEngineerMode");
     if(engineerBtn){
       engineerBtn.addEventListener("click", () => {
         state.engineerMode = !state.engineerMode;
-        if(!state.engineerMode){
-          const trace = $("engineerTrace");
-          if(trace) trace.innerHTML = "";
-        }
         updateEngineerModeUI();
       });
     }
