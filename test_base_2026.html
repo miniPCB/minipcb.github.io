@@ -3948,6 +3948,49 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     try{ return JSON.parse(text); }catch{ return null; }
   }
 
+  function normalizeAiSetForAllowedKeys(rawSet, allowedKeys){
+    const src = (rawSet && typeof rawSet === "object") ? rawSet : {};
+    const allowed = new Set(Array.from(allowedKeys || []));
+    const alias = {
+      section_name: "section_title",
+      sectionname: "section_title",
+      test_name: "section_title",
+      section_type: "section_type",
+      test_type: "section_type",
+      section_no: "section_no",
+      test_no: "section_no",
+      objective: "purpose",
+      test_setup: "setup",
+      equipment: "test_equipment",
+      acceptance_criteria: "in_tol_conclusion",
+      pass_fail_criteria: "in_tol_conclusion",
+      pass_fail: "in_tol_conclusion",
+      data_to_record: "measurement",
+      measurement_data: "measurement",
+      safety_notes: "notes"
+    };
+    const out = {};
+    for(const [k, v] of Object.entries(src)){
+      let key = String(k || "");
+      if(!allowed.has(key)){
+        const mapped = alias[key.toLowerCase()];
+        if(mapped) key = mapped;
+      }
+      if(!allowed.has(key)) continue;
+      if(Array.isArray(v)){
+        const rows = v.map(x => sanitizeAiText(x)).filter(Boolean);
+        out[key] = rows.map(x => `- ${x}`).join("\n");
+        continue;
+      }
+      if(v && typeof v === "object"){
+        out[key] = sanitizeAiText(JSON.stringify(v));
+        continue;
+      }
+      out[key] = sanitizeAiText(v);
+    }
+    return out;
+  }
+
   async function applyAiChatUpdates(plan, payload){
     const perm = normalizeAiChatPermission(state.prefs.ai_chat_permission ?? 1);
     if(perm <= 0) return false;
@@ -3991,11 +4034,6 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const testNo = String(item?.section_no || "").trim();
         const rawSet = item?.set || {};
         const set = (rawSet && typeof rawSet === "object") ? { ...rawSet } : {};
-        // Accept common legacy/alternate keys from model outputs.
-        if(set.section_title == null && typeof set.section_name === "string") set.section_title = set.section_name;
-        if(set.section_type == null && typeof set.test_type === "string") set.section_type = set.test_type;
-        if(set.section_no == null && typeof set.test_no === "string") set.section_no = set.test_no;
-        if(set.section_title == null && typeof set.test_name === "string") set.section_title = set.test_name;
         const wantsDelete = perm >= 2 && item?.delete === true;
         if(wantsDelete && testNo){
           deleteSet.add(testNo);
@@ -4006,17 +4044,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!test){
           if(perm < 2) continue;
           const newNo = testNo || nextTestNo(plan);
-          const safeSet = {};
           const allowedKeys = defaultPlanKeys.size ? defaultPlanKeys : baseSchemaKeys;
-          for(const [k, v] of Object.entries(set)){
-            if(!allowedKeys.has(k)) continue;
-            safeSet[k] = sanitizeAiText(v);
-          }
+          const safeSet = normalizeAiSetForAllowedKeys(set, allowedKeys);
           test = createTestFromSet(plan, safeSet, newNo);
           changed = true;
         }
         const allowedKeys = new Set(Object.keys(test.data || {}).filter(k => k !== "_ai"));
-        for(const [k, v] of Object.entries(set)){
+        const normalizedSet = normalizeAiSetForAllowedKeys(set, allowedKeys);
+        for(const [k, v] of Object.entries(normalizedSet)){
           if(!allowedKeys.has(k)) continue;
           const curM = getFieldMaturity(test, k);
           if(curM >= 3) continue;
