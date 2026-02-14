@@ -1,14 +1,31 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://minipcb.com/schemas/netlist.schema.json",
-  "title": "miniPCB Netlist Schema",
+  "$id": "https://minipcb.com/schemas/netlist.schema.v1.1.json",
+  "title": "miniPCB Netlist Schema v1.1",
   "type": "object",
-  "required": ["schema_version", "metadata", "components", "nets"],
+
+  "required": ["schema_version", "identity", "metadata", "components", "nets"],
+
   "properties": {
     "schema_version": {
       "type": "string",
-      "pattern": "^\\d+\\.\\d+$"
+      "enum": ["1.1"]
     },
+
+    "identity": {
+      "type": "object",
+      "required": ["board_pn", "board_rev", "board_type"],
+      "properties": {
+        "board_pn": { "type": "string", "minLength": 1 },
+        "board_rev": { "type": "string", "minLength": 1 },
+        "board_type": {
+          "type": "string",
+          "enum": ["pcb", "schematic", "combined"]
+        }
+      },
+      "additionalProperties": false
+    },
+
     "metadata": {
       "type": "object",
       "required": ["project_name", "revision"],
@@ -21,56 +38,97 @@
       },
       "additionalProperties": true
     },
+
     "components": {
       "type": "array",
       "items": { "$ref": "#/$defs/component" }
     },
+
     "nets": {
       "type": "array",
       "items": { "$ref": "#/$defs/net" }
     },
+
     "sheets": {
       "type": "array",
       "items": { "$ref": "#/$defs/sheet" }
     },
+
     "logical_blocks": {
       "type": "array",
       "items": { "$ref": "#/$defs/logical_block" }
     },
+
     "test_integration": {
       "$ref": "#/$defs/test_integration"
     },
+
     "ports": {
       "type": "array",
       "items": { "$ref": "#/$defs/port" }
     },
-    "hierarchy": {
-      "type": "object"
-    },
+
     "analysis": {
-      "type": "object"
+      "$ref": "#/$defs/analysis"
     }
   },
-  "additionalProperties": false,
+
+  "unevaluatedProperties": false,
+
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "identity": {
+            "properties": {
+              "board_type": { "const": "pcb" }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "items": {
+              "required": ["placement"]
+            }
+          }
+        }
+      }
+    }
+  ],
+
   "$defs": {
+
     "component": {
       "type": "object",
       "required": ["refdes", "pins"],
       "properties": {
-        "refdes": { "type": "string" },
+        "refdes": {
+          "type": "string",
+          "pattern": "^[A-Z]+[0-9]+$"
+        },
         "value": { "type": "string" },
         "footprint": { "type": "string" },
         "description": { "type": "string" },
         "manufacturer_part_number": { "type": "string" },
         "attributes": { "type": "object" },
+
         "placement": {
           "type": "object",
+          "required": ["x", "y", "rotation"],
           "properties": {
             "x": { "type": "number" },
             "y": { "type": "number" },
-            "rotation": { "type": "number" }
-          }
+            "rotation": { "type": "number" },
+            "side": {
+              "type": "string",
+              "enum": ["Top", "Bottom"]
+            }
+          },
+          "additionalProperties": false
         },
+
         "pins": {
           "type": "array",
           "items": { "$ref": "#/$defs/pin" }
@@ -78,13 +136,14 @@
       },
       "additionalProperties": false
     },
+
     "pin": {
       "type": "object",
       "required": ["pin_number", "net"],
       "properties": {
         "pin_number": { "type": "string" },
         "pin_name": { "type": "string" },
-        "net": { "type": "string" },
+        "net": { "type": "string", "minLength": 1 },
         "electrical_type": {
           "type": "string",
           "enum": [
@@ -101,26 +160,43 @@
       },
       "additionalProperties": false
     },
+
     "net": {
       "type": "object",
       "required": ["name", "connections"],
       "properties": {
-        "name": { "type": "string" },
-        "type": { "type": "string" },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["signal", "power", "ground", "analog", "digital", "clock"]
+        },
+        "voltage_domain": { "type": "string" },
+        "criticality": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "safety"]
+        },
         "connections": {
           "type": "array",
           "items": {
             "type": "object",
             "required": ["refdes", "pin"],
             "properties": {
-              "refdes": { "type": "string" },
+              "refdes": {
+                "type": "string",
+                "pattern": "^[A-Z]+[0-9]+$"
+              },
               "pin": { "type": "string" }
-            }
+            },
+            "additionalProperties": false
           }
         }
       },
       "additionalProperties": false
     },
+
     "port": {
       "type": "object",
       "required": ["name", "net"],
@@ -131,8 +207,10 @@
           "enum": ["input", "output", "bidirectional"]
         },
         "net": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
+
     "sheet": {
       "type": "object",
       "required": ["sheet_number", "title"],
@@ -142,6 +220,7 @@
       },
       "additionalProperties": false
     },
+
     "logical_block": {
       "type": "object",
       "required": ["name", "members"],
@@ -154,23 +233,33 @@
       },
       "additionalProperties": false
     },
+
     "test_integration": {
       "type": "object",
       "required": ["test_points"],
       "properties": {
+        "coverage_status": {
+          "type": "string",
+          "enum": ["complete", "partial", "missing"]
+        },
+        "auto_generated": { "type": "boolean" },
+        "test_plan_reference": { "type": "string" },
         "test_points": {
           "type": "array",
           "items": { "$ref": "#/$defs/test_point" }
-        },
-        "test_plan_reference": { "type": "string" }
+        }
       },
       "additionalProperties": false
     },
+
     "test_point": {
       "type": "object",
       "required": ["refdes", "net", "measurement_type"],
       "properties": {
-        "refdes": { "type": "string" },
+        "refdes": {
+          "type": "string",
+          "pattern": "^[A-Z]+[0-9]+$"
+        },
         "net": { "type": "string" },
         "measurement_type": {
           "type": "string",
@@ -186,11 +275,37 @@
         },
         "expected_range": {
           "type": "object",
+          "required": ["min", "max"],
           "properties": {
             "min": { "type": "number" },
             "max": { "type": "number" }
           },
           "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "component_count": { "type": "integer" },
+        "net_count": { "type": "integer" },
+        "floating_nets": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "unconnected_pins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["refdes", "pin"],
+            "properties": {
+              "refdes": { "type": "string" },
+              "pin": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false
