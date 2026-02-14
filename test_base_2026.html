@@ -498,6 +498,14 @@
       flex-wrap:wrap;
       align-items:center;
     }
+    .jsonUrlInput{
+      min-width:280px;
+      max-width:520px;
+      height:26px;
+      font-size:11px;
+      padding:0 8px;
+      border-radius:10px;
+    }
     .jsonTabs{
       display:flex;
       gap:6px;
@@ -5687,11 +5695,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!test || !fieldKey) return document.createElement("div");
     if(!test._jsonView) test._jsonView = {};
     if(!test._jsonView[fieldKey]){
-      test._jsonView[fieldKey] = { loading: false, files: [], active: 0, revisions: {}, error: "", lastAttempts: [] };
+      test._jsonView[fieldKey] = { loading: false, files: [], active: 0, revisions: {}, error: "", lastAttempts: [], manualUrl: "" };
     }
     const view = test._jsonView[fieldKey];
     const baseUrl = normalizeJsonBaseUrl(state.prefs?.json_base_url);
     const sectionNo = String(test.data?.section_no || "").trim();
+    const dataHref = String(test?.data?.[fieldKey]?.href || test?.data?.[fieldKey]?.url || "").trim();
+    if(!view.manualUrl && dataHref) view.manualUrl = dataHref;
 
     const wrap = document.createElement("div");
     wrap.className = "jsonWrap";
@@ -5700,6 +5710,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     const expandLabel = state.matrixExpanded ? "Collapse" : "Expand";
     toolbar.innerHTML = `
       <button class="btn" data-action="refresh">Refresh</button>
+      <input class="input jsonUrlInput" type="text" id="jsonUrlInput" placeholder="Paste JSON URL or href" value="${escapeHtml(view.manualUrl)}" />
+      <button class="btn" data-action="load-url">Load URL</button>
       <button class="btn" data-action="expand">${expandLabel}</button>
       <span class="tag" title="${escapeHtml(baseUrl)}">JSON URL: ${escapeHtml(baseUrl)}</span>
     `;
@@ -5867,9 +5879,62 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         }
         if(action === "refresh"){
           runAsync(loadRevisions(true));
+          return;
+        }
+        if(action === "load-url"){
+          const input = toolbar.querySelector("#jsonUrlInput");
+          const raw = String(input?.value || "").trim();
+          if(!raw){
+            setStatus("Enter a URL or href.");
+            return;
+          }
+          const url = resolveSiteHref(raw);
+          view.manualUrl = raw;
+          try{
+            if(!test.data[fieldKey] || typeof test.data[fieldKey] !== "object") test.data[fieldKey] = {};
+            test.data[fieldKey].href = raw;
+            test.modified = true;
+            if(!test._dirtyFields) test._dirtyFields = {};
+            test._dirtyFields[fieldKey] = true;
+            $("dirtyHint").style.display = "";
+            updateSaveAllIndicator();
+          }catch{
+            // Non-blocking; still try loading.
+          }
+          runAsync((async () => {
+            setStatus(`Loading ${url}...`);
+            try{
+              const resp = await fetch(url, { cache: "no-store" });
+              if(!resp.ok) throw new Error(`Failed to load URL (${resp.status}).`);
+              const payload = await resp.json();
+              view.files = [{ name: raw.split(/[?#]/)[0].split("/").pop() || "json", url }];
+              if(!view.revisions) view.revisions = {};
+              view.revisions[url] = payload;
+              view.active = 0;
+              view.error = "";
+              view.lastAttempts = [url];
+              renderTabs();
+              renderActiveRevision();
+            }catch(err){
+              view.error = err.message || "Failed to load URL.";
+              view.files = [];
+              view.lastAttempts = [url];
+              renderTabs();
+              renderActiveRevision();
+            }
+          })());
         }
       });
     });
+    const urlInput = toolbar.querySelector("#jsonUrlInput");
+    if(urlInput){
+      urlInput.addEventListener("keydown", (e) => {
+        if(e.key !== "Enter") return;
+        e.preventDefault();
+        const loadBtn = toolbar.querySelector('button[data-action="load-url"]');
+        if(loadBtn) loadBtn.click();
+      });
+    }
 
     runAsync(loadRevisions(false));
     return wrap;
