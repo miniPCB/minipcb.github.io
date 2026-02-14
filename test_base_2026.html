@@ -5604,6 +5604,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       names.add(`${sec}_${hint}_netlist.json`);
       names.add(`${sec}_${hint}_partlist.json`);
     }
+    if(revHints.size === 0){
+      for(let i = 0; i <= 20; i += 1){
+        const n = String(i).padStart(2, "0");
+        names.add(`${sec}_A1-${n}_sch.json`);
+      }
+    }
     return Array.from(names);
   }
 
@@ -5777,9 +5783,16 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(!view.revisions || force) view.revisions = {};
         view.files = [];
         view.lastAttempts = [];
+        const seenAttempts = new Set();
+        const pushAttempt = (url) => {
+          const key = String(url || "");
+          if(!key || seenAttempts.has(key)) return;
+          seenAttempts.add(key);
+          view.lastAttempts.push(key);
+        };
         const explicit = buildExplicitJsonHrefCandidates(test, fieldKey, sectionNo);
         for(const file of explicit){
-          view.lastAttempts.push(file.url);
+          pushAttempt(file.url);
           try{
             const resp = await fetch(file.url, { cache: "no-store" });
             if(!resp.ok) continue;
@@ -5805,7 +5818,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           const probes = buildJsonProbeNames(test, sectionNo);
           for(const name of probes){
             const url = new URL(name, `${candidateBase}/`).toString();
-            view.lastAttempts.push(url);
+            pushAttempt(url);
             try{
               const resp = await fetch(url, { cache: "no-store" });
               if(!resp.ok) continue;
