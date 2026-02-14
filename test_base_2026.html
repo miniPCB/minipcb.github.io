@@ -5406,6 +5406,21 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return String(raw || "https://minipcb.com/json").trim().replace(/\/+$/,"");
   }
 
+  function jsonBaseCandidates(preferred){
+    const out = [];
+    const add = (u) => {
+      const v = normalizeJsonBaseUrl(u);
+      if(!v) return;
+      if(!out.includes(v)) out.push(v);
+    };
+    add(preferred);
+    if(location?.origin && /^https?:/i.test(location.origin)){
+      add(`${location.origin}/json`);
+      add(new URL("json", location.href).toString());
+    }
+    return out;
+  }
+
   function normalizeToken(text){
     return String(text || "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
   }
@@ -5672,23 +5687,30 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       renderTabs();
       renderActiveRevision();
       try{
-        const files = await listJsonFiles(baseUrl, force);
         if(!view.revisions || force) view.revisions = {};
-        view.files = findJsonCandidatesForSection(files, sectionNo);
-        if(!view.files.length){
+        view.files = [];
+        const bases = jsonBaseCandidates(baseUrl);
+        for(const candidateBase of bases){
+          const files = await listJsonFiles(candidateBase, force);
+          view.files = findJsonCandidatesForSection(files, sectionNo);
+          if(view.files.length){
+            break;
+          }
           const probes = buildJsonProbeNames(test, sectionNo);
           for(const name of probes){
-            const url = new URL(name, `${baseUrl}/`).toString();
+            const url = new URL(name, `${candidateBase}/`).toString();
             try{
               const resp = await fetch(url, { cache: "no-store" });
               if(!resp.ok) continue;
               const payload = await resp.json();
               view.files.push({ name, url });
-              if(!view.revisions) view.revisions = {};
               view.revisions[url] = payload;
             }catch{
               // Probe candidate missing or invalid JSON, continue.
             }
+          }
+          if(view.files.length){
+            break;
           }
         }
         view.active = 0;
