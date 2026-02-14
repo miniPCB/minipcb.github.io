@@ -453,11 +453,72 @@
       padding:10px;
     }
 
-    .jsonText{
-      margin:0;
-      white-space:pre;
-      font: 12px/1.5 var(--mono);
-      color: var(--text);
+    .jsonTree{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      font-family: var(--mono);
+      font-size:12px;
+    }
+
+    .jsonEntry{
+      display:flex;
+      align-items:flex-start;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+
+    .jsonChild{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin-left:10px;
+      border-left:1px dashed rgba(102,163,255,0.3);
+      padding-left:10px;
+      min-width:0;
+      flex:1;
+    }
+
+    .jsonBubble{
+      display:inline-flex;
+      align-items:center;
+      border-radius:999px;
+      padding:3px 9px;
+      line-height:1.2;
+      max-width:100%;
+      word-break:break-word;
+      white-space:normal;
+    }
+
+    .jsonKeyBubble{
+      background: rgba(102,163,255,0.18);
+      border:1px solid rgba(102,163,255,0.45);
+      color: #c6e3ff;
+      font-weight:600;
+    }
+
+    .jsonValBubble{
+      background: rgba(123,220,181,0.15);
+      border:1px solid rgba(123,220,181,0.45);
+      color: #c8ffe2;
+    }
+
+    .jsonValBubble.type-number{
+      background: rgba(255,211,124,0.15);
+      border-color: rgba(255,211,124,0.45);
+      color: #ffeec3;
+    }
+
+    .jsonValBubble.type-boolean{
+      background: rgba(206,160,255,0.15);
+      border-color: rgba(206,160,255,0.45);
+      color: #f0deff;
+    }
+
+    .jsonValBubble.type-null{
+      background: rgba(255,123,123,0.15);
+      border-color: rgba(255,123,123,0.45);
+      color: #ffd6d6;
     }
 
     .status{
@@ -603,7 +664,7 @@
               </div>
               <div class="jsonStatus" id="jsonStatus">Select a file to load JSON.</div>
               <div class="jsonViewport">
-                <pre class="jsonText" id="jsonContent">No JSON loaded.</pre>
+                <div id="jsonContent" class="jsonStatus">No JSON loaded.</div>
               </div>
             </div>
           </div>
@@ -637,7 +698,8 @@
       mdIndex: [],
       currentMarkdownText: "",
       currentJsonPath: "",
-      currentJsonText: ""
+      currentJsonText: "",
+      currentJsonValue: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1096,13 +1158,85 @@
       });
     }
 
-    function updateJsonPane(path, text, status){
+    function renderJsonValueTree(value, keyLabel){
+      const entry = document.createElement("div");
+      entry.className = "jsonEntry";
+
+      if(keyLabel){
+        const key = document.createElement("span");
+        key.className = "jsonBubble jsonKeyBubble";
+        key.textContent = keyLabel;
+        entry.appendChild(key);
+      }
+
+      const appendPrimitive = (primitive) => {
+        const bubble = document.createElement("span");
+        let cls = "type-string";
+        if(primitive === null) cls = "type-null";
+        else if(typeof primitive === "number") cls = "type-number";
+        else if(typeof primitive === "boolean") cls = "type-boolean";
+        bubble.className = `jsonBubble jsonValBubble ${cls}`;
+        bubble.textContent = primitive === null ? "null" : String(primitive);
+        entry.appendChild(bubble);
+      };
+
+      if(value === null || typeof value !== "object"){
+        appendPrimitive(value);
+        return entry;
+      }
+
+      const child = document.createElement("div");
+      child.className = "jsonChild";
+
+      if(Array.isArray(value)){
+        if(!value.length){
+          appendPrimitive("empty list");
+          return entry;
+        }
+        value.forEach((item, idx) => child.appendChild(renderJsonValueTree(item, `item ${idx + 1}`)));
+      }else{
+        const keys = Object.keys(value);
+        if(!keys.length){
+          appendPrimitive("empty object");
+          return entry;
+        }
+        keys.forEach((k) => child.appendChild(renderJsonValueTree(value[k], k)));
+      }
+
+      entry.appendChild(child);
+      return entry;
+    }
+
+    function renderJsonPaneContent(value){
+      const contentEl = $("jsonContent");
+      if(!contentEl) return;
+      contentEl.innerHTML = "";
+      if(value === null || value === undefined){
+        contentEl.className = "jsonStatus";
+        contentEl.textContent = "No JSON loaded.";
+        return;
+      }
+      const tree = document.createElement("div");
+      tree.className = "jsonTree";
+      tree.appendChild(renderJsonValueTree(value, "root"));
+      contentEl.className = "";
+      contentEl.appendChild(tree);
+    }
+
+    function updateJsonPane(path, text, status, value){
       const pathEl = $("jsonPath");
       const statusEl = $("jsonStatus");
-      const contentEl = $("jsonContent");
       if(pathEl) pathEl.textContent = `Path: ${path || "(none)"}`;
       if(statusEl) statusEl.textContent = status || "";
-      if(contentEl) contentEl.textContent = text || "";
+      if(value !== undefined){
+        renderJsonPaneContent(value);
+      }else{
+        const contentEl = $("jsonContent");
+        if(contentEl){
+          contentEl.className = "jsonStatus";
+          contentEl.textContent = text || "";
+        }
+      }
     }
 
     function getJsonCandidates(entry, mdPath){
@@ -1130,7 +1264,8 @@
       if(!candidates.length){
         state.currentJsonPath = "";
         state.currentJsonText = "";
-        updateJsonPane("", "No JSON candidate path for this entry.", "No JSON loaded.");
+        state.currentJsonValue = null;
+        updateJsonPane("", "No JSON candidate path for this entry.", "No JSON loaded.", null);
         return;
       }
 
@@ -1143,12 +1278,15 @@
           const raw = await res.text();
           if(requestId !== state.requestId) return;
           let pretty = raw;
+          let parsed = null;
           try{
-            pretty = JSON.stringify(JSON.parse(raw), null, 2);
+            parsed = JSON.parse(raw);
+            pretty = JSON.stringify(parsed, null, 2);
           }catch(_){}
           state.currentJsonPath = path;
           state.currentJsonText = pretty;
-          updateJsonPane(path, pretty, "JSON loaded.");
+          state.currentJsonValue = parsed;
+          updateJsonPane(path, pretty, "JSON loaded.", parsed);
           return;
         }catch(_){
           if(requestId !== state.requestId) return;
@@ -1157,7 +1295,8 @@
 
       state.currentJsonPath = candidates[0] || "";
       state.currentJsonText = "";
-      updateJsonPane(state.currentJsonPath, "No JSON file found for this entry.", "JSON not found.");
+      state.currentJsonValue = null;
+      updateJsonPane(state.currentJsonPath, "No JSON file found for this entry.", "JSON not found.", null);
     }
 
     async function selectEntry(entry){
@@ -1336,9 +1475,9 @@
           if(!text) return;
           try{
             await navigator.clipboard.writeText(text);
-            updateJsonPane(state.currentJsonPath, text, "Copied JSON to clipboard.");
+            updateJsonPane(state.currentJsonPath, text, "Copied JSON to clipboard.", state.currentJsonValue);
           }catch(_){
-            updateJsonPane(state.currentJsonPath, text, "Clipboard write failed.");
+            updateJsonPane(state.currentJsonPath, text, "Clipboard write failed.", state.currentJsonValue);
           }
         });
       }
