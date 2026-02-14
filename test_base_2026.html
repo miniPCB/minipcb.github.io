@@ -5504,6 +5504,26 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return stripped || "Base";
   }
 
+  function buildJsonProbeNames(test, sectionNo){
+    const names = new Set();
+    const sec = String(sectionNo || "").trim();
+    if(!sec) return [];
+    const rev = String(
+      test?.data?.revision ||
+      test?.data?.design_revision ||
+      test?.data?.doc_revision ||
+      ""
+    ).trim();
+    names.add(`${sec}.json`);
+    if(rev){
+      names.add(`${sec}_${rev}.json`);
+      names.add(`${sec}_${rev}_sch.json`);
+      names.add(`${sec}_${rev}_netlist.json`);
+      names.add(`${sec}_${rev}_partlist.json`);
+    }
+    return Array.from(names);
+  }
+
   function renderJsonValueTree(value, keyLabel = ""){
     const entry = document.createElement("div");
     entry.className = "jsonEntry";
@@ -5653,9 +5673,25 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       renderActiveRevision();
       try{
         const files = await listJsonFiles(baseUrl, force);
-        view.files = findJsonCandidatesForSection(files, sectionNo);
-        view.active = 0;
         if(!view.revisions || force) view.revisions = {};
+        view.files = findJsonCandidatesForSection(files, sectionNo);
+        if(!view.files.length){
+          const probes = buildJsonProbeNames(test, sectionNo);
+          for(const name of probes){
+            const url = new URL(name, `${baseUrl}/`).toString();
+            try{
+              const resp = await fetch(url, { cache: "no-store" });
+              if(!resp.ok) continue;
+              const payload = await resp.json();
+              view.files.push({ name, url });
+              if(!view.revisions) view.revisions = {};
+              view.revisions[url] = payload;
+            }catch{
+              // Probe candidate missing or invalid JSON, continue.
+            }
+          }
+        }
+        view.active = 0;
         renderTabs();
         if(!view.files.length){
           view.loading = false;
