@@ -1779,6 +1779,7 @@
     test_editor_lock: "locked",
     bom_matrix_controls: true,
     json_base_url: "https://minipcb.com/json",
+    json_href_template: "json/{section_no}_{revision}_sch.json",
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -5421,6 +5422,30 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return out;
   }
 
+  function resolveSiteHref(href){
+    const raw = String(href || "").trim();
+    if(!raw) return "";
+    if(/^https?:\/\//i.test(raw)) return raw;
+    if(location?.origin && /^https?:/i.test(location.origin)){
+      if(raw.startsWith("/")) return `${location.origin}${raw}`;
+      return `${location.origin}/${raw.replace(/^\.?\//, "")}`;
+    }
+    return new URL(raw, location.href).toString();
+  }
+
+  function fillJsonHrefTemplate(template, test, sectionNo){
+    const revision = String(
+      test?.data?.revision ||
+      test?.data?.design_revision ||
+      test?.data?.doc_revision ||
+      ""
+    ).trim();
+    return String(template || "")
+      .replace(/\{section_no\}/gi, sectionNo || "")
+      .replace(/\{revision\}/gi, revision)
+      .replace(/\{rev\}/gi, revision);
+  }
+
   function normalizeToken(text){
     return String(text || "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
   }
@@ -5537,6 +5562,22 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       names.add(`${sec}_${rev}_partlist.json`);
     }
     return Array.from(names);
+  }
+
+  function buildExplicitJsonHrefCandidates(test, fieldKey, sectionNo){
+    const dataHref = String(test?.data?.[fieldKey]?.href || test?.data?.[fieldKey]?.url || "").trim();
+    const prefTemplate = String(state.prefs?.json_href_template || "").trim();
+    const templates = [dataHref, prefTemplate].filter(Boolean);
+    const out = [];
+    for(const t of templates){
+      const filled = fillJsonHrefTemplate(t, test, sectionNo).trim();
+      if(!filled) continue;
+      const url = resolveSiteHref(filled);
+      if(!url) continue;
+      const name = filled.split(/[?#]/)[0].split("/").pop() || "json";
+      if(!out.some(x => x.url === url)) out.push({ name, url });
+    }
+    return out;
   }
 
   function renderJsonValueTree(value, keyLabel = ""){
@@ -5689,6 +5730,23 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       try{
         if(!view.revisions || force) view.revisions = {};
         view.files = [];
+        const explicit = buildExplicitJsonHrefCandidates(test, fieldKey, sectionNo);
+        for(const file of explicit){
+          try{
+            const resp = await fetch(file.url, { cache: "no-store" });
+            if(!resp.ok) continue;
+            view.files.push(file);
+            view.revisions[file.url] = await resp.json();
+          }catch{
+            // explicit href candidate failed, continue with discovery
+          }
+        }
+        if(view.files.length){
+          view.active = 0;
+          renderTabs();
+          renderActiveRevision();
+          return;
+        }
         const bases = jsonBaseCandidates(baseUrl);
         for(const candidateBase of bases){
           const files = await listJsonFiles(candidateBase, force);
@@ -8479,6 +8537,14 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           </div>
           <div style="flex:1;"></div>
         </div>
+        <div class="row" style="margin-top:10px;">
+          <div style="flex:2;">
+            <div class="label">JSON Href Template</div>
+            <input class="input" id="prefJsonHrefTemplate" placeholder="json/{section_no}_{revision}_sch.json" />
+            <div class="hint">Supports {section_no}, {revision}, {rev}. Example: json/{section_no}_{revision}_sch.json</div>
+          </div>
+          <div style="flex:1;"></div>
+        </div>
 
         <div class="hr"></div>
 
@@ -8539,6 +8605,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(prefMatrixControls) prefMatrixControls.value = state.prefs.bom_matrix_controls === false ? "false" : "true";
       const prefJsonBaseUrl = $("prefJsonBaseUrl");
       if(prefJsonBaseUrl) prefJsonBaseUrl.value = normalizeJsonBaseUrl(state.prefs.json_base_url);
+      const prefJsonHrefTemplate = $("prefJsonHrefTemplate");
+      if(prefJsonHrefTemplate) prefJsonHrefTemplate.value = String(state.prefs.json_href_template || "json/{section_no}_{revision}_sch.json");
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -8622,6 +8690,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         if(prefMatrixControls) state.prefs.bom_matrix_controls = prefMatrixControls.value === "true";
         const prefJsonBaseUrl = $("prefJsonBaseUrl");
         if(prefJsonBaseUrl) state.prefs.json_base_url = normalizeJsonBaseUrl(prefJsonBaseUrl.value);
+        const prefJsonHrefTemplate = $("prefJsonHrefTemplate");
+        if(prefJsonHrefTemplate) state.prefs.json_href_template = String(prefJsonHrefTemplate.value || "").trim();
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
