@@ -1,112 +1,113 @@
-# miniPCB Netlist JSON Schema
+# miniPCB Netlist Schema v1.1
 
-This folder contains netlist JSON files and the schema that defines the base format:
+This folder contains netlist JSON files and the authoritative schema:
 
 - Schema file: `netlist.schema.json`
 - Schema dialect: JSON Schema Draft 2020-12
+- Schema ID: `https://minipcb.com/schemas/netlist.schema.v1.1.json`
+- Supported schema version value: `1.1`
 
 ## Required Top-Level Fields
 
 Every valid netlist must include:
 
-- `schema_version` (string, format like `1.0`)
-- `metadata` (object)
-- `components` (array)
-- `nets` (array)
+- `schema_version` (must be `"1.1"`)
+- `identity`
+- `metadata`
+- `components`
+- `nets`
 
-## Top-Level Structure
+## Top-Level Model
 
-Supported top-level properties:
+Defined top-level sections:
 
-- `schema_version`: schema version string (`^\d+\.\d+$`)
-- `metadata`: project/build metadata
-- `components`: list of components and their pins
-- `nets`: list of electrical nets and their connections
+- `schema_version`: fixed schema version marker
+- `identity`: strict board identity and netlist type
+- `metadata`: project metadata (allows custom metadata keys)
+- `components`: component and pin definitions
+- `nets`: net definitions and connectivity
 - `sheets` (optional): schematic sheet metadata
-- `logical_blocks` (optional): grouped functional blocks
-- `test_integration` (optional): test-point and test-plan data
-- `ports` (optional): external I/O port definitions
-- `hierarchy` (optional): hierarchical design data
-- `analysis` (optional): analysis/simulation results or metadata
+- `logical_blocks` (optional): functional grouping
+- `test_integration` (optional): structured test coverage data
+- `ports` (optional): external interface mapping
+- `analysis` (optional): structured analysis results
 
-## `metadata`
+Unknown top-level sections are rejected (`unevaluatedProperties: false`).
 
-Required fields:
+## Feature Highlights
 
-- `project_name` (string)
-- `revision` (string)
+### Conditional Validation (PCB Requires Placement)
 
-Optional fields:
+If `identity.board_type` is `"pcb"`, each component item must include `placement`.
 
-- `source_tool` (string)
-- `generated_on` (date-time string)
-- `units` (string)
+### Electrical Classification
 
-## `components`
+The schema supports electrical semantics through:
 
-Each component requires:
+- `pin.electrical_type` (input/output/passive/power/analog/digital classes)
+- `net.type` (`signal`, `power`, `ground`, `analog`, `digital`, `clock`)
+- `net.criticality` (`low`, `medium`, `high`, `safety`)
+- `net.voltage_domain` for power-domain grouping
 
-- `refdes` (string), e.g. `R1`, `U2`
-- `pins` (array)
+### Strict Identity Management
 
-Optional component fields:
+Identity is required and locked down:
 
-- `value`, `footprint`, `description`, `manufacturer_part_number`
-- `attributes` (object)
-- `placement` object with optional `x`, `y`, `rotation` numbers
+- `identity.board_pn` (required, non-empty)
+- `identity.board_rev` (required, non-empty)
+- `identity.board_type` (required enum: `pcb`, `schematic`, `combined`)
 
-### Pin Object
+Reference identifiers are pattern-validated:
 
-Each pin requires:
+- `component.refdes` and connection/test-point `refdes`: `^[A-Z]+[0-9]+$`
+- `net.name`: `^[A-Za-z0-9_\\-]+$`
 
-- `pin_number` (string)
-- `net` (string)
+### Controlled Extensibility
 
-Optional pin fields:
+The schema is strict by default, but intentionally extensible in controlled areas:
 
-- `pin_name` (string)
-- `electrical_type` (enum):
-  - `input`
-  - `output`
-  - `bidirectional`
-  - `passive`
-  - `power_in`
-  - `power_out`
-  - `analog`
-  - `digital`
+- Top-level is closed (`unevaluatedProperties: false`)
+- Most structural objects use `additionalProperties: false`
+- `metadata` is open for project/tool-specific keys
 
-## `nets`
+### Strong Pattern Enforcement
 
-Each net requires:
+Pattern/enum constraints enforce predictable data:
 
-- `name` (string)
-- `connections` (array)
+- Fixed `schema_version` enum (`"1.1"`)
+- Regex for identity-like symbols (`refdes`, `net.name`)
+- Enums for board type, electrical types, net classes, criticality, directions, and measurement types
 
-Optional net field:
+### Structured Analysis
 
-- `type` (string)
+`analysis` provides machine-consumable quality signals:
 
-Each connection requires:
+- `component_count`
+- `net_count`
+- `floating_nets`
+- `unconnected_pins` with strict `{ refdes, pin }` shape
 
-- `refdes` (string)
-- `pin` (string)
+### Structured Test Coverage
 
-## `ports` (Optional)
+`test_integration` supports explicit test readiness:
 
-Each port requires:
+- `coverage_status` (`complete`, `partial`, `missing`)
+- `auto_generated` (boolean)
+- `test_plan_reference`
+- `test_points[]` with typed measurements and optional required `expected_range { min, max }`
 
-- `name` (string)
-- `net` (string)
+## Detailed Usage Examples
 
-Optional:
-
-- `direction` (`input`, `output`, `bidirectional`)
-
-## Minimal Valid Example
+### 1. Minimal Valid Combined Netlist
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "identity": {
+    "board_pn": "04B-005",
+    "board_rev": "A",
+    "board_type": "combined"
+  },
   "metadata": {
     "project_name": "miniPCB Project",
     "revision": "A"
@@ -116,100 +117,148 @@ Optional:
 }
 ```
 
-## Detailed Usage Examples
+## Additional Minimal Usage Snippets
 
-### 1. Basic Electrical Netlist
+These are intentionally small, schema-valid templates for quick starts.
 
-Use this as a starting point for simple circuits and validation pipelines.
+### A. Minimal `schematic` Netlist
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "identity": {
+    "board_pn": "04B-100",
+    "board_rev": "A",
+    "board_type": "schematic"
+  },
   "metadata": {
-    "project_name": "Power Filter",
-    "revision": "B",
-    "source_tool": "miniPCB Editor",
-    "units": "mm"
+    "project_name": "Quick Schematic",
+    "revision": "A"
+  },
+  "components": [],
+  "nets": []
+}
+```
+
+### B. Minimal `pcb` Netlist (Placement Required)
+
+```json
+{
+  "schema_version": "1.1",
+  "identity": {
+    "board_pn": "04B-101",
+    "board_rev": "A",
+    "board_type": "pcb"
+  },
+  "metadata": {
+    "project_name": "Quick PCB",
+    "revision": "A"
   },
   "components": [
     {
-      "refdes": "C1",
-      "value": "10uF",
-      "footprint": "0603",
-      "pins": [
-        { "pin_number": "1", "net": "VIN", "electrical_type": "passive" },
-        { "pin_number": "2", "net": "GND", "electrical_type": "passive" }
-      ]
-    },
-    {
       "refdes": "R1",
-      "value": "1k",
-      "footprint": "0603",
+      "placement": { "x": 0, "y": 0, "rotation": 0 },
       "pins": [
-        { "pin_number": "1", "net": "VIN", "electrical_type": "passive" },
-        { "pin_number": "2", "net": "SENSE", "electrical_type": "passive" }
+        { "pin_number": "1", "net": "N1" }
       ]
     }
   ],
   "nets": [
     {
-      "name": "VIN",
-      "type": "power",
+      "name": "N1",
       "connections": [
-        { "refdes": "C1", "pin": "1" },
         { "refdes": "R1", "pin": "1" }
-      ]
-    },
-    {
-      "name": "GND",
-      "type": "power",
-      "connections": [
-        { "refdes": "C1", "pin": "2" }
-      ]
-    },
-    {
-      "name": "SENSE",
-      "connections": [
-        { "refdes": "R1", "pin": "2" }
       ]
     }
   ]
 }
 ```
 
-### 2. Schematic-Oriented Netlist (`sheets` + `logical_blocks`)
-
-Use `sheets` to track drawing organization and `logical_blocks` for functional grouping.
+### C. Minimal `combined` Netlist
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "identity": {
+    "board_pn": "04B-102",
+    "board_rev": "A",
+    "board_type": "combined"
+  },
+  "metadata": {
+    "project_name": "Quick Combined",
+    "revision": "A"
+  },
+  "components": [],
+  "nets": []
+}
+```
+
+### D. Minimal Test Coverage Block
+
+Use this block inside an otherwise valid netlist.
+
+```json
+{
+  "test_integration": {
+    "test_points": [
+      {
+        "refdes": "TP1",
+        "net": "N1",
+        "measurement_type": "voltage"
+      }
+    ]
+  }
+}
+```
+
+### E. Minimal Analysis Block
+
+Use this block inside an otherwise valid netlist.
+
+```json
+{
+  "analysis": {}
+}
+```
+
+### 2. Schematic Netlist with Logical Grouping
+
+```json
+{
+  "schema_version": "1.1",
+  "identity": {
+    "board_pn": "04B-005",
+    "board_rev": "B",
+    "board_type": "schematic"
+  },
   "metadata": {
     "project_name": "Amplifier Front End",
-    "revision": "A"
+    "revision": "B",
+    "source_tool": "SchematicEditor"
   },
   "sheets": [
     { "sheet_number": 1, "title": "Input Stage" },
     { "sheet_number": 2, "title": "Output Stage" }
   ],
   "logical_blocks": [
-    { "name": "Bias Network", "members": ["R1", "R2", "Q1"] },
-    { "name": "Output Buffer", "members": ["Q2", "R5", "R6"] }
+    { "name": "Bias Network", "members": ["R1", "R2", "Q1"] }
   ],
   "components": [
     {
       "refdes": "Q1",
       "value": "NPN",
       "pins": [
-        { "pin_number": "1", "pin_name": "C", "net": "VCC" },
-        { "pin_number": "2", "pin_name": "B", "net": "BIAS" },
-        { "pin_number": "3", "pin_name": "E", "net": "OUT_PRE" }
+        { "pin_number": "1", "pin_name": "C", "net": "VCC", "electrical_type": "analog" },
+        { "pin_number": "2", "pin_name": "B", "net": "BIAS", "electrical_type": "input" },
+        { "pin_number": "3", "pin_name": "E", "net": "OUT_PRE", "electrical_type": "output" }
       ]
     }
   ],
   "nets": [
     {
       "name": "BIAS",
+      "type": "analog",
+      "criticality": "medium",
       "connections": [
         { "refdes": "Q1", "pin": "2" }
       ]
@@ -218,24 +267,28 @@ Use `sheets` to track drawing organization and `logical_blocks` for functional g
 }
 ```
 
-### 3. PCB-Oriented Netlist (Placement + Ports)
-
-Use this when netlist data is consumed by layout, assembly, or I/O export tools.
+### 3. PCB Netlist (Placement Required)
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "identity": {
+    "board_pn": "04B-005",
+    "board_rev": "C",
+    "board_type": "pcb"
+  },
   "metadata": {
     "project_name": "Controller Board",
     "revision": "C",
-    "generated_on": "2026-02-14T17:30:00Z"
+    "generated_on": "2026-02-14T17:30:00Z",
+    "units": "mm"
   },
   "components": [
     {
       "refdes": "U1",
       "value": "MCU",
       "footprint": "QFN-32",
-      "placement": { "x": 25.4, "y": 18.2, "rotation": 90 },
+      "placement": { "x": 25.4, "y": 18.2, "rotation": 90, "side": "Top" },
       "pins": [
         { "pin_number": "1", "pin_name": "VDD", "net": "3V3", "electrical_type": "power_in" },
         { "pin_number": "2", "pin_name": "GND", "net": "GND", "electrical_type": "power_in" },
@@ -247,12 +300,16 @@ Use this when netlist data is consumed by layout, assembly, or I/O export tools.
     {
       "name": "3V3",
       "type": "power",
+      "voltage_domain": "3V3_MAIN",
+      "criticality": "high",
       "connections": [
         { "refdes": "U1", "pin": "1" }
       ]
     },
     {
       "name": "BTN_IN",
+      "type": "digital",
+      "criticality": "low",
       "connections": [
         { "refdes": "U1", "pin": "5" }
       ]
@@ -265,13 +322,16 @@ Use this when netlist data is consumed by layout, assembly, or I/O export tools.
 }
 ```
 
-### 4. Manufacturing Test Integration (`test_integration`)
-
-Use `test_integration` to define measurable conditions tied to nets and reference test plans.
+### 4. Test and Analysis Enriched Netlist
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
+  "identity": {
+    "board_pn": "04B-005",
+    "board_rev": "D",
+    "board_type": "combined"
+  },
   "metadata": {
     "project_name": "5V Regulator Module",
     "revision": "D"
@@ -279,6 +339,9 @@ Use `test_integration` to define measurable conditions tied to nets and referenc
   "components": [],
   "nets": [],
   "test_integration": {
+    "coverage_status": "partial",
+    "auto_generated": true,
+    "test_plan_reference": "test_plan_04B-005.md",
     "test_points": [
       {
         "refdes": "TP1",
@@ -290,29 +353,34 @@ Use `test_integration` to define measurable conditions tied to nets and referenc
         "refdes": "TP2",
         "net": "GND",
         "measurement_type": "continuity"
-      },
-      {
-        "refdes": "TP3",
-        "net": "CLK",
-        "measurement_type": "frequency",
-        "expected_range": { "min": 999000.0, "max": 1001000.0 }
       }
-    ],
-    "test_plan_reference": "test_plan_04B-005.md"
+    ]
+  },
+  "analysis": {
+    "component_count": 24,
+    "net_count": 31,
+    "floating_nets": ["N$23"],
+    "unconnected_pins": [
+      { "refdes": "U3", "pin": "17" }
+    ]
   }
 }
 ```
 
-## Authoring Tips
+## Authoring Notes
 
-- Keep `components[*].pins[*].net` names synchronized with `nets[*].name`.
-- Ensure each `nets[*].connections[*]` entry matches a real component `refdes` and `pin_number`.
-- Use `metadata.revision` to track released dataset versions (A, B, C...) and avoid overwriting historical outputs.
-- Prefer explicit `electrical_type` values for downstream ERC/DFT tooling.
-- Use `generated_on` when files are produced by automation to improve traceability.
+- Keep `components[*].pins[*].net` aligned with `nets[*].name`.
+- Keep `nets[*].connections[*]` aligned with real `(refdes, pin_number)` pairs.
+- Use `identity` as immutable board identity and `metadata.revision` as dataset release tracking.
+- For PCB exports, always include `placement` data even before final placement freeze.
 
-## Notes
+## Suitable Tooling and Workflows
 
-- Component and net objects disallow unknown properties (`additionalProperties: false` in schema).
-- `metadata` allows additional custom properties.
-- Top-level unknown properties are disallowed (`additionalProperties: false`), so all top-level sections must be defined in the schema.
+This schema is now suitable for:
+
+- Automated CI validation
+- Git pre-commit enforcement
+- EPSA automation
+- TestBASE auto-generation
+- AI graph reasoning
+- Risk analysis tooling
