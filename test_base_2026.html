@@ -5440,10 +5440,18 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       test?.data?.doc_revision ||
       ""
     ).trim();
-    return String(template || "")
+    let out = String(template || "")
       .replace(/\{section_no\}/gi, sectionNo || "")
       .replace(/\{revision\}/gi, revision)
       .replace(/\{rev\}/gi, revision);
+    if(!revision){
+      out = out
+        .replace(/__+/g, "_")
+        .replace(/--+/g, "-")
+        .replace(/_-|-_/g, "_")
+        .replace(/([/_-])+\./g, ".");
+    }
+    return out;
   }
 
   function normalizeToken(text){
@@ -5566,6 +5574,9 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     addRevHintsFrom(test?.data?.doc_id);
     addRevHintsFrom(test?.data?.version);
     addRevHintsFrom(test?.data?.source_document);
+    for(const file of (state.aiChatContextFiles || [])){
+      addRevHintsFrom(file?.name || "");
+    }
     const planTests = Array.isArray(state.currentPlan?.tests) ? state.currentPlan.tests : [];
     for(const t of planTests){
       const d = t?.data || {};
@@ -5711,7 +5722,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       }
       if(!view.files.length){
         const attempts = Array.isArray(view.lastAttempts) && view.lastAttempts.length
-          ? ` Last tried: ${view.lastAttempts.slice(0, 3).join(" | ")}`
+          ? ` Last tried: ${view.lastAttempts.slice(0, 8).join(" | ")}`
           : "";
         setStatus(`No JSON file found for section ${sectionNo || "(missing section_no)"} at ${baseUrl}.${attempts}`);
         return;
