@@ -5554,12 +5554,44 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       test?.data?.doc_revision ||
       ""
     ).trim();
+    const revHints = new Set();
+    if(rev) revHints.add(rev);
+    const revRx = /\b[A-Z]\d-\d{2}\b/g;
+    const addRevHintsFrom = (value) => {
+      const s = String(value || "");
+      const matches = s.match(revRx) || [];
+      for(const m of matches) revHints.add(m);
+    };
+    addRevHintsFrom(test?.data?.section_no);
+    addRevHintsFrom(test?.data?.doc_id);
+    addRevHintsFrom(test?.data?.version);
+    addRevHintsFrom(test?.data?.source_document);
+    const planTests = Array.isArray(state.currentPlan?.tests) ? state.currentPlan.tests : [];
+    for(const t of planTests){
+      const d = t?.data || {};
+      addRevHintsFrom(d.revision);
+      addRevHintsFrom(d.design_revision);
+      addRevHintsFrom(d.doc_revision);
+      addRevHintsFrom(d.version);
+      addRevHintsFrom(d.doc_id);
+      addRevHintsFrom(d.source_document);
+    }
     names.add(`${sec}.json`);
+    names.add(`${sec}_sch.json`);
+    names.add(`${sec}_netlist.json`);
+    names.add(`${sec}_partlist.json`);
+    names.add(`${sec}_bom.json`);
     if(rev){
       names.add(`${sec}_${rev}.json`);
       names.add(`${sec}_${rev}_sch.json`);
       names.add(`${sec}_${rev}_netlist.json`);
       names.add(`${sec}_${rev}_partlist.json`);
+    }
+    for(const hint of revHints){
+      names.add(`${sec}_${hint}.json`);
+      names.add(`${sec}_${hint}_sch.json`);
+      names.add(`${sec}_${hint}_netlist.json`);
+      names.add(`${sec}_${hint}_partlist.json`);
     }
     return Array.from(names);
   }
@@ -5638,7 +5670,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     if(!test || !fieldKey) return document.createElement("div");
     if(!test._jsonView) test._jsonView = {};
     if(!test._jsonView[fieldKey]){
-      test._jsonView[fieldKey] = { loading: false, files: [], active: 0, revisions: {}, error: "" };
+      test._jsonView[fieldKey] = { loading: false, files: [], active: 0, revisions: {}, error: "", lastAttempts: [] };
     }
     const view = test._jsonView[fieldKey];
     const baseUrl = normalizeJsonBaseUrl(state.prefs?.json_base_url);
@@ -5678,7 +5710,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         return;
       }
       if(!view.files.length){
-        setStatus(`No JSON file found for section ${sectionNo || "(missing section_no)"} at ${baseUrl}.`);
+        const attempts = Array.isArray(view.lastAttempts) && view.lastAttempts.length
+          ? ` Last tried: ${view.lastAttempts.slice(0, 3).join(" | ")}`
+          : "";
+        setStatus(`No JSON file found for section ${sectionNo || "(missing section_no)"} at ${baseUrl}.${attempts}`);
         return;
       }
       const activeFile = view.files[Math.max(0, Math.min(view.active, view.files.length - 1))];
@@ -5730,8 +5765,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       try{
         if(!view.revisions || force) view.revisions = {};
         view.files = [];
+        view.lastAttempts = [];
         const explicit = buildExplicitJsonHrefCandidates(test, fieldKey, sectionNo);
         for(const file of explicit){
+          view.lastAttempts.push(file.url);
           try{
             const resp = await fetch(file.url, { cache: "no-store" });
             if(!resp.ok) continue;
@@ -5757,6 +5794,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           const probes = buildJsonProbeNames(test, sectionNo);
           for(const name of probes){
             const url = new URL(name, `${candidateBase}/`).toString();
+            view.lastAttempts.push(url);
             try{
               const resp = await fetch(url, { cache: "no-store" });
               if(!resp.ok) continue;
