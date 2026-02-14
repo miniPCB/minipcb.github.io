@@ -10130,6 +10130,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       const out = [];
       for(const k of keys){
         if(["param1_label","param1_value","param2_label","param2_value"].includes(k)) continue;
+        const fieldType = String(test.data?._ai?.field_types?.[k] || "text").toLowerCase();
+        if(fieldType.includes("matrix") || fieldType.includes("json")) continue;
         const v = (test.data[k] ?? "");
         const m = getFieldMaturity(test, k);
         if(m >= 3) continue; // do not touch M3/M4
@@ -10279,6 +10281,12 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       logLine(`AI Suggest: using model "${model}".`, "ok");
       const targets = [];
       if(fieldOverride && Object.prototype.hasOwnProperty.call(test.data || {}, fieldOverride)){
+        const fieldType = String(test.data?._ai?.field_types?.[fieldOverride] || "text").toLowerCase();
+        if(fieldType.includes("matrix") || fieldType.includes("json")){
+          toast("AI Suggest", `Skipping ${fieldOverride} (${fieldType || "non-text"}).`, "warn");
+          logLine(`AI Suggest: skipped "${fieldOverride}" (${fieldType || "non-text"} field).`, "warn");
+          return;
+        }
         targets.push(fieldOverride);
       }else{
         const lowMaturity = fieldsNeedingSuggestion(test);
