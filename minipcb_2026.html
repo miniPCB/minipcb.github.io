@@ -390,6 +390,76 @@
       font-weight:600;
     }
 
+    .jsonWrap{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,0.02);
+      padding:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-height:280px;
+    }
+
+    .jsonToolbar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+    }
+
+    .jsonUrl{
+      flex:1;
+      min-width:240px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:6px 10px;
+      font-size:12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+      font-family: var(--mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .jsonBtn{
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:6px 10px;
+      font-size:12px;
+      color: var(--text);
+      background: rgba(255,255,255,0.05);
+      cursor:pointer;
+    }
+
+    .jsonBtn:hover{
+      border-color: rgba(102,163,255,0.7);
+      background: rgba(102,163,255,0.15);
+    }
+
+    .jsonStatus{
+      font-size:12px;
+      color: var(--muted);
+    }
+
+    .jsonViewport{
+      border:1px solid rgba(42,52,71,0.6);
+      border-radius:10px;
+      background: rgba(15,20,30,0.45);
+      overflow:auto;
+      min-height:260px;
+      flex:1;
+      padding:10px;
+    }
+
+    .jsonText{
+      margin:0;
+      white-space:pre;
+      font: 12px/1.5 var(--mono);
+      color: var(--text);
+    }
+
     .status{
       padding:8px 12px;
       border-radius:999px;
@@ -513,6 +583,7 @@
           <div class="preview-meta" id="previewMeta"></div>
           <div class="tabBar" id="previewTabs">
             <button class="tabBtn active" data-tab="markdown">Markdown</button>
+            <button class="tabBtn" data-tab="json">JSON</button>
             <button class="tabBtn" data-tab="schematic">Schematic</button>
             <button class="tabBtn" data-tab="layout">Layout</button>
             <button class="tabBtn" data-tab="assembly">Assembly</button>
@@ -522,6 +593,19 @@
         <div class="preview" id="previewPane">
           <div class="tabPanel active" data-panel="markdown">
             <div class="empty" id="emptyState">Pick a file from the left to render its markdown.</div>
+          </div>
+          <div class="tabPanel" data-panel="json">
+            <div class="jsonWrap">
+              <div class="jsonToolbar">
+                <div class="jsonUrl" id="jsonPath">Path: (none)</div>
+                <button class="jsonBtn" id="jsonReloadBtn" type="button">Reload</button>
+                <button class="jsonBtn" id="jsonCopyBtn" type="button">Copy</button>
+              </div>
+              <div class="jsonStatus" id="jsonStatus">Select a file to load JSON.</div>
+              <div class="jsonViewport">
+                <pre class="jsonText" id="jsonContent">No JSON loaded.</pre>
+              </div>
+            </div>
           </div>
           <div class="tabPanel" data-panel="schematic">
             <div class="empty">Schematic view placeholder. Add images or SVGs here.</div>
@@ -551,7 +635,9 @@
       requestId: 0,
       currentFetch: null,
       mdIndex: [],
-      currentMarkdownText: ""
+      currentMarkdownText: "",
+      currentJsonPath: "",
+      currentJsonText: ""
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1010,6 +1096,70 @@
       });
     }
 
+    function updateJsonPane(path, text, status){
+      const pathEl = $("jsonPath");
+      const statusEl = $("jsonStatus");
+      const contentEl = $("jsonContent");
+      if(pathEl) pathEl.textContent = `Path: ${path || "(none)"}`;
+      if(statusEl) statusEl.textContent = status || "";
+      if(contentEl) contentEl.textContent = text || "";
+    }
+
+    function getJsonCandidates(entry, mdPath){
+      const candidates = [];
+      const pushUnique = (v) => {
+        if(!v) return;
+        if(!candidates.includes(v)) candidates.push(v);
+      };
+
+      const fromMd = (mdPath || "").replace(/^md\//, "json/").replace(/\.md$/i, ".json");
+      pushUnique(fromMd);
+      const fromFilename = (entry && entry.filename ? String(entry.filename) : "").replace(/\.md$/i, ".json");
+      if(fromFilename) pushUnique(`json/${fromFilename}`);
+      if(entry && entry.pn && entry.rev){
+        pushUnique(`json/${entry.pn}_${entry.rev}_sch.json`);
+      }
+      if(entry && entry.pn){
+        pushUnique(`json/${entry.pn}_A1-01_sch.json`);
+      }
+      return candidates.filter(Boolean);
+    }
+
+    async function loadJsonForEntry(entry, mdPath, requestId){
+      const candidates = getJsonCandidates(entry, mdPath);
+      if(!candidates.length){
+        state.currentJsonPath = "";
+        state.currentJsonText = "";
+        updateJsonPane("", "No JSON candidate path for this entry.", "No JSON loaded.");
+        return;
+      }
+
+      for(const path of candidates){
+        try{
+          updateJsonPane(path, state.currentJsonText || "Loading...", "Fetching JSON...");
+          const res = await fetch(path + "?v=" + Date.now(), { cache: "no-store" });
+          if(requestId !== state.requestId) return;
+          if(!res.ok) continue;
+          const raw = await res.text();
+          if(requestId !== state.requestId) return;
+          let pretty = raw;
+          try{
+            pretty = JSON.stringify(JSON.parse(raw), null, 2);
+          }catch(_){}
+          state.currentJsonPath = path;
+          state.currentJsonText = pretty;
+          updateJsonPane(path, pretty, "JSON loaded.");
+          return;
+        }catch(_){
+          if(requestId !== state.requestId) return;
+        }
+      }
+
+      state.currentJsonPath = candidates[0] || "";
+      state.currentJsonText = "";
+      updateJsonPane(state.currentJsonPath, "No JSON file found for this entry.", "JSON not found.");
+    }
+
     async function selectEntry(entry){
       let path = entry && entry.mdPath ? entry.mdPath : "";
       try{
@@ -1027,6 +1177,7 @@
       if(!path){
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml((entry && entry.href) || "#")}" target="_blank" rel="noopener">${escapeHtml((entry && entry.href) || "link")}</a>.</div>`;
         state.currentMarkdownText = "";
+        await loadJsonForEntry(entry, "", requestId);
         return;
       }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
@@ -1058,16 +1209,19 @@
         const html = markdownToHtml(text);
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
         state.currentMarkdownText = text;
+        await loadJsonForEntry(entry, path, requestId);
       }catch(err){
         const msg = (err && err.message) || "Unknown error";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
         if(!path){
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml((entry && entry.href) || "#")}" target="_blank" rel="noopener">${escapeHtml((entry && entry.href) || "link")}</a>.</div>`;
           state.currentMarkdownText = "";
+          await loadJsonForEntry(entry, "", state.requestId);
           return;
         }
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         state.currentMarkdownText = "";
+        await loadJsonForEntry(entry, path, state.requestId);
       }
 
       renderList();
@@ -1167,6 +1321,29 @@
       });
     }
 
+    function setupJsonActions(){
+      const reloadBtn = $("jsonReloadBtn");
+      const copyBtn = $("jsonCopyBtn");
+      if(reloadBtn){
+        reloadBtn.addEventListener("click", async () => {
+          if(!state.current) return;
+          await loadJsonForEntry(state.current, state.current && state.current.mdPath ? state.current.mdPath : "", state.requestId);
+        });
+      }
+      if(copyBtn){
+        copyBtn.addEventListener("click", async () => {
+          const text = state.currentJsonText || "";
+          if(!text) return;
+          try{
+            await navigator.clipboard.writeText(text);
+            updateJsonPane(state.currentJsonPath, text, "Copied JSON to clipboard.");
+          }catch(_){
+            updateJsonPane(state.currentJsonPath, text, "Clipboard write failed.");
+          }
+        });
+      }
+    }
+
     window.addEventListener("hashchange", () => {
       const hashPath = getHashPath();
       const target = state.entries.find(e => e.path === hashPath || e.filename === hashPath);
@@ -1174,6 +1351,7 @@
     });
 
     setupTabs();
+    setupJsonActions();
     loadIndex();
   </script>
   </body>
