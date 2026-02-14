@@ -337,6 +337,9 @@
     .gridEditor.matrixExpanded .matrixViewport{
       height:520px;
     }
+    .gridEditor.matrixExpanded .jsonViewport{
+      height:520px;
+    }
     .testRow{
       padding:10px 10px;
       border:1px solid rgba(42,52,71,.65);
@@ -477,6 +480,116 @@
     .matrixHint{
       font-size:10px;
       color: var(--muted);
+    }
+    .jsonWrap{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,.02);
+      padding:8px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-width:0;
+      min-height:220px;
+    }
+    .jsonToolbar{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .jsonTabs{
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      align-items:center;
+      min-height:28px;
+    }
+    .jsonTab{
+      height:26px;
+      padding:0 9px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.02);
+      color: var(--text);
+      font-size:11px;
+      cursor:pointer;
+    }
+    .jsonTab.active{
+      border-color: rgba(124,196,255,.45);
+      background: rgba(124,196,255,.10);
+    }
+    .jsonViewport{
+      border:1px solid rgba(42,52,71,.6);
+      border-radius:10px;
+      background: rgba(15,20,30,.45);
+      overflow:auto;
+      height:320px;
+      min-width:0;
+      padding:10px;
+    }
+    .jsonStatus{
+      font-size:12px;
+      color: var(--muted);
+      line-height:1.45;
+    }
+    .jsonTree{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .jsonEntry{
+      display:flex;
+      align-items:flex-start;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+    .jsonChild{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin-left:10px;
+      border-left:1px dashed rgba(124,196,255,.25);
+      padding-left:10px;
+      min-width:0;
+      flex:1;
+    }
+    .jsonBubble{
+      display:inline-flex;
+      align-items:center;
+      border-radius:999px;
+      padding:3px 9px;
+      font-size:11px;
+      line-height:1.2;
+      max-width:100%;
+      word-break:break-word;
+      white-space:normal;
+    }
+    .jsonKeyBubble{
+      background: rgba(124,196,255,.16);
+      border:1px solid rgba(124,196,255,.40);
+      color: rgba(196,227,255,.95);
+      font-weight:600;
+    }
+    .jsonValBubble{
+      background: rgba(124,255,176,.12);
+      border:1px solid rgba(124,255,176,.36);
+      color: rgba(196,255,223,.95);
+    }
+    .jsonValBubble.type-number{
+      background: rgba(255,211,124,.13);
+      border-color: rgba(255,211,124,.40);
+      color: rgba(255,238,195,.95);
+    }
+    .jsonValBubble.type-boolean{
+      background: rgba(215,160,255,.13);
+      border-color: rgba(215,160,255,.40);
+      color: rgba(241,218,255,.95);
+    }
+    .jsonValBubble.type-null{
+      background: rgba(255,124,124,.13);
+      border-color: rgba(255,124,124,.38);
+      color: rgba(255,215,215,.95);
     }
     .req{ display:inline-flex; align-items:center; gap:6px; font-size:10px; color: rgba(255,211,124,.95); }
     .req::before{ content:"●"; font-size:10px; }
@@ -1604,7 +1717,8 @@
     for(const k of keys){
       const fieldType = String(fieldTypes[k] || "").toLowerCase();
       const isMatrix = fieldType.includes("matrix");
-      if(isMatrix){
+      const isJson = fieldType.includes("json");
+      if(isMatrix || isJson){
         out[k] = (src[k] && typeof src[k] === "object") ? cloneJsonValue(src[k]) : {};
       }else{
         out[k] = safeStringify(src[k]);
@@ -1664,6 +1778,7 @@
     ai_personality_dialog: false,
     test_editor_lock: "locked",
     bom_matrix_controls: true,
+    json_base_url: "https://minipcb.com/json",
     new_test_template_mode: "default",// default | choose
     new_test_template_default: "__blank__"
   });
@@ -3153,6 +3268,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     for(const k of keys){
       if(["param1_label","param1_value","param2_label","param2_value"].includes(k)) continue;
       if(k === "_ai") continue;
+      const fieldType = String(test.data?._ai?.field_types?.[k] || "text").toLowerCase();
+      if(fieldType.includes("json")) continue;
       const m = getFieldMaturity(test, k);
       if(m > 2) continue;
       const v = (test.data[k] ?? "");
@@ -5283,6 +5400,303 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
     return id;
   }
 
+  const jsonDirectoryCache = new Map();
+
+  function normalizeJsonBaseUrl(raw){
+    return String(raw || "https://minipcb.com/json").trim().replace(/\/+$/,"");
+  }
+
+  function normalizeToken(text){
+    return String(text || "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
+  }
+
+  function parseJsonManifestEntries(payload, baseUrl){
+    const items = Array.isArray(payload) ? payload
+      : Array.isArray(payload?.files) ? payload.files
+      : Array.isArray(payload?.entries) ? payload.entries
+      : [];
+    const out = [];
+    for(const entry of items){
+      const rawName = typeof entry === "string" ? entry
+        : (entry?.name || entry?.path || entry?.file || entry?.url || "");
+      const rawUrl = typeof entry === "object" && entry?.url ? entry.url : rawName;
+      const name = String(rawName || "").split(/[?#]/)[0].split("/").pop();
+      if(!/\.json$/i.test(name || "")) continue;
+      const url = new URL(String(rawUrl || ""), `${baseUrl}/`).toString();
+      out.push({ name, url });
+    }
+    return out;
+  }
+
+  function parseJsonDirectoryEntries(html, baseUrl){
+    const out = [];
+    const seen = new Set();
+    const rx = /href\s*=\s*["']([^"']+\.json(?:[?#][^"']*)?)["']/gi;
+    let match;
+    while((match = rx.exec(String(html || "")))){
+      const href = match[1];
+      const clean = String(href || "").split(/[?#]/)[0];
+      const name = clean.split("/").pop();
+      if(!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      out.push({ name, url: new URL(clean, `${baseUrl}/`).toString() });
+    }
+    return out;
+  }
+
+  async function listJsonFiles(baseUrl, force = false){
+    const root = normalizeJsonBaseUrl(baseUrl);
+    const now = Date.now();
+    const cached = jsonDirectoryCache.get(root);
+    if(!force && cached && (now - cached.ts) < 120000){
+      return cached.files;
+    }
+    let files = [];
+    try{
+      const manifestResp = await fetch(`${root}/manifest.json`, { cache: "no-store" });
+      if(manifestResp.ok){
+        const payload = await manifestResp.json();
+        files = parseJsonManifestEntries(payload, root);
+      }
+    }catch{
+      // Fall through to directory listing.
+    }
+    if(!files.length){
+      try{
+        const dirResp = await fetch(`${root}/`, { cache: "no-store" });
+        if(dirResp.ok){
+          const html = await dirResp.text();
+          files = parseJsonDirectoryEntries(html, root);
+        }
+      }catch{
+        files = [];
+      }
+    }
+    const dedup = [];
+    const seen = new Set();
+    for(const f of files){
+      const key = String(f.name || "").toLowerCase();
+      if(!key || seen.has(key)) continue;
+      seen.add(key);
+      dedup.push(f);
+    }
+    dedup.sort((a, b) => String(b.name || "").localeCompare(String(a.name || ""), undefined, { numeric: true, sensitivity: "base" }));
+    jsonDirectoryCache.set(root, { ts: now, files: dedup });
+    return dedup;
+  }
+
+  function findJsonCandidatesForSection(files, sectionNo){
+    const target = normalizeToken(sectionNo);
+    if(!target) return [];
+    return (files || []).filter(file => {
+      const base = String(file?.name || "").replace(/\.json$/i, "");
+      const token = normalizeToken(base);
+      return token.includes(target);
+    });
+  }
+
+  function buildJsonRevisionLabel(fileName, sectionNo){
+    const base = String(fileName || "").replace(/\.json$/i, "");
+    const sec = String(sectionNo || "").trim();
+    if(!sec) return base || "Revision";
+    const esc = sec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const stripped = base.replace(new RegExp(`^${esc}[_\\- ]*`, "i"), "");
+    return stripped || "Base";
+  }
+
+  function renderJsonValueTree(value, keyLabel = ""){
+    const entry = document.createElement("div");
+    entry.className = "jsonEntry";
+    if(keyLabel){
+      const keyBubble = document.createElement("span");
+      keyBubble.className = "jsonBubble jsonKeyBubble";
+      keyBubble.textContent = keyLabel;
+      entry.appendChild(keyBubble);
+    }
+
+    const appendPrimitive = (primitive) => {
+      const bubble = document.createElement("span");
+      let cls = "type-string";
+      if(primitive === null) cls = "type-null";
+      else if(typeof primitive === "number") cls = "type-number";
+      else if(typeof primitive === "boolean") cls = "type-boolean";
+      bubble.className = `jsonBubble jsonValBubble ${cls}`;
+      bubble.textContent = primitive === null ? "null" : String(primitive);
+      entry.appendChild(bubble);
+    };
+
+    if(value === null || typeof value !== "object"){
+      appendPrimitive(value);
+      return entry;
+    }
+
+    const child = document.createElement("div");
+    child.className = "jsonChild";
+    if(Array.isArray(value)){
+      if(!value.length){
+        const empty = document.createElement("span");
+        empty.className = "jsonBubble jsonValBubble type-null";
+        empty.textContent = "empty list";
+        child.appendChild(empty);
+      }else{
+        value.forEach((item, idx) => child.appendChild(renderJsonValueTree(item, `item ${idx + 1}`)));
+      }
+    }else{
+      const keys = Object.keys(value);
+      if(!keys.length){
+        const empty = document.createElement("span");
+        empty.className = "jsonBubble jsonValBubble type-null";
+        empty.textContent = "empty object";
+        child.appendChild(empty);
+      }else{
+        for(const k of keys){
+          child.appendChild(renderJsonValueTree(value[k], k));
+        }
+      }
+    }
+    entry.appendChild(child);
+    return entry;
+  }
+
+  function buildJsonWidget(test, fieldKey){
+    if(!test || !fieldKey) return document.createElement("div");
+    if(!test._jsonView) test._jsonView = {};
+    if(!test._jsonView[fieldKey]){
+      test._jsonView[fieldKey] = { loading: false, files: [], active: 0, revisions: {}, error: "" };
+    }
+    const view = test._jsonView[fieldKey];
+    const baseUrl = normalizeJsonBaseUrl(state.prefs?.json_base_url);
+    const sectionNo = String(test.data?.section_no || "").trim();
+
+    const wrap = document.createElement("div");
+    wrap.className = "jsonWrap";
+    const toolbar = document.createElement("div");
+    toolbar.className = "jsonToolbar";
+    const expandLabel = state.matrixExpanded ? "Collapse" : "Expand";
+    toolbar.innerHTML = `
+      <button class="btn" data-action="refresh">Refresh</button>
+      <button class="btn" data-action="expand">${expandLabel}</button>
+      <span class="tag" title="${escapeHtml(baseUrl)}">JSON URL: ${escapeHtml(baseUrl)}</span>
+    `;
+    wrap.appendChild(toolbar);
+
+    const tabs = document.createElement("div");
+    tabs.className = "jsonTabs";
+    wrap.appendChild(tabs);
+
+    const viewport = document.createElement("div");
+    viewport.className = "jsonViewport";
+    wrap.appendChild(viewport);
+
+    const setStatus = (text) => {
+      viewport.innerHTML = `<div class="jsonStatus">${escapeHtml(text)}</div>`;
+    };
+
+    const renderActiveRevision = () => {
+      if(view.error){
+        setStatus(view.error);
+        return;
+      }
+      if(view.loading){
+        setStatus("Loading JSON revisions...");
+        return;
+      }
+      if(!view.files.length){
+        setStatus(`No JSON file found for section ${sectionNo || "(missing section_no)"} at ${baseUrl}.`);
+        return;
+      }
+      const activeFile = view.files[Math.max(0, Math.min(view.active, view.files.length - 1))];
+      const payload = view.revisions?.[activeFile.url];
+      if(!payload){
+        setStatus(`Select a revision to load ${activeFile.name}.`);
+        return;
+      }
+      viewport.innerHTML = "";
+      const tree = document.createElement("div");
+      tree.className = "jsonTree";
+      const rootLabel = buildJsonRevisionLabel(activeFile.name, sectionNo);
+      tree.appendChild(renderJsonValueTree(payload, rootLabel));
+      viewport.appendChild(tree);
+    };
+
+    const renderTabs = () => {
+      tabs.innerHTML = "";
+      if(!view.files.length) return;
+      view.files.forEach((file, idx) => {
+        const btn = document.createElement("button");
+        btn.className = `jsonTab${idx === view.active ? " active" : ""}`;
+        btn.textContent = buildJsonRevisionLabel(file.name, sectionNo);
+        btn.title = file.name;
+        btn.addEventListener("click", async () => {
+          view.active = idx;
+          renderTabs();
+          if(!view.revisions[file.url]){
+            setStatus(`Loading ${file.name}...`);
+            try{
+              const resp = await fetch(file.url, { cache: "no-store" });
+              if(!resp.ok) throw new Error(`Failed to load ${file.name} (${resp.status}).`);
+              view.revisions[file.url] = await resp.json();
+            }catch(err){
+              view.error = err.message || `Failed to load ${file.name}.`;
+            }
+          }
+          renderActiveRevision();
+        });
+        tabs.appendChild(btn);
+      });
+    };
+
+    const loadRevisions = async (force = false) => {
+      view.loading = true;
+      view.error = "";
+      renderTabs();
+      renderActiveRevision();
+      try{
+        const files = await listJsonFiles(baseUrl, force);
+        view.files = findJsonCandidatesForSection(files, sectionNo);
+        view.active = 0;
+        if(!view.revisions || force) view.revisions = {};
+        renderTabs();
+        if(!view.files.length){
+          view.loading = false;
+          renderActiveRevision();
+          return;
+        }
+        const first = view.files[0];
+        if(!view.revisions[first.url]){
+          const resp = await fetch(first.url, { cache: "no-store" });
+          if(!resp.ok) throw new Error(`Failed to load ${first.name} (${resp.status}).`);
+          view.revisions[first.url] = await resp.json();
+        }
+      }catch(err){
+        view.error = err.message || "Failed to load JSON revisions.";
+      }finally{
+        view.loading = false;
+        renderTabs();
+        renderActiveRevision();
+      }
+    };
+
+    toolbar.querySelectorAll("button").forEach(btn => {
+      const action = btn.getAttribute("data-action");
+      btn.addEventListener("click", () => {
+        if(action === "expand"){
+          state.matrixExpanded = !state.matrixExpanded;
+          const grid = document.querySelector(".gridEditor");
+          if(grid) grid.classList.toggle("matrixExpanded", state.matrixExpanded);
+          renderForm();
+          return;
+        }
+        if(action === "refresh"){
+          runAsync(loadRevisions(true));
+        }
+      });
+    });
+
+    runAsync(loadRevisions(false));
+    return wrap;
+  }
+
   function buildMatrixWidget(test, fieldKey, locked){
     const { matrix } = ensureMatrixField(test, fieldKey);
     if(!test._matrixView) test._matrixView = {};
@@ -5873,9 +6287,10 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const isSelect = type.includes("select");
         const isComputed = type.includes("computed") || k === "rpn";
         const isMatrix = type.includes("matrix");
+        const isJson = type.includes("json");
         const isTextArea = type === "textarea";
-        if(!isSelect && !isComputed && !isTextArea && !isMatrix) type = "text";
-      const full = isTextArea || isMatrix;
+        if(!isSelect && !isComputed && !isTextArea && !isMatrix && !isJson) type = "text";
+      const full = isTextArea || isMatrix || isJson;
 
       const cell = document.createElement("div");
       cell.className = full ? "full" : "";
@@ -5939,6 +6354,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const matrixControl = buildMatrixWidget(test, k, locked);
         cell.appendChild(head);
         cell.appendChild(matrixControl);
+        grid.appendChild(cell);
+        continue;
+      }
+      if(isJson){
+        const jsonControl = buildJsonWidget(test, k);
+        cell.appendChild(head);
+        cell.appendChild(jsonControl);
         grid.appendChild(cell);
         continue;
       }
@@ -6239,6 +6661,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <option value="text">Text (single line)</option>
           <option value="textarea">Text (multi-line)</option>
           <option value="matrix">Matrix (table)</option>
+          <option value="json">JSON (remote revisions)</option>
         </select>
         <div class="hr"></div>
         <div class="label">Field Prompt (AI guidance)</div>
@@ -6262,6 +6685,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         const anchor = anchorKey || state.focusField || "";
         const value = type === "matrix"
           ? { rows: [], cols: [], row_labels: {}, col_labels: {}, cells: {} }
+          : type === "json"
+            ? {}
           : "";
         if(position === "before") test.data = insertFieldBefore(test, anchor, name, value);
         else test.data = insertFieldAfter(test, anchor, name, value);
@@ -6460,6 +6885,7 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           <option value="text">Text (single line)</option>
           <option value="textarea">Text (multi-line)</option>
           <option value="matrix">Matrix (table)</option>
+          <option value="json">JSON (remote revisions)</option>
         </select>
         <div class="hr"></div>
         <div class="label">Field Prompt (AI guidance)</div>
@@ -6539,6 +6965,11 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
           if(!(out[newKey] && typeof out[newKey] === "object" && !Array.isArray(out[newKey]))){
             out[newKey] = { rows: [], cols: [], row_labels: {}, col_labels: {}, cells: {} };
           }
+        }else if(newType === "json"){
+          if(!(out[newKey] && typeof out[newKey] === "object" && !Array.isArray(out[newKey]))){
+            out[newKey] = {};
+          }
+          if(out._ai.field_schema[newKey]) delete out._ai.field_schema[newKey];
         }else if(out._ai.field_schema[newKey]){
           delete out._ai.field_schema[newKey];
         }
@@ -7983,6 +8414,13 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
             </select>
           </div>
         </div>
+        <div class="row" style="margin-top:10px;">
+          <div style="flex:2;">
+            <div class="label">JSON Base URL</div>
+            <input class="input" id="prefJsonBaseUrl" placeholder="https://minipcb.com/json" />
+          </div>
+          <div style="flex:1;"></div>
+        </div>
 
         <div class="hr"></div>
 
@@ -8041,6 +8479,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
       if(prefTestEditorLock) prefTestEditorLock.value = state.prefs.test_editor_lock || "locked";
       const prefMatrixControls = $("prefMatrixControls");
       if(prefMatrixControls) prefMatrixControls.value = state.prefs.bom_matrix_controls === false ? "false" : "true";
+      const prefJsonBaseUrl = $("prefJsonBaseUrl");
+      if(prefJsonBaseUrl) prefJsonBaseUrl.value = normalizeJsonBaseUrl(state.prefs.json_base_url);
       $("prefNewTestTemplateMode").value = state.prefs.new_test_template_mode || "default";
       const defaultTemplateSelect = $("prefNewTestTemplateDefault");
       if(defaultTemplateSelect) defaultTemplateSelect.value = state.prefs.new_test_template_default || "__blank__";
@@ -8122,6 +8562,8 @@ ${plan.userNotes || "Add plan-level notes here (equipment, safety, lab setup, et
         state.prefs.test_editor_lock = $("prefTestEditorLock").value || "locked";
         const prefMatrixControls = $("prefMatrixControls");
         if(prefMatrixControls) state.prefs.bom_matrix_controls = prefMatrixControls.value === "true";
+        const prefJsonBaseUrl = $("prefJsonBaseUrl");
+        if(prefJsonBaseUrl) state.prefs.json_base_url = normalizeJsonBaseUrl(prefJsonBaseUrl.value);
         state.prefs.new_test_template_mode = $("prefNewTestTemplateMode").value;
         state.prefs.new_test_template_default = $("prefNewTestTemplateDefault").value || "__blank__";
         const dbgSel = $("prefAiReviewDebug");
