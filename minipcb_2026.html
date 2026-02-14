@@ -699,7 +699,8 @@
       currentMarkdownText: "",
       currentJsonPath: "",
       currentJsonText: "",
-      currentJsonValue: null
+      currentJsonValue: null,
+      pathExistsCache: {}
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1036,6 +1037,26 @@
       return rb.minor - ra.minor;
     }
 
+    function parseA1Minor(rev){
+      const m = String(rev || "").match(/^A1-(\d{2})$/i);
+      return m ? Number(m[1]) : 0;
+    }
+
+    async function pathExists(path){
+      if(!path) return false;
+      if(Object.prototype.hasOwnProperty.call(state.pathExistsCache, path)){
+        return !!state.pathExistsCache[path];
+      }
+      try{
+        const res = await fetch(path + "?v=" + Date.now(), { method: "HEAD", cache: "no-store" });
+        state.pathExistsCache[path] = !!res.ok;
+        return !!res.ok;
+      }catch(_){
+        state.pathExistsCache[path] = false;
+        return false;
+      }
+    }
+
     async function resolveMdPathForEntry(entry){
       const pn = (entry && entry.pn) || "";
       if(!pn) return "";
@@ -1043,14 +1064,30 @@
       const existing = (state.mdIndex || []).filter(x => x && x.pn === pn);
       if(existing.length){
         existing.sort((a, b) => compareRevDesc(a.rev, b.rev));
-        const best = existing[0];
-        if((best && best.path)){
-          entry.mdPath = best.path;
-          entry.filename = best.filename || entry.filename || "";
-          entry.rev = best.rev || entry.rev || "";
-          entry.kind = best.kind || entry.kind || "";
+        const bestIndexed = existing[0];
+        const bestMinor = parseA1Minor(bestIndexed && bestIndexed.rev);
+
+        // If index.json lags behind latest pushes, probe for newer A1-XX revisions.
+        for(let i = 30; i > bestMinor; i -= 1){
+          const rev = String(i).padStart(2, "0");
+          const candidate = `md/${pn}_A1-${rev}_sch.md`;
+          if(await pathExists(candidate)){
+            entry.mdPath = candidate;
+            entry.filename = `${pn}_A1-${rev}_sch.md`;
+            entry.rev = `A1-${rev}`;
+            entry.kind = "sch";
+            entry.hasMarkdown = true;
+            return candidate;
+          }
+        }
+
+        if((bestIndexed && bestIndexed.path) && await pathExists(bestIndexed.path)){
+          entry.mdPath = bestIndexed.path;
+          entry.filename = bestIndexed.filename || entry.filename || "";
+          entry.rev = bestIndexed.rev || entry.rev || "";
+          entry.kind = bestIndexed.kind || entry.kind || "";
           entry.hasMarkdown = true;
-          return best.path;
+          return bestIndexed.path;
         }
       }
 
@@ -1060,17 +1097,14 @@
       for(let i = 30; i >= 1; i -= 1){
         const rev = String(i).padStart(2, "0");
         const candidate = `md/${pn}_A1-${rev}_sch.md`;
-        try{
-          const res = await fetch(candidate, { method: "HEAD", cache: "no-store" });
-          if(res.ok){
-            entry.mdPath = candidate;
-            entry.filename = `${pn}_A1-${rev}_sch.md`;
-            entry.rev = `A1-${rev}`;
-            entry.kind = "sch";
-            entry.hasMarkdown = true;
-            return candidate;
-          }
-        }catch(_){}
+        if(await pathExists(candidate)){
+          entry.mdPath = candidate;
+          entry.filename = `${pn}_A1-${rev}_sch.md`;
+          entry.rev = `A1-${rev}`;
+          entry.kind = "sch";
+          entry.hasMarkdown = true;
+          return candidate;
+        }
       }
 
       return "";
@@ -1382,7 +1416,7 @@
     async function loadIndex(){
       let mdEntries = [];
       try{
-        const res = await fetch("md/index.json");
+        const res = await fetch("md/index.json?v=" + Date.now(), { cache: "no-store" });
         if(!res.ok) throw new Error("Index not found");
         const data = await res.json();
         mdEntries = Array.isArray(data.entries) ? data.entries.slice() : [];
@@ -1485,8 +1519,8 @@
 
     window.addEventListener("hashchange", () => {
       const hashPath = getHashPath();
-      const target = state.entries.find(e => e.path === hashPath || e.filename === hashPath);
-      if(target && (!state.current || target.path !== state.current.path)) selectEntry(target);
+      const target = state.entries.find(e => e.mdPath === hashPath || e.filename === hashPath || e.pn === hashPath);
+      if(target && (!state.current || target.pn !== state.current.pn || target.mdPath !== state.current.mdPath)) selectEntry(target);
     });
 
     setupTabs();
