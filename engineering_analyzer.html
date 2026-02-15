@@ -495,6 +495,7 @@
           <button id="saveSetupBtn" type="button">Save Setup File</button>
         </div>
       </div>
+      <p id="setupSaveStatus" class="hint">Setup files target `json/fmea/setup` when directory access is configured.</p>
       <section id="fmeaAssumptionsSection" class="fmea-assumptions hidden">
         <h3>FMEA Failure Mode Assumptions</h3>
         <p id="fmeaAssumptionsStatus" class="assumption-note">Load inputs to generate component-level assumptions.</p>
@@ -784,6 +785,7 @@
     const panelResults = document.getElementById("panelResults");
     const panelSaved = document.getElementById("panelSaved");
     const saveSetupBtn = document.getElementById("saveSetupBtn");
+    const setupSaveStatus = document.getElementById("setupSaveStatus");
     const selectFmeaDirBtn = document.getElementById("selectFmeaDirBtn");
     const refreshSavedBtn = document.getElementById("refreshSavedBtn");
     const savedStatus = document.getElementById("savedStatus");
@@ -1170,40 +1172,67 @@
       };
     }
 
+    function setSavedStatus(message) {
+      if (savedStatus) savedStatus.textContent = message;
+      if (setupSaveStatus) setupSaveStatus.textContent = message;
+    }
+
+    async function resolveFmeaBaseDirectoryHandle() {
+      if (!state.fmeaDirHandle) return null;
+      const selected = state.fmeaDirHandle;
+      try {
+        const jsonDir = await selected.getDirectoryHandle("json");
+        const fmeaDir = await jsonDir.getDirectoryHandle("fmea");
+        return { handle: fmeaDir, resolvedFrom: "json/fmea" };
+      } catch (_err1) {
+        // continue
+      }
+      try {
+        const fmeaDir = await selected.getDirectoryHandle("fmea");
+        return { handle: fmeaDir, resolvedFrom: "fmea" };
+      } catch (_err2) {
+        // continue
+      }
+      return { handle: selected, resolvedFrom: "(selected folder)" };
+    }
+
     async function saveSetupFile() {
       const payload = buildSetupPayload();
       const stem = buildAnalysisStem("fmea_setup");
       const filename = stem + ".json";
       try {
         if (await writeJsonToFmeaDirectory("setup", filename, payload)) {
-          savedStatus.textContent = "Saved setup file to json/fmea/setup/" + filename;
+          setSavedStatus("Saved setup file to json/fmea/setup/" + filename);
           refreshSavedFiles();
           return;
         }
       } catch (err) {
-        savedStatus.textContent = "Direct setup save failed: " + err.message + ". Downloaded instead.";
+        setSavedStatus("Direct setup save failed: " + err.message + ". Downloaded instead.");
       }
+      setSavedStatus("Directory save unavailable. Downloaded setup file instead.");
       downloadBlob(filename, JSON.stringify(payload, null, 2), "application/json");
     }
 
     async function selectFmeaDirectory() {
       try {
         if (!window.showDirectoryPicker) {
-          savedStatus.textContent = "Directory API unavailable in this browser. Use downloads or provide json/fmea/index.json.";
+          setSavedStatus("Directory API unavailable in this browser. Use downloads or provide json/fmea/index.json.");
           return;
         }
         const handle = await window.showDirectoryPicker();
         state.fmeaDirHandle = handle;
-        savedStatus.textContent = "Directory selected. Writes go to selected folder and setup subfolder.";
+        const resolved = await resolveFmeaBaseDirectoryHandle();
+        setSavedStatus("Directory selected. Save base resolved as " + (resolved ? resolved.resolvedFrom : "(none)") + " under selected folder.");
         await refreshSavedFiles();
       } catch (err) {
-        savedStatus.textContent = "Directory selection cancelled or denied.";
+        setSavedStatus("Directory selection cancelled or denied.");
       }
     }
 
     async function writeJsonToFmeaDirectory(subdir, filename, value) {
-      if (!state.fmeaDirHandle) return false;
-      const base = state.fmeaDirHandle;
+      const resolved = await resolveFmeaBaseDirectoryHandle();
+      if (!resolved || !resolved.handle) return false;
+      const base = resolved.handle;
       const targetDir = subdir ? await base.getDirectoryHandle(subdir, { create: true }) : base;
       const fileHandle = await targetDir.getFileHandle(filename, { create: true });
       const writable = await fileHandle.createWritable();
@@ -1213,8 +1242,9 @@
     }
 
     async function writeTextToFmeaDirectory(subdir, filename, text) {
-      if (!state.fmeaDirHandle) return false;
-      const base = state.fmeaDirHandle;
+      const resolved = await resolveFmeaBaseDirectoryHandle();
+      if (!resolved || !resolved.handle) return false;
+      const base = resolved.handle;
       const targetDir = subdir ? await base.getDirectoryHandle(subdir, { create: true }) : base;
       const fileHandle = await targetDir.getFileHandle(filename, { create: true });
       const writable = await fileHandle.createWritable();
@@ -1234,7 +1264,9 @@
     async function refreshSavedFilesFromDirectory() {
       const rows = [];
       try {
-        for await (const [name, handle] of state.fmeaDirHandle.entries()) {
+        const resolved = await resolveFmeaBaseDirectoryHandle();
+        if (!resolved || !resolved.handle) throw new Error("No directory selected");
+        for await (const [name, handle] of resolved.handle.entries()) {
           if (handle.kind === "file") rows.push({ name, location: "json/fmea", type: "file", source: "dir" });
           if (handle.kind === "directory" && name === "setup") {
             for await (const [sname, sh] of handle.entries()) {
@@ -1243,9 +1275,9 @@
           }
         }
         renderSavedFiles(rows);
-        savedStatus.textContent = "Loaded " + rows.length + " saved files from selected folder.";
+        setSavedStatus("Loaded " + rows.length + " saved files from resolved json/fmea base.");
       } catch (err) {
-        savedStatus.textContent = "Unable to enumerate selected folder: " + err.message;
+        setSavedStatus("Unable to enumerate selected folder: " + err.message);
       }
     }
 
@@ -1261,10 +1293,10 @@
           source: "index"
         })) : [];
         renderSavedFiles(rows);
-        savedStatus.textContent = "Loaded " + rows.length + " saved files from json/fmea/index.json.";
+        setSavedStatus("Loaded " + rows.length + " saved files from json/fmea/index.json.");
       } catch (_err) {
         renderSavedFiles([]);
-        savedStatus.textContent = "No directory selected and no json/fmea/index.json manifest available.";
+        setSavedStatus("No directory selected and no json/fmea/index.json manifest available.");
       }
     }
 
@@ -1305,7 +1337,9 @@
     async function loadSavedAnalysisRow(row) {
       try {
         if (state.fmeaDirHandle && row.source === "dir") {
-          const dir = row.inSetup ? await state.fmeaDirHandle.getDirectoryHandle("setup") : state.fmeaDirHandle;
+          const resolved = await resolveFmeaBaseDirectoryHandle();
+          if (!resolved || !resolved.handle) throw new Error("No resolved base directory");
+          const dir = row.inSetup ? await resolved.handle.getDirectoryHandle("setup") : resolved.handle;
           const file = await (await dir.getFileHandle(row.name)).getFile();
           const text = await file.text();
           const parsed = JSON.parse(text);
@@ -1320,7 +1354,7 @@
         renderJsonViewer(outputViewer, parsed, "No JSON output yet.");
         activateTab("results");
       } catch (err) {
-        savedStatus.textContent = "Load failed: " + err.message;
+        setSavedStatus("Load failed: " + err.message);
       }
     }
 
@@ -1810,9 +1844,9 @@
         if (!savedDirect) {
           downloadBlob(jsonName, JSON.stringify(state.lastOutput, null, 2), "application/json");
           downloadBlob(mdName, state.lastMarkdown, "text/markdown");
-          savedStatus.textContent = "Direct result save unavailable. Downloaded files instead.";
+          setSavedStatus("Direct result save unavailable. Downloaded files instead.");
         } else {
-          savedStatus.textContent = "Saved result files to json/fmea/" + jsonName + " and .md pair.";
+          setSavedStatus("Saved result files to json/fmea/" + jsonName + " and .md pair.");
           refreshSavedFiles();
         }
         state.outputsExported = true;
