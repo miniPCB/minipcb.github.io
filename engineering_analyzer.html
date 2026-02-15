@@ -203,17 +203,108 @@
        background: #182231;
      }
 
-     pre {
-       margin: 0;
-       padding: 10px;
-       white-space: pre;
-       overflow: auto;
+    pre {
+      margin: 0;
+      padding: 10px;
+      white-space: pre;
+      overflow: auto;
        max-height: 320px;
        font-size: 0.8rem;
        font-family: var(--mono);
        background: #0f151f;
-       border-top: 1px solid var(--border);
-     }
+      border-top: 1px solid var(--border);
+    }
+
+    .jsonViewport{
+      border-top: 1px solid var(--border);
+      background: rgba(15,20,30,0.45);
+      overflow:auto;
+      min-height:220px;
+      max-height:360px;
+      padding:10px;
+      border-radius:0 0 8px 8px;
+    }
+
+    .jsonStatus{
+      color: var(--muted);
+      font-size: 0.84rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .jsonTree{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      font-family: var(--mono);
+      font-size:12px;
+    }
+
+    .jsonEntry{
+      display:flex;
+      align-items:flex-start;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+
+    .jsonChild{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin-left:10px;
+      border-left:1px dashed rgba(102,163,255,0.3);
+      padding-left:10px;
+      min-width:0;
+      flex:1;
+    }
+
+    .jsonBubble{
+      display:inline-flex;
+      align-items:center;
+      border-radius:999px;
+      padding:3px 9px;
+      line-height:1.2;
+      max-width:100%;
+      word-break:break-word;
+      white-space:normal;
+    }
+
+    .jsonKeyBubble{
+      background: rgba(102,163,255,0.18);
+      border:1px solid rgba(102,163,255,0.45);
+      color: #c6e3ff;
+      font-weight:600;
+    }
+
+    .jsonValBubble{
+      background: rgba(123,220,181,0.15);
+      border:1px solid rgba(123,220,181,0.45);
+      color: #c8ffe2;
+    }
+
+    .jsonValBubble.type-number{
+      background: rgba(255,211,124,0.15);
+      border-color: rgba(255,211,124,0.45);
+      color: #ffeec3;
+    }
+
+    .jsonValBubble.type-boolean{
+      background: rgba(206,160,255,0.15);
+      border-color: rgba(206,160,255,0.45);
+      color: #f0deff;
+    }
+
+    .jsonValBubble.type-null{
+      background: rgba(255,123,123,0.15);
+      border-color: rgba(255,123,123,0.45);
+      color: #ffd6d6;
+    }
+
+    .jsonValBubble.type-object{
+      background: rgba(111,181,255,0.15);
+      border-color: rgba(111,181,255,0.45);
+      color: #d8ebff;
+    }
 
      .table-wrap {
        overflow: auto;
@@ -357,11 +448,11 @@
       <p id="inputStatus" class="hint">Load `netlist.json` (or equivalent schema v1.1 JSON) to enable analysis.</p>
       <details open>
         <summary>Input JSON Viewer</summary>
-        <pre id="inputViewer">{}</pre>
+        <div id="inputViewer" class="jsonViewport jsonStatus">No JSON loaded.</div>
       </details>
       <details>
         <summary>Net Graph Viewer (v0.1 placeholder)</summary>
-        <pre id="netGraphViewer">Graph output is optional in v0.1. Net adjacency summary will appear here after upload.</pre>
+        <div id="netGraphViewer" class="jsonViewport jsonStatus">Graph output is optional in v0.1. Net adjacency summary will appear here after upload.</div>
       </details>
     </section>
 
@@ -399,7 +490,7 @@
       <div id="summaryGrid" class="summary-grid"></div>
       <details>
         <summary>Output JSON Viewer</summary>
-        <pre id="outputViewer">{}</pre>
+        <div id="outputViewer" class="jsonViewport jsonStatus">No JSON output yet.</div>
       </details>
     </section>
    </div>
@@ -673,20 +764,20 @@
          errors.push("stress_rules.json did not match expected structure.");
        }
 
-       inputViewer.textContent = JSON.stringify({
-         uploaded_files: Object.keys(state.files),
-         detected: {
-           netlist: !!state.netlist,
-           test_plan: !!state.testPlan,
-           parts_library: !!state.partsLibrary,
-           tolerance_library: !!state.toleranceLibrary,
-           stress_rules: !!state.stressRules
-         },
-         preview: state.netlist || {}
-       }, null, 2);
+      renderJsonViewer(inputViewer, {
+        uploaded_files: Object.keys(state.files),
+        detected: {
+          netlist: !!state.netlist,
+          test_plan: !!state.testPlan,
+          parts_library: !!state.partsLibrary,
+          tolerance_library: !!state.toleranceLibrary,
+          stress_rules: !!state.stressRules
+        },
+        preview: state.netlist || {}
+      }, "No JSON loaded.");
 
 
-       netGraphViewer.textContent = buildNetAdjacencySummary(state.netlist);
+      renderJsonViewer(netGraphViewer, buildNetAdjacencyData(state.netlist), "No netlist loaded.");
 
 
       if (errors.length) {
@@ -763,7 +854,7 @@
       state.lastOutput = Object.assign({}, base, analysis.result);
       state.lastMarkdown = analysis.markdown;
       state.outputsExported = false;
-      outputViewer.textContent = JSON.stringify(state.lastOutput, null, 2);
+      renderJsonViewer(outputViewer, state.lastOutput, "No JSON output yet.");
       renderAnalysis(analysis);
       resultStatus.textContent = "Completed " + type.toUpperCase() + " with deterministic engine v" + ENGINE_VERSION + ".";
       updateWorkflowUi();
@@ -1147,21 +1238,94 @@
        return map;
      }
 
-     function buildNetAdjacencySummary(netlist) {
-       if (!netlist || !Array.isArray(netlist.components)) {
-         return "No netlist loaded.";
-       }
-       const netToRefs = buildNetToRefsMap(netlist);
-       const lines = [];
-       const nets = Object.keys(netToRefs).sort();
-       lines.push("Nets: " + nets.length);
-       lines.push("");
-       for (const net of nets.slice(0, 120)) {
-         lines.push(net + " => " + dedupe(netToRefs[net]).join(", "));
-       }
-       if (nets.length > 120) lines.push("... truncated");
-       return lines.join("\n");
-     }
+    function buildNetAdjacencyData(netlist) {
+      if (!netlist || !Array.isArray(netlist.components)) return null;
+      const netToRefs = buildNetToRefsMap(netlist);
+      const nets = Object.keys(netToRefs).sort();
+      const adjacency = {};
+      for (const net of nets.slice(0, 120)) adjacency[net] = dedupe(netToRefs[net]);
+      return {
+        net_count: nets.length,
+        truncated: nets.length > 120,
+        adjacency
+      };
+    }
+
+    function renderJsonValueTree(value, keyLabel, depth) {
+      const entry = document.createElement("div");
+      entry.className = "jsonEntry";
+      if (keyLabel) {
+        const key = document.createElement("span");
+        key.className = "jsonBubble jsonKeyBubble";
+        key.textContent = keyLabel;
+        entry.appendChild(key);
+      }
+
+      const appendPrimitive = (primitive, cls) => {
+        const bubble = document.createElement("span");
+        bubble.className = "jsonBubble jsonValBubble " + cls;
+        bubble.textContent = primitive === null ? "null" : String(primitive);
+        entry.appendChild(bubble);
+      };
+
+      if (depth > 7) {
+        appendPrimitive("max depth reached", "type-object");
+        return entry;
+      }
+
+      if (value === null) {
+        appendPrimitive(null, "type-null");
+        return entry;
+      }
+      if (typeof value === "number") {
+        appendPrimitive(value, "type-number");
+        return entry;
+      }
+      if (typeof value === "boolean") {
+        appendPrimitive(value, "type-boolean");
+        return entry;
+      }
+      if (typeof value !== "object") {
+        appendPrimitive(value, "type-string");
+        return entry;
+      }
+
+      const child = document.createElement("div");
+      child.className = "jsonChild";
+      if (Array.isArray(value)) {
+        if (!value.length) {
+          appendPrimitive("empty list", "type-object");
+          return entry;
+        }
+        value.slice(0, 250).forEach((item, idx) => child.appendChild(renderJsonValueTree(item, "item " + (idx + 1), depth + 1)));
+        if (value.length > 250) child.appendChild(renderJsonValueTree("truncated", "more", depth + 1));
+      } else {
+        const keys = Object.keys(value);
+        if (!keys.length) {
+          appendPrimitive("empty object", "type-object");
+          return entry;
+        }
+        keys.slice(0, 250).forEach((k) => child.appendChild(renderJsonValueTree(value[k], k, depth + 1)));
+        if (keys.length > 250) child.appendChild(renderJsonValueTree("truncated", "more", depth + 1));
+      }
+      entry.appendChild(child);
+      return entry;
+    }
+
+    function renderJsonViewer(container, value, emptyText) {
+      if (!container) return;
+      container.innerHTML = "";
+      if (value === null || value === undefined) {
+        container.classList.add("jsonStatus");
+        container.textContent = emptyText || "No JSON loaded.";
+        return;
+      }
+      const tree = document.createElement("div");
+      tree.className = "jsonTree";
+      tree.appendChild(renderJsonValueTree(value, "root", 0));
+      container.classList.remove("jsonStatus");
+      container.appendChild(tree);
+    }
 
      function extractCoveredNets(testPlan) {
        const set = new Set();
@@ -1334,7 +1498,7 @@
       state.lastOutput = null;
       state.lastMarkdown = "";
       state.outputsExported = false;
-      outputViewer.textContent = "{}";
+      renderJsonViewer(outputViewer, null, "No JSON output yet.");
       resultsHead.innerHTML = "";
       resultsBody.innerHTML = "";
       secondaryHead.innerHTML = "";
