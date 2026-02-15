@@ -1,0 +1,498 @@
+ENGINEERING ANALYZER SPECIFICATION
+
+Version: 0.1
+Target: Single HTML file
+Execution: Client-side only
+Deterministic: Yes
+
+1. Purpose
+
+The Engineering Analyzer is a browser-based deterministic analysis engine that:
+
+Accepts structured JSON input files
+
+Executes selected analysis modules
+
+Produces structured JSON and Markdown outputs
+
+Provides visual inspection of inputs and results
+
+Requires no server or API
+
+2. Execution Environment
+
+Single file: engineering_analyzer.html
+
+All CSS inline
+
+All JavaScript inline
+
+No external dependencies required
+
+Compatible with GitHub Pages hosting
+
+Runs entirely in browser memory
+
+3. File Locations (Project Structure)
+
+Input source (repository reference):
+
+C:\Repos\minipcb.github.io\json
+
+
+Output target (repository reference):
+
+C:\Repos\minipcb.github.io\analysis_results
+
+
+Since the application runs in browser:
+
+Files are loaded via file input control
+
+Files are exported via Blob download
+
+User manually places downloaded files into analysis_results
+
+No filesystem write access is assumed.
+
+4. Supported Input Files
+Required
+
+netlist.json (miniPCB schema v1.1)
+
+Optional
+
+test_plan.json
+
+parts_library.json
+
+tolerance_library.json
+
+stress_rules.json
+
+All inputs must validate against defined JSON schemas before analysis.
+
+5. Core Architecture
+
+The application defines a deterministic analyzer registry:
+
+const analyzers = {
+  fmea: runFMEA,
+  epsa: runEPSA,
+  wcca: runWCCA,
+  coverage: runCoverage
+};
+
+
+Each analyzer:
+
+Accepts structured input object
+
+Produces deterministic output object
+
+Produces no side effects
+
+Uses no randomness
+
+Uses no AI
+
+Uses no asynchronous external calls
+
+6. User Interface Specification
+
+UI elements must appear in the following order:
+
+Top Control Panel
+
+[ Upload Files ]
+[ Select Analysis Type ▼ ]
+[ Run Analysis ]
+[ Export Results ]
+
+Main Content Area
+
+Left Panel:
+
+Input JSON Viewer (collapsible)
+
+Net Graph Viewer (optional for v0.1)
+
+Right Panel:
+
+Analysis Results Table
+
+Risk / Stress / Margin table
+
+Summary statistics
+
+Output JSON Viewer (collapsible)
+
+Styling requirements:
+
+Dark mode
+
+Consistent with Test Base 2026 color scheme
+
+Collapsible panels
+
+Scrollable tables
+
+Fixed-width JSON display
+
+Deterministic layout
+
+7. Analysis Modules
+
+Each module must operate deterministically.
+
+7.1 FMEA Module
+
+Function: runFMEA(netlist, test_plan)
+
+7.1.1 Failure Mode Assumptions
+
+Failure assumptions are defined by component class:
+
+Resistors:
+
+open
+
+short
+
+oot_high
+
+oot_low
+
+Capacitors:
+
+open
+
+short
+
+capacitance_low
+
+esr_high
+
+Transistors:
+
+gain_low
+
+be_short
+
+ce_short
+
+open_collector
+
+Connectors:
+
+open_contact
+
+intermittent_contact
+
+Test Points:
+
+measurement_error
+
+Failure assumption list must be static and version-controlled.
+
+7.1.2 Propagation Rules
+
+Propagation is rule-based.
+
+Example deterministic rule:
+
+If resistor fails oot_low:
+
+Downstream node voltage increases
+
+Upstream bias shifts
+
+Propagation must:
+
+Track affected nets
+
+Track affected components
+
+Track affected interface pins
+
+No SPICE simulation is required.
+
+7.1.3 RPN Calculation
+
+RPN formula:
+
+RPN = Severity × Occurrence × Detection
+
+Severity:
+
+Derived from affected net type
+
+Interface nets > internal nets
+
+Occurrence:
+
+Derived from component type class
+
+Detection:
+
+Derived from coverage engine
+
+If no test covers affected net, detection score worsens
+
+All scoring tables must be explicitly defined constants.
+
+7.1.4 FMEA Output
+
+Produces:
+
+fmea.json containing:
+
+component
+
+failure_mode
+
+affected_nets
+
+severity
+
+occurrence
+
+detection
+
+RPN
+
+coverage_status
+
+Also produces:
+
+fmea.md report
+
+7.2 EPSA Module
+
+Function: runEPSA(netlist, parts_library)
+
+Required Data
+
+Parts library must contain:
+
+voltage_rating
+
+current_rating
+
+power_rating
+
+temperature_rating
+
+Deterministic Calculations
+
+For each component:
+
+Voltage stress:
+
+Compare net nominal voltage to rating
+
+Current stress:
+
+If current metadata exists, compare to rating
+
+Power dissipation:
+
+For resistors: P = V^2 / R
+
+Use deterministic approximations
+
+Derating Margin:
+
+Margin % = (Rating - Actual) / Rating × 100
+
+Flag if below threshold.
+
+EPSA Output
+
+Produces:
+
+epsa.json:
+
+component
+
+parameter
+
+actual
+
+rating
+
+margin_percent
+
+status
+
+Also produces markdown report.
+
+7.3 WCCA Module
+
+Function: runWCCA(netlist, tolerance_library)
+
+Deterministic Computation
+
+Worst-case resistor network:
+
+Rmax = R_nominal × (1 + tolerance)
+Rmin = R_nominal × (1 - tolerance)
+
+Propagate extremes through:
+
+Voltage dividers
+
+Gain stages
+
+Bias networks
+
+Calculate:
+
+Worst-case output voltage
+
+Worst-case gain
+
+Worst-case bias current
+
+Margin reporting:
+
+Nominal vs worst-case difference
+
+Percent deviation
+
+WCCA Output
+
+wcca.json:
+
+network
+
+nominal_value
+
+worst_case_high
+
+worst_case_low
+
+deviation_percent
+
+margin_status
+
+7.4 Coverage Analysis Module
+
+Function: runCoverage(netlist, test_plan)
+
+Compute:
+
+Net coverage %
+
+= (# nets with test coverage) / (total nets)
+
+Critical net coverage %
+
+Critical nets defined as:
+
+Interface nets
+
+Power nets
+
+Bias nets
+
+Redundancy analysis:
+
+Count test points per net
+
+Flag single-point-of-failure nets
+
+Produces:
+
+coverage.json
+
+8. Visualization Requirements
+
+Minimum required for v0.1:
+
+Sortable results table
+
+Risk color scale
+
+Coverage color scale
+
+JSON viewer (input + output)
+
+Download buttons
+
+Optional (future):
+
+Interactive net graph
+
+Component failure highlight
+
+9. Export Specification
+
+Exports via Blob download:
+
+Filename format:
+
+analysis_<type><board_pn><revision>.json
+analysis_<type><board_pn><revision>.md
+
+User manually places files into:
+
+C:\Repos\minipcb.github.io\analysis_results
+
+10. Deterministic Constraints
+
+The application SHALL:
+
+Use no randomness
+
+Use no AI
+
+Use no server calls
+
+Produce identical output for identical input
+
+Use versioned failure assumption tables
+
+Use versioned scoring tables
+
+Log analysis version in output JSON
+
+11. Versioning
+
+Output JSON must include:
+
+"analysis_engine_version": "0.1"
+"analysis_type": "fmea"
+"generated_on": ISO8601 timestamp
+
+12. Expandability
+
+The architecture must allow:
+
+Addition of new analyzer functions
+
+Addition of new failure modes
+
+Addition of new stress rules
+
+Addition of AI explanation layer (optional future)
+
+Without breaking deterministic core.
+
+13. Future Extensions (Not v0.1)
+
+AI narrative explanation
+
+Monte Carlo simulation mode
+
+Margin heatmaps
+
+Reliability growth modeling
+
+Auto TestBASE integration
+
+Final Statement
+
+engineering_analyzer.html is defined as:
+
+A deterministic, client-side, multi-domain engineering analysis engine capable of executing FMEA, EPSA, WCCA, and coverage analysis using structured JSON inputs and producing structured JSON outputs suitable for version control.
