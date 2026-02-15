@@ -1,202 +1,1091 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Engineering Analyzer</title>
-  <style>
-    :root{--bg:#0d1117;--p:#151c28;--p2:#1a2331;--t:#e8edf5;--m:#9aa9be;--b:#2a384d;--ok:#2ecc71;--w:#f1c40f;--bad:#ff5c5c}
-    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 0 0,#1d2738,transparent 55%),var(--bg);color:var(--t);font-family:Segoe UI,Tahoma,sans-serif}
-    .page{max-width:1400px;margin:0 auto;padding:18px}.title{margin:0 0 12px}
-    .ctrl{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;background:linear-gradient(var(--p2),var(--p));border:1px solid var(--b);border-radius:10px;padding:10px;margin-bottom:12px}
-    button,select{min-height:40px;background:#1e2837;color:var(--t);border:1px solid var(--b);border-radius:8px;padding:0 10px;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
-    .content{display:grid;grid-template-columns:minmax(300px,37%) minmax(430px,63%);gap:12px}.panel{background:var(--p);border:1px solid var(--b);border-radius:10px;overflow:hidden}
-    h2{margin:0;padding:10px 12px;background:#1a2535;border-bottom:1px solid var(--b);font-size:1rem}.body{padding:10px}
-    details{border:1px solid var(--b);border-radius:8px;margin-bottom:10px;overflow:hidden;background:#111926}
-    summary{padding:10px;background:#182231;cursor:pointer;font-weight:600}
-    pre{margin:0;padding:10px;max-height:320px;overflow:auto;background:#0f151f;border-top:1px solid var(--b);font-family:Consolas,Courier New,monospace;font-size:.8rem}
-    .hint{margin:0 0 10px;color:var(--m);font-size:.87rem}.wrap{max-height:320px;overflow:auto;border:1px solid var(--b);border-radius:8px;margin-bottom:10px}
-    table{width:100%;border-collapse:collapse;font-size:.86rem}th,td{padding:8px;border-bottom:1px solid #283447;text-align:left;vertical-align:top}
-    th{position:sticky;top:0;background:#1a2535;cursor:pointer}.sum{display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:10px}
-    .metric{padding:8px 10px;border:1px solid var(--b);border-radius:8px;background:#121c2a}.k{display:block;color:var(--m);font-size:.75rem}.v{font-size:1.05rem;font-weight:700}
-    .ok{color:var(--ok);font-weight:700}.warn{color:var(--w);font-weight:700}.bad{color:var(--bad);font-weight:700}
-    .hidden{display:none}@media(max-width:1050px){.ctrl{grid-template-columns:1fr 1fr}.content{grid-template-columns:1fr}}
-  </style>
+   <meta charset="utf-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Engineering Analyzer</title>
+   <style>
+     :root {
+       --bg: #0e1118;
+       --panel: #151b25;
+       --panel-2: #1b2330;
+       --text: #e8edf5;
+       --muted: #98a7bb;
+       --accent: #2f88ff;
+       --accent-2: #37c3ff;
+       --border: #2d3a4d;
+       --ok: #2ecc71;
+       --warn: #f1c40f;
+       --bad: #ff5757;
+       --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+       --mono: "Consolas", "Courier New", monospace;
+       --sans: "Segoe UI", "Trebuchet MS", sans-serif;
+     }
+
+     * { box-sizing: border-box; }
+
+     body {
+       margin: 0;
+       font-family: var(--sans);
+       color: var(--text);
+       background:
+         radial-gradient(circle at 20% 0%, #1b2434 0%, transparent 50%),
+         radial-gradient(circle at 90% 100%, #132036 0%, transparent 45%),
+         var(--bg);
+       min-height: 100vh;
+     }
+
+     .page {
+       max-width: 1400px;
+       margin: 0 auto;
+       padding: 20px;
+     }
+
+     .title {
+       margin: 0 0 16px;
+       font-size: 1.45rem;
+       letter-spacing: 0.02em;
+     }
+
+     .control-panel {
+       display: grid;
+       grid-template-columns: repeat(4, minmax(160px, 1fr));
+       gap: 10px;
+       padding: 12px;
+       border: 1px solid var(--border);
+       background: linear-gradient(180deg, var(--panel-2), var(--panel));
+       border-radius: 12px;
+       box-shadow: var(--shadow);
+       margin-bottom: 14px;
+     }
+
+     button,
+     select {
+       border: 1px solid var(--border);
+       background: #1e2837;
+       color: var(--text);
+       border-radius: 8px;
+       min-height: 42px;
+       padding: 0 12px;
+       font-size: 0.95rem;
+       cursor: pointer;
+     }
+
+     button:hover, select:hover { border-color: #496287; }
+     button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+     .content {
+       display: grid;
+       grid-template-columns: minmax(320px, 38%) minmax(420px, 62%);
+       gap: 12px;
+       align-items: start;
+     }
+
+     .panel {
+       border: 1px solid var(--border);
+       background: var(--panel);
+       border-radius: 12px;
+       box-shadow: var(--shadow);
+       overflow: hidden;
+     }
+
+     .panel h2 {
+       margin: 0;
+       padding: 10px 12px;
+       font-size: 1rem;
+       border-bottom: 1px solid var(--border);
+       background: #1a2230;
+     }
+
+     .panel-body { padding: 10px; }
+
+     details {
+       border: 1px solid var(--border);
+       border-radius: 8px;
+       margin-bottom: 10px;
+       overflow: hidden;
+       background: #121a25;
+     }
+
+     summary {
+       cursor: pointer;
+       padding: 10px 12px;
+       user-select: none;
+       font-weight: 600;
+       background: #182231;
+     }
+
+     pre {
+       margin: 0;
+       padding: 10px;
+       white-space: pre;
+       overflow: auto;
+       max-height: 320px;
+       font-size: 0.8rem;
+       font-family: var(--mono);
+       background: #0f151f;
+       border-top: 1px solid var(--border);
+     }
+
+     .table-wrap {
+       overflow: auto;
+       border: 1px solid var(--border);
+       border-radius: 8px;
+       max-height: 330px;
+       margin-bottom: 10px;
+     }
+
+     table {
+       width: 100%;
+       border-collapse: collapse;
+       font-size: 0.86rem;
+     }
+
+     th, td {
+       padding: 8px 9px;
+       border-bottom: 1px solid #283447;
+       text-align: left;
+       vertical-align: top;
+     }
+
+     th {
+       position: sticky;
+       top: 0;
+       background: #1a2535;
+       cursor: pointer;
+       white-space: nowrap;
+     }
+
+     tr:hover td { background: #152132; }
+
+     .summary-grid {
+       display: grid;
+       grid-template-columns: repeat(3, minmax(120px, 1fr));
+       gap: 10px;
+     }
+
+     .metric {
+       border: 1px solid var(--border);
+       border-radius: 8px;
+       background: #121c2a;
+       padding: 8px 10px;
+     }
+
+     .metric .k {
+       display: block;
+       color: var(--muted);
+       font-size: 0.76rem;
+       margin-bottom: 4px;
+     }
+
+     .metric .v {
+       font-weight: 700;
+       font-size: 1.05rem;
+     }
+
+     .status-ok { color: var(--ok); font-weight: 700; }
+     .status-warn { color: var(--warn); font-weight: 700; }
+     .status-bad { color: var(--bad); font-weight: 700; }
+     .muted { color: var(--muted); }
+
+     .hint {
+       margin: 0;
+       padding: 0 2px 10px;
+       font-size: 0.86rem;
+       color: var(--muted);
+     }
+
+     .hidden { display: none; }
+
+     @media (max-width: 1080px) {
+       .control-panel { grid-template-columns: 1fr 1fr; }
+       .content { grid-template-columns: 1fr; }
+     }
+   </style>
 </head>
 <body>
-  <div class="page">
-    <h1 class="title">Engineering Analyzer v0.1</h1>
-    <section class="ctrl">
-      <button id="uploadBtn" type="button">Upload Files</button>
-      <select id="analysisType" aria-label="Select Analysis Type">
-        <option value="fmea">FMEA</option><option value="epsa">EPSA</option><option value="wcca">WCCA</option><option value="coverage">Coverage</option>
-      </select>
-      <button id="runBtn" type="button" disabled>Run Analysis</button>
-      <button id="exportBtn" type="button" disabled>Export Results</button>
-      <input id="fileInput" class="hidden" type="file" accept=".json,application/json" multiple>
-    </section>
-    <section class="content">
-      <article class="panel"><h2>Input</h2><div class="body">
-        <p id="inputStatus" class="hint">Load netlist JSON to begin.</p>
-        <details open><summary>Input JSON Viewer</summary><pre id="inputViewer">{}</pre></details>
-        <details><summary>Net Graph Viewer (v0.1 placeholder)</summary><pre id="graphViewer">Net adjacency summary appears here after upload.</pre></details>
-      </div></article>
-      <article class="panel"><h2>Results</h2><div class="body">
-        <p id="resultStatus" class="hint">Run an analysis.</p>
-        <div class="wrap"><table><thead><tr id="head1"></tr></thead><tbody id="body1"></tbody></table></div>
-        <div class="wrap"><table><thead><tr id="head2"></tr></thead><tbody id="body2"></tbody></table></div>
-        <div id="summary" class="sum"></div>
-        <details><summary>Output JSON Viewer</summary><pre id="outputViewer">{}</pre></details>
-      </div></article>
-    </section>
-  </div>
-  <script>
-    "use strict";
-    const ENGINE_VERSION="0.1";
-    const S={files:{},netlist:null,testPlan:null,partsLibrary:null,toleranceLibrary:null,stressRules:null,lastType:null,lastOut:null,lastMd:""};
-    const $=id=>document.getElementById(id);
-    const E={upload:$("uploadBtn"),input:$("fileInput"),type:$("analysisType"),run:$("runBtn"),exp:$("exportBtn"),inStatus:$("inputStatus"),resStatus:$("resultStatus"),inView:$("inputViewer"),outView:$("outputViewer"),graph:$("graphViewer"),h1:$("head1"),b1:$("body1"),h2:$("head2"),b2:$("body2"),sum:$("summary")};
-    const FAIL={resistor:["open","short","oot_high","oot_low"],capacitor:["open","short","capacitance_low","esr_high"],transistor:["gain_low","be_short","ce_short","open_collector"],connector:["open_contact","intermittent_contact"],test_point:["measurement_error"],other:["open"]};
-    const OCC={resistor:3,capacitor:4,transistor:5,connector:6,test_point:2,other:4};
-    const analyzers={fmea:runFMEA,epsa:runEPSA,wcca:runWCCA,coverage:runCoverage};
-    let sort={k:null,d:1,t:"p"};
-    E.upload.onclick=()=>E.input.click();E.input.onchange=loadFiles;E.run.onclick=runSelected;E.exp.onclick=exportResults;
-    function loadFiles(ev){
-      const files=[...(ev.target.files||[])];if(!files.length)return;resetRun();
-      Promise.all(files.map(readJson)).then(list=>{
-        S.files={};for(const f of list)S.files[f.name]=f.data;classify();validateInputs();
-      }).catch(err=>{E.inStatus.textContent="Upload failed: "+err.message;E.run.disabled=true;});
-    }
-    function readJson(file){return new Promise((ok,bad)=>{const r=new FileReader();r.onerror=()=>bad(new Error("Cannot read "+file.name));r.onload=()=>{try{ok({name:file.name,data:JSON.parse(String(r.result))});}catch(_){bad(new Error(file.name+" is not valid JSON"));}};r.readAsText(file);});}
-    function classify(){
-      S.netlist=S.testPlan=S.partsLibrary=S.toleranceLibrary=S.stressRules=null;
-      for(const [n,d] of Object.entries(S.files)){const l=n.toLowerCase();
-        if(l.includes("test_plan")){S.testPlan=d;continue;}
-        if(l.includes("parts_library")){S.partsLibrary=d;continue;}
-        if(l.includes("tolerance_library")){S.toleranceLibrary=d;continue;}
-        if(l.includes("stress_rules")){S.stressRules=d;continue;}
-        if(!S.netlist&&looksLikeNetlist(d))S.netlist=d;
-      }
-    }
-    function looksLikeNetlist(d){return !!(d&&typeof d==="object"&&Array.isArray(d.components));}
-    function validateInputs(){
-      const errs=[];if(!validNetlist(S.netlist))errs.push("Missing netlist required fields.");
-      if(S.testPlan&&!validTestPlan(S.testPlan))errs.push("test_plan.json invalid structure.");
-      if(S.partsLibrary&&!validParts(S.partsLibrary))errs.push("parts_library.json invalid structure.");
-      if(S.toleranceLibrary&&!validTol(S.toleranceLibrary))errs.push("tolerance_library.json invalid structure.");
-      if(S.stressRules&&!validStress(S.stressRules))errs.push("stress_rules.json invalid structure.");
-      E.inView.textContent=JSON.stringify({uploaded_files:Object.keys(S.files),detected:{netlist:!!S.netlist,test_plan:!!S.testPlan,parts_library:!!S.partsLibrary,tolerance_library:!!S.toleranceLibrary,stress_rules:!!S.stressRules},preview:S.netlist||{}},null,2);
-      E.graph.textContent=netSummary(S.netlist);
-      if(errs.length){E.inStatus.textContent="Validation errors: "+errs.join(" | ");E.run.disabled=true;return;}
-      E.inStatus.textContent="Inputs validated. Ready to run "+E.type.value.toUpperCase()+".";E.run.disabled=!S.netlist;
-    }
-    function validNetlist(n){if(!n||typeof n!=="object"||!n.schema_version||!n.identity||!Array.isArray(n.components))return false;for(const c of n.components){if(!Array.isArray(c.pins))return false;for(const p of c.pins)if(!p||typeof p.net!=="string")return false;}return true;}
-    function validTestPlan(p){return p&&typeof p==="object"&&(Array.isArray(p.tests)||Array.isArray(p.covered_nets)||Array.isArray(p.nets));}
-    function validParts(p){return p&&typeof p==="object"&&(Array.isArray(p.parts)||typeof p.by_refdes==="object");}
-    function validTol(t){return t&&typeof t==="object"&&(Array.isArray(t.tolerances)||typeof t.default_tolerance==="number"||typeof t.by_refdes==="object");}
-    function validStress(s){return s&&typeof s==="object"&&(typeof s.margin_threshold_percent==="number"||typeof s.thresholds==="object");}
-    function runSelected(){
-      if(!S.netlist){E.resStatus.textContent="Load a valid netlist first.";return;}
-      const type=E.type.value,fn=analyzers[type];if(!fn){E.resStatus.textContent="Unknown analysis type.";return;}
-      resetRun();const cov=runCoverage(S.netlist,S.testPlan).result;
-      const base={analysis_engine_version:ENGINE_VERSION,analysis_type:type,generated_on:new Date().toISOString(),board_pn:get(S.netlist,["identity","board_pn"],"unknown_board"),board_rev:get(S.netlist,["identity","board_rev"],"unknown_rev")};
-      const out=fn(S.netlist,S.testPlan,S.partsLibrary,S.toleranceLibrary,S.stressRules,cov);S.lastType=type;S.lastOut=Object.assign({},base,out.result);S.lastMd=out.markdown;
-      E.outView.textContent=JSON.stringify(S.lastOut,null,2);render(out);E.exp.disabled=false;E.resStatus.textContent="Completed "+type.toUpperCase()+" with deterministic engine v"+ENGINE_VERSION+".";
-    }
-    function render(out){drawTable("p",out.primaryRows||[]);drawTable("s",out.secondaryRows||[]);E.sum.innerHTML="";for(const [k,v] of Object.entries(out.summary||{})){const d=document.createElement("div");d.className="metric";d.innerHTML='<span class="k">'+k+'</span><span class="v">'+v+"</span>";E.sum.appendChild(d);}}
-    function drawTable(which,rows){
-      const h=which==="p"?E.h1:E.h2,b=which==="p"?E.b1:E.b2;h.innerHTML="";b.innerHTML="";
-      if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.textContent="No rows.";tr.appendChild(td);b.appendChild(tr);return;}
-      const keys=Object.keys(rows[0]);for(const k of keys){const th=document.createElement("th");th.textContent=k;th.onclick=()=>{const d=(sort.k===k&&sort.t===which)?-sort.d:1;sort={k,d,t:which};rows.sort((a,c)=>cmp(a[k],c[k])*d);drawTable(which,rows);};h.appendChild(th);}
-      for(const r of rows){const tr=document.createElement("tr");for(const k of keys){const td=document.createElement("td"),v=r[k];td.textContent=Array.isArray(v)?v.join(", "):String(v);paint(td,k,v);tr.appendChild(td);}b.appendChild(tr);}
-    }
-    function paint(td,k,v){const kk=String(k).toLowerCase(),vv=String(v).toLowerCase();if(kk==="rpn"){const n=Number(v);td.className=n>=250?"bad":n>=120?"warn":"ok";}
-      if(kk.includes("coverage")||kk==="covered"){td.className=(vv.includes("true")||vv.includes("covered")||Number(v)>=80)?"ok":"warn";}
-      if(kk==="status"||kk.endsWith("status")){td.className=(["pass","good","redundant","covered"].includes(vv))?"ok":(["warn","watch"].includes(vv)?"warn":"bad");}}
-    function exportResults(){
-      if(!S.lastOut||!S.lastType)return;const pn=safe(S.lastOut.board_pn),rv=safe(S.lastOut.board_rev),t=safe(S.lastType);
-      const jn="analysis_"+t+"_"+pn+"_"+rv+".json",mn="analysis_"+t+"_"+pn+"_"+rv+".md";
-      dl(jn,JSON.stringify(S.lastOut,null,2),"application/json");dl(mn,S.lastMd||"# Empty report\n","text/markdown");
-    }
-    function dl(name,txt,m){const b=new Blob([txt],{type:m}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u);}
-    function markdown(title,rows,sum,cols){
-      const lines=["# "+title+" Report","","Engine Version: "+ENGINE_VERSION,"Generated On: "+new Date().toISOString(),"","## Summary"];
-      for(const [k,v] of Object.entries(sum))lines.push("- "+k+": "+v);lines.push("","## Results");
-      if(!rows.length)return lines.concat(["No rows."]).join("\n");
-      lines.push("| "+cols.join(" | ")+" |","| "+cols.map(()=> "---").join(" | ")+" |");
-      for(const r of rows.slice(0,500))lines.push("| "+cols.map(c=>Array.isArray(r[c])?r[c].join(", "):String(r[c])).join(" | ")+" |");
-      return lines.join("\n");
-    }
-    function runFMEA(netlist,testPlan,_parts,_tol,_stress,coverage){
-      const cov=(coverage&&coverage.coverage_map)||{},rows=[],n2r=netToRefs(netlist),comps=netlist.components||[];
-      for(const c of comps){
-        const cls=kind(c.refdes),modes=FAIL[cls]||FAIL.other,nets=compNets(c),affComps=uniq(nets.flatMap(n=>n2r[n]||[]).filter(r=>r!==c.refdes)),affIfc=nets.filter(isInterface);
-        for(const mode of modes){
-          const sev=severity(nets),occ=OCC[cls]||OCC.other,det=nets.some(n=>cov[n])?3:8,rpn=sev*occ*det;
-          rows.push({component:c.refdes||"UNASSIGNED",failure_mode:mode,affected_nets:nets,affected_components:affComps,affected_interface_pins:affIfc,severity:sev,occurrence:occ,detection:det,RPN:rpn,coverage_status:det===3?"covered":"uncovered"});
-        }
-      }
-      rows.sort((a,b)=>b.RPN-a.RPN||String(a.component).localeCompare(String(b.component)));
-      const summary={entries:rows.length,high_risk_count:rows.filter(r=>r.RPN>=200).length,average_rpn:rows.length?round2(rows.reduce((x,r)=>x+r.RPN,0)/rows.length):0};
-      return{primaryRows:rows,secondaryRows:rows.slice(0,20).map(r=>({component:r.component,failure_mode:r.failure_mode,RPN:r.RPN,coverage_status:r.coverage_status})),summary,result:{fmea:rows,summary},markdown:markdown("FMEA",rows,summary,["component","failure_mode","severity","occurrence","detection","RPN","coverage_status"])};
-    }
-    function runEPSA(netlist,_test,parts,_tol,stress){
-      const pmap=partsMap(parts),thr=get(stress,["margin_threshold_percent"],20),rows=[],comps=netlist.components||[];
-      for(const c of comps){
-        const info=pmap[c.refdes]||{},cls=kind(c.refdes),rV=num(info.voltage_rating,cls==="transistor"?40:16),rI=num(info.current_rating,cls==="connector"?1:0.2),rP=num(info.power_rating,cls==="resistor"?0.25:0.5);
-        const nets=compNets(c),v=compVoltage(netlist,nets),i=compCurrent(cls,v,c.value),p=cls==="resistor"?resPower(v,c.value):v*i;
-        rows.push(stressRow(c.refdes,"voltage",v,rV,thr),stressRow(c.refdes,"current",i,rI,thr),stressRow(c.refdes,"power",p,rP,thr));
-      }
-      const summary={entries:rows.length,pass_count:rows.filter(r=>r.status==="pass").length,warn_count:rows.filter(r=>r.status==="warn").length,fail_count:rows.filter(r=>r.status==="fail").length};
-      return{primaryRows:rows,secondaryRows:rows.filter(r=>r.status!=="pass"),summary,result:{epsa:rows,summary},markdown:markdown("EPSA",rows,summary,["component","parameter","actual","rating","margin_percent","status"])};
-    }
-    function runWCCA(netlist,_test,_parts,tol){
-      const tmap=tolMap(tol),rows=[],comps=netlist.components||[];
-      for(const c of comps){if(kind(c.refdes)!=="resistor")continue;const n=parseR(c.value);if(!Number.isFinite(n)||n<=0)continue;
-        const t=num(tmap[c.refdes],num(tmap.default,0.05)),h=n*(1+t),l=n*(1-t),dev=t*100;
-        rows.push({network:c.refdes,nominal_value:round4(n),worst_case_high:round4(h),worst_case_low:round4(l),deviation_percent:round2(dev),margin_status:dev<=5?"good":dev<=10?"watch":"critical"});
-      }
-      const summary={entries:rows.length,avg_deviation_percent:rows.length?round2(rows.reduce((a,r)=>a+r.deviation_percent,0)/rows.length):0,critical_count:rows.filter(r=>r.margin_status==="critical").length};
-      return{primaryRows:rows,secondaryRows:rows.filter(r=>r.margin_status!=="good"),summary,result:{wcca:rows,summary},markdown:markdown("WCCA",rows,summary,["network","nominal_value","worst_case_high","worst_case_low","deviation_percent","margin_status"])};
-    }
-    function runCoverage(netlist,testPlan){
-      const nets=uniq((netlist.components||[]).flatMap(compNets)),covered=coveredNets(testPlan),map={};for(const n of nets)map[n]=covered.has(n);
-      const crit=nets.filter(n=>isPower(n)||isBias(n)||isInterface(n)),tp={};for(const c of netlist.components||[]){if(!isTP(c.refdes))continue;for(const n of compNets(c))tp[n]=(tp[n]||0)+1;}
-      const rows=nets.map(n=>({net:n,covered:map[n],critical:crit.includes(n),test_points:tp[n]||0,redundancy_status:(tp[n]||0)<=1?"single-point-risk":"redundant"}));
-      const cov=nets.length?round2((rows.filter(r=>r.covered).length/nets.length)*100):0,ccov=crit.length?round2((crit.filter(n=>map[n]).length/crit.length)*100):0;
-      const summary={total_nets:nets.length,covered_nets:rows.filter(r=>r.covered).length,net_coverage_percent:cov,critical_net_coverage_percent:ccov};
-      return{primaryRows:rows,secondaryRows:rows.filter(r=>r.redundancy_status!=="redundant"),summary,result:{coverage:rows,summary,coverage_map:map},markdown:markdown("Coverage",rows,summary,["net","covered","critical","test_points","redundancy_status"])};
-    }
-    function netToRefs(netlist){const m={};for(const c of netlist.components||[]){const r=c.refdes||"UNASSIGNED";for(const n of compNets(c)){if(!m[n])m[n]=[];m[n].push(r);}}return m;}
-    function netSummary(netlist){if(!netlist||!Array.isArray(netlist.components))return "No netlist loaded.";const m=netToRefs(netlist),nets=Object.keys(m).sort(),lines=["Nets: "+nets.length,""];for(const n of nets.slice(0,120))lines.push(n+" => "+uniq(m[n]).join(", "));if(nets.length>120)lines.push("... truncated");return lines.join("\n");}
-    function compNets(c){return uniq((c.pins||[]).map(p=>p&&p.net).filter(n=>typeof n==="string"));}
-    function kind(ref){const r=String(ref||"").toUpperCase();if(r.startsWith("R"))return"resistor";if(r.startsWith("C"))return"capacitor";if(r.startsWith("Q"))return"transistor";if(r.startsWith("J")||r.startsWith("P"))return"connector";if(isTP(r))return"test_point";return"other";}
-    function isTP(ref){const r=String(ref||"").toUpperCase();return r.startsWith("TP")||r.includes("TEST");}
-    function isPower(net){const n=String(net||"").toUpperCase();return n==="GND"||n==="V+"||n==="VCC"||n==="VBAT"||n.includes("POWER");}
-    function isBias(net){const n=String(net||"").toUpperCase();return n.includes("BIAS")||n.includes("BASE");}
-    function isInterface(net){const n=String(net||"").toUpperCase();return n.includes("INPUT")||n.includes("OUTPUT")||n.includes("INTERFACE")||n.startsWith("IO");}
-    function severity(nets){let s=4;for(const n of nets){if(isInterface(n))s=Math.max(s,9);else if(isPower(n))s=Math.max(s,8);else if(isBias(n))s=Math.max(s,7);else s=Math.max(s,5);}return s;}
-    function coveredNets(plan){const s=new Set();if(!plan||typeof plan!=="object")return s;
-      for(const n of plan.covered_nets||[])if(typeof n==="string")s.add(n);for(const n of plan.nets||[])if(typeof n==="string")s.add(n);
-      for(const t of plan.tests||[]){const c=[...(t&&t.nets||[]),...(t&&t.covered_nets||[]),...(t&&t.affected_nets||[])];for(const n of c)if(typeof n==="string")s.add(n);}return s;}
-    function partsMap(lib){if(!lib||typeof lib!=="object")return{};if(lib.by_refdes&&typeof lib.by_refdes==="object")return Object.assign({},lib.by_refdes);const m={};for(const p of lib.parts||[])if(p&&p.refdes)m[p.refdes]=p;return m;}
-    function tolMap(lib){const m={default:0.05};if(!lib||typeof lib!=="object")return m;if(typeof lib.default_tolerance==="number")m.default=lib.default_tolerance;
-      for(const t of lib.tolerances||[])if(t&&t.refdes&&typeof t.tolerance==="number")m[t.refdes]=t.tolerance;
-      if(lib.by_refdes&&typeof lib.by_refdes==="object")for(const [k,v] of Object.entries(lib.by_refdes))m[k]=Number(v);return m;}
-    function stressRow(component,parameter,actual,rating,thr){const mg=rating===0?-100:((rating-actual)/rating)*100,status=mg<0?"fail":mg<thr?"warn":"pass";return{component,parameter,actual:round4(actual),rating:round4(rating),margin_percent:round2(mg),status};}
-    function compVoltage(netlist,nets){const lv=nets.map(n=>netVoltage(netlist,n)).filter(Number.isFinite);if(!lv.length)return 0;if(lv.length===1)return lv[0];return Math.abs(Math.max(...lv)-Math.min(...lv));}
-    function netVoltage(netlist,net){const n=String(net||"").toUpperCase();if(n==="GND")return 0;if(n==="V+"||n==="VCC")return 12;if(isInterface(n))return 5;const m=get(netlist,["net_metadata",n,"nominal_voltage"],null);if(typeof m==="number")return m;return 1;}
-    function compCurrent(cls,v,val){if(cls==="resistor"){const r=parseR(val);if(r>0)return v/r;}if(cls==="connector")return Math.max(.01,v/100);if(cls==="transistor")return Math.max(.002,v/1000);return Math.max(.001,v/2000);}
-    function resPower(v,val){const r=parseR(val);if(!Number.isFinite(r)||r<=0)return 0;return(v*v)/r;}
-    function parseR(raw){if(typeof raw==="number")return raw;const x=String(raw||"").trim().toLowerCase();if(!x)return NaN;if(/^\d+(\.\d+)?$/.test(x))return Number(x);const m=x.replace(",",".").match(/^(\d+(\.\d+)?)([kmun]?)(\d+)?$/);if(!m)return NaN;let n=Number(m[1]||"0");if(m[4])n=Number(String(n)+"."+m[4]);const s=m[3]==="m"?1e6:m[3]==="k"?1e3:m[3]==="u"?1e-6:m[3]==="n"?1e-9:1;return n*s;}
-    function cmp(a,b){const na=Number(a),nb=Number(b);if(Number.isFinite(na)&&Number.isFinite(nb))return na-nb;return String(a).localeCompare(String(b));}
-    function get(o,p,f){let c=o;for(const k of p){if(!c||typeof c!=="object"||!(k in c))return f;c=c[k];}return c;}
-    function safe(v){return String(v||"unknown").replace(/[^a-z0-9_.-]/gi,"_");}
-    function uniq(a){return Array.from(new Set(a));}
-    function num(v,f){const n=Number(v);return Number.isFinite(n)?n:f;}
-    function round2(n){return Math.round(Number(n)*100)/100;}
-    function round4(n){return Math.round(Number(n)*10000)/10000;}
-    function resetRun(){S.lastType=null;S.lastOut=null;S.lastMd="";E.outView.textContent="{}";E.h1.innerHTML="";E.b1.innerHTML="";E.h2.innerHTML="";E.b2.innerHTML="";E.sum.innerHTML="";E.exp.disabled=true;}
-  </script>
+   <div class="page">
+     <h1 class="title">Engineering Analyzer v0.1</h1>
+
+     <section class="control-panel">
+       <button id="uploadBtn" type="button">Upload Files</button>
+       <select id="analysisType" aria-label="Select Analysis Type">
+         <option value="fmea">FMEA</option>
+         <option value="epsa">EPSA</option>
+         <option value="wcca">WCCA</option>
+         <option value="coverage">Coverage</option>
+       </select>
+       <button id="runBtn" type="button" disabled>Run Analysis</button>
+       <button id="exportBtn" type="button" disabled>Export Results</button>
+       <input id="fileInput" type="file" accept=".json,application/json" multiple class="hidden">
+     </section>
+
+     <section class="content">
+       <article class="panel">
+         <h2>Input</h2>
+         <div class="panel-body">
+           <p id="inputStatus" class="hint">Load `netlist.json` (or equivalent schema v1.1 JSON) to enable analysis.</p>
+           <details open>
+             <summary>Input JSON Viewer</summary>
+             <pre id="inputViewer">{}</pre>
+           </details>
+           <details>
+             <summary>Net Graph Viewer (v0.1 placeholder)</summary>
+             <pre id="netGraphViewer">Graph output is optional in v0.1. Net adjacency summary will appear here after upload.</pre>
+           </details>
+         </div>
+       </article>
+
+       <article class="panel">
+         <h2>Results</h2>
+         <div class="panel-body">
+           <p id="resultStatus" class="hint">Run an analysis to populate deterministic results.</p>
+           <div class="table-wrap">
+             <table id="resultsTable">
+               <thead><tr id="resultsHead"></tr></thead>
+               <tbody id="resultsBody"></tbody>
+             </table>
+           </div>
+           <div class="table-wrap">
+             <table id="secondaryTable">
+               <thead><tr id="secondaryHead"></tr></thead>
+               <tbody id="secondaryBody"></tbody>
+             </table>
+           </div>
+           <div id="summaryGrid" class="summary-grid"></div>
+           <details>
+             <summary>Output JSON Viewer</summary>
+             <pre id="outputViewer">{}</pre>
+           </details>
+         </div>
+       </article>
+     </section>
+   </div>
+
+   <script>
+     "use strict";
+
+     const ENGINE_VERSION = "0.1";
+
+     const state = {
+       files: {},
+       netlist: null,
+       testPlan: null,
+       partsLibrary: null,
+       toleranceLibrary: null,
+       stressRules: null,
+       lastAnalysisType: null,
+       lastOutput: null,
+       lastMarkdown: ""
+     };
+
+     const failureModesByClass = Object.freeze({
+       resistor: ["open", "short", "oot_high", "oot_low"],
+       capacitor: ["open", "short", "capacitance_low", "esr_high"],
+       transistor: ["gain_low", "be_short", "ce_short", "open_collector"],
+       connector: ["open_contact", "intermittent_contact"],
+       test_point: ["measurement_error"],
+       other: ["open"]
+     });
+
+     const occurrenceByClass = Object.freeze({
+       resistor: 3,
+       capacitor: 4,
+       transistor: 5,
+       connector: 6,
+       test_point: 2,
+       other: 4
+     });
+
+     const detectionCovered = 3;
+     const detectionUncovered = 8;
+
+     const analyzers = Object.freeze({
+       fmea: runFMEA,
+       epsa: runEPSA,
+       wcca: runWCCA,
+       coverage: runCoverage
+     });
+
+     const uploadBtn = document.getElementById("uploadBtn");
+     const fileInput = document.getElementById("fileInput");
+     const analysisType = document.getElementById("analysisType");
+     const runBtn = document.getElementById("runBtn");
+     const exportBtn = document.getElementById("exportBtn");
+
+
+     const inputStatus = document.getElementById("inputStatus");
+     const resultStatus = document.getElementById("resultStatus");
+     const inputViewer = document.getElementById("inputViewer");
+     const outputViewer = document.getElementById("outputViewer");
+     const netGraphViewer = document.getElementById("netGraphViewer");
+     const resultsHead = document.getElementById("resultsHead");
+     const resultsBody = document.getElementById("resultsBody");
+     const secondaryHead = document.getElementById("secondaryHead");
+     const secondaryBody = document.getElementById("secondaryBody");
+     const summaryGrid = document.getElementById("summaryGrid");
+
+
+     let sortState = { key: null, direction: 1, table: "primary" };
+
+
+
+     uploadBtn.addEventListener("click", () => fileInput.click());
+     fileInput.addEventListener("change", handleFileUpload);
+     runBtn.addEventListener("click", runSelectedAnalysis);
+     exportBtn.addEventListener("click", exportResults);
+
+
+     function handleFileUpload(event) {
+       const files = Array.from(event.target.files || []);
+       if (!files.length) {
+         return;
+       }
+       resetRunState();
+       const reads = files.map(readJsonFile);
+       Promise.all(reads)
+         .then((loaded) => {
+           state.files = {};
+           for (const loadedFile of loaded) {
+             state.files[loadedFile.name] = loadedFile.data;
+           }
+           classifyLoadedFiles();
+           validateAndRenderInputs();
+         })
+         .catch((err) => {
+           inputStatus.textContent = "Upload failed: " + err.message;
+           runBtn.disabled = true;
+         });
+     }
+
+     function readJsonFile(file) {
+       return new Promise((resolve, reject) => {
+         const reader = new FileReader();
+         reader.onerror = () => reject(new Error("Unable to read " + file.name));
+         reader.onload = () => {
+           try {
+             const parsed = JSON.parse(String(reader.result));
+             resolve({ name: file.name, data: parsed });
+           } catch (err) {
+             reject(new Error(file.name + " is not valid JSON."));
+           }
+         };
+         reader.readAsText(file);
+       });
+     }
+
+     function classifyLoadedFiles() {
+       state.netlist = null;
+       state.testPlan = null;
+       state.partsLibrary = null;
+       state.toleranceLibrary = null;
+       state.stressRules = null;
+
+       for (const [name, data] of Object.entries(state.files)) {
+         const lower = name.toLowerCase();
+         if (lower.includes("test_plan")) {
+           state.testPlan = data;
+           continue;
+         }
+         if (lower.includes("parts_library")) {
+           state.partsLibrary = data;
+           continue;
+         }
+         if (lower.includes("tolerance_library")) {
+           state.toleranceLibrary = data;
+           continue;
+         }
+         if (lower.includes("stress_rules")) {
+           state.stressRules = data;
+           continue;
+         }
+         if (!state.netlist && looksLikeNetlist(data)) {
+           state.netlist = data;
+         }
+       }
+     }
+
+     function looksLikeNetlist(data) {
+       return !!(data && typeof data === "object" && Array.isArray(data.components));
+     }
+
+     function validateAndRenderInputs() {
+       const errors = [];
+       if (!validateNetlist(state.netlist)) {
+         errors.push("Missing required netlist schema fields: schema_version, identity, components[].pins[].net");
+       }
+       if (state.testPlan && !validateTestPlan(state.testPlan)) {
+         errors.push("test_plan.json did not match expected structure.");
+       }
+       if (state.partsLibrary && !validatePartsLibrary(state.partsLibrary)) {
+         errors.push("parts_library.json did not match expected structure.");
+       }
+       if (state.toleranceLibrary && !validateToleranceLibrary(state.toleranceLibrary)) {
+         errors.push("tolerance_library.json did not match expected structure.");
+       }
+       if (state.stressRules && !validateStressRules(state.stressRules)) {
+         errors.push("stress_rules.json did not match expected structure.");
+       }
+
+       inputViewer.textContent = JSON.stringify({
+         uploaded_files: Object.keys(state.files),
+         detected: {
+           netlist: !!state.netlist,
+           test_plan: !!state.testPlan,
+           parts_library: !!state.partsLibrary,
+           tolerance_library: !!state.toleranceLibrary,
+           stress_rules: !!state.stressRules
+         },
+         preview: state.netlist || {}
+       }, null, 2);
+
+
+       netGraphViewer.textContent = buildNetAdjacencySummary(state.netlist);
+
+
+       if (errors.length) {
+         inputStatus.textContent = "Validation errors: " + errors.join(" | ");
+         runBtn.disabled = true;
+         return;
+       }
+
+       runBtn.disabled = !state.netlist;
+       inputStatus.textContent = "Inputs loaded and validated. Ready to run " + analysisType.value.toUpperCase() + ".";
+     }
+
+     function validateNetlist(netlist) {
+       if (!netlist || typeof netlist !== "object") return false;
+       if (!netlist.schema_version || !netlist.identity || !Array.isArray(netlist.components)) return false;
+       for (const c of netlist.components) {
+         if (!Array.isArray(c.pins)) return false;
+         for (const pin of c.pins) {
+           if (!pin || typeof pin.net !== "string") return false;
+         }
+       }
+       return true;
+     }
+
+     function validateTestPlan(plan) {
+       if (!plan || typeof plan !== "object") return false;
+       return Array.isArray(plan.tests) || Array.isArray(plan.covered_nets) || Array.isArray(plan.nets);
+     }
+
+     function validatePartsLibrary(lib) {
+       if (!lib || typeof lib !== "object") return false;
+       if (Array.isArray(lib.parts)) return true;
+       if (typeof lib.by_refdes === "object") return true;
+       return false;
+     }
+
+     function validateToleranceLibrary(lib) {
+       if (!lib || typeof lib !== "object") return false;
+       return Array.isArray(lib.tolerances) || typeof lib.default_tolerance === "number";
+     }
+
+     function validateStressRules(rules) {
+       if (!rules || typeof rules !== "object") return false;
+       return typeof rules.margin_threshold_percent === "number" || typeof rules.thresholds === "object";
+     }
+
+     function runSelectedAnalysis() {
+       if (!state.netlist) {
+         resultStatus.textContent = "Load a valid netlist first.";
+         return;
+       }
+       const type = analysisType.value;
+       const analyzer = analyzers[type];
+       if (!analyzer) {
+         resultStatus.textContent = "Unknown analysis type: " + type;
+         return;
+       }
+       resetRunState();
+       const base = {
+         analysis_engine_version: ENGINE_VERSION,
+         analysis_type: type,
+         generated_on: new Date().toISOString(),
+         board_pn: safeGet(state.netlist, ["identity", "board_pn"], "unknown_board"),
+         board_rev: safeGet(state.netlist, ["identity", "board_rev"], "unknown_rev")
+       };
+       const coverageResult = runCoverage(state.netlist, state.testPlan).result;
+       const analysis = analyzer(state.netlist, state.testPlan, state.partsLibrary, state.toleranceLibrary, state.stressRules, coverageResult);
+       state.lastAnalysisType = type;
+       state.lastOutput = Object.assign({}, base, analysis.result);
+       state.lastMarkdown = analysis.markdown;
+       outputViewer.textContent = JSON.stringify(state.lastOutput, null, 2);
+       renderAnalysis(analysis);
+       resultStatus.textContent = "Completed " + type.toUpperCase() + " with deterministic engine v" + ENGINE_VERSION + ".";
+       exportBtn.disabled = false;
+     }
+
+     function runFMEA(netlist, testPlan, _partsLibrary, _toleranceLibrary, _stressRules, coverageResult) {
+       const netCoverage = (coverageResult && coverageResult.coverage_map) || {};
+       const rows = [];
+       const netToRefs = buildNetToRefsMap(netlist);
+       const components = Array.isArray(netlist.components) ? netlist.components : [];
+
+       for (const component of components) {
+         const componentClass = classifyComponent(component.refdes);
+         const failures = failureModesByClass[componentClass] || failureModesByClass.other;
+         const nets = extractComponentNets(component);
+         const affectedComponents = dedupe(nets.flatMap((net) => netToRefs[net] || []).filter((ref) => ref !== component.refdes));
+         const affectedInterfacePins = nets.filter(isInterfaceNet);
+
+
+         for (const mode of failures) {
+           const severity = computeSeverity(nets);
+           const occurrence = occurrenceByClass[componentClass] || occurrenceByClass.other;
+           const detection = nets.some((n) => netCoverage[n]) ? detectionCovered : detectionUncovered;
+           const rpn = severity * occurrence * detection;
+           rows.push({
+             component: component.refdes || "UNASSIGNED",
+             failure_mode: mode,
+             affected_nets: nets,
+             affected_components: affectedComponents,
+             affected_interface_pins: affectedInterfacePins,
+             severity,
+             occurrence,
+             detection,
+             RPN: rpn,
+             coverage_status: detection === detectionCovered ? "covered" : "uncovered"
+           });
+         }
+       }
+
+       rows.sort((a, b) => b.RPN - a.RPN || String(a.component).localeCompare(String(b.component)));
+       const summary = {
+         entries: rows.length,
+         high_risk_count: rows.filter((r) => r.RPN >= 200).length,
+         average_rpn: rows.length ? Number((rows.reduce((acc, r) => acc + r.RPN, 0) / rows.length).toFixed(2)) : 0
+       };
+
+
+
+       return {
+         primaryRows: rows,
+         secondaryRows: rows.slice(0, 20).map((r) => ({
+           component: r.component,
+           failure_mode: r.failure_mode,
+           RPN: r.RPN,
+           coverage_status: r.coverage_status
+         })),
+         summary,
+         result: { fmea: rows, summary },
+         markdown: buildMarkdown("FMEA", rows, summary, ["component", "failure_mode", "severity", "occurrence", "detection", "RPN", "coverage_status"])
+       };
+     }
+
+     function runEPSA(netlist, _testPlan, partsLibrary, _toleranceLibrary, stressRules) {
+       const partsMap = buildPartsMap(partsLibrary);
+       const threshold = safeGet(stressRules, ["margin_threshold_percent"], 20);
+       const rows = [];
+       const components = Array.isArray(netlist.components) ? netlist.components : [];
+
+       for (const component of components) {
+         const info = partsMap[component.refdes] || {};
+         const componentClass = classifyComponent(component.refdes);
+         const ratingVoltage = toNumber(info.voltage_rating, componentClass === "transistor" ? 40 : 16);
+         const ratingCurrent = toNumber(info.current_rating, componentClass === "connector" ? 1 : 0.2);
+         const ratingPower = toNumber(info.power_rating, componentClass === "resistor" ? 0.25 : 0.5);
+         const nets = extractComponentNets(component);
+         const vActual = estimateComponentVoltage(netlist, nets);
+         const iActual = estimateComponentCurrent(componentClass, vActual, component.value);
+         const pActual = componentClass === "resistor" ? computeResistorPower(vActual, component.value) : vActual * iActual;
+
+         rows.push(buildStressRow(component.refdes, "voltage", vActual, ratingVoltage, threshold));
+         rows.push(buildStressRow(component.refdes, "current", iActual, ratingCurrent, threshold));
+         rows.push(buildStressRow(component.refdes, "power", pActual, ratingPower, threshold));
+       }
+
+       const summary = {
+         entries: rows.length,
+         pass_count: rows.filter((r) => r.status === "pass").length,
+         warn_count: rows.filter((r) => r.status === "warn").length,
+         fail_count: rows.filter((r) => r.status === "fail").length
+       };
+
+
+
+       return {
+         primaryRows: rows,
+         secondaryRows: rows.filter((r) => r.status !== "pass"),
+         summary,
+         result: { epsa: rows, summary },
+         markdown: buildMarkdown("EPSA", rows, summary, ["component", "parameter", "actual", "rating", "margin_percent", "status"])
+       };
+     }
+
+     function runWCCA(netlist, _testPlan, _partsLibrary, toleranceLibrary) {
+       const tolerances = buildToleranceMap(toleranceLibrary);
+       const rows = [];
+       const components = Array.isArray(netlist.components) ? netlist.components : [];
+
+       for (const component of components) {
+         if (classifyComponent(component.refdes) !== "resistor") continue;
+         const nominal = parseResistance(component.value);
+         if (!Number.isFinite(nominal) || nominal <= 0) continue;
+         const tol = toNumber(tolerances[component.refdes], toNumber(tolerances.default, 0.05));
+         const high = nominal * (1 + tol);
+         const low = nominal * (1 - tol);
+         const deviation = tol * 100;
+         rows.push({
+           network: component.refdes,
+           nominal_value: round4(nominal),
+           worst_case_high: round4(high),
+           worst_case_low: round4(low),
+           deviation_percent: round2(deviation),
+           margin_status: deviation <= 5 ? "good" : deviation <= 10 ? "watch" : "critical"
+         });
+       }
+
+       const summary = {
+         entries: rows.length,
+         avg_deviation_percent: rows.length ? round2(rows.reduce((a, r) => a + r.deviation_percent, 0) / rows.length) : 0,
+         critical_count: rows.filter((r) => r.margin_status === "critical").length
+       };
+
+
+
+       return {
+         primaryRows: rows,
+         secondaryRows: rows.filter((r) => r.margin_status !== "good"),
+         summary,
+         result: { wcca: rows, summary },
+         markdown: buildMarkdown("WCCA", rows, summary, ["network", "nominal_value", "worst_case_high", "worst_case_low", "deviation_percent", "margin_status"])
+       };
+     }
+
+     function runCoverage(netlist, testPlan) {
+       const nets = dedupe((netlist.components || []).flatMap((c) => extractComponentNets(c)));
+       const covered = extractCoveredNets(testPlan);
+       const coverageMap = {};
+       for (const net of nets) coverageMap[net] = covered.has(net);
+       const total = nets.length;
+       const coveredCount = nets.filter((n) => coverageMap[n]).length;
+       const criticalNets = nets.filter((n) => isPowerNet(n) || isBiasNet(n) || isInterfaceNet(n));
+       const criticalCovered = criticalNets.filter((n) => coverageMap[n]).length;
+
+       const tpByNet = {};
+       for (const component of netlist.components || []) {
+         if (!isTestPoint(component.refdes)) continue;
+         for (const net of extractComponentNets(component)) {
+           tpByNet[net] = (tpByNet[net] || 0) + 1;
+         }
+       }
+
+       const rows = nets.map((net) => ({
+         net,
+         covered: coverageMap[net],
+         critical: criticalNets.includes(net),
+         test_points: tpByNet[net] || 0,
+         redundancy_status: (tpByNet[net] || 0) <= 1 ? "single-point-risk" : "redundant"
+       }));
+
+
+       const summary = {
+         total_nets: total,
+         covered_nets: coveredCount,
+         net_coverage_percent: total ? round2((coveredCount / total) * 100) : 0,
+         critical_net_coverage_percent: criticalNets.length ? round2((criticalCovered / criticalNets.length) * 100) : 0
+       };
+
+
+
+       return {
+         primaryRows: rows,
+         secondaryRows: rows.filter((r) => r.redundancy_status !== "redundant"),
+         summary,
+         result: { coverage: rows, summary, coverage_map: coverageMap },
+         markdown: buildMarkdown("Coverage", rows, summary, ["net", "covered", "critical", "test_points", "redundancy_status"])
+       };
+     }
+
+     function renderAnalysis(analysis) {
+       renderTable("primary", analysis.primaryRows || []);
+       renderTable("secondary", analysis.secondaryRows || []);
+       renderSummary(analysis.summary || {});
+     }
+
+     function renderTable(which, rows) {
+       const head = which === "primary" ? resultsHead : secondaryHead;
+       const body = which === "primary" ? resultsBody : secondaryBody;
+       head.innerHTML = "";
+       body.innerHTML = "";
+       if (!rows.length) {
+         const tr = document.createElement("tr");
+         const td = document.createElement("td");
+         td.textContent = "No rows.";
+         tr.appendChild(td);
+         body.appendChild(tr);
+         return;
+       }
+       const keys = Object.keys(rows[0]);
+       for (const key of keys) {
+         const th = document.createElement("th");
+         th.textContent = key;
+         th.addEventListener("click", () => {
+           const direction = sortState.key === key && sortState.table === which ? -sortState.direction : 1;
+           sortState = { key, direction, table: which };
+           rows.sort((a, b) => compareValues(a[key], b[key]) * direction);
+           renderTable(which, rows);
+         });
+         head.appendChild(th);
+       }
+
+       for (const row of rows) {
+         const tr = document.createElement("tr");
+         for (const key of keys) {
+           const td = document.createElement("td");
+           const value = row[key];
+           td.textContent = Array.isArray(value) ? value.join(", ") : String(value);
+           applyCellColor(td, key, value);
+           tr.appendChild(td);
+         }
+         body.appendChild(tr);
+       }
+     }
+
+     function applyCellColor(td, key, value) {
+       const lowerKey = String(key).toLowerCase();
+       const lowerValue = String(value).toLowerCase();
+       if (lowerKey === "rpn") {
+         const n = Number(value);
+         if (n >= 250) td.classList.add("status-bad");
+         else if (n >= 120) td.classList.add("status-warn");
+         else td.classList.add("status-ok");
+       }
+       if (lowerKey.includes("coverage") || lowerKey === "covered") {
+         if (lowerValue.includes("true") || lowerValue.includes("covered") || Number(value) >= 80) td.classList.add("status-ok");
+         else td.classList.add("status-warn");
+       }
+       if (lowerKey === "status" || lowerKey.endsWith("status")) {
+         if (lowerValue === "pass" || lowerValue === "good" || lowerValue === "redundant") td.classList.add("status-ok");
+         else if (lowerValue === "warn" || lowerValue === "watch") td.classList.add("status-warn");
+         else td.classList.add("status-bad");
+       }
+     }
+
+     function renderSummary(summary) {
+       summaryGrid.innerHTML = "";
+       for (const [k, v] of Object.entries(summary)) {
+         const item = document.createElement("div");
+         item.className = "metric";
+         item.innerHTML = '<span class="k">' + k + '</span><span class="v">' + v + "</span>";
+         summaryGrid.appendChild(item);
+       }
+     }
+
+     function exportResults() {
+       if (!state.lastOutput || !state.lastAnalysisType) return;
+       const boardPn = safeFilePart(state.lastOutput.board_pn || "unknown_board");
+       const rev = safeFilePart(state.lastOutput.board_rev || "unknown_rev");
+       const type = safeFilePart(state.lastAnalysisType);
+       const jsonName = "analysis_" + type + "_" + boardPn + "_" + rev + ".json";
+       const mdName = "analysis_" + type + "_" + boardPn + "_" + rev + ".md";
+       downloadBlob(jsonName, JSON.stringify(state.lastOutput, null, 2), "application/json");
+       downloadBlob(mdName, state.lastMarkdown, "text/markdown");
+     }
+
+     function downloadBlob(filename, content, mime) {
+       const blob = new Blob([content], { type: mime });
+       const url = URL.createObjectURL(blob);
+       const a = document.createElement("a");
+       a.href = url;
+       a.download = filename;
+       document.body.appendChild(a);
+       a.click();
+       a.remove();
+       URL.revokeObjectURL(url);
+     }
+
+     function buildMarkdown(title, rows, summary, columns) {
+       const lines = [];
+       lines.push("# " + title + " Report");
+       lines.push("");
+       lines.push("Engine Version: " + ENGINE_VERSION);
+       lines.push("Generated On: " + new Date().toISOString());
+       lines.push("");
+       lines.push("## Summary");
+       for (const [k, v] of Object.entries(summary)) {
+         lines.push("- " + k + ": " + v);
+       }
+       lines.push("");
+       lines.push("## Results");
+       if (!rows.length) {
+         lines.push("No rows.");
+         return lines.join("\n");
+       }
+       lines.push("| " + columns.join(" | ") + " |");
+       lines.push("| " + columns.map(() => "---").join(" | ") + " |");
+       const maxRows = Math.min(rows.length, 500);
+       for (let i = 0; i < maxRows; i += 1) {
+         const row = rows[i];
+         const cells = columns.map((col) => {
+           const value = row[col];
+           if (Array.isArray(value)) return value.join(", ");
+           return String(value);
+         });
+         lines.push("| " + cells.join(" | ") + " |");
+       }
+       return lines.join("\n");
+     }
+
+     function buildPartsMap(partsLibrary) {
+       const map = {};
+       if (!partsLibrary || typeof partsLibrary !== "object") return map;
+       if (partsLibrary.by_refdes && typeof partsLibrary.by_refdes === "object") {
+         return Object.assign({}, partsLibrary.by_refdes);
+       }
+       if (Array.isArray(partsLibrary.parts)) {
+         for (const part of partsLibrary.parts) {
+           if (part && part.refdes) map[part.refdes] = part;
+         }
+       }
+       return map;
+     }
+
+     function buildToleranceMap(toleranceLibrary) {
+       const map = {};
+       if (!toleranceLibrary || typeof toleranceLibrary !== "object") {
+         map.default = 0.05;
+         return map;
+       }
+       if (typeof toleranceLibrary.default_tolerance === "number") {
+         map.default = toleranceLibrary.default_tolerance;
+       } else {
+         map.default = 0.05;
+       }
+       if (Array.isArray(toleranceLibrary.tolerances)) {
+         for (const t of toleranceLibrary.tolerances) {
+           if (t && t.refdes && typeof t.tolerance === "number") map[t.refdes] = t.tolerance;
+         }
+       }
+       if (toleranceLibrary.by_refdes && typeof toleranceLibrary.by_refdes === "object") {
+         for (const [k, v] of Object.entries(toleranceLibrary.by_refdes)) {
+           map[k] = Number(v);
+         }
+       }
+       return map;
+     }
+
+     function buildStressRow(component, parameter, actual, rating, threshold) {
+       const margin = rating === 0 ? -100 : ((rating - actual) / rating) * 100;
+       const status = margin < 0 ? "fail" : margin < threshold ? "warn" : "pass";
+       return {
+         component,
+         parameter,
+         actual: round4(actual),
+         rating: round4(rating),
+         margin_percent: round2(margin),
+         status
+       };
+     }
+
+     function buildNetToRefsMap(netlist) {
+       const map = {};
+       for (const component of netlist.components || []) {
+         const ref = component.refdes || "UNASSIGNED";
+         for (const net of extractComponentNets(component)) {
+           if (!map[net]) map[net] = [];
+           map[net].push(ref);
+         }
+       }
+       return map;
+     }
+
+     function buildNetAdjacencySummary(netlist) {
+       if (!netlist || !Array.isArray(netlist.components)) {
+         return "No netlist loaded.";
+       }
+       const netToRefs = buildNetToRefsMap(netlist);
+       const lines = [];
+       const nets = Object.keys(netToRefs).sort();
+       lines.push("Nets: " + nets.length);
+       lines.push("");
+       for (const net of nets.slice(0, 120)) {
+         lines.push(net + " => " + dedupe(netToRefs[net]).join(", "));
+       }
+       if (nets.length > 120) lines.push("... truncated");
+       return lines.join("\n");
+     }
+
+     function extractCoveredNets(testPlan) {
+       const set = new Set();
+       if (!testPlan || typeof testPlan !== "object") return set;
+
+       if (Array.isArray(testPlan.covered_nets)) {
+         for (const net of testPlan.covered_nets) {
+           if (typeof net === "string") set.add(net);
+         }
+       }
+
+       if (Array.isArray(testPlan.nets)) {
+         for (const net of testPlan.nets) {
+           if (typeof net === "string") set.add(net);
+         }
+       }
+
+       if (Array.isArray(testPlan.tests)) {
+         for (const test of testPlan.tests) {
+           if (!test || typeof test !== "object") continue;
+           const candidates = [].concat(test.nets || [], test.covered_nets || [], test.affected_nets || []);
+           for (const net of candidates) {
+             if (typeof net === "string") set.add(net);
+           }
+         }
+       }
+       return set;
+     }
+
+     function extractComponentNets(component) {
+       const nets = [];
+       for (const pin of component.pins || []) {
+         if (pin && typeof pin.net === "string") nets.push(pin.net);
+       }
+       return dedupe(nets);
+     }
+
+     function computeSeverity(nets) {
+       let max = 4;
+       for (const net of nets) {
+         if (isInterfaceNet(net)) max = Math.max(max, 9);
+         else if (isPowerNet(net)) max = Math.max(max, 8);
+         else if (isBiasNet(net)) max = Math.max(max, 7);
+         else max = Math.max(max, 5);
+       }
+       return max;
+     }
+
+     function classifyComponent(refdes) {
+       const r = String(refdes || "").toUpperCase();
+       if (r.startsWith("R")) return "resistor";
+       if (r.startsWith("C")) return "capacitor";
+       if (r.startsWith("Q")) return "transistor";
+       if (r.startsWith("J") || r.startsWith("P")) return "connector";
+       if (isTestPoint(r)) return "test_point";
+       return "other";
+     }
+
+     function isTestPoint(refdes) {
+       const r = String(refdes || "").toUpperCase();
+       return r.startsWith("TP") || r.includes("TEST");
+     }
+
+     function isPowerNet(net) {
+       const n = String(net || "").toUpperCase();
+       return n === "V+" || n === "VCC" || n === "VBAT" || n === "GND" || n.includes("POWER");
+     }
+
+     function isBiasNet(net) {
+       const n = String(net || "").toUpperCase();
+       return n.includes("BIAS") || n.includes("BASE");
+     }
+
+     function isInterfaceNet(net) {
+       const n = String(net || "").toUpperCase();
+       return n.includes("INPUT") || n.includes("OUTPUT") || n.includes("INTERFACE") || n.startsWith("IO");
+     }
+
+     function estimateComponentVoltage(netlist, nets) {
+       const levels = nets.map((net) => estimateNetVoltage(netlist, net)).filter((x) => Number.isFinite(x));
+       if (!levels.length) return 0;
+       if (levels.length === 1) return levels[0];
+       const max = Math.max.apply(null, levels);
+       const min = Math.min.apply(null, levels);
+       return Math.abs(max - min);
+     }
+
+     function estimateNetVoltage(netlist, net) {
+       const n = String(net || "").toUpperCase();
+       if (n === "GND") return 0;
+       if (n === "V+" || n === "VCC") return 12;
+       if (isInterfaceNet(n)) return 5;
+       const byMeta = safeGet(netlist, ["net_metadata", net, "nominal_voltage"], null);
+       if (typeof byMeta === "number") return byMeta;
+       return 1;
+     }
+
+     function estimateComponentCurrent(componentClass, voltage, value) {
+       if (componentClass === "resistor") {
+         const r = parseResistance(value);
+         if (r > 0) return voltage / r;
+       }
+       if (componentClass === "connector") return Math.max(0.01, voltage / 100);
+       if (componentClass === "transistor") return Math.max(0.002, voltage / 1000);
+       return Math.max(0.001, voltage / 2000);
+     }
+
+     function computeResistorPower(voltage, value) {
+       const r = parseResistance(value);
+       if (!Number.isFinite(r) || r <= 0) return 0;
+       return (voltage * voltage) / r;
+     }
+
+     function parseResistance(raw) {
+       if (typeof raw === "number") return raw;
+       const v = String(raw || "").trim().toLowerCase();
+       if (!v) return NaN;
+       if (/^\d+(\.\d+)?$/.test(v)) return Number(v);
+       const normalized = v.replace(",", ".");
+       const match = normalized.match(/^(\d+(\.\d+)?)([kmun]?)(\d+)?$/);
+       if (!match) return NaN;
+       const lead = Number(match[1] || "0");
+       const suffix = match[3] || "";
+       const tail = match[4] || "";
+       let value = lead;
+       if (tail) value = Number(String(lead) + "." + tail);
+       const scale = suffix === "m" ? 1e6 : suffix === "k" ? 1e3 : suffix === "u" ? 1e-6 : suffix === "n" ? 1e-9 : 1;
+       return value * scale;
+     }
+
+     function compareValues(a, b) {
+       const na = Number(a);
+       const nb = Number(b);
+       if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+       return String(a).localeCompare(String(b));
+     }
+
+     function safeGet(obj, path, fallback) {
+       let cur = obj;
+       for (const key of path) {
+         if (!cur || typeof cur !== "object" || !(key in cur)) return fallback;
+         cur = cur[key];
+       }
+       return cur;
+     }
+
+     function safeFilePart(v) {
+       return String(v || "unknown").replace(/[^a-z0-9_.-]/gi, "_");
+     }
+
+     function dedupe(arr) {
+       return Array.from(new Set(arr));
+     }
+
+     function toNumber(v, fallback) {
+       const n = Number(v);
+       return Number.isFinite(n) ? n : fallback;
+     }
+
+     function round2(n) {
+       return Math.round(Number(n) * 100) / 100;
+     }
+
+     function round4(n) {
+       return Math.round(Number(n) * 10000) / 10000;
+     }
+
+     function resetRunState() {
+       state.lastAnalysisType = null;
+       state.lastOutput = null;
+       state.lastMarkdown = "";
+       outputViewer.textContent = "{}";
+       resultsHead.innerHTML = "";
+       resultsBody.innerHTML = "";
+       secondaryHead.innerHTML = "";
+       secondaryBody.innerHTML = "";
+       summaryGrid.innerHTML = "";
+       exportBtn.disabled = true;
+     }
+   </script>
 </body>
 </html>
