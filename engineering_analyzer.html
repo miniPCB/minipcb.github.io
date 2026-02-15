@@ -147,6 +147,38 @@
       padding-left: 2px;
     }
 
+    .fmea-assumptions {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #121a25;
+      padding: 10px;
+    }
+
+    .fmea-assumptions h3 {
+      margin: 0 0 8px;
+      font-size: 0.96rem;
+    }
+
+    .assumption-note {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .assumption-table textarea {
+      width: 100%;
+      min-height: 72px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #1a2332;
+      color: var(--text);
+      padding: 7px 8px;
+      font-family: var(--mono);
+      font-size: 0.79rem;
+      resize: vertical;
+    }
+
      button,
      select {
        border: 1px solid var(--border);
@@ -434,6 +466,40 @@
           </label>
         </div>
       </div>
+      <section id="fmeaAssumptionsSection" class="fmea-assumptions hidden">
+        <h3>FMEA Failure Mode Assumptions</h3>
+        <p id="fmeaAssumptionsStatus" class="assumption-note">Load inputs to generate component-level assumptions.</p>
+        <details open>
+          <summary>Failure Mode Lookup Tables (by Component Type)</summary>
+          <div class="table-wrap assumption-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Component Type</th>
+                  <th>Failure Modes (one per line)</th>
+                </tr>
+              </thead>
+              <tbody id="fmeaLookupBody"></tbody>
+            </table>
+          </div>
+        </details>
+        <details open>
+          <summary>Generated Assumptions for Loaded Components</summary>
+          <div class="table-wrap assumption-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>RefDes</th>
+                  <th>Type</th>
+                  <th>Source</th>
+                  <th>Applied Failure Modes (editable)</th>
+                </tr>
+              </thead>
+              <tbody id="fmeaGeneratedBody"></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
     </section>
 
     <section id="panelInputs" class="tab-panel">
@@ -512,29 +578,49 @@
       lastOutput: null,
       lastMarkdown: "",
       outputsExported: false,
+      fmeaAssumptionLookup: null,
+      fmeaAssumptionOverrides: {},
       options: {
         marginThresholdPercent: 20,
         showSecondary: true
       }
     };
 
-     const failureModesByClass = Object.freeze({
-       resistor: ["open", "short", "oot_high", "oot_low"],
-       capacitor: ["open", "short", "capacitance_low", "esr_high"],
-       transistor: ["gain_low", "be_short", "ce_short", "open_collector"],
-       connector: ["open_contact", "intermittent_contact"],
-       test_point: ["measurement_error"],
-       other: ["open"]
-     });
+    const DEFAULT_FAILURE_MODES_BY_CLASS = Object.freeze({
+      resistor: Object.freeze(["open", "short", "oot_high", "oot_low", "drift_high", "drift_low", "noise_excess"]),
+      capacitor: Object.freeze(["open", "short", "capacitance_low", "capacitance_high", "esr_high", "leakage_high"]),
+      transistor: Object.freeze(["gain_low", "gain_high", "be_short", "ce_short", "open_collector", "open_emitter", "leakage_high"]),
+      connector: Object.freeze(["open_contact", "intermittent_contact", "high_contact_resistance", "miswire"]),
+      test_point: Object.freeze(["measurement_error", "probe_slip", "open_test_node"]),
+      diode: Object.freeze(["open", "short", "leakage_high", "vf_shift"]),
+      inductor: Object.freeze(["open", "short", "inductance_low", "inductance_high", "core_saturation"]),
+      integrated_circuit: Object.freeze(["pin_open", "pin_short", "latchup", "timing_shift", "output_stuck_high", "output_stuck_low"]),
+      switch: Object.freeze(["stuck_open", "stuck_closed", "intermittent_contact", "high_contact_resistance"]),
+      fuse: Object.freeze(["nuisance_open", "fail_to_open", "high_resistance"]),
+      relay: Object.freeze(["coil_open", "contact_welded", "contact_bounce_excess", "contact_open"]),
+      transformer: Object.freeze(["primary_open", "secondary_open", "interwinding_short", "turns_ratio_shift"]),
+      crystal: Object.freeze(["start_fail", "freq_shift_high", "freq_shift_low", "high_esr"]),
+      sensor: Object.freeze(["offset_shift", "gain_shift", "stuck_output", "open_signal"]),
+      other: Object.freeze(["open", "short"])
+    });
 
-     const occurrenceByClass = Object.freeze({
-       resistor: 3,
-       capacitor: 4,
-       transistor: 5,
-       connector: 6,
-       test_point: 2,
-       other: 4
-     });
+    const occurrenceByClass = Object.freeze({
+      resistor: 3,
+      capacitor: 4,
+      transistor: 5,
+      connector: 6,
+      test_point: 2,
+      diode: 4,
+      inductor: 4,
+      integrated_circuit: 6,
+      switch: 5,
+      fuse: 3,
+      relay: 5,
+      transformer: 4,
+      crystal: 4,
+      sensor: 5,
+      other: 4
+    });
 
      const detectionCovered = 3;
      const detectionUncovered = 8;
@@ -578,6 +664,10 @@
     const panelInputs = document.getElementById("panelInputs");
     const panelRun = document.getElementById("panelRun");
     const panelResults = document.getElementById("panelResults");
+    const fmeaAssumptionsSection = document.getElementById("fmeaAssumptionsSection");
+    const fmeaAssumptionsStatus = document.getElementById("fmeaAssumptionsStatus");
+    const fmeaLookupBody = document.getElementById("fmeaLookupBody");
+    const fmeaGeneratedBody = document.getElementById("fmeaGeneratedBody");
 
 
      let sortState = { key: null, direction: 1, table: "primary" };
@@ -596,6 +686,7 @@
     tabRunBtn.addEventListener("click", () => activateTab("run"));
     tabResultsBtn.addEventListener("click", () => activateTab("results"));
 
+    initializeFmeaAssumptions();
     applyOptionsToUi();
     updateWorkflowUi();
 
@@ -606,6 +697,7 @@
       applyOptionsToUi();
       resetRunState();
       updateWorkflowUi();
+      refreshFmeaAssumptionUi();
       if (state.inputsValid) {
         inputStatus.textContent = "Inputs loaded and validated. Ready to run " + analysisType.value.toUpperCase() + ".";
       }
@@ -670,6 +762,123 @@
       }
     }
 
+    function initializeFmeaAssumptions() {
+      state.fmeaAssumptionLookup = cloneFailureModeLookup(DEFAULT_FAILURE_MODES_BY_CLASS);
+      state.fmeaAssumptionOverrides = {};
+      refreshFmeaAssumptionUi();
+    }
+
+    function cloneFailureModeLookup(lookup) {
+      const clone = {};
+      for (const [k, v] of Object.entries(lookup)) clone[k] = Array.isArray(v) ? v.slice() : [];
+      return clone;
+    }
+
+    function normalizeFailureModeListFromText(text) {
+      const values = String(text || "")
+        .split(/\r?\n|,/)
+        .map((x) => x.trim().toLowerCase().replace(/\s+/g, "_"))
+        .filter(Boolean);
+      return dedupe(values);
+    }
+
+    function getFailureModesForComponent(componentClass, refdes) {
+      const override = state.fmeaAssumptionOverrides[refdes];
+      if (Array.isArray(override) && override.length) return override.slice();
+      const defaults = state.fmeaAssumptionLookup[componentClass] || state.fmeaAssumptionLookup.other || ["open"];
+      return defaults.length ? defaults.slice() : ["open"];
+    }
+
+    function renderFmeaLookupTable() {
+      if (!fmeaLookupBody) return;
+      fmeaLookupBody.innerHTML = "";
+      const keys = Object.keys(state.fmeaAssumptionLookup || {}).sort();
+      for (const componentType of keys) {
+        const tr = document.createElement("tr");
+        const tdType = document.createElement("td");
+        tdType.textContent = componentType;
+        const tdModes = document.createElement("td");
+        const textarea = document.createElement("textarea");
+        textarea.value = (state.fmeaAssumptionLookup[componentType] || []).join("\n");
+        textarea.addEventListener("change", () => {
+          const list = normalizeFailureModeListFromText(textarea.value);
+          state.fmeaAssumptionLookup[componentType] = list.length ? list : ["open"];
+          textarea.value = state.fmeaAssumptionLookup[componentType].join("\n");
+          renderGeneratedFmeaAssumptions();
+        });
+        tdModes.appendChild(textarea);
+        tr.appendChild(tdType);
+        tr.appendChild(tdModes);
+        fmeaLookupBody.appendChild(tr);
+      }
+    }
+
+    function renderGeneratedFmeaAssumptions() {
+      if (!fmeaGeneratedBody) return;
+      fmeaGeneratedBody.innerHTML = "";
+      const components = (state.netlist && Array.isArray(state.netlist.components)) ? state.netlist.components.slice() : [];
+      components.sort((a, b) => String(a.refdes || "").localeCompare(String(b.refdes || "")));
+      if (!components.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 4;
+        td.textContent = "Load a netlist to generate assumptions per component.";
+        tr.appendChild(td);
+        fmeaGeneratedBody.appendChild(tr);
+        return;
+      }
+
+      for (const component of components) {
+        const refdes = component.refdes || "UNASSIGNED";
+        const componentType = classifyComponent(refdes);
+        const isOverride = Array.isArray(state.fmeaAssumptionOverrides[refdes]);
+        const applied = getFailureModesForComponent(componentType, refdes);
+        const tr = document.createElement("tr");
+
+        const tdRefdes = document.createElement("td");
+        tdRefdes.textContent = refdes;
+        const tdType = document.createElement("td");
+        tdType.textContent = componentType;
+        const tdSource = document.createElement("td");
+        tdSource.textContent = isOverride ? "override" : "lookup";
+        const tdModes = document.createElement("td");
+        const textarea = document.createElement("textarea");
+        textarea.value = applied.join("\n");
+        textarea.addEventListener("change", () => {
+          const parsed = normalizeFailureModeListFromText(textarea.value);
+          const fallback = state.fmeaAssumptionLookup[componentType] || state.fmeaAssumptionLookup.other || ["open"];
+          if (!parsed.length || arraysEqual(parsed, fallback)) {
+            delete state.fmeaAssumptionOverrides[refdes];
+            textarea.value = fallback.join("\n");
+            tdSource.textContent = "lookup";
+          } else {
+            state.fmeaAssumptionOverrides[refdes] = parsed;
+            tdSource.textContent = "override";
+          }
+        });
+        tdModes.appendChild(textarea);
+
+        tr.appendChild(tdRefdes);
+        tr.appendChild(tdType);
+        tr.appendChild(tdSource);
+        tr.appendChild(tdModes);
+        fmeaGeneratedBody.appendChild(tr);
+      }
+    }
+
+    function refreshFmeaAssumptionUi() {
+      if (!fmeaAssumptionsSection) return;
+      const isFmea = analysisType.value === "fmea";
+      fmeaAssumptionsSection.classList.toggle("hidden", !isFmea);
+      if (!isFmea) return;
+      renderFmeaLookupTable();
+      renderGeneratedFmeaAssumptions();
+      const componentCount = state.netlist && Array.isArray(state.netlist.components) ? state.netlist.components.length : 0;
+      fmeaAssumptionsStatus.textContent = componentCount
+        ? "Deterministic assumptions generated for " + componentCount + " components from refdes-derived types."
+        : "Load inputs to generate component-level assumptions.";
+    }
+
 
     function handleFileUpload(event) {
       const files = Array.from(event.target.files || []);
@@ -691,6 +900,7 @@
         .catch((err) => {
           state.inputsValid = false;
           inputStatus.textContent = "Upload failed: " + err.message;
+          refreshFmeaAssumptionUi();
           updateWorkflowUi();
         });
     }
@@ -711,14 +921,14 @@
        });
      }
 
-     function classifyLoadedFiles() {
-       state.netlist = null;
-       state.testPlan = null;
-       state.partsLibrary = null;
-       state.toleranceLibrary = null;
+    function classifyLoadedFiles() {
+      state.netlist = null;
+      state.testPlan = null;
+      state.partsLibrary = null;
+      state.toleranceLibrary = null;
        state.stressRules = null;
 
-       for (const [name, data] of Object.entries(state.files)) {
+      for (const [name, data] of Object.entries(state.files)) {
          const lower = name.toLowerCase();
          if (lower.includes("test_plan")) {
            state.testPlan = data;
@@ -736,11 +946,22 @@
            state.stressRules = data;
            continue;
          }
-         if (!state.netlist && looksLikeNetlist(data)) {
-           state.netlist = data;
-         }
-       }
-     }
+        if (!state.netlist && looksLikeNetlist(data)) {
+          state.netlist = data;
+        }
+      }
+      pruneFmeaOverridesToLoadedComponents();
+      refreshFmeaAssumptionUi();
+    }
+
+    function pruneFmeaOverridesToLoadedComponents() {
+      const valid = new Set((state.netlist && Array.isArray(state.netlist.components))
+        ? state.netlist.components.map((c) => c.refdes || "UNASSIGNED")
+        : []);
+      for (const key of Object.keys(state.fmeaAssumptionOverrides || {})) {
+        if (!valid.has(key)) delete state.fmeaAssumptionOverrides[key];
+      }
+    }
 
      function looksLikeNetlist(data) {
        return !!(data && typeof data === "object" && Array.isArray(data.components));
@@ -783,12 +1004,14 @@
       if (errors.length) {
         state.inputsValid = false;
         inputStatus.textContent = "Validation errors: " + errors.join(" | ");
+        refreshFmeaAssumptionUi();
         updateWorkflowUi();
         return;
       }
 
       state.inputsValid = !!state.netlist;
       inputStatus.textContent = "Inputs loaded and validated. Ready to run " + analysisType.value.toUpperCase() + ".";
+      refreshFmeaAssumptionUi();
       updateWorkflowUi();
       activateTab("run");
     }
@@ -867,10 +1090,10 @@
        const netToRefs = buildNetToRefsMap(netlist);
        const components = Array.isArray(netlist.components) ? netlist.components : [];
 
-       for (const component of components) {
-         const componentClass = classifyComponent(component.refdes);
-         const failures = failureModesByClass[componentClass] || failureModesByClass.other;
-         const nets = extractComponentNets(component);
+      for (const component of components) {
+        const componentClass = classifyComponent(component.refdes);
+        const failures = getFailureModesForComponent(componentClass, component.refdes || "UNASSIGNED");
+        const nets = extractComponentNets(component);
          const affectedComponents = dedupe(nets.flatMap((net) => netToRefs[net] || []).filter((ref) => ref !== component.refdes));
          const affectedInterfacePins = nets.filter(isInterfaceNet);
 
@@ -1374,15 +1597,24 @@
        return max;
      }
 
-     function classifyComponent(refdes) {
-       const r = String(refdes || "").toUpperCase();
-       if (r.startsWith("R")) return "resistor";
-       if (r.startsWith("C")) return "capacitor";
-       if (r.startsWith("Q")) return "transistor";
-       if (r.startsWith("J") || r.startsWith("P")) return "connector";
-       if (isTestPoint(r)) return "test_point";
-       return "other";
-     }
+    function classifyComponent(refdes) {
+      const r = String(refdes || "").toUpperCase();
+      if (r.startsWith("R")) return "resistor";
+      if (r.startsWith("C")) return "capacitor";
+      if (r.startsWith("Q")) return "transistor";
+      if (r.startsWith("D")) return "diode";
+      if (r.startsWith("L")) return "inductor";
+      if (r.startsWith("U") || r.startsWith("IC")) return "integrated_circuit";
+      if (r.startsWith("S")) return "switch";
+      if (r.startsWith("F")) return "fuse";
+      if (r.startsWith("K")) return "relay";
+      if (r.startsWith("T")) return "transformer";
+      if (r.startsWith("X")) return "crystal";
+      if (r.startsWith("B")) return "sensor";
+      if (r.startsWith("J") || r.startsWith("P")) return "connector";
+      if (isTestPoint(r)) return "test_point";
+      return "other";
+    }
 
      function isTestPoint(refdes) {
        const r = String(refdes || "").toUpperCase();
@@ -1476,9 +1708,17 @@
        return String(v || "unknown").replace(/[^a-z0-9_.-]/gi, "_");
      }
 
-     function dedupe(arr) {
-       return Array.from(new Set(arr));
-     }
+    function dedupe(arr) {
+      return Array.from(new Set(arr));
+    }
+
+    function arraysEqual(a, b) {
+      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i += 1) {
+        if (a[i] !== b[i]) return false;
+      }
+      return true;
+    }
 
      function toNumber(v, fallback) {
        const n = Number(v);
