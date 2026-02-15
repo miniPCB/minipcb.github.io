@@ -47,17 +47,94 @@
        letter-spacing: 0.02em;
      }
 
-     .control-panel {
-       display: grid;
-       grid-template-columns: repeat(4, minmax(160px, 1fr));
-       gap: 10px;
-       padding: 12px;
-       border: 1px solid var(--border);
-       background: linear-gradient(180deg, var(--panel-2), var(--panel));
-       border-radius: 12px;
-       box-shadow: var(--shadow);
-       margin-bottom: 14px;
-     }
+    .top-ribbon {
+      padding: 12px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      margin-bottom: 14px;
+    }
+
+    .stage-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .stage-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #121a25;
+      padding: 8px 10px;
+      min-height: 58px;
+    }
+
+    .stage-title {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .stage-state {
+      display: inline-block;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    .stage-locked .stage-state { color: var(--muted); }
+    .stage-ready .stage-state { color: var(--warn); }
+    .stage-done .stage-state { color: var(--ok); }
+
+    .control-panel {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .control-group {
+      display: grid;
+      gap: 6px;
+      align-content: start;
+    }
+
+    .control-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding-left: 2px;
+    }
+
+    .inline-option {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .inline-option input[type="number"] {
+      border: 1px solid var(--border);
+      background: #1e2837;
+      color: var(--text);
+      border-radius: 8px;
+      min-height: 42px;
+      padding: 0 10px;
+      width: 100%;
+    }
+
+    .checkline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      padding-left: 2px;
+    }
 
      button,
      select {
@@ -197,28 +274,85 @@
 
      .hidden { display: none; }
 
-     @media (max-width: 1080px) {
-       .control-panel { grid-template-columns: 1fr 1fr; }
-       .content { grid-template-columns: 1fr; }
-     }
+    @media (max-width: 1200px) {
+      .stage-row { grid-template-columns: 1fr 1fr 1fr; }
+      .control-panel { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    @media (max-width: 860px) {
+      .stage-row { grid-template-columns: 1fr 1fr; }
+      .control-panel { grid-template-columns: 1fr 1fr; }
+      .content { grid-template-columns: 1fr; }
+    }
    </style>
 </head>
 <body>
    <div class="page">
      <h1 class="title">Engineering Analyzer v0.1</h1>
 
-     <section class="control-panel">
-       <button id="uploadBtn" type="button">Upload Files</button>
-       <select id="analysisType" aria-label="Select Analysis Type">
-         <option value="fmea">FMEA</option>
-         <option value="epsa">EPSA</option>
-         <option value="wcca">WCCA</option>
-         <option value="coverage">Coverage</option>
-       </select>
-       <button id="runBtn" type="button" disabled>Run Analysis</button>
-       <button id="exportBtn" type="button" disabled>Export Results</button>
-       <input id="fileInput" type="file" accept=".json,application/json" multiple class="hidden">
-     </section>
+    <section class="top-ribbon">
+      <div class="stage-row">
+        <div id="stageAnalysis" class="stage-card stage-done">
+          <span class="stage-title">Analysis</span>
+          <span id="stageAnalysisState" class="stage-state">Done</span>
+        </div>
+        <div id="stageOptions" class="stage-card stage-ready">
+          <span class="stage-title">Options</span>
+          <span id="stageOptionsState" class="stage-state">Ready</span>
+        </div>
+        <div id="stageInputs" class="stage-card stage-ready">
+          <span class="stage-title">Inputs</span>
+          <span id="stageInputsState" class="stage-state">Ready</span>
+        </div>
+        <div id="stageRun" class="stage-card stage-locked">
+          <span class="stage-title">Run</span>
+          <span id="stageRunState" class="stage-state">Locked</span>
+        </div>
+        <div id="stageOutputs" class="stage-card stage-locked">
+          <span class="stage-title">Outputs</span>
+          <span id="stageOutputsState" class="stage-state">Locked</span>
+        </div>
+      </div>
+
+      <div class="control-panel">
+        <div class="control-group">
+          <div class="control-label">Analysis Type</div>
+          <select id="analysisType" aria-label="Select Analysis Type">
+            <option value="fmea">FMEA</option>
+            <option value="epsa">EPSA</option>
+            <option value="wcca">WCCA</option>
+            <option value="coverage">Coverage</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">Options</div>
+          <div class="inline-option">
+            <input id="optionMargin" type="number" min="0" max="100" step="1" value="20" aria-label="EPSA Margin Threshold Percent">
+          </div>
+          <label class="checkline">
+            <input id="optionShowSecondary" type="checkbox" checked>
+            Show secondary table
+          </label>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">Inputs</div>
+          <button id="uploadBtn" type="button">Upload Files</button>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">Run</div>
+          <button id="runBtn" type="button" disabled>Run Analysis</button>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">Outputs</div>
+          <button id="exportBtn" type="button" disabled>Export Results</button>
+        </div>
+      </div>
+      <input id="fileInput" type="file" accept=".json,application/json" multiple class="hidden">
+    </section>
 
      <section class="content">
        <article class="panel">
@@ -240,13 +374,13 @@
          <h2>Results</h2>
          <div class="panel-body">
            <p id="resultStatus" class="hint">Run an analysis to populate deterministic results.</p>
-           <div class="table-wrap">
+          <div class="table-wrap">
              <table id="resultsTable">
                <thead><tr id="resultsHead"></tr></thead>
                <tbody id="resultsBody"></tbody>
              </table>
            </div>
-           <div class="table-wrap">
+           <div id="secondaryWrap" class="table-wrap">
              <table id="secondaryTable">
                <thead><tr id="secondaryHead"></tr></thead>
                <tbody id="secondaryBody"></tbody>
@@ -267,17 +401,23 @@
 
      const ENGINE_VERSION = "0.1";
 
-     const state = {
-       files: {},
-       netlist: null,
-       testPlan: null,
-       partsLibrary: null,
-       toleranceLibrary: null,
-       stressRules: null,
-       lastAnalysisType: null,
-       lastOutput: null,
-       lastMarkdown: ""
-     };
+    const state = {
+      files: {},
+      netlist: null,
+      testPlan: null,
+      partsLibrary: null,
+      toleranceLibrary: null,
+      stressRules: null,
+      inputsValid: false,
+      lastAnalysisType: null,
+      lastOutput: null,
+      lastMarkdown: "",
+      outputsExported: false,
+      options: {
+        marginThresholdPercent: 20,
+        showSecondary: true
+      }
+    };
 
      const failureModesByClass = Object.freeze({
        resistor: ["open", "short", "oot_high", "oot_low"],
@@ -307,11 +447,14 @@
        coverage: runCoverage
      });
 
-     const uploadBtn = document.getElementById("uploadBtn");
-     const fileInput = document.getElementById("fileInput");
-     const analysisType = document.getElementById("analysisType");
-     const runBtn = document.getElementById("runBtn");
-     const exportBtn = document.getElementById("exportBtn");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const fileInput = document.getElementById("fileInput");
+    const analysisType = document.getElementById("analysisType");
+    const runBtn = document.getElementById("runBtn");
+    const exportBtn = document.getElementById("exportBtn");
+    const optionMargin = document.getElementById("optionMargin");
+    const optionShowSecondary = document.getElementById("optionShowSecondary");
+    const secondaryWrap = document.getElementById("secondaryWrap");
 
 
      const inputStatus = document.getElementById("inputStatus");
@@ -321,28 +464,91 @@
      const netGraphViewer = document.getElementById("netGraphViewer");
      const resultsHead = document.getElementById("resultsHead");
      const resultsBody = document.getElementById("resultsBody");
-     const secondaryHead = document.getElementById("secondaryHead");
-     const secondaryBody = document.getElementById("secondaryBody");
-     const summaryGrid = document.getElementById("summaryGrid");
+    const secondaryHead = document.getElementById("secondaryHead");
+    const secondaryBody = document.getElementById("secondaryBody");
+    const summaryGrid = document.getElementById("summaryGrid");
+    const stageAnalysis = document.getElementById("stageAnalysis");
+    const stageOptions = document.getElementById("stageOptions");
+    const stageInputs = document.getElementById("stageInputs");
+    const stageRun = document.getElementById("stageRun");
+    const stageOutputs = document.getElementById("stageOutputs");
+    const stageAnalysisState = document.getElementById("stageAnalysisState");
+    const stageOptionsState = document.getElementById("stageOptionsState");
+    const stageInputsState = document.getElementById("stageInputsState");
+    const stageRunState = document.getElementById("stageRunState");
+    const stageOutputsState = document.getElementById("stageOutputsState");
 
 
      let sortState = { key: null, direction: 1, table: "primary" };
 
 
 
-     uploadBtn.addEventListener("click", () => fileInput.click());
-     fileInput.addEventListener("change", handleFileUpload);
-     runBtn.addEventListener("click", runSelectedAnalysis);
-     exportBtn.addEventListener("click", exportResults);
+    uploadBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", handleFileUpload);
+    runBtn.addEventListener("click", runSelectedAnalysis);
+    exportBtn.addEventListener("click", exportResults);
+    analysisType.addEventListener("change", handleAnalysisOrOptionChange);
+    optionMargin.addEventListener("change", handleAnalysisOrOptionChange);
+    optionShowSecondary.addEventListener("change", handleAnalysisOrOptionChange);
+
+    applyOptionsToUi();
+    updateWorkflowUi();
+
+    function handleAnalysisOrOptionChange() {
+      const margin = Number(optionMargin.value);
+      state.options.marginThresholdPercent = Number.isFinite(margin) ? Math.max(0, Math.min(100, margin)) : 20;
+      state.options.showSecondary = !!optionShowSecondary.checked;
+      applyOptionsToUi();
+      resetRunState();
+      updateWorkflowUi();
+      if (state.inputsValid) {
+        inputStatus.textContent = "Inputs loaded and validated. Ready to run " + analysisType.value.toUpperCase() + ".";
+      }
+    }
+
+    function applyOptionsToUi() {
+      optionMargin.value = String(state.options.marginThresholdPercent);
+      optionShowSecondary.checked = !!state.options.showSecondary;
+      secondaryWrap.style.display = state.options.showSecondary ? "block" : "none";
+    }
+
+    function setStage(card, label, mode) {
+      card.classList.remove("stage-locked", "stage-ready", "stage-done");
+      card.classList.add(mode);
+      label.textContent = mode === "stage-done" ? "Done" : mode === "stage-ready" ? "Ready" : "Locked";
+    }
+
+    function updateWorkflowUi() {
+      const analysisReady = !!analysisType.value;
+      const optionsReady = analysisReady;
+      const inputsReady = optionsReady && !!state.inputsValid;
+      const runReady = inputsReady;
+      const runDone = !!state.lastOutput;
+      const outputsReady = runDone;
+      const outputsDone = outputsReady && !!state.outputsExported;
+
+      optionMargin.disabled = !optionsReady;
+      optionShowSecondary.disabled = !optionsReady;
+      uploadBtn.disabled = !analysisReady;
+      runBtn.disabled = !runReady;
+      exportBtn.disabled = !outputsReady;
+
+      setStage(stageAnalysis, stageAnalysisState, analysisReady ? "stage-done" : "stage-locked");
+      setStage(stageOptions, stageOptionsState, optionsReady ? "stage-done" : "stage-locked");
+      setStage(stageInputs, stageInputsState, inputsReady ? "stage-done" : (optionsReady ? "stage-ready" : "stage-locked"));
+      setStage(stageRun, stageRunState, runDone ? "stage-done" : (runReady ? "stage-ready" : "stage-locked"));
+      setStage(stageOutputs, stageOutputsState, outputsDone ? "stage-done" : (outputsReady ? "stage-ready" : "stage-locked"));
+    }
 
 
-     function handleFileUpload(event) {
-       const files = Array.from(event.target.files || []);
-       if (!files.length) {
-         return;
-       }
-       resetRunState();
-       const reads = files.map(readJsonFile);
+    function handleFileUpload(event) {
+      const files = Array.from(event.target.files || []);
+      if (!files.length) {
+        return;
+      }
+      state.inputsValid = false;
+      resetRunState();
+      const reads = files.map(readJsonFile);
        Promise.all(reads)
          .then((loaded) => {
            state.files = {};
@@ -352,11 +558,12 @@
            classifyLoadedFiles();
            validateAndRenderInputs();
          })
-         .catch((err) => {
-           inputStatus.textContent = "Upload failed: " + err.message;
-           runBtn.disabled = true;
-         });
-     }
+        .catch((err) => {
+          state.inputsValid = false;
+          inputStatus.textContent = "Upload failed: " + err.message;
+          updateWorkflowUi();
+        });
+    }
 
      function readJsonFile(file) {
        return new Promise((resolve, reject) => {
@@ -443,15 +650,17 @@
        netGraphViewer.textContent = buildNetAdjacencySummary(state.netlist);
 
 
-       if (errors.length) {
-         inputStatus.textContent = "Validation errors: " + errors.join(" | ");
-         runBtn.disabled = true;
-         return;
-       }
+      if (errors.length) {
+        state.inputsValid = false;
+        inputStatus.textContent = "Validation errors: " + errors.join(" | ");
+        updateWorkflowUi();
+        return;
+      }
 
-       runBtn.disabled = !state.netlist;
-       inputStatus.textContent = "Inputs loaded and validated. Ready to run " + analysisType.value.toUpperCase() + ".";
-     }
+      state.inputsValid = !!state.netlist;
+      inputStatus.textContent = "Inputs loaded and validated. Ready to run " + analysisType.value.toUpperCase() + ".";
+      updateWorkflowUi();
+    }
 
      function validateNetlist(netlist) {
        if (!netlist || typeof netlist !== "object") return false;
@@ -477,28 +686,30 @@
        return false;
      }
 
-     function validateToleranceLibrary(lib) {
-       if (!lib || typeof lib !== "object") return false;
-       return Array.isArray(lib.tolerances) || typeof lib.default_tolerance === "number";
-     }
+    function validateToleranceLibrary(lib) {
+      if (!lib || typeof lib !== "object") return false;
+      return Array.isArray(lib.tolerances) || typeof lib.default_tolerance === "number" || typeof lib.by_refdes === "object";
+    }
 
      function validateStressRules(rules) {
        if (!rules || typeof rules !== "object") return false;
        return typeof rules.margin_threshold_percent === "number" || typeof rules.thresholds === "object";
      }
 
-     function runSelectedAnalysis() {
-       if (!state.netlist) {
-         resultStatus.textContent = "Load a valid netlist first.";
-         return;
-       }
-       const type = analysisType.value;
-       const analyzer = analyzers[type];
-       if (!analyzer) {
-         resultStatus.textContent = "Unknown analysis type: " + type;
-         return;
-       }
-       resetRunState();
+    function runSelectedAnalysis() {
+      if (!state.netlist || !state.inputsValid) {
+        resultStatus.textContent = "Load a valid netlist first.";
+        updateWorkflowUi();
+        return;
+      }
+      const type = analysisType.value;
+      const analyzer = analyzers[type];
+      if (!analyzer) {
+        resultStatus.textContent = "Unknown analysis type: " + type;
+        updateWorkflowUi();
+        return;
+      }
+      resetRunState();
        const base = {
          analysis_engine_version: ENGINE_VERSION,
          analysis_type: type,
@@ -508,14 +719,15 @@
        };
        const coverageResult = runCoverage(state.netlist, state.testPlan).result;
        const analysis = analyzer(state.netlist, state.testPlan, state.partsLibrary, state.toleranceLibrary, state.stressRules, coverageResult);
-       state.lastAnalysisType = type;
-       state.lastOutput = Object.assign({}, base, analysis.result);
-       state.lastMarkdown = analysis.markdown;
-       outputViewer.textContent = JSON.stringify(state.lastOutput, null, 2);
-       renderAnalysis(analysis);
-       resultStatus.textContent = "Completed " + type.toUpperCase() + " with deterministic engine v" + ENGINE_VERSION + ".";
-       exportBtn.disabled = false;
-     }
+      state.lastAnalysisType = type;
+      state.lastOutput = Object.assign({}, base, analysis.result);
+      state.lastMarkdown = analysis.markdown;
+      state.outputsExported = false;
+      outputViewer.textContent = JSON.stringify(state.lastOutput, null, 2);
+      renderAnalysis(analysis);
+      resultStatus.textContent = "Completed " + type.toUpperCase() + " with deterministic engine v" + ENGINE_VERSION + ".";
+      updateWorkflowUi();
+    }
 
      function runFMEA(netlist, testPlan, _partsLibrary, _toleranceLibrary, _stressRules, coverageResult) {
        const netCoverage = (coverageResult && coverageResult.coverage_map) || {};
@@ -574,9 +786,9 @@
        };
      }
 
-     function runEPSA(netlist, _testPlan, partsLibrary, _toleranceLibrary, stressRules) {
-       const partsMap = buildPartsMap(partsLibrary);
-       const threshold = safeGet(stressRules, ["margin_threshold_percent"], 20);
+    function runEPSA(netlist, _testPlan, partsLibrary, _toleranceLibrary, stressRules) {
+      const partsMap = buildPartsMap(partsLibrary);
+      const threshold = toNumber(state.options.marginThresholdPercent, safeGet(stressRules, ["margin_threshold_percent"], 20));
        const rows = [];
        const components = Array.isArray(netlist.components) ? netlist.components : [];
 
@@ -753,10 +965,10 @@
          else if (n >= 120) td.classList.add("status-warn");
          else td.classList.add("status-ok");
        }
-       if (lowerKey.includes("coverage") || lowerKey === "covered") {
-         if (lowerValue.includes("true") || lowerValue.includes("covered") || Number(value) >= 80) td.classList.add("status-ok");
-         else td.classList.add("status-warn");
-       }
+      if (lowerKey.includes("coverage") || lowerKey === "covered") {
+        if (lowerValue === "true" || lowerValue === "covered" || Number(value) >= 80) td.classList.add("status-ok");
+        else td.classList.add("status-warn");
+      }
        if (lowerKey === "status" || lowerKey.endsWith("status")) {
          if (lowerValue === "pass" || lowerValue === "good" || lowerValue === "redundant") td.classList.add("status-ok");
          else if (lowerValue === "warn" || lowerValue === "watch") td.classList.add("status-warn");
@@ -774,16 +986,18 @@
        }
      }
 
-     function exportResults() {
-       if (!state.lastOutput || !state.lastAnalysisType) return;
-       const boardPn = safeFilePart(state.lastOutput.board_pn || "unknown_board");
-       const rev = safeFilePart(state.lastOutput.board_rev || "unknown_rev");
-       const type = safeFilePart(state.lastAnalysisType);
+    function exportResults() {
+      if (!state.lastOutput || !state.lastAnalysisType) return;
+      const boardPn = safeFilePart(state.lastOutput.board_pn || "unknown_board");
+      const rev = safeFilePart(state.lastOutput.board_rev || "unknown_rev");
+      const type = safeFilePart(state.lastAnalysisType);
        const jsonName = "analysis_" + type + "_" + boardPn + "_" + rev + ".json";
        const mdName = "analysis_" + type + "_" + boardPn + "_" + rev + ".md";
-       downloadBlob(jsonName, JSON.stringify(state.lastOutput, null, 2), "application/json");
-       downloadBlob(mdName, state.lastMarkdown, "text/markdown");
-     }
+      downloadBlob(jsonName, JSON.stringify(state.lastOutput, null, 2), "application/json");
+      downloadBlob(mdName, state.lastMarkdown, "text/markdown");
+      state.outputsExported = true;
+      updateWorkflowUi();
+    }
 
      function downloadBlob(filename, content, mime) {
        const blob = new Blob([content], { type: mime });
@@ -1074,18 +1288,20 @@
        return Math.round(Number(n) * 10000) / 10000;
      }
 
-     function resetRunState() {
-       state.lastAnalysisType = null;
-       state.lastOutput = null;
-       state.lastMarkdown = "";
-       outputViewer.textContent = "{}";
-       resultsHead.innerHTML = "";
-       resultsBody.innerHTML = "";
-       secondaryHead.innerHTML = "";
-       secondaryBody.innerHTML = "";
-       summaryGrid.innerHTML = "";
-       exportBtn.disabled = true;
-     }
+    function resetRunState() {
+      state.lastAnalysisType = null;
+      state.lastOutput = null;
+      state.lastMarkdown = "";
+      state.outputsExported = false;
+      outputViewer.textContent = "{}";
+      resultsHead.innerHTML = "";
+      resultsBody.innerHTML = "";
+      secondaryHead.innerHTML = "";
+      secondaryBody.innerHTML = "";
+      summaryGrid.innerHTML = "";
+      applyOptionsToUi();
+      updateWorkflowUi();
+    }
    </script>
 </body>
 </html>
