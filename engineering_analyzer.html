@@ -41,58 +41,69 @@
        padding: 20px;
      }
 
-     .title {
-       margin: 0 0 16px;
-       font-size: 1.45rem;
-       letter-spacing: 0.02em;
-     }
-
-    .top-ribbon {
-      padding: 12px;
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, var(--panel-2), var(--panel));
-      border-radius: 12px;
-      box-shadow: var(--shadow);
-      margin-bottom: 14px;
+    .title {
+      margin: 0 0 16px;
+      font-size: 1.45rem;
+      letter-spacing: 0.02em;
     }
 
-    .stage-row {
+    .tabbar {
       display: grid;
-      grid-template-columns: repeat(5, minmax(130px, 1fr));
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
       gap: 8px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
 
-    .stage-card {
+    .tab-button {
       border: 1px solid var(--border);
       border-radius: 10px;
-      background: #121a25;
-      padding: 8px 10px;
-      min-height: 58px;
+      background: #131b27;
+      color: var(--text);
+      padding: 10px;
+      text-align: left;
+      min-height: 62px;
+      cursor: pointer;
     }
 
-    .stage-title {
+    .tab-button .tab-title {
       display: block;
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-bottom: 3px;
+      font-size: 0.82rem;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 3px;
     }
 
-    .stage-state {
-      display: inline-block;
-      font-size: 0.88rem;
+    .tab-button .tab-state {
+      font-size: 0.9rem;
       font-weight: 700;
+      color: var(--muted);
     }
 
-    .stage-locked .stage-state { color: var(--muted); }
-    .stage-ready .stage-state { color: var(--warn); }
-    .stage-done .stage-state { color: var(--ok); }
+    .tab-button.active {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, #1b2a3f, #141e2d);
+      box-shadow: inset 0 0 0 1px rgba(47, 136, 255, 0.2);
+    }
+
+    .tab-button.state-ready .tab-state { color: var(--warn); }
+    .tab-button.state-done .tab-state { color: var(--ok); }
+    .tab-button.state-locked { opacity: 0.65; cursor: not-allowed; }
+
+    .tab-panel {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .tab-panel.hidden { display: none; }
 
     .control-panel {
       display: grid;
-      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 10px;
     }
 
@@ -275,13 +286,13 @@
      .hidden { display: none; }
 
     @media (max-width: 1200px) {
-      .stage-row { grid-template-columns: 1fr 1fr 1fr; }
-      .control-panel { grid-template-columns: 1fr 1fr 1fr; }
+      .tabbar { grid-template-columns: 1fr 1fr; }
+      .control-panel { grid-template-columns: 1fr 1fr; }
     }
 
     @media (max-width: 860px) {
-      .stage-row { grid-template-columns: 1fr 1fr; }
-      .control-panel { grid-template-columns: 1fr 1fr; }
+      .tabbar { grid-template-columns: 1fr; }
+      .control-panel { grid-template-columns: 1fr; }
       .content { grid-template-columns: 1fr; }
     }
    </style>
@@ -290,30 +301,27 @@
    <div class="page">
      <h1 class="title">Engineering Analyzer v0.1</h1>
 
-    <section class="top-ribbon">
-      <div class="stage-row">
-        <div id="stageAnalysis" class="stage-card stage-done">
-          <span class="stage-title">Analysis</span>
-          <span id="stageAnalysisState" class="stage-state">Done</span>
-        </div>
-        <div id="stageOptions" class="stage-card stage-ready">
-          <span class="stage-title">Options</span>
-          <span id="stageOptionsState" class="stage-state">Ready</span>
-        </div>
-        <div id="stageInputs" class="stage-card stage-ready">
-          <span class="stage-title">Inputs</span>
-          <span id="stageInputsState" class="stage-state">Ready</span>
-        </div>
-        <div id="stageRun" class="stage-card stage-locked">
-          <span class="stage-title">Run</span>
-          <span id="stageRunState" class="stage-state">Locked</span>
-        </div>
-        <div id="stageOutputs" class="stage-card stage-locked">
-          <span class="stage-title">Outputs</span>
-          <span id="stageOutputsState" class="stage-state">Locked</span>
-        </div>
-      </div>
+    <section class="tabbar">
+      <button id="tabSetupBtn" class="tab-button active state-done" type="button" data-tab="setup">
+        <span class="tab-title">Setup Analysis</span>
+        <span id="tabSetupState" class="tab-state">Done</span>
+      </button>
+      <button id="tabInputsBtn" class="tab-button state-ready" type="button" data-tab="inputs">
+        <span class="tab-title">Load Inputs</span>
+        <span id="tabInputsState" class="tab-state">Ready</span>
+      </button>
+      <button id="tabRunBtn" class="tab-button state-locked" type="button" data-tab="run" disabled>
+        <span class="tab-title">Run Analysis</span>
+        <span id="tabRunState" class="tab-state">Locked</span>
+      </button>
+      <button id="tabResultsBtn" class="tab-button state-locked" type="button" data-tab="results" disabled>
+        <span class="tab-title">Review Results</span>
+        <span id="tabResultsState" class="tab-state">Locked</span>
+      </button>
+    </section>
 
+    <section id="panelSetup" class="tab-panel">
+      <h2>Setup Analysis</h2>
       <div class="control-panel">
         <div class="control-group">
           <div class="control-label">Analysis Type</div>
@@ -324,7 +332,6 @@
             <option value="coverage">Coverage</option>
           </select>
         </div>
-
         <div class="control-group">
           <div class="control-label">Options</div>
           <div class="inline-option">
@@ -335,65 +342,66 @@
             Show secondary table
           </label>
         </div>
+      </div>
+    </section>
 
+    <section id="panelInputs" class="tab-panel hidden">
+      <h2>Load Inputs</h2>
+      <div class="control-panel">
         <div class="control-group">
           <div class="control-label">Inputs</div>
           <button id="uploadBtn" type="button">Upload Files</button>
+          <input id="fileInput" type="file" accept=".json,application/json" multiple class="hidden">
         </div>
+      </div>
+      <p id="inputStatus" class="hint">Load `netlist.json` (or equivalent schema v1.1 JSON) to enable analysis.</p>
+      <details open>
+        <summary>Input JSON Viewer</summary>
+        <pre id="inputViewer">{}</pre>
+      </details>
+      <details>
+        <summary>Net Graph Viewer (v0.1 placeholder)</summary>
+        <pre id="netGraphViewer">Graph output is optional in v0.1. Net adjacency summary will appear here after upload.</pre>
+      </details>
+    </section>
 
+    <section id="panelRun" class="tab-panel hidden">
+      <h2>Run Analysis</h2>
+      <div class="control-panel">
         <div class="control-group">
           <div class="control-label">Run</div>
           <button id="runBtn" type="button" disabled>Run Analysis</button>
         </div>
+      </div>
+      <p id="resultStatus" class="hint">Run an analysis to populate deterministic results.</p>
+    </section>
 
+    <section id="panelResults" class="tab-panel hidden">
+      <h2>Review Results</h2>
+      <div class="control-panel">
         <div class="control-group">
           <div class="control-label">Outputs</div>
           <button id="exportBtn" type="button" disabled>Export Results</button>
         </div>
       </div>
-      <input id="fileInput" type="file" accept=".json,application/json" multiple class="hidden">
+      <div class="table-wrap">
+        <table id="resultsTable">
+          <thead><tr id="resultsHead"></tr></thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+      <div id="secondaryWrap" class="table-wrap">
+        <table id="secondaryTable">
+          <thead><tr id="secondaryHead"></tr></thead>
+          <tbody id="secondaryBody"></tbody>
+        </table>
+      </div>
+      <div id="summaryGrid" class="summary-grid"></div>
+      <details>
+        <summary>Output JSON Viewer</summary>
+        <pre id="outputViewer">{}</pre>
+      </details>
     </section>
-
-     <section class="content">
-       <article class="panel">
-         <h2>Input</h2>
-         <div class="panel-body">
-           <p id="inputStatus" class="hint">Load `netlist.json` (or equivalent schema v1.1 JSON) to enable analysis.</p>
-           <details open>
-             <summary>Input JSON Viewer</summary>
-             <pre id="inputViewer">{}</pre>
-           </details>
-           <details>
-             <summary>Net Graph Viewer (v0.1 placeholder)</summary>
-             <pre id="netGraphViewer">Graph output is optional in v0.1. Net adjacency summary will appear here after upload.</pre>
-           </details>
-         </div>
-       </article>
-
-       <article class="panel">
-         <h2>Results</h2>
-         <div class="panel-body">
-           <p id="resultStatus" class="hint">Run an analysis to populate deterministic results.</p>
-          <div class="table-wrap">
-             <table id="resultsTable">
-               <thead><tr id="resultsHead"></tr></thead>
-               <tbody id="resultsBody"></tbody>
-             </table>
-           </div>
-           <div id="secondaryWrap" class="table-wrap">
-             <table id="secondaryTable">
-               <thead><tr id="secondaryHead"></tr></thead>
-               <tbody id="secondaryBody"></tbody>
-             </table>
-           </div>
-           <div id="summaryGrid" class="summary-grid"></div>
-           <details>
-             <summary>Output JSON Viewer</summary>
-             <pre id="outputViewer">{}</pre>
-           </details>
-         </div>
-       </article>
-     </section>
    </div>
 
    <script>
@@ -467,16 +475,18 @@
     const secondaryHead = document.getElementById("secondaryHead");
     const secondaryBody = document.getElementById("secondaryBody");
     const summaryGrid = document.getElementById("summaryGrid");
-    const stageAnalysis = document.getElementById("stageAnalysis");
-    const stageOptions = document.getElementById("stageOptions");
-    const stageInputs = document.getElementById("stageInputs");
-    const stageRun = document.getElementById("stageRun");
-    const stageOutputs = document.getElementById("stageOutputs");
-    const stageAnalysisState = document.getElementById("stageAnalysisState");
-    const stageOptionsState = document.getElementById("stageOptionsState");
-    const stageInputsState = document.getElementById("stageInputsState");
-    const stageRunState = document.getElementById("stageRunState");
-    const stageOutputsState = document.getElementById("stageOutputsState");
+    const tabSetupBtn = document.getElementById("tabSetupBtn");
+    const tabInputsBtn = document.getElementById("tabInputsBtn");
+    const tabRunBtn = document.getElementById("tabRunBtn");
+    const tabResultsBtn = document.getElementById("tabResultsBtn");
+    const tabSetupState = document.getElementById("tabSetupState");
+    const tabInputsState = document.getElementById("tabInputsState");
+    const tabRunState = document.getElementById("tabRunState");
+    const tabResultsState = document.getElementById("tabResultsState");
+    const panelSetup = document.getElementById("panelSetup");
+    const panelInputs = document.getElementById("panelInputs");
+    const panelRun = document.getElementById("panelRun");
+    const panelResults = document.getElementById("panelResults");
 
 
      let sortState = { key: null, direction: 1, table: "primary" };
@@ -490,6 +500,10 @@
     analysisType.addEventListener("change", handleAnalysisOrOptionChange);
     optionMargin.addEventListener("change", handleAnalysisOrOptionChange);
     optionShowSecondary.addEventListener("change", handleAnalysisOrOptionChange);
+    tabSetupBtn.addEventListener("click", () => activateTab("setup"));
+    tabInputsBtn.addEventListener("click", () => activateTab("inputs"));
+    tabRunBtn.addEventListener("click", () => activateTab("run"));
+    tabResultsBtn.addEventListener("click", () => activateTab("results"));
 
     applyOptionsToUi();
     updateWorkflowUi();
@@ -512,32 +526,57 @@
       secondaryWrap.style.display = state.options.showSecondary ? "block" : "none";
     }
 
-    function setStage(card, label, mode) {
-      card.classList.remove("stage-locked", "stage-ready", "stage-done");
-      card.classList.add(mode);
-      label.textContent = mode === "stage-done" ? "Done" : mode === "stage-ready" ? "Ready" : "Locked";
+    function setTabState(button, label, mode) {
+      button.classList.remove("state-locked", "state-ready", "state-done");
+      button.classList.add(mode);
+      button.disabled = mode === "state-locked";
+      label.textContent = mode === "state-done" ? "Done" : mode === "state-ready" ? "Ready" : "Locked";
+    }
+
+    function activateTab(tabName) {
+      const tabs = {
+        setup: { btn: tabSetupBtn, panel: panelSetup },
+        inputs: { btn: tabInputsBtn, panel: panelInputs },
+        run: { btn: tabRunBtn, panel: panelRun },
+        results: { btn: tabResultsBtn, panel: panelResults }
+      };
+      const current = tabs[tabName];
+      if (!current || current.btn.disabled) return;
+      for (const value of Object.values(tabs)) {
+        value.btn.classList.remove("active");
+        value.panel.classList.add("hidden");
+      }
+      current.btn.classList.add("active");
+      current.panel.classList.remove("hidden");
     }
 
     function updateWorkflowUi() {
       const analysisReady = !!analysisType.value;
-      const optionsReady = analysisReady;
-      const inputsReady = optionsReady && !!state.inputsValid;
-      const runReady = inputsReady;
+      const inputsReady = analysisReady && !!state.inputsValid;
       const runDone = !!state.lastOutput;
       const outputsReady = runDone;
       const outputsDone = outputsReady && !!state.outputsExported;
 
-      optionMargin.disabled = !optionsReady;
-      optionShowSecondary.disabled = !optionsReady;
+      optionMargin.disabled = !analysisReady;
+      optionShowSecondary.disabled = !analysisReady;
       uploadBtn.disabled = !analysisReady;
-      runBtn.disabled = !runReady;
+      runBtn.disabled = !inputsReady;
       exportBtn.disabled = !outputsReady;
 
-      setStage(stageAnalysis, stageAnalysisState, analysisReady ? "stage-done" : "stage-locked");
-      setStage(stageOptions, stageOptionsState, optionsReady ? "stage-done" : "stage-locked");
-      setStage(stageInputs, stageInputsState, inputsReady ? "stage-done" : (optionsReady ? "stage-ready" : "stage-locked"));
-      setStage(stageRun, stageRunState, runDone ? "stage-done" : (runReady ? "stage-ready" : "stage-locked"));
-      setStage(stageOutputs, stageOutputsState, outputsDone ? "stage-done" : (outputsReady ? "stage-ready" : "stage-locked"));
+      setTabState(tabSetupBtn, tabSetupState, "state-done");
+      setTabState(tabInputsBtn, tabInputsState, inputsReady ? "state-done" : "state-ready");
+      setTabState(tabRunBtn, tabRunState, runDone ? "state-done" : (inputsReady ? "state-ready" : "state-locked"));
+      setTabState(tabResultsBtn, tabResultsState, outputsDone ? "state-done" : (outputsReady ? "state-ready" : "state-locked"));
+
+      if (tabResultsBtn.disabled && tabResultsBtn.classList.contains("active")) {
+        if (!tabRunBtn.disabled) activateTab("run");
+        else if (!tabInputsBtn.disabled) activateTab("inputs");
+        else activateTab("setup");
+      }
+      if (tabRunBtn.disabled && tabRunBtn.classList.contains("active")) {
+        if (!tabInputsBtn.disabled) activateTab("inputs");
+        else activateTab("setup");
+      }
     }
 
 
@@ -660,6 +699,7 @@
       state.inputsValid = !!state.netlist;
       inputStatus.textContent = "Inputs loaded and validated. Ready to run " + analysisType.value.toUpperCase() + ".";
       updateWorkflowUi();
+      activateTab("run");
     }
 
      function validateNetlist(netlist) {
@@ -727,6 +767,7 @@
       renderAnalysis(analysis);
       resultStatus.textContent = "Completed " + type.toUpperCase() + " with deterministic engine v" + ENGINE_VERSION + ".";
       updateWorkflowUi();
+      activateTab("results");
     }
 
      function runFMEA(netlist, testPlan, _partsLibrary, _toleranceLibrary, _stressRules, coverageResult) {
