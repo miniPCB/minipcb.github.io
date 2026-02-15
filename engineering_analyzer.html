@@ -179,6 +179,24 @@
       resize: vertical;
     }
 
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .detail-grid select,
+    .detail-grid textarea {
+      width: 100%;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
      button,
      select {
        border: 1px solid var(--border);
@@ -499,6 +517,35 @@
             </table>
           </div>
         </details>
+        <details open>
+          <summary>Failure Mode Drill-Down (Level 1 / Level 2 Propagation)</summary>
+          <div class="detail-grid">
+            <div>
+              <div class="control-label">Component</div>
+              <select id="fmeaDetailComponent"></select>
+            </div>
+            <div>
+              <div class="control-label">Failure Mode</div>
+              <select id="fmeaDetailMode"></select>
+            </div>
+            <div style="grid-column:1 / -1;">
+              <div class="control-label">Failure Mode Description</div>
+              <textarea id="fmeaDetailDescription" rows="2"></textarea>
+            </div>
+            <div style="grid-column:1 / -1;">
+              <div class="control-label">Propagation Effects - Level 1</div>
+              <textarea id="fmeaDetailL1" rows="2"></textarea>
+            </div>
+            <div style="grid-column:1 / -1;">
+              <div class="control-label">Propagation Effects - Level 2</div>
+              <textarea id="fmeaDetailL2" rows="3"></textarea>
+            </div>
+          </div>
+          <div class="detail-actions">
+            <button id="fmeaDetailSaveBtn" type="button">Save Mode Detail Override</button>
+            <button id="fmeaDetailResetBtn" type="button">Reset Mode Detail to Default</button>
+          </div>
+        </details>
       </section>
     </section>
 
@@ -580,6 +627,7 @@
       outputsExported: false,
       fmeaAssumptionLookup: null,
       fmeaAssumptionOverrides: {},
+      fmeaKnowledgeOverrides: {},
       options: {
         marginThresholdPercent: 20,
         showSecondary: true
@@ -602,6 +650,37 @@
       crystal: Object.freeze(["start_fail", "freq_shift_high", "freq_shift_low", "high_esr"]),
       sensor: Object.freeze(["offset_shift", "gain_shift", "stuck_output", "open_signal"]),
       other: Object.freeze(["open", "short"])
+    });
+
+    const DEFAULT_FAILURE_MODE_KNOWLEDGE = Object.freeze({
+      resistor: Object.freeze({
+        open: Object.freeze({ description: "Conduction path opens and current flow drops to near zero.", l1: "Direct branch current collapses and node bias shifts.", l2: "Downstream gain/margin can collapse; detection often visible as static offset." }),
+        short: Object.freeze({ description: "Terminals effectively short and branch resistance drops strongly.", l1: "Branch current rises and neighboring node voltage compresses.", l2: "Upstream supply loading rises; thermal stress can propagate to adjacent parts." }),
+        oot_high: Object.freeze({ description: "Resistance drifts above nominal tolerance band.", l1: "Current reduces and divider/bias point moves low.", l2: "Stage gain and headroom reduce, increasing clipping or under-drive risk." }),
+        oot_low: Object.freeze({ description: "Resistance drifts below nominal tolerance band.", l1: "Current increases and divider/bias point moves high.", l2: "Power dissipation rises and later-stage bias can overdrive." })
+      }),
+      capacitor: Object.freeze({
+        open: Object.freeze({ description: "Capacitive coupling/decoupling is lost.", l1: "AC path opens or local filtering is removed.", l2: "Noise and ripple propagation increase into dependent nodes." }),
+        short: Object.freeze({ description: "Capacitor behaves like a low-impedance fault.", l1: "Connected nets are forced together at low impedance.", l2: "Bias collapse or supply loading may trigger multi-node failure signatures." }),
+        capacitance_low: Object.freeze({ description: "Capacitance drops below expected value.", l1: "Time constants shorten and filtering weakens.", l2: "Dynamic stability margins degrade under transient loading." }),
+        esr_high: Object.freeze({ description: "Equivalent series resistance rises beyond expected.", l1: "Ripple attenuation and pulse-current support degrade.", l2: "Thermal self-heating and cross-stage noise coupling increase." })
+      }),
+      transistor: Object.freeze({
+        gain_low: Object.freeze({ description: "Effective beta/transconductance is reduced.", l1: "Stage gain drops and bias point may move off center.", l2: "Signal chain compression/under-drive propagates to downstream nodes." }),
+        be_short: Object.freeze({ description: "Base-emitter junction is effectively shorted.", l1: "Bias network is heavily loaded and control action is lost.", l2: "Collector/emitter operating point collapses and output behavior saturates." }),
+        ce_short: Object.freeze({ description: "Collector-emitter path is shorted or near short.", l1: "Load is forced toward supply/ground path unexpectedly.", l2: "Branch overcurrent and thermal stress can propagate into supply network." }),
+        open_collector: Object.freeze({ description: "Collector conduction path opens.", l1: "Expected sink/source path disappears.", l2: "Downstream node floats or rails, causing interface-level functional loss." })
+      }),
+      connector: Object.freeze({
+        open_contact: Object.freeze({ description: "One or more interface contacts are open.", l1: "Signal or supply continuity is interrupted.", l2: "External-system observability/control degrades and appears intermittent/static." }),
+        intermittent_contact: Object.freeze({ description: "Contact intermittently opens under vibration or handling.", l1: "Momentary dropouts appear on interface nets.", l2: "Transient faults propagate as sporadic resets, spikes, or communication loss." })
+      }),
+      test_point: Object.freeze({
+        measurement_error: Object.freeze({ description: "Probe setup or instrument coupling introduces error.", l1: "Observed value diverges from actual node condition.", l2: "Diagnostic decisions propagate incorrect fault isolation paths." }),
+        probe_slip: Object.freeze({ description: "Probe contact moves to wrong node or loses contact.", l1: "Sampled signal is discontinuous or from unintended net.", l2: "Root-cause localization propagates to false suspects." }),
+        open_test_node: Object.freeze({ description: "Test access path is open or inaccessible.", l1: "Required observability point is unavailable.", l2: "Coverage gaps increase and detection score worsens for related failures." })
+      }),
+      other: Object.freeze({})
     });
 
     const occurrenceByClass = Object.freeze({
@@ -668,6 +747,13 @@
     const fmeaAssumptionsStatus = document.getElementById("fmeaAssumptionsStatus");
     const fmeaLookupBody = document.getElementById("fmeaLookupBody");
     const fmeaGeneratedBody = document.getElementById("fmeaGeneratedBody");
+    const fmeaDetailComponent = document.getElementById("fmeaDetailComponent");
+    const fmeaDetailMode = document.getElementById("fmeaDetailMode");
+    const fmeaDetailDescription = document.getElementById("fmeaDetailDescription");
+    const fmeaDetailL1 = document.getElementById("fmeaDetailL1");
+    const fmeaDetailL2 = document.getElementById("fmeaDetailL2");
+    const fmeaDetailSaveBtn = document.getElementById("fmeaDetailSaveBtn");
+    const fmeaDetailResetBtn = document.getElementById("fmeaDetailResetBtn");
 
 
      let sortState = { key: null, direction: 1, table: "primary" };
@@ -685,6 +771,10 @@
     tabInputsBtn.addEventListener("click", () => activateTab("inputs"));
     tabRunBtn.addEventListener("click", () => activateTab("run"));
     tabResultsBtn.addEventListener("click", () => activateTab("results"));
+    fmeaDetailComponent.addEventListener("change", refreshFmeaDetailModeOptions);
+    fmeaDetailMode.addEventListener("change", populateFmeaDetailEditor);
+    fmeaDetailSaveBtn.addEventListener("click", saveFmeaDetailOverride);
+    fmeaDetailResetBtn.addEventListener("click", resetFmeaDetailOverride);
 
     initializeFmeaAssumptions();
     applyOptionsToUi();
@@ -765,6 +855,7 @@
     function initializeFmeaAssumptions() {
       state.fmeaAssumptionLookup = cloneFailureModeLookup(DEFAULT_FAILURE_MODES_BY_CLASS);
       state.fmeaAssumptionOverrides = {};
+      state.fmeaKnowledgeOverrides = {};
       refreshFmeaAssumptionUi();
     }
 
@@ -787,6 +878,29 @@
       if (Array.isArray(override) && override.length) return override.slice();
       const defaults = state.fmeaAssumptionLookup[componentClass] || state.fmeaAssumptionLookup.other || ["open"];
       return defaults.length ? defaults.slice() : ["open"];
+    }
+
+    function buildKnowledgeKey(componentClass, mode) {
+      return componentClass + "::" + mode;
+    }
+
+    function buildDefaultFailureKnowledge(componentClass, mode) {
+      const modeLabel = String(mode || "unknown").replace(/_/g, " ");
+      const typeLabel = String(componentClass || "component").replace(/_/g, " ");
+      return {
+        description: "Deterministic failure assumption for " + typeLabel + " mode '" + modeLabel + "'.",
+        l1: "Primary propagation: directly connected nets and bias points shift based on topology.",
+        l2: "Secondary propagation: downstream interfaces, margins, and detection paths are impacted."
+      };
+    }
+
+    function getFailureModeKnowledge(componentClass, mode) {
+      const key = buildKnowledgeKey(componentClass, mode);
+      if (state.fmeaKnowledgeOverrides[key]) return Object.assign({}, state.fmeaKnowledgeOverrides[key]);
+      const typeDefaults = DEFAULT_FAILURE_MODE_KNOWLEDGE[componentClass] || DEFAULT_FAILURE_MODE_KNOWLEDGE.other || {};
+      const knowledge = typeDefaults[mode];
+      if (knowledge) return { description: knowledge.description, l1: knowledge.l1, l2: knowledge.l2 };
+      return buildDefaultFailureKnowledge(componentClass, mode);
     }
 
     function renderFmeaLookupTable() {
@@ -855,6 +969,7 @@
             state.fmeaAssumptionOverrides[refdes] = parsed;
             tdSource.textContent = "override";
           }
+          if (fmeaDetailComponent.value === refdes) refreshFmeaDetailModeOptions();
         });
         tdModes.appendChild(textarea);
 
@@ -864,6 +979,105 @@
         tr.appendChild(tdModes);
         fmeaGeneratedBody.appendChild(tr);
       }
+      refreshFmeaDetailComponentOptions();
+    }
+
+    function refreshFmeaDetailComponentOptions() {
+      if (!fmeaDetailComponent) return;
+      const prev = fmeaDetailComponent.value;
+      fmeaDetailComponent.innerHTML = "";
+      const components = (state.netlist && Array.isArray(state.netlist.components)) ? state.netlist.components.slice() : [];
+      components.sort((a, b) => String(a.refdes || "").localeCompare(String(b.refdes || "")));
+      if (!components.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "(no component loaded)";
+        fmeaDetailComponent.appendChild(opt);
+        refreshFmeaDetailModeOptions();
+        return;
+      }
+      for (const c of components) {
+        const ref = c.refdes || "UNASSIGNED";
+        const opt = document.createElement("option");
+        opt.value = ref;
+        opt.textContent = ref + " (" + classifyComponent(ref) + ")";
+        fmeaDetailComponent.appendChild(opt);
+      }
+      if (prev) fmeaDetailComponent.value = prev;
+      if (!fmeaDetailComponent.value) fmeaDetailComponent.selectedIndex = 0;
+      refreshFmeaDetailModeOptions();
+    }
+
+    function refreshFmeaDetailModeOptions() {
+      if (!fmeaDetailMode) return;
+      const refdes = fmeaDetailComponent.value;
+      const prev = fmeaDetailMode.value;
+      fmeaDetailMode.innerHTML = "";
+      if (!refdes) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "(no mode)";
+        fmeaDetailMode.appendChild(opt);
+        populateFmeaDetailEditor();
+        return;
+      }
+      const componentType = classifyComponent(refdes);
+      const modes = getFailureModesForComponent(componentType, refdes);
+      for (const mode of modes) {
+        const opt = document.createElement("option");
+        opt.value = mode;
+        opt.textContent = mode;
+        fmeaDetailMode.appendChild(opt);
+      }
+      if (prev && modes.includes(prev)) fmeaDetailMode.value = prev;
+      if (!fmeaDetailMode.value && modes.length) fmeaDetailMode.selectedIndex = 0;
+      populateFmeaDetailEditor();
+    }
+
+    function populateFmeaDetailEditor() {
+      const refdes = fmeaDetailComponent.value;
+      const mode = fmeaDetailMode.value;
+      const disable = !refdes || !mode;
+      fmeaDetailDescription.disabled = disable;
+      fmeaDetailL1.disabled = disable;
+      fmeaDetailL2.disabled = disable;
+      fmeaDetailSaveBtn.disabled = disable;
+      fmeaDetailResetBtn.disabled = disable;
+      if (disable) {
+        fmeaDetailDescription.value = "";
+        fmeaDetailL1.value = "";
+        fmeaDetailL2.value = "";
+        return;
+      }
+      const componentType = classifyComponent(refdes);
+      const k = getFailureModeKnowledge(componentType, mode);
+      fmeaDetailDescription.value = k.description || "";
+      fmeaDetailL1.value = k.l1 || "";
+      fmeaDetailL2.value = k.l2 || "";
+    }
+
+    function saveFmeaDetailOverride() {
+      const refdes = fmeaDetailComponent.value;
+      const mode = fmeaDetailMode.value;
+      if (!refdes || !mode) return;
+      const componentType = classifyComponent(refdes);
+      const key = buildKnowledgeKey(componentType, mode);
+      state.fmeaKnowledgeOverrides[key] = {
+        description: String(fmeaDetailDescription.value || "").trim(),
+        l1: String(fmeaDetailL1.value || "").trim(),
+        l2: String(fmeaDetailL2.value || "").trim()
+      };
+      fmeaAssumptionsStatus.textContent = "Saved detail override for " + componentType + " / " + mode + ".";
+    }
+
+    function resetFmeaDetailOverride() {
+      const refdes = fmeaDetailComponent.value;
+      const mode = fmeaDetailMode.value;
+      if (!refdes || !mode) return;
+      const componentType = classifyComponent(refdes);
+      delete state.fmeaKnowledgeOverrides[buildKnowledgeKey(componentType, mode)];
+      populateFmeaDetailEditor();
+      fmeaAssumptionsStatus.textContent = "Reset detail override to deterministic default for " + componentType + " / " + mode + ".";
     }
 
     function refreshFmeaAssumptionUi() {
@@ -960,6 +1174,13 @@
         : []);
       for (const key of Object.keys(state.fmeaAssumptionOverrides || {})) {
         if (!valid.has(key)) delete state.fmeaAssumptionOverrides[key];
+      }
+      const validTypes = new Set((state.netlist && Array.isArray(state.netlist.components))
+        ? state.netlist.components.map((c) => classifyComponent(c.refdes || "UNASSIGNED"))
+        : []);
+      for (const key of Object.keys(state.fmeaKnowledgeOverrides || {})) {
+        const type = String(key).split("::")[0];
+        if (!validTypes.has(type)) delete state.fmeaKnowledgeOverrides[key];
       }
     }
 
@@ -1098,18 +1319,18 @@
          const affectedInterfacePins = nets.filter(isInterfaceNet);
 
 
-         for (const mode of failures) {
-           const severity = computeSeverity(nets);
-           const occurrence = occurrenceByClass[componentClass] || occurrenceByClass.other;
-           const detection = nets.some((n) => netCoverage[n]) ? detectionCovered : detectionUncovered;
-           const rpn = severity * occurrence * detection;
-           rows.push({
-             component: component.refdes || "UNASSIGNED",
-             failure_mode: mode,
-             affected_nets: nets,
-             affected_components: affectedComponents,
-             affected_interface_pins: affectedInterfacePins,
-             severity,
+        for (const mode of failures) {
+          const severity = computeSeverity(nets);
+          const occurrence = occurrenceByClass[componentClass] || occurrenceByClass.other;
+          const detection = nets.some((n) => netCoverage[n]) ? detectionCovered : detectionUncovered;
+          const rpn = severity * occurrence * detection;
+          rows.push({
+            component: component.refdes || "UNASSIGNED",
+            failure_mode: mode,
+            affected_nets: nets,
+            affected_components: affectedComponents,
+            affected_interface_pins: affectedInterfacePins,
+            severity,
              occurrence,
              detection,
              RPN: rpn,
