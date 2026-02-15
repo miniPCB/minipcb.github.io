@@ -1154,6 +1154,12 @@
       return "analysis_" + safeFilePart(kind || analysisType.value || "fmea") + "_" + boardPn + "_" + boardRev + "_" + when;
     }
 
+    function buildStableAnalysisStem() {
+      const boardPn = safeFilePart(safeGet(state.netlist || {}, ["identity", "board_pn"], "unknown_board"));
+      const boardRev = safeFilePart(safeGet(state.netlist || {}, ["identity", "board_rev"], "unknown_rev"));
+      return "analysis_" + boardPn + "_" + boardRev;
+    }
+
     function buildSetupPayload() {
       return {
         setup_version: "0.1",
@@ -1211,6 +1217,28 @@
       }
       setSavedStatus("Directory save unavailable. Downloaded setup file instead.");
       downloadBlob(filename, JSON.stringify(payload, null, 2), "application/json");
+    }
+
+    async function autoSaveLatestAnalysisReport() {
+      if (!state.lastOutput) return;
+      const stem = buildStableAnalysisStem();
+      const jsonName = stem + ".json";
+      const mdName = stem + ".md";
+      try {
+        const okJson = await writeJsonToFmeaDirectory("", jsonName, state.lastOutput);
+        const okMd = await writeTextToFmeaDirectory("", mdName, state.lastMarkdown || "");
+        if (okJson && okMd) {
+          setSavedStatus("Auto-saved analysis report to json/fmea/" + jsonName + " (overwrites same PN/REV).");
+          state.outputsExported = true;
+          updateWorkflowUi();
+          refreshSavedFiles();
+          return;
+        }
+      } catch (err) {
+        setSavedStatus("Auto-save failed: " + err.message);
+        return;
+      }
+      setSavedStatus("Auto-save not available until a folder is selected in Saved Analysis.");
     }
 
     async function selectFmeaDirectory() {
@@ -1566,6 +1594,7 @@
       renderJsonViewer(outputViewer, state.lastOutput, "No JSON output yet.");
       renderAnalysis(analysis);
       resultStatus.textContent = "Completed " + type.toUpperCase() + " with deterministic engine v" + ENGINE_VERSION + ".";
+      autoSaveLatestAnalysisReport();
       updateWorkflowUi();
       activateTab("results");
     }
@@ -1829,7 +1858,7 @@
 
     function exportResults() {
       if (!state.lastOutput || !state.lastAnalysisType) return;
-      const stem = buildAnalysisStem(state.lastAnalysisType);
+      const stem = buildStableAnalysisStem();
       const jsonName = stem + ".json";
       const mdName = stem + ".md";
       (async () => {
@@ -1846,7 +1875,7 @@
           downloadBlob(mdName, state.lastMarkdown, "text/markdown");
           setSavedStatus("Direct result save unavailable. Downloaded files instead.");
         } else {
-          setSavedStatus("Saved result files to json/fmea/" + jsonName + " and .md pair.");
+          setSavedStatus("Saved result files to json/fmea/" + jsonName + " and .md pair (overwrites same PN/REV).");
           refreshSavedFiles();
         }
         state.outputsExported = true;
