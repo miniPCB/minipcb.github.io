@@ -49,7 +49,7 @@
 
     .tabbar {
       display: grid;
-      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
       gap: 8px;
       margin-bottom: 12px;
     }
@@ -195,6 +195,12 @@
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+    }
+
+    .saved-table button {
+      min-height: 30px;
+      padding: 0 8px;
+      font-size: 0.8rem;
     }
 
      button,
@@ -459,6 +465,10 @@
         <span class="tab-title">Review Results</span>
         <span id="tabResultsState" class="tab-state">Locked</span>
       </button>
+      <button id="tabSavedBtn" class="tab-button state-ready" type="button" data-tab="saved">
+        <span class="tab-title">Saved Analysis</span>
+        <span id="tabSavedState" class="tab-state">Ready</span>
+      </button>
     </section>
 
     <section id="panelSetup" class="tab-panel hidden">
@@ -482,6 +492,7 @@
             <input id="optionShowSecondary" type="checkbox" checked>
             Show secondary table
           </label>
+          <button id="saveSetupBtn" type="button">Save Setup File</button>
         </div>
       </div>
       <section id="fmeaAssumptionsSection" class="fmea-assumptions hidden">
@@ -606,6 +617,31 @@
         <div id="outputViewer" class="jsonViewport jsonStatus">No JSON output yet.</div>
       </details>
     </section>
+
+    <section id="panelSaved" class="tab-panel hidden">
+      <h2>Saved Analysis</h2>
+      <div class="control-panel">
+        <div class="control-group">
+          <div class="control-label">Directory Access</div>
+          <button id="selectFmeaDirBtn" type="button">Select `json/fmea` Folder</button>
+          <button id="refreshSavedBtn" type="button">Refresh Saved Files</button>
+        </div>
+      </div>
+      <p id="savedStatus" class="hint">Select the `json/fmea` folder to read/write setup and result files directly. Fallback listing uses `json/fmea/index.json` if present.</p>
+      <div class="table-wrap saved-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Location</th>
+              <th>Type</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="savedFilesBody"></tbody>
+        </table>
+      </div>
+    </section>
    </div>
 
    <script>
@@ -625,6 +661,7 @@
       lastOutput: null,
       lastMarkdown: "",
       outputsExported: false,
+      fmeaDirHandle: null,
       fmeaAssumptionLookup: null,
       fmeaAssumptionOverrides: {},
       fmeaKnowledgeOverrides: {},
@@ -735,14 +772,22 @@
     const tabInputsBtn = document.getElementById("tabInputsBtn");
     const tabRunBtn = document.getElementById("tabRunBtn");
     const tabResultsBtn = document.getElementById("tabResultsBtn");
+    const tabSavedBtn = document.getElementById("tabSavedBtn");
     const tabSetupState = document.getElementById("tabSetupState");
     const tabInputsState = document.getElementById("tabInputsState");
     const tabRunState = document.getElementById("tabRunState");
     const tabResultsState = document.getElementById("tabResultsState");
+    const tabSavedState = document.getElementById("tabSavedState");
     const panelSetup = document.getElementById("panelSetup");
     const panelInputs = document.getElementById("panelInputs");
     const panelRun = document.getElementById("panelRun");
     const panelResults = document.getElementById("panelResults");
+    const panelSaved = document.getElementById("panelSaved");
+    const saveSetupBtn = document.getElementById("saveSetupBtn");
+    const selectFmeaDirBtn = document.getElementById("selectFmeaDirBtn");
+    const refreshSavedBtn = document.getElementById("refreshSavedBtn");
+    const savedStatus = document.getElementById("savedStatus");
+    const savedFilesBody = document.getElementById("savedFilesBody");
     const fmeaAssumptionsSection = document.getElementById("fmeaAssumptionsSection");
     const fmeaAssumptionsStatus = document.getElementById("fmeaAssumptionsStatus");
     const fmeaLookupBody = document.getElementById("fmeaLookupBody");
@@ -771,14 +816,19 @@
     tabInputsBtn.addEventListener("click", () => activateTab("inputs"));
     tabRunBtn.addEventListener("click", () => activateTab("run"));
     tabResultsBtn.addEventListener("click", () => activateTab("results"));
+    tabSavedBtn.addEventListener("click", () => activateTab("saved"));
     fmeaDetailComponent.addEventListener("change", refreshFmeaDetailModeOptions);
     fmeaDetailMode.addEventListener("change", populateFmeaDetailEditor);
     fmeaDetailSaveBtn.addEventListener("click", saveFmeaDetailOverride);
     fmeaDetailResetBtn.addEventListener("click", resetFmeaDetailOverride);
+    saveSetupBtn.addEventListener("click", saveSetupFile);
+    selectFmeaDirBtn.addEventListener("click", selectFmeaDirectory);
+    refreshSavedBtn.addEventListener("click", refreshSavedFiles);
 
     initializeFmeaAssumptions();
     applyOptionsToUi();
     updateWorkflowUi();
+    refreshSavedFiles();
 
     function handleAnalysisOrOptionChange() {
       const margin = Number(optionMargin.value);
@@ -811,7 +861,8 @@
         setup: { btn: tabSetupBtn, panel: panelSetup },
         inputs: { btn: tabInputsBtn, panel: panelInputs },
         run: { btn: tabRunBtn, panel: panelRun },
-        results: { btn: tabResultsBtn, panel: panelResults }
+        results: { btn: tabResultsBtn, panel: panelResults },
+        saved: { btn: tabSavedBtn, panel: panelSaved }
       };
       const current = tabs[tabName];
       if (!current || current.btn.disabled) return;
@@ -840,6 +891,7 @@
       setTabState(tabInputsBtn, tabInputsState, inputsReady ? "state-done" : "state-ready");
       setTabState(tabRunBtn, tabRunState, runDone ? "state-done" : (inputsReady ? "state-ready" : "state-locked"));
       setTabState(tabResultsBtn, tabResultsState, outputsDone ? "state-done" : (outputsReady ? "state-ready" : "state-locked"));
+      setTabState(tabSavedBtn, tabSavedState, "state-ready");
 
       if (tabResultsBtn.disabled && tabResultsBtn.classList.contains("active")) {
         if (!tabRunBtn.disabled) activateTab("run");
@@ -1091,6 +1143,185 @@
       fmeaAssumptionsStatus.textContent = componentCount
         ? "Deterministic assumptions generated for " + componentCount + " components from refdes-derived types."
         : "Load inputs to generate component-level assumptions.";
+    }
+
+    function buildAnalysisStem(kind) {
+      const boardPn = safeFilePart(safeGet(state.netlist || {}, ["identity", "board_pn"], "unknown_board"));
+      const boardRev = safeFilePart(safeGet(state.netlist || {}, ["identity", "board_rev"], "unknown_rev"));
+      const when = new Date().toISOString().replace(/[:.]/g, "-");
+      return "analysis_" + safeFilePart(kind || analysisType.value || "fmea") + "_" + boardPn + "_" + boardRev + "_" + when;
+    }
+
+    function buildSetupPayload() {
+      return {
+        setup_version: "0.1",
+        setup_type: "fmea",
+        generated_on: new Date().toISOString(),
+        board_pn: safeGet(state.netlist || {}, ["identity", "board_pn"], "unknown_board"),
+        board_rev: safeGet(state.netlist || {}, ["identity", "board_rev"], "unknown_rev"),
+        analysis_type: analysisType.value,
+        options: {
+          margin_threshold_percent: state.options.marginThresholdPercent,
+          show_secondary: state.options.showSecondary
+        },
+        fmea_failure_mode_lookup: state.fmeaAssumptionLookup || {},
+        fmea_component_overrides: state.fmeaAssumptionOverrides || {},
+        fmea_mode_knowledge_overrides: state.fmeaKnowledgeOverrides || {}
+      };
+    }
+
+    async function saveSetupFile() {
+      const payload = buildSetupPayload();
+      const stem = buildAnalysisStem("fmea_setup");
+      const filename = stem + ".json";
+      try {
+        if (await writeJsonToFmeaDirectory("setup", filename, payload)) {
+          savedStatus.textContent = "Saved setup file to json/fmea/setup/" + filename;
+          refreshSavedFiles();
+          return;
+        }
+      } catch (err) {
+        savedStatus.textContent = "Direct setup save failed: " + err.message + ". Downloaded instead.";
+      }
+      downloadBlob(filename, JSON.stringify(payload, null, 2), "application/json");
+    }
+
+    async function selectFmeaDirectory() {
+      try {
+        if (!window.showDirectoryPicker) {
+          savedStatus.textContent = "Directory API unavailable in this browser. Use downloads or provide json/fmea/index.json.";
+          return;
+        }
+        const handle = await window.showDirectoryPicker();
+        state.fmeaDirHandle = handle;
+        savedStatus.textContent = "Directory selected. Writes go to selected folder and setup subfolder.";
+        await refreshSavedFiles();
+      } catch (err) {
+        savedStatus.textContent = "Directory selection cancelled or denied.";
+      }
+    }
+
+    async function writeJsonToFmeaDirectory(subdir, filename, value) {
+      if (!state.fmeaDirHandle) return false;
+      const base = state.fmeaDirHandle;
+      const targetDir = subdir ? await base.getDirectoryHandle(subdir, { create: true }) : base;
+      const fileHandle = await targetDir.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(value, null, 2));
+      await writable.close();
+      return true;
+    }
+
+    async function writeTextToFmeaDirectory(subdir, filename, text) {
+      if (!state.fmeaDirHandle) return false;
+      const base = state.fmeaDirHandle;
+      const targetDir = subdir ? await base.getDirectoryHandle(subdir, { create: true }) : base;
+      const fileHandle = await targetDir.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(String(text));
+      await writable.close();
+      return true;
+    }
+
+    async function refreshSavedFiles() {
+      if (state.fmeaDirHandle) {
+        await refreshSavedFilesFromDirectory();
+        return;
+      }
+      await refreshSavedFilesFromIndex();
+    }
+
+    async function refreshSavedFilesFromDirectory() {
+      const rows = [];
+      try {
+        for await (const [name, handle] of state.fmeaDirHandle.entries()) {
+          if (handle.kind === "file") rows.push({ name, location: "json/fmea", type: "file", source: "dir" });
+          if (handle.kind === "directory" && name === "setup") {
+            for await (const [sname, sh] of handle.entries()) {
+              if (sh.kind === "file") rows.push({ name: sname, location: "json/fmea/setup", type: "setup-file", source: "dir", inSetup: true });
+            }
+          }
+        }
+        renderSavedFiles(rows);
+        savedStatus.textContent = "Loaded " + rows.length + " saved files from selected folder.";
+      } catch (err) {
+        savedStatus.textContent = "Unable to enumerate selected folder: " + err.message;
+      }
+    }
+
+    async function refreshSavedFilesFromIndex() {
+      try {
+        const res = await fetch("json/fmea/index.json?v=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) throw new Error("index.json not found");
+        const data = await res.json();
+        const rows = Array.isArray(data.files) ? data.files.map((f) => ({
+          name: String(f.name || ""),
+          location: String(f.location || "json/fmea"),
+          type: String(f.type || "file"),
+          source: "index"
+        })) : [];
+        renderSavedFiles(rows);
+        savedStatus.textContent = "Loaded " + rows.length + " saved files from json/fmea/index.json.";
+      } catch (_err) {
+        renderSavedFiles([]);
+        savedStatus.textContent = "No directory selected and no json/fmea/index.json manifest available.";
+      }
+    }
+
+    function renderSavedFiles(rows) {
+      savedFilesBody.innerHTML = "";
+      if (!rows.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 4;
+        td.textContent = "No saved analysis files found.";
+        tr.appendChild(td);
+        savedFilesBody.appendChild(tr);
+        return;
+      }
+      rows.sort((a, b) => String(a.location + "/" + a.name).localeCompare(String(b.location + "/" + b.name)));
+      for (const row of rows) {
+        const tr = document.createElement("tr");
+        const tdName = document.createElement("td");
+        tdName.textContent = row.name;
+        const tdLoc = document.createElement("td");
+        tdLoc.textContent = row.location;
+        const tdType = document.createElement("td");
+        tdType.textContent = row.type;
+        const tdAction = document.createElement("td");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Load";
+        btn.addEventListener("click", () => loadSavedAnalysisRow(row));
+        tdAction.appendChild(btn);
+        tr.appendChild(tdName);
+        tr.appendChild(tdLoc);
+        tr.appendChild(tdType);
+        tr.appendChild(tdAction);
+        savedFilesBody.appendChild(tr);
+      }
+    }
+
+    async function loadSavedAnalysisRow(row) {
+      try {
+        if (state.fmeaDirHandle && row.source === "dir") {
+          const dir = row.inSetup ? await state.fmeaDirHandle.getDirectoryHandle("setup") : state.fmeaDirHandle;
+          const file = await (await dir.getFileHandle(row.name)).getFile();
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          renderJsonViewer(outputViewer, parsed, "No JSON output yet.");
+          activateTab("results");
+          return;
+        }
+        const path = (row.location || "json/fmea").replace(/\/+$/, "") + "/" + row.name;
+        const res = await fetch(path + "?v=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) throw new Error("Cannot fetch " + path);
+        const parsed = await res.json();
+        renderJsonViewer(outputViewer, parsed, "No JSON output yet.");
+        activateTab("results");
+      } catch (err) {
+        savedStatus.textContent = "Load failed: " + err.message;
+      }
     }
 
 
@@ -1564,15 +1795,29 @@
 
     function exportResults() {
       if (!state.lastOutput || !state.lastAnalysisType) return;
-      const boardPn = safeFilePart(state.lastOutput.board_pn || "unknown_board");
-      const rev = safeFilePart(state.lastOutput.board_rev || "unknown_rev");
-      const type = safeFilePart(state.lastAnalysisType);
-       const jsonName = "analysis_" + type + "_" + boardPn + "_" + rev + ".json";
-       const mdName = "analysis_" + type + "_" + boardPn + "_" + rev + ".md";
-      downloadBlob(jsonName, JSON.stringify(state.lastOutput, null, 2), "application/json");
-      downloadBlob(mdName, state.lastMarkdown, "text/markdown");
-      state.outputsExported = true;
-      updateWorkflowUi();
+      const stem = buildAnalysisStem(state.lastAnalysisType);
+      const jsonName = stem + ".json";
+      const mdName = stem + ".md";
+      (async () => {
+        let savedDirect = false;
+        try {
+          const okJson = await writeJsonToFmeaDirectory("", jsonName, state.lastOutput);
+          const okMd = await writeTextToFmeaDirectory("", mdName, state.lastMarkdown || "");
+          savedDirect = okJson && okMd;
+        } catch (_err) {
+          savedDirect = false;
+        }
+        if (!savedDirect) {
+          downloadBlob(jsonName, JSON.stringify(state.lastOutput, null, 2), "application/json");
+          downloadBlob(mdName, state.lastMarkdown, "text/markdown");
+          savedStatus.textContent = "Direct result save unavailable. Downloaded files instead.";
+        } else {
+          savedStatus.textContent = "Saved result files to json/fmea/" + jsonName + " and .md pair.";
+          refreshSavedFiles();
+        }
+        state.outputsExported = true;
+        updateWorkflowUi();
+      })();
     }
 
      function downloadBlob(filename, content, mime) {
