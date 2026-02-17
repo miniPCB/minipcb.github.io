@@ -203,6 +203,103 @@
       font-size: 0.8rem;
     }
 
+    .assumption-board {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+    }
+
+    .assumption-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #101823;
+      padding: 10px;
+    }
+
+    .assumption-card-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .assumption-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 0.78rem;
+      border: 1px solid var(--border);
+      background: #1a2638;
+      color: var(--text);
+    }
+
+    .assumption-chip.ref { border-color: rgba(102,163,255,.45); color: #c6e3ff; background: rgba(102,163,255,.18); }
+    .assumption-chip.type { border-color: rgba(123,220,181,.45); color: #c8ffe2; background: rgba(123,220,181,.15); }
+    .assumption-chip.src { border-color: rgba(255,211,124,.45); color: #ffeec3; background: rgba(255,211,124,.15); }
+
+    .bucket-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .bucket {
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      min-height: 82px;
+      padding: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-content: flex-start;
+      transition: border-color .15s ease, background .15s ease;
+    }
+
+    .bucket h4 {
+      margin: 0 0 5px;
+      width: 100%;
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .bucket.run {
+      background: rgba(46,204,113,0.08);
+      border-color: rgba(46,204,113,0.45);
+    }
+
+    .bucket.skip {
+      background: rgba(255,87,87,0.08);
+      border-color: rgba(255,87,87,0.45);
+    }
+
+    .bucket.drag-over {
+      border-style: solid;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+    }
+
+    .mode-pill {
+      border: 1px solid rgba(46,204,113,.5);
+      color: #d6ffe8;
+      background: rgba(46,204,113,.2);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      line-height: 1.2;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .mode-pill.skip {
+      border-color: rgba(255,87,87,.5);
+      color: #ffd8d8;
+      background: rgba(255,87,87,.2);
+    }
+
+    .mode-pill:active { cursor: grabbing; }
+
      button,
      select {
        border: 1px solid var(--border);
@@ -515,18 +612,8 @@
         </details>
         <details open>
           <summary>Generated Assumptions for Loaded Components</summary>
-          <div class="table-wrap assumption-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>RefDes</th>
-                  <th>Type</th>
-                  <th>Source</th>
-                  <th>Applied Failure Modes (editable)</th>
-                </tr>
-              </thead>
-              <tbody id="fmeaGeneratedBody"></tbody>
-            </table>
+          <div class="table-wrap">
+            <div id="fmeaGeneratedBoard" class="assumption-board"></div>
           </div>
         </details>
         <details open>
@@ -795,7 +882,7 @@
     const fmeaAssumptionsSection = document.getElementById("fmeaAssumptionsSection");
     const fmeaAssumptionsStatus = document.getElementById("fmeaAssumptionsStatus");
     const fmeaLookupBody = document.getElementById("fmeaLookupBody");
-    const fmeaGeneratedBody = document.getElementById("fmeaGeneratedBody");
+    const fmeaGeneratedBoard = document.getElementById("fmeaGeneratedBoard");
     const fmeaDetailComponent = document.getElementById("fmeaDetailComponent");
     const fmeaDetailMode = document.getElementById("fmeaDetailMode");
     const fmeaDetailDescription = document.getElementById("fmeaDetailDescription");
@@ -932,10 +1019,40 @@
     }
 
     function getFailureModesForComponent(componentClass, refdes) {
-      const override = state.fmeaAssumptionOverrides[refdes];
-      if (Array.isArray(override) && override.length) return override.slice();
+      const buckets = getFailureModeBucketsForComponent(componentClass, refdes);
+      return buckets.run.slice();
+    }
+
+    function getFailureModeBucketsForComponent(componentClass, refdes) {
       const defaults = state.fmeaAssumptionLookup[componentClass] || state.fmeaAssumptionLookup.other || ["open"];
-      return defaults.length ? defaults.slice() : ["open"];
+      const override = state.fmeaAssumptionOverrides[refdes];
+      if (!override) return { run: defaults.slice(), skip: [], isOverride: false };
+
+      // Backward compatibility with previous array-based override format.
+      if (Array.isArray(override)) {
+        const runLegacy = dedupe(override);
+        const skipLegacy = defaults.filter((m) => !runLegacy.includes(m));
+        return { run: runLegacy, skip: skipLegacy, isOverride: true };
+      }
+
+      const run = dedupe(Array.isArray(override.run) ? override.run : defaults);
+      const skip = dedupe(Array.isArray(override.skip) ? override.skip : []);
+      const merged = dedupe([].concat(run, skip, defaults));
+      const resolvedRun = dedupe(run.filter((m) => merged.includes(m)));
+      const resolvedSkip = dedupe(skip.filter((m) => merged.includes(m) && !resolvedRun.includes(m)));
+      const isOverride = !arraysEqual(resolvedRun, defaults) || resolvedSkip.length > 0;
+      return { run: resolvedRun, skip: resolvedSkip, isOverride };
+    }
+
+    function setFailureModeBucketsForComponent(componentClass, refdes, run, skip) {
+      const defaults = state.fmeaAssumptionLookup[componentClass] || state.fmeaAssumptionLookup.other || ["open"];
+      const runNorm = dedupe((run || []).map((x) => String(x).trim()).filter(Boolean));
+      const skipNorm = dedupe((skip || []).map((x) => String(x).trim()).filter(Boolean)).filter((m) => !runNorm.includes(m));
+      if (arraysEqual(runNorm, defaults) && skipNorm.length === 0) {
+        delete state.fmeaAssumptionOverrides[refdes];
+        return;
+      }
+      state.fmeaAssumptionOverrides[refdes] = { run: runNorm, skip: skipNorm };
     }
 
     function buildKnowledgeKey(componentClass, mode) {
@@ -985,57 +1102,113 @@
       }
     }
 
+    function createModePill(refdes, mode, bucketName) {
+      const pill = document.createElement("span");
+      pill.className = "mode-pill" + (bucketName === "skip" ? " skip" : "");
+      pill.textContent = mode;
+      pill.draggable = true;
+      pill.dataset.refdes = refdes;
+      pill.dataset.mode = mode;
+      pill.dataset.bucket = bucketName;
+      pill.addEventListener("dragstart", (ev) => {
+        ev.dataTransfer.setData("text/plain", JSON.stringify({
+          refdes,
+          mode,
+          fromBucket: bucketName
+        }));
+      });
+      return pill;
+    }
+
+    function attachBucketDropHandlers(bucketEl, refdes, targetBucket) {
+      bucketEl.addEventListener("dragover", (ev) => {
+        ev.preventDefault();
+        bucketEl.classList.add("drag-over");
+      });
+      bucketEl.addEventListener("dragleave", () => bucketEl.classList.remove("drag-over"));
+      bucketEl.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        bucketEl.classList.remove("drag-over");
+        let payload = null;
+        try { payload = JSON.parse(ev.dataTransfer.getData("text/plain")); } catch (_err) { return; }
+        if (!payload || payload.refdes !== refdes || !payload.mode) return;
+        const componentType = classifyComponent(refdes);
+        const buckets = getFailureModeBucketsForComponent(componentType, refdes);
+        const run = buckets.run.slice();
+        const skip = buckets.skip.slice();
+        if (payload.fromBucket === targetBucket) return;
+        if (targetBucket === "run") {
+          if (!run.includes(payload.mode)) run.push(payload.mode);
+          const idx = skip.indexOf(payload.mode);
+          if (idx >= 0) skip.splice(idx, 1);
+        } else {
+          if (!skip.includes(payload.mode)) skip.push(payload.mode);
+          const idx = run.indexOf(payload.mode);
+          if (idx >= 0) run.splice(idx, 1);
+        }
+        if (!run.length) return; // keep at least one runnable mode
+        setFailureModeBucketsForComponent(componentType, refdes, run, skip);
+        renderGeneratedFmeaAssumptions();
+      });
+    }
+
     function renderGeneratedFmeaAssumptions() {
-      if (!fmeaGeneratedBody) return;
-      fmeaGeneratedBody.innerHTML = "";
+      if (!fmeaGeneratedBoard) return;
+      fmeaGeneratedBoard.innerHTML = "";
       const components = (state.netlist && Array.isArray(state.netlist.components)) ? state.netlist.components.slice() : [];
       components.sort((a, b) => String(a.refdes || "").localeCompare(String(b.refdes || "")));
       if (!components.length) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 4;
-        td.textContent = "Load a netlist to generate assumptions per component.";
-        tr.appendChild(td);
-        fmeaGeneratedBody.appendChild(tr);
+        const empty = document.createElement("div");
+        empty.className = "assumption-note";
+        empty.textContent = "Load a netlist to generate assumptions per component.";
+        fmeaGeneratedBoard.appendChild(empty);
         return;
       }
 
       for (const component of components) {
         const refdes = component.refdes || "UNASSIGNED";
         const componentType = classifyComponent(refdes);
-        const isOverride = Array.isArray(state.fmeaAssumptionOverrides[refdes]);
-        const applied = getFailureModesForComponent(componentType, refdes);
-        const tr = document.createElement("tr");
+        const buckets = getFailureModeBucketsForComponent(componentType, refdes);
+        const card = document.createElement("div");
+        card.className = "assumption-card";
 
-        const tdRefdes = document.createElement("td");
-        tdRefdes.textContent = refdes;
-        const tdType = document.createElement("td");
-        tdType.textContent = componentType;
-        const tdSource = document.createElement("td");
-        tdSource.textContent = isOverride ? "override" : "lookup";
-        const tdModes = document.createElement("td");
-        const textarea = document.createElement("textarea");
-        textarea.value = applied.join("\n");
-        textarea.addEventListener("change", () => {
-          const parsed = normalizeFailureModeListFromText(textarea.value);
-          const fallback = state.fmeaAssumptionLookup[componentType] || state.fmeaAssumptionLookup.other || ["open"];
-          if (!parsed.length || arraysEqual(parsed, fallback)) {
-            delete state.fmeaAssumptionOverrides[refdes];
-            textarea.value = fallback.join("\n");
-            tdSource.textContent = "lookup";
-          } else {
-            state.fmeaAssumptionOverrides[refdes] = parsed;
-            tdSource.textContent = "override";
-          }
-          if (fmeaDetailComponent.value === refdes) refreshFmeaDetailModeOptions();
-        });
-        tdModes.appendChild(textarea);
+        const head = document.createElement("div");
+        head.className = "assumption-card-head";
+        const chipRef = document.createElement("span");
+        chipRef.className = "assumption-chip ref";
+        chipRef.textContent = refdes;
+        const chipType = document.createElement("span");
+        chipType.className = "assumption-chip type";
+        chipType.textContent = componentType;
+        const chipSrc = document.createElement("span");
+        chipSrc.className = "assumption-chip src";
+        chipSrc.textContent = buckets.isOverride ? "override" : "lookup";
+        head.appendChild(chipRef);
+        head.appendChild(chipType);
+        head.appendChild(chipSrc);
 
-        tr.appendChild(tdRefdes);
-        tr.appendChild(tdType);
-        tr.appendChild(tdSource);
-        tr.appendChild(tdModes);
-        fmeaGeneratedBody.appendChild(tr);
+        const bucketGrid = document.createElement("div");
+        bucketGrid.className = "bucket-grid";
+        const runBucket = document.createElement("div");
+        runBucket.className = "bucket run";
+        const skipBucket = document.createElement("div");
+        skipBucket.className = "bucket skip";
+        const runTitle = document.createElement("h4");
+        runTitle.textContent = "Run";
+        const skipTitle = document.createElement("h4");
+        skipTitle.textContent = "Skip";
+        runBucket.appendChild(runTitle);
+        skipBucket.appendChild(skipTitle);
+        for (const mode of buckets.run) runBucket.appendChild(createModePill(refdes, mode, "run"));
+        for (const mode of buckets.skip) skipBucket.appendChild(createModePill(refdes, mode, "skip"));
+        attachBucketDropHandlers(runBucket, refdes, "run");
+        attachBucketDropHandlers(skipBucket, refdes, "skip");
+        bucketGrid.appendChild(runBucket);
+        bucketGrid.appendChild(skipBucket);
+
+        card.appendChild(head);
+        card.appendChild(bucketGrid);
+        fmeaGeneratedBoard.appendChild(card);
       }
       refreshFmeaDetailComponentOptions();
     }
@@ -1080,7 +1253,8 @@
         return;
       }
       const componentType = classifyComponent(refdes);
-      const modes = getFailureModesForComponent(componentType, refdes);
+      const buckets = getFailureModeBucketsForComponent(componentType, refdes);
+      const modes = dedupe([].concat(buckets.run, buckets.skip));
       for (const mode of modes) {
         const opt = document.createElement("option");
         opt.value = mode;
@@ -1472,6 +1646,11 @@
         : []);
       for (const key of Object.keys(state.fmeaAssumptionOverrides || {})) {
         if (!valid.has(key)) delete state.fmeaAssumptionOverrides[key];
+      }
+      for (const key of Object.keys(state.fmeaAssumptionOverrides || {})) {
+        const componentType = classifyComponent(key);
+        const buckets = getFailureModeBucketsForComponent(componentType, key);
+        setFailureModeBucketsForComponent(componentType, key, buckets.run, buckets.skip);
       }
       const validTypes = new Set((state.netlist && Array.isArray(state.netlist.components))
         ? state.netlist.components.map((c) => classifyComponent(c.refdes || "UNASSIGNED"))
