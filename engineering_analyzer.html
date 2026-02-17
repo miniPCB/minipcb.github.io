@@ -1325,10 +1325,52 @@
       return "analysis_" + boardPn + "_" + boardRev;
     }
 
+    function buildComprehensiveFmeaSetupSnapshot() {
+      const netlist = state.netlist || null;
+      const components = (netlist && Array.isArray(netlist.components)) ? netlist.components.slice() : [];
+      components.sort((a, b) => String(a.refdes || "").localeCompare(String(b.refdes || "")));
+      const resolvedByComponent = [];
+
+      for (const component of components) {
+        const refdes = component.refdes || "UNASSIGNED";
+        const componentType = classifyComponent(refdes);
+        const buckets = getFailureModeBucketsForComponent(componentType, refdes);
+        const allModes = dedupe([].concat(buckets.run, buckets.skip));
+        const modeKnowledge = {};
+        for (const mode of allModes) modeKnowledge[mode] = getFailureModeKnowledge(componentType, mode);
+        resolvedByComponent.push({
+          refdes,
+          component_type: componentType,
+          source: buckets.isOverride ? "override" : "lookup",
+          failure_modes_run: buckets.run,
+          failure_modes_skip: buckets.skip,
+          failure_mode_details: modeKnowledge
+        });
+      }
+
+      return {
+        input_files_loaded: Object.keys(state.files || {}),
+        input_files_raw: state.files || {},
+        detected_inputs: {
+          netlist: !!state.netlist,
+          test_plan: !!state.testPlan,
+          parts_library: !!state.partsLibrary,
+          tolerance_library: !!state.toleranceLibrary,
+          stress_rules: !!state.stressRules
+        },
+        net_adjacency_snapshot: buildNetAdjacencyData(state.netlist),
+        fmea_lookup_tables: state.fmeaAssumptionLookup || {},
+        fmea_component_overrides_raw: state.fmeaAssumptionOverrides || {},
+        fmea_mode_knowledge_overrides_raw: state.fmeaKnowledgeOverrides || {},
+        fmea_resolved_assumptions_by_component: resolvedByComponent
+      };
+    }
+
     function buildSetupPayload() {
       return {
         setup_version: "0.1",
         setup_type: "fmea",
+        analysis_engine_version: ENGINE_VERSION,
         generated_on: new Date().toISOString(),
         board_pn: safeGet(state.netlist || {}, ["identity", "board_pn"], "unknown_board"),
         board_rev: safeGet(state.netlist || {}, ["identity", "board_rev"], "unknown_rev"),
@@ -1340,7 +1382,10 @@
         },
         fmea_failure_mode_lookup: state.fmeaAssumptionLookup || {},
         fmea_component_overrides: state.fmeaAssumptionOverrides || {},
-        fmea_mode_knowledge_overrides: state.fmeaKnowledgeOverrides || {}
+        fmea_mode_knowledge_overrides: state.fmeaKnowledgeOverrides || {},
+        // Comprehensive snapshot: includes all loaded inputs + resolved assumptions (run/skip + details).
+        // This is intentionally verbose so future agents/tools can reconstruct full setup context.
+        comprehensive_snapshot: buildComprehensiveFmeaSetupSnapshot()
       };
     }
 
