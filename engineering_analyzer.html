@@ -1327,30 +1327,71 @@
 
     function buildComprehensiveFmeaSetupSnapshot() {
       const netlist = state.netlist || null;
+      const files = state.files || {};
+      const fileNames = Object.keys(files).sort();
       const components = (netlist && Array.isArray(netlist.components)) ? netlist.components.slice() : [];
       components.sort((a, b) => String(a.refdes || "").localeCompare(String(b.refdes || "")));
-      const resolvedByComponent = [];
 
+      // Deterministic lightweight fingerprints to quickly detect setup changes without diffing large blobs.
+      const hashOf = (value) => {
+        const text = JSON.stringify(value);
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < text.length; i += 1) {
+          h ^= text.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return ("00000000" + (h >>> 0).toString(16)).slice(-8);
+      };
+
+      const knowledgeCatalog = {};
+      const resolvedByComponent = [];
       for (const component of components) {
         const refdes = component.refdes || "UNASSIGNED";
         const componentType = classifyComponent(refdes);
         const buckets = getFailureModeBucketsForComponent(componentType, refdes);
-        const allModes = dedupe([].concat(buckets.run, buckets.skip));
-        const modeKnowledge = {};
-        for (const mode of allModes) modeKnowledge[mode] = getFailureModeKnowledge(componentType, mode);
+        const allModes = dedupe([].concat(buckets.run, buckets.skip)).sort();
+
+        if (!knowledgeCatalog[componentType]) knowledgeCatalog[componentType] = {};
+        for (const mode of allModes) {
+          if (!knowledgeCatalog[componentType][mode]) {
+            const key = buildKnowledgeKey(componentType, mode);
+            knowledgeCatalog[componentType][mode] = Object.assign(
+              { source: state.fmeaKnowledgeOverrides[key] ? "override" : "default" },
+              getFailureModeKnowledge(componentType, mode)
+            );
+          }
+        }
+
         resolvedByComponent.push({
           refdes,
           component_type: componentType,
-          source: buckets.isOverride ? "override" : "lookup",
-          failure_modes_run: buckets.run,
-          failure_modes_skip: buckets.skip,
-          failure_mode_details: modeKnowledge
+          assumption_source: buckets.isOverride ? "override" : "lookup",
+          failure_modes_run: buckets.run.slice(),
+          failure_modes_skip: buckets.skip.slice(),
+          failure_mode_detail_refs: allModes.map((mode) => componentType + "::" + mode)
         });
       }
 
+      const fileFingerprints = {};
+      for (const name of fileNames) fileFingerprints[name] = hashOf(files[name]);
+
       return {
-        input_files_loaded: Object.keys(state.files || {}),
-        input_files_raw: state.files || {},
+        schema_style: "normalized_comprehensive_v1",
+        summary: {
+          component_count: components.length,
+          resolved_component_count: resolvedByComponent.length,
+          input_file_count: fileNames.length,
+          knowledge_entry_count: Object.values(knowledgeCatalog).reduce((acc, byMode) => acc + Object.keys(byMode).length, 0)
+        },
+        fingerprints: {
+          input_files: fileFingerprints,
+          fmea_lookup_tables: hashOf(state.fmeaAssumptionLookup || {}),
+          fmea_component_overrides: hashOf(state.fmeaAssumptionOverrides || {}),
+          fmea_mode_knowledge_overrides: hashOf(state.fmeaKnowledgeOverrides || {}),
+          resolved_assumptions: hashOf(resolvedByComponent)
+        },
+        input_files_loaded: fileNames,
+        input_files_raw: files,
         detected_inputs: {
           netlist: !!state.netlist,
           test_plan: !!state.testPlan,
@@ -1362,6 +1403,7 @@
         fmea_lookup_tables: state.fmeaAssumptionLookup || {},
         fmea_component_overrides_raw: state.fmeaAssumptionOverrides || {},
         fmea_mode_knowledge_overrides_raw: state.fmeaKnowledgeOverrides || {},
+        fmea_mode_knowledge_catalog_resolved: knowledgeCatalog,
         fmea_resolved_assumptions_by_component: resolvedByComponent
       };
     }
