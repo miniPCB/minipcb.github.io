@@ -581,14 +581,7 @@
           </select>
         </div>
         <div class="control-group">
-          <div class="control-label">Options</div>
-          <div class="inline-option">
-            <input id="optionMargin" type="number" min="0" max="100" step="1" value="20" aria-label="EPSA Margin Threshold Percent">
-          </div>
-          <label class="checkline">
-            <input id="optionShowSecondary" type="checkbox" checked>
-            Show secondary table
-          </label>
+          <div class="control-label">Setup Actions</div>
           <button id="saveSetupBtn" type="button">Save Setup File</button>
         </div>
       </div>
@@ -738,6 +731,16 @@
 
      const ENGINE_VERSION = "0.1";
 
+    // Fixed UI/runtime defaults intentionally replacing removed Setup options:
+    // 1) EPSA margin threshold is deterministic at 20%.
+    // 2) Secondary results table remains visible by default.
+    // If changing these values, update:
+    // - `buildSetupPayload()` persisted metadata fields
+    // - `runEPSA()` threshold source
+    // - `applyFixedUiDefaults()` display behavior
+    const FIXED_EPSA_MARGIN_THRESHOLD_PERCENT = 20;
+    const FIXED_SHOW_SECONDARY_TABLE = true;
+
     const state = {
       files: {},
       netlist: null,
@@ -753,11 +756,7 @@
       fmeaDirHandle: null,
       fmeaAssumptionLookup: null,
       fmeaAssumptionOverrides: {},
-      fmeaKnowledgeOverrides: {},
-      options: {
-        marginThresholdPercent: 20,
-        showSecondary: true
-      }
+      fmeaKnowledgeOverrides: {}
     };
 
     const DEFAULT_FAILURE_MODES_BY_CLASS = Object.freeze({
@@ -843,8 +842,6 @@
     const runBtn = document.getElementById("runBtn");
     const saveResultsBtn = document.getElementById("saveResultsBtn");
     const exportBtn = document.getElementById("exportBtn");
-    const optionMargin = document.getElementById("optionMargin");
-    const optionShowSecondary = document.getElementById("optionShowSecondary");
     const secondaryWrap = document.getElementById("secondaryWrap");
 
 
@@ -901,9 +898,7 @@
     runBtn.addEventListener("click", runSelectedAnalysis);
     saveResultsBtn.addEventListener("click", saveResultsFile);
     exportBtn.addEventListener("click", exportResults);
-    analysisType.addEventListener("change", handleAnalysisOrOptionChange);
-    optionMargin.addEventListener("change", handleAnalysisOrOptionChange);
-    optionShowSecondary.addEventListener("change", handleAnalysisOrOptionChange);
+    analysisType.addEventListener("change", handleAnalysisTypeChange);
     tabSetupBtn.addEventListener("click", () => activateTab("setup"));
     tabInputsBtn.addEventListener("click", () => activateTab("inputs"));
     tabRunBtn.addEventListener("click", () => activateTab("run"));
@@ -918,15 +913,11 @@
     refreshSavedBtn.addEventListener("click", refreshSavedFiles);
 
     initializeFmeaAssumptions();
-    applyOptionsToUi();
+    applyFixedUiDefaults();
     updateWorkflowUi();
     refreshSavedFiles();
 
-    function handleAnalysisOrOptionChange() {
-      const margin = Number(optionMargin.value);
-      state.options.marginThresholdPercent = Number.isFinite(margin) ? Math.max(0, Math.min(100, margin)) : 20;
-      state.options.showSecondary = !!optionShowSecondary.checked;
-      applyOptionsToUi();
+    function handleAnalysisTypeChange() {
       resetRunState();
       updateWorkflowUi();
       refreshFmeaAssumptionUi();
@@ -935,10 +926,8 @@
       }
     }
 
-    function applyOptionsToUi() {
-      optionMargin.value = String(state.options.marginThresholdPercent);
-      optionShowSecondary.checked = !!state.options.showSecondary;
-      secondaryWrap.style.display = state.options.showSecondary ? "block" : "none";
+    function applyFixedUiDefaults() {
+      secondaryWrap.style.display = FIXED_SHOW_SECONDARY_TABLE ? "block" : "none";
     }
 
     function setTabState(button, label, mode) {
@@ -973,8 +962,6 @@
       const outputsReady = runDone;
       const outputsDone = outputsReady && !!state.outputsExported;
 
-      optionMargin.disabled = !analysisReady;
-      optionShowSecondary.disabled = !analysisReady;
       uploadBtn.disabled = !analysisReady;
       runBtn.disabled = !inputsReady;
       saveResultsBtn.disabled = !outputsReady;
@@ -1347,8 +1334,9 @@
         board_rev: safeGet(state.netlist || {}, ["identity", "board_rev"], "unknown_rev"),
         analysis_type: analysisType.value,
         options: {
-          margin_threshold_percent: state.options.marginThresholdPercent,
-          show_secondary: state.options.showSecondary
+          // Persist fixed defaults so future tools/agents can infer behavior from setup files.
+          margin_threshold_percent: FIXED_EPSA_MARGIN_THRESHOLD_PERCENT,
+          show_secondary: FIXED_SHOW_SECONDARY_TABLE
         },
         fmea_failure_mode_lookup: state.fmeaAssumptionLookup || {},
         fmea_component_overrides: state.fmeaAssumptionOverrides || {},
@@ -1842,7 +1830,9 @@
 
     function runEPSA(netlist, _testPlan, partsLibrary, _toleranceLibrary, stressRules) {
       const partsMap = buildPartsMap(partsLibrary);
-      const threshold = toNumber(state.options.marginThresholdPercent, safeGet(stressRules, ["margin_threshold_percent"], 20));
+      // Fixed deterministic EPSA threshold now that Setup option control was removed.
+      // If changed, keep `FIXED_EPSA_MARGIN_THRESHOLD_PERCENT` and setup serialization in sync.
+      const threshold = toNumber(FIXED_EPSA_MARGIN_THRESHOLD_PERCENT, safeGet(stressRules, ["margin_threshold_percent"], 20));
        const rows = [];
        const components = Array.isArray(netlist.components) ? netlist.components : [];
 
@@ -2462,7 +2452,7 @@
       secondaryHead.innerHTML = "";
       secondaryBody.innerHTML = "";
       summaryGrid.innerHTML = "";
-      applyOptionsToUi();
+      applyFixedUiDefaults();
       updateWorkflowUi();
     }
    </script>
