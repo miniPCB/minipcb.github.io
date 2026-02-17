@@ -1325,7 +1325,7 @@
       return "analysis_" + boardPn + "_" + boardRev;
     }
 
-    function buildComprehensiveFmeaSetupSnapshot() {
+    function buildSetupPayload() {
       const netlist = state.netlist || null;
       const files = state.files || {};
       const fileNames = Object.keys(files).sort();
@@ -1343,92 +1343,114 @@
         return ("00000000" + (h >>> 0).toString(16)).slice(-8);
       };
 
-      const knowledgeCatalog = {};
+      const schFileName = fileNames.find((name) => /_sch\.json$/i.test(name))
+        || fileNames.find((name) => files[name] === netlist)
+        || "";
+      const schRaw = schFileName ? files[schFileName] : (netlist || {});
+
+      const componentTypeByRefdes = {};
+      const fmeaCatalog = {};
       const resolvedByComponent = [];
+      const validationErrors = [];
+      const validationWarnings = [];
+
       for (const component of components) {
         const refdes = component.refdes || "UNASSIGNED";
         const componentType = classifyComponent(refdes);
         const buckets = getFailureModeBucketsForComponent(componentType, refdes);
         const allModes = dedupe([].concat(buckets.run, buckets.skip)).sort();
+        const catalogRefs = [];
 
-        if (!knowledgeCatalog[componentType]) knowledgeCatalog[componentType] = {};
+        componentTypeByRefdes[refdes] = componentType;
         for (const mode of allModes) {
-          if (!knowledgeCatalog[componentType][mode]) {
-            const key = buildKnowledgeKey(componentType, mode);
-            knowledgeCatalog[componentType][mode] = Object.assign(
-              { source: state.fmeaKnowledgeOverrides[key] ? "override" : "default" },
-              getFailureModeKnowledge(componentType, mode)
-            );
+          const modeRef = componentType + "::" + mode;
+          const key = buildKnowledgeKey(componentType, mode);
+          if (!fmeaCatalog[modeRef]) {
+            const k = getFailureModeKnowledge(componentType, mode);
+            fmeaCatalog[modeRef] = {
+              component_type: componentType,
+              mode,
+              description: k.description || "",
+              propagation_l1: k.l1 || "",
+              propagation_l2: k.l2 || "",
+              source: state.fmeaKnowledgeOverrides[key] ? "knowledge_override" : "default"
+            };
           }
+          catalogRefs.push(modeRef);
         }
+
+        const overlap = buckets.run.filter((mode) => buckets.skip.includes(mode));
+        if (overlap.length) validationErrors.push(refdes + " has run/skip overlap: " + overlap.join(", "));
 
         resolvedByComponent.push({
           refdes,
           component_type: componentType,
           assumption_source: buckets.isOverride ? "override" : "lookup",
-          failure_modes_run: buckets.run.slice(),
-          failure_modes_skip: buckets.skip.slice(),
-          failure_mode_detail_refs: allModes.map((mode) => componentType + "::" + mode)
+          failure_modes_run: dedupe(buckets.run.slice()),
+          failure_modes_skip: dedupe(buckets.skip.slice()),
+          catalog_refs: dedupe(catalogRefs)
         });
       }
 
-      const fileFingerprints = {};
-      for (const name of fileNames) fileFingerprints[name] = hashOf(files[name]);
+      for (const refdes of Object.keys(state.fmeaAssumptionOverrides || {})) {
+        if (!componentTypeByRefdes[refdes]) validationWarnings.push("Override exists for non-netlist component: " + refdes);
+      }
 
-      return {
-        schema_style: "normalized_comprehensive_v1",
-        summary: {
-          component_count: components.length,
-          resolved_component_count: resolvedByComponent.length,
-          input_file_count: fileNames.length,
-          knowledge_entry_count: Object.values(knowledgeCatalog).reduce((acc, byMode) => acc + Object.keys(byMode).length, 0)
-        },
-        fingerprints: {
-          input_files: fileFingerprints,
-          fmea_lookup_tables: hashOf(state.fmeaAssumptionLookup || {}),
-          fmea_component_overrides: hashOf(state.fmeaAssumptionOverrides || {}),
-          fmea_mode_knowledge_overrides: hashOf(state.fmeaKnowledgeOverrides || {}),
-          resolved_assumptions: hashOf(resolvedByComponent)
-        },
-        input_files_loaded: fileNames,
-        input_files_raw: files,
-        detected_inputs: {
-          netlist: !!state.netlist,
-          test_plan: !!state.testPlan,
-          parts_library: !!state.partsLibrary,
-          tolerance_library: !!state.toleranceLibrary,
-          stress_rules: !!state.stressRules
-        },
-        net_adjacency_snapshot: buildNetAdjacencyData(state.netlist),
-        fmea_lookup_tables: state.fmeaAssumptionLookup || {},
-        fmea_component_overrides_raw: state.fmeaAssumptionOverrides || {},
-        fmea_mode_knowledge_overrides_raw: state.fmeaKnowledgeOverrides || {},
-        fmea_mode_knowledge_catalog_resolved: knowledgeCatalog,
-        fmea_resolved_assumptions_by_component: resolvedByComponent
-      };
-    }
+      const modeKnowledgeOverrides = {};
+      for (const [modeRef, detail] of Object.entries(state.fmeaKnowledgeOverrides || {})) {
+        modeKnowledgeOverrides[modeRef] = {
+          description: String(safeGet(detail, ["description"], "") || ""),
+          propagation_l1: String(safeGet(detail, ["l1"], "") || ""),
+          propagation_l2: String(safeGet(detail, ["l2"], "") || "")
+        };
+      }
 
-    function buildSetupPayload() {
-      return {
-        setup_version: "0.1",
+      const payload = {
+        schema_version: "fmea_setup_v1",
         setup_type: "fmea",
-        analysis_engine_version: ENGINE_VERSION,
+        analysis_type: "fmea",
         generated_on: new Date().toISOString(),
-        board_pn: safeGet(state.netlist || {}, ["identity", "board_pn"], "unknown_board"),
-        board_rev: safeGet(state.netlist || {}, ["identity", "board_rev"], "unknown_rev"),
-        analysis_type: analysisType.value,
-        options: {
-          // Persist fixed defaults so future tools/agents can infer behavior from setup files.
-          margin_threshold_percent: FIXED_EPSA_MARGIN_THRESHOLD_PERCENT,
-          show_secondary: FIXED_SHOW_SECONDARY_TABLE
+        board_pn: safeGet(netlist || {}, ["identity", "board_pn"], "unknown_board"),
+        board_rev: safeGet(netlist || {}, ["identity", "board_rev"], "unknown_rev"),
+        input: {
+          uploaded_files: fileNames,
+          sch_file_name: schFileName,
+          sch_raw: schRaw,
+          sch_fingerprint: hashOf(schRaw)
         },
-        fmea_failure_mode_lookup: state.fmeaAssumptionLookup || {},
-        fmea_component_overrides: state.fmeaAssumptionOverrides || {},
-        fmea_mode_knowledge_overrides: state.fmeaKnowledgeOverrides || {},
-        // Comprehensive snapshot: includes all loaded inputs + resolved assumptions (run/skip + details).
-        // This is intentionally verbose so future agents/tools can reconstruct full setup context.
-        comprehensive_snapshot: buildComprehensiveFmeaSetupSnapshot()
+        classification: {
+          // Deterministic refdes-prefix classifier version used to derive component_type_by_refdes.
+          classification_rules_version: "refdes_prefix_v1",
+          component_type_by_refdes: componentTypeByRefdes
+        },
+        // Canonical single-source catalog. Do not duplicate lookup tables elsewhere in the setup payload.
+        fmea_catalog: fmeaCatalog,
+        overrides: {
+          component_overrides: state.fmeaAssumptionOverrides || {},
+          mode_knowledge_overrides: modeKnowledgeOverrides
+        },
+        resolved_assumptions_by_component: resolvedByComponent,
+        topology_snapshot: buildNetAdjacencyData(netlist),
+        validation: {
+          is_valid: validationErrors.length === 0,
+          errors: validationErrors,
+          warnings: validationWarnings
+        },
+        provenance: {
+          analysis_engine_version: ENGINE_VERSION,
+          ruleset_version: "fmea_ruleset_v1",
+          fingerprints: {
+            sch_raw: hashOf(schRaw),
+            fmea_catalog: hashOf(fmeaCatalog),
+            component_overrides: hashOf(state.fmeaAssumptionOverrides || {}),
+            mode_knowledge_overrides: hashOf(modeKnowledgeOverrides),
+            resolved_assumptions: hashOf(resolvedByComponent)
+          }
+        }
       };
+
+      if (!payload.input.sch_file_name) validationWarnings.push("No *_sch.json filename detected; sch_raw sourced from current netlist.");
+      return payload;
     }
 
     function setSavedStatus(message) {
