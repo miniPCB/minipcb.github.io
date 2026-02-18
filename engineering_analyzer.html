@@ -235,6 +235,62 @@
       font-family: var(--mono);
       font-size: 0.79rem;
       resize: vertical;
+     }
+
+    .lookup-pill-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 10px;
+      padding: 2px;
+    }
+
+    .lookup-pill-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #101823;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .lookup-type-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      width: fit-content;
+      border: 1px solid rgba(102,163,255,.45);
+      color: #c6e3ff;
+      background: rgba(102,163,255,.18);
+    }
+
+    .lookup-mode-cloud {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-content: flex-start;
+      min-height: 34px;
+    }
+
+    .lookup-mode-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      border: 1px solid rgba(123,220,181,.45);
+      color: #c8ffe2;
+      background: rgba(123,220,181,.15);
+      line-height: 1.2;
+    }
+
+    .lookup-edit-label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
 
     .detail-grid {
@@ -753,15 +809,7 @@
         </section>
         <section id="setupStagePanelAssumptions" class="setup-stage-panel hidden">
           <div class="table-wrap assumption-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Component Type</th>
-                  <th>Failure Modes (one per line)</th>
-                </tr>
-              </thead>
-              <tbody id="fmeaLookupBody"></tbody>
-            </table>
+            <div id="fmeaLookupBody" class="lookup-pill-board"></div>
           </div>
         </section>
         <section id="setupStagePanelComponents" class="setup-stage-panel hidden">
@@ -1281,22 +1329,37 @@
       fmeaLookupBody.innerHTML = "";
       const keys = Object.keys(state.fmeaAssumptionLookup || {}).sort();
       for (const componentType of keys) {
-        const tr = document.createElement("tr");
-        const tdType = document.createElement("td");
-        tdType.textContent = componentType;
-        const tdModes = document.createElement("td");
+        const card = document.createElement("div");
+        card.className = "lookup-pill-card";
+        const typePill = document.createElement("span");
+        typePill.className = "lookup-type-pill";
+        typePill.textContent = componentType;
+        const modeCloud = document.createElement("div");
+        modeCloud.className = "lookup-mode-cloud";
+        const modes = state.fmeaAssumptionLookup[componentType] || [];
+        for (const mode of modes) {
+          const pill = document.createElement("span");
+          pill.className = "lookup-mode-pill";
+          pill.textContent = mode;
+          modeCloud.appendChild(pill);
+        }
+        const editLabel = document.createElement("div");
+        editLabel.className = "lookup-edit-label";
+        editLabel.textContent = "Edit modes (one per line)";
         const textarea = document.createElement("textarea");
-        textarea.value = (state.fmeaAssumptionLookup[componentType] || []).join("\n");
+        textarea.value = modes.join("\n");
         textarea.addEventListener("change", () => {
           const list = normalizeFailureModeListFromText(textarea.value);
           state.fmeaAssumptionLookup[componentType] = list.length ? list : ["open"];
           textarea.value = state.fmeaAssumptionLookup[componentType].join("\n");
+          renderFmeaLookupTable();
           renderGeneratedFmeaAssumptions();
         });
-        tdModes.appendChild(textarea);
-        tr.appendChild(tdType);
-        tr.appendChild(tdModes);
-        fmeaLookupBody.appendChild(tr);
+        card.appendChild(typePill);
+        card.appendChild(modeCloud);
+        card.appendChild(editLabel);
+        card.appendChild(textarea);
+        fmeaLookupBody.appendChild(card);
       }
     }
 
