@@ -36,7 +36,8 @@
      }
 
      .page {
-       max-width: 1400px;
+       width: min(1920px, calc(100vw - 24px));
+       max-width: none;
        margin: 0 auto;
        padding: 20px;
      }
@@ -154,6 +155,48 @@
       background: #121a25;
       padding: 10px;
     }
+
+    .setup-stage-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(170px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .setup-stage-button {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #131b27;
+      color: var(--text);
+      padding: 10px;
+      text-align: left;
+      min-height: 52px;
+      cursor: pointer;
+      font-size: 0.86rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .setup-stage-button.active {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, #1b2a3f, #141e2d);
+      box-shadow: inset 0 0 0 1px rgba(47, 136, 255, 0.2);
+    }
+
+    .setup-stage-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .setup-stage-panel {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #101823;
+      padding: 10px;
+      width: 100%;
+    }
+
+    .setup-stage-panel.hidden { display: none; }
 
     .fmea-assumptions h3 {
       margin: 0 0 8px;
@@ -529,16 +572,18 @@
 
      .hidden { display: none; }
 
-    @media (max-width: 1200px) {
-      .tabbar { grid-template-columns: 1fr 1fr; }
-      .control-panel { grid-template-columns: 1fr 1fr; }
-    }
+     @media (max-width: 1200px) {
+       .tabbar { grid-template-columns: 1fr 1fr; }
+       .control-panel { grid-template-columns: 1fr 1fr; }
+       .setup-stage-tabs { grid-template-columns: 1fr 1fr; }
+     }
 
-    @media (max-width: 860px) {
-      .tabbar { grid-template-columns: 1fr; }
-      .control-panel { grid-template-columns: 1fr; }
-      .content { grid-template-columns: 1fr; }
-    }
+     @media (max-width: 860px) {
+       .tabbar { grid-template-columns: 1fr; }
+       .control-panel { grid-template-columns: 1fr; }
+       .setup-stage-tabs { grid-template-columns: 1fr; }
+       .content { grid-template-columns: 1fr; }
+     }
    </style>
 </head>
 <body>
@@ -570,27 +615,34 @@
 
     <section id="panelSetup" class="tab-panel hidden">
       <h2>Setup Analysis</h2>
-      <div class="control-panel">
-        <div class="control-group">
-          <div class="control-label">Analysis Type</div>
-          <select id="analysisType" aria-label="Select Analysis Type">
-            <option value="fmea">FMEA</option>
-            <option value="epsa">EPSA</option>
-            <option value="wcca">WCCA</option>
-            <option value="coverage">Coverage</option>
-          </select>
-        </div>
-        <div class="control-group">
-          <div class="control-label">Setup Actions</div>
-          <button id="saveSetupBtn" type="button">Save Setup File</button>
-        </div>
-      </div>
-      <p id="setupSaveStatus" class="hint">Setup files target `json/fmea/setup` when directory access is configured.</p>
-      <section id="fmeaAssumptionsSection" class="fmea-assumptions hidden">
+      <section id="fmeaAssumptionsSection" class="fmea-assumptions">
         <h3>FMEA Failure Mode Assumptions</h3>
+        <div class="setup-stage-tabs">
+          <button id="setupStageTabType" class="setup-stage-button active" type="button" data-setup-tab="analysis_type">1. Analysis Type</button>
+          <button id="setupStageTabAssumptions" class="setup-stage-button" type="button" data-setup-tab="analysis_assumptions">2. Analysis Assumptions</button>
+          <button id="setupStageTabComponents" class="setup-stage-button" type="button" data-setup-tab="assumptions_per_component">3. Assumptions per Component</button>
+          <button id="setupStageTabDrill" class="setup-stage-button" type="button" data-setup-tab="propagation_drill_down">4. Propagation Drill Down</button>
+        </div>
         <p id="fmeaAssumptionsStatus" class="assumption-note">Load inputs to generate component-level assumptions.</p>
-        <details open>
-          <summary>Failure Mode Lookup Tables (by Component Type)</summary>
+        <section id="setupStagePanelType" class="setup-stage-panel">
+          <div class="control-panel">
+            <div class="control-group">
+              <div class="control-label">Analysis Type</div>
+              <select id="analysisType" aria-label="Select Analysis Type">
+                <option value="fmea">FMEA</option>
+                <option value="epsa">EPSA</option>
+                <option value="wcca">WCCA</option>
+                <option value="coverage">Coverage</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <div class="control-label">Setup Actions</div>
+              <button id="saveSetupBtn" type="button">Save Setup File</button>
+            </div>
+          </div>
+          <p id="setupSaveStatus" class="hint">Setup files target `json/fmea/setup` when directory access is configured.</p>
+        </section>
+        <section id="setupStagePanelAssumptions" class="setup-stage-panel hidden">
           <div class="table-wrap assumption-table">
             <table>
               <thead>
@@ -602,15 +654,13 @@
               <tbody id="fmeaLookupBody"></tbody>
             </table>
           </div>
-        </details>
-        <details open>
-          <summary>Generated Assumptions for Loaded Components</summary>
+        </section>
+        <section id="setupStagePanelComponents" class="setup-stage-panel hidden">
           <div class="table-wrap">
             <div id="fmeaGeneratedBoard" class="assumption-board"></div>
           </div>
-        </details>
-        <details open>
-          <summary>Failure Mode Drill-Down (Level 1 / Level 2 Propagation)</summary>
+        </section>
+        <section id="setupStagePanelDrill" class="setup-stage-panel hidden">
           <div class="detail-grid">
             <div>
               <div class="control-label">Component</div>
@@ -637,7 +687,7 @@
             <button id="fmeaDetailSaveBtn" type="button">Save Mode Detail Override</button>
             <button id="fmeaDetailResetBtn" type="button">Reset Mode Detail to Default</button>
           </div>
-        </details>
+        </section>
       </section>
     </section>
 
@@ -899,6 +949,14 @@
     const fmeaDetailL2 = document.getElementById("fmeaDetailL2");
     const fmeaDetailSaveBtn = document.getElementById("fmeaDetailSaveBtn");
     const fmeaDetailResetBtn = document.getElementById("fmeaDetailResetBtn");
+    const setupStageTabType = document.getElementById("setupStageTabType");
+    const setupStageTabAssumptions = document.getElementById("setupStageTabAssumptions");
+    const setupStageTabComponents = document.getElementById("setupStageTabComponents");
+    const setupStageTabDrill = document.getElementById("setupStageTabDrill");
+    const setupStagePanelType = document.getElementById("setupStagePanelType");
+    const setupStagePanelAssumptions = document.getElementById("setupStagePanelAssumptions");
+    const setupStagePanelComponents = document.getElementById("setupStagePanelComponents");
+    const setupStagePanelDrill = document.getElementById("setupStagePanelDrill");
 
 
      let sortState = { key: null, direction: 1, table: "primary" };
@@ -923,8 +981,13 @@
     saveSetupBtn.addEventListener("click", saveSetupFile);
     selectFmeaDirBtn.addEventListener("click", selectFmeaDirectory);
     refreshSavedBtn.addEventListener("click", refreshSavedFiles);
+    setupStageTabType.addEventListener("click", () => activateSetupStageTab("analysis_type"));
+    setupStageTabAssumptions.addEventListener("click", () => activateSetupStageTab("analysis_assumptions"));
+    setupStageTabComponents.addEventListener("click", () => activateSetupStageTab("assumptions_per_component"));
+    setupStageTabDrill.addEventListener("click", () => activateSetupStageTab("propagation_drill_down"));
 
     initializeFmeaAssumptions();
+    activateSetupStageTab("analysis_type");
     applyFixedUiDefaults();
     updateWorkflowUi();
     refreshSavedFiles();
@@ -933,9 +996,35 @@
       resetRunState();
       updateWorkflowUi();
       refreshFmeaAssumptionUi();
+      updateSetupStageTabsForAnalysisType();
       if (state.inputsValid) {
         inputStatus.textContent = "Inputs loaded and validated. Ready to run " + analysisType.value.toUpperCase() + ".";
       }
+    }
+
+    function activateSetupStageTab(tabName) {
+      const tabs = {
+        analysis_type: { btn: setupStageTabType, panel: setupStagePanelType },
+        analysis_assumptions: { btn: setupStageTabAssumptions, panel: setupStagePanelAssumptions },
+        assumptions_per_component: { btn: setupStageTabComponents, panel: setupStagePanelComponents },
+        propagation_drill_down: { btn: setupStageTabDrill, panel: setupStagePanelDrill }
+      };
+      const current = tabs[tabName];
+      if (!current || current.btn.disabled) return;
+      for (const value of Object.values(tabs)) {
+        value.btn.classList.remove("active");
+        value.panel.classList.add("hidden");
+      }
+      current.btn.classList.add("active");
+      current.panel.classList.remove("hidden");
+    }
+
+    function updateSetupStageTabsForAnalysisType() {
+      const isFmea = analysisType.value === "fmea";
+      setupStageTabAssumptions.disabled = !isFmea;
+      setupStageTabComponents.disabled = !isFmea;
+      setupStageTabDrill.disabled = !isFmea;
+      if (!isFmea) activateSetupStageTab("analysis_type");
     }
 
     function applyFixedUiDefaults() {
@@ -1314,8 +1403,11 @@
     function refreshFmeaAssumptionUi() {
       if (!fmeaAssumptionsSection) return;
       const isFmea = analysisType.value === "fmea";
-      fmeaAssumptionsSection.classList.toggle("hidden", !isFmea);
-      if (!isFmea) return;
+      updateSetupStageTabsForAnalysisType();
+      if (!isFmea) {
+        fmeaAssumptionsStatus.textContent = "Select FMEA in Analysis Type to enable assumptions, per-component run/skip, and propagation drill-down.";
+        return;
+      }
       renderFmeaLookupTable();
       renderGeneratedFmeaAssumptions();
       const componentCount = state.netlist && Array.isArray(state.netlist.components) ? state.netlist.components.length : 0;
