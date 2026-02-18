@@ -676,6 +676,37 @@
        max-height: 95vh;
      }
 
+     #setupStagePanelAssumptions .table-wrap {
+       height: 95vh;
+       max-height: 95vh;
+     }
+
+     .context-menu {
+       position: fixed;
+       z-index: 1000;
+       min-width: 210px;
+       border: 1px solid var(--border);
+       border-radius: 10px;
+       background: #0f1824;
+       box-shadow: var(--shadow);
+       padding: 6px;
+     }
+
+     .context-menu button {
+       width: 100%;
+       text-align: left;
+       min-height: 34px;
+       border-radius: 8px;
+       background: transparent;
+       border: 1px solid transparent;
+       font-size: 0.84rem;
+     }
+
+     .context-menu button:hover {
+       border-color: #496287;
+       background: #152132;
+     }
+
      table {
        width: 100%;
        border-collapse: collapse;
@@ -935,6 +966,13 @@
     </section>
    </div>
 
+   <div id="lookupModeContextMenu" class="context-menu hidden">
+     <button type="button" data-lookup-action="duplicate">Duplicate</button>
+     <button type="button" data-lookup-action="delete">Delete</button>
+     <button type="button" data-lookup-action="insert_before">Insert New Before</button>
+     <button type="button" data-lookup-action="insert_after">Insert New After</button>
+   </div>
+
    <script>
      "use strict";
 
@@ -1108,6 +1146,7 @@
     const fmeaDetailL2 = document.getElementById("fmeaDetailL2");
     const fmeaDetailSaveBtn = document.getElementById("fmeaDetailSaveBtn");
     const fmeaDetailResetBtn = document.getElementById("fmeaDetailResetBtn");
+    const lookupModeContextMenu = document.getElementById("lookupModeContextMenu");
     const setupStageTabType = document.getElementById("setupStageTabType");
     const setupStageTabAssumptions = document.getElementById("setupStageTabAssumptions");
     const setupStageTabComponents = document.getElementById("setupStageTabComponents");
@@ -1120,6 +1159,7 @@
 
      let sortState = { key: null, direction: 1, table: "primary" };
      const drillSelection = { refdes: "", mode: "" };
+     const lookupContextState = { componentType: "", modeIndex: -1 };
 
 
 
@@ -1143,6 +1183,15 @@
     setupStageTabAssumptions.addEventListener("click", () => activateSetupStageTab("analysis_assumptions"));
     setupStageTabComponents.addEventListener("click", () => activateSetupStageTab("assumptions_per_component"));
     setupStageTabDrill.addEventListener("click", () => activateSetupStageTab("propagation_drill_down"));
+    if (lookupModeContextMenu) {
+      lookupModeContextMenu.addEventListener("click", handleLookupModeContextAction);
+      document.addEventListener("click", hideLookupModeContextMenu);
+      document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") hideLookupModeContextMenu(); });
+      document.addEventListener("contextmenu", (ev) => {
+        const target = ev.target;
+        if (!(target instanceof HTMLElement) || !target.closest(".lookup-mode-pill")) hideLookupModeContextMenu();
+      });
+    }
 
     initializeFmeaAssumptions();
     activateSetupStageTab("analysis_type");
@@ -1264,6 +1313,10 @@
       return dedupe(values);
     }
 
+    function normalizeFailureModeValue(value) {
+      return String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
+    }
+
     function getFailureModesForComponent(componentClass, refdes) {
       const buckets = getFailureModeBucketsForComponent(componentClass, refdes);
       return buckets.run.slice();
@@ -1337,10 +1390,12 @@
         const modeCloud = document.createElement("div");
         modeCloud.className = "lookup-mode-cloud";
         const modes = state.fmeaAssumptionLookup[componentType] || [];
-        for (const mode of modes) {
+        for (let i = 0; i < modes.length; i += 1) {
+          const mode = modes[i];
           const pill = document.createElement("span");
           pill.className = "lookup-mode-pill";
           pill.textContent = mode;
+          pill.addEventListener("contextmenu", (ev) => showLookupModeContextMenu(ev, componentType, i));
           modeCloud.appendChild(pill);
         }
         const editLabel = document.createElement("div");
@@ -1361,6 +1416,58 @@
         card.appendChild(textarea);
         fmeaLookupBody.appendChild(card);
       }
+    }
+
+    function showLookupModeContextMenu(ev, componentType, modeIndex) {
+      if (!lookupModeContextMenu) return;
+      ev.preventDefault();
+      lookupContextState.componentType = componentType;
+      lookupContextState.modeIndex = modeIndex;
+      lookupModeContextMenu.classList.remove("hidden");
+      const pad = 8;
+      const menuRect = lookupModeContextMenu.getBoundingClientRect();
+      const x = Math.min(ev.clientX, window.innerWidth - menuRect.width - pad);
+      const y = Math.min(ev.clientY, window.innerHeight - menuRect.height - pad);
+      lookupModeContextMenu.style.left = Math.max(pad, x) + "px";
+      lookupModeContextMenu.style.top = Math.max(pad, y) + "px";
+    }
+
+    function hideLookupModeContextMenu() {
+      if (!lookupModeContextMenu) return;
+      lookupModeContextMenu.classList.add("hidden");
+    }
+
+    function handleLookupModeContextAction(ev) {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+      const action = target.dataset.lookupAction;
+      if (!action) return;
+      const componentType = lookupContextState.componentType;
+      const idx = lookupContextState.modeIndex;
+      const list = (state.fmeaAssumptionLookup[componentType] || []).slice();
+      if (!componentType || idx < 0 || idx >= list.length) {
+        hideLookupModeContextMenu();
+        return;
+      }
+      if (action === "duplicate") {
+        list.splice(idx + 1, 0, list[idx]);
+      } else if (action === "delete") {
+        list.splice(idx, 1);
+        if (!list.length) list.push("open");
+      } else if (action === "insert_before" || action === "insert_after") {
+        const entered = window.prompt("Enter new failure mode token (example: pin_short_crossrail):", "");
+        const normalized = normalizeFailureModeValue(entered);
+        if (!normalized) {
+          hideLookupModeContextMenu();
+          return;
+        }
+        const insertAt = action === "insert_before" ? idx : idx + 1;
+        list.splice(insertAt, 0, normalized);
+      }
+      state.fmeaAssumptionLookup[componentType] = list;
+      hideLookupModeContextMenu();
+      renderFmeaLookupTable();
+      renderGeneratedFmeaAssumptions();
     }
 
     function createModePill(refdes, mode, bucketName) {
