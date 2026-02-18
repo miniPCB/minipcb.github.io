@@ -255,6 +255,89 @@
       flex-wrap: wrap;
     }
 
+    .drill-layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 34%) minmax(420px, 66%);
+      gap: 10px;
+      margin-bottom: 10px;
+      align-items: start;
+    }
+
+    .drill-col {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0f1824;
+      padding: 10px;
+      min-height: 220px;
+    }
+
+    .drill-col .control-label { margin-bottom: 8px; display: block; }
+
+    .pill-cloud {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-content: flex-start;
+      max-height: 44vh;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .drill-pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 0.8rem;
+      line-height: 1.25;
+      color: var(--text);
+      background: #1a2638;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .drill-pill.active {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35), 0 0 0 1px rgba(255,255,255,0.08);
+      transform: translateY(-1px);
+    }
+
+    .drill-detail-grid {
+      margin-top: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .detail-pill {
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 9px 11px;
+      min-height: 56px;
+      color: var(--text);
+      background: rgba(67, 118, 198, 0.17);
+    }
+
+    .detail-pill[data-field="description"] { background: rgba(67, 118, 198, 0.2); border-color: rgba(89, 158, 255, 0.55); }
+    .detail-pill[data-field="l1"] { background: rgba(60, 164, 114, 0.2); border-color: rgba(85, 221, 156, 0.55); }
+    .detail-pill[data-field="l2"] { background: rgba(180, 126, 52, 0.22); border-color: rgba(255, 199, 111, 0.55); }
+    .detail-pill.disabled { opacity: 0.55; }
+
+    .detail-pill .pill-title {
+      display: block;
+      font-size: 0.75rem;
+      color: rgba(235, 242, 251, 0.8);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .detail-pill .pill-text {
+      outline: none;
+      min-height: 22px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     .saved-table button {
       min-height: 30px;
       padding: 0 8px;
@@ -603,6 +686,7 @@
        .tabbar { grid-template-columns: 1fr; }
        .control-panel { grid-template-columns: 1fr; }
        .setup-stage-tabs { grid-template-columns: 1fr; }
+       .drill-layout { grid-template-columns: 1fr; }
        .content { grid-template-columns: 1fr; }
      }
    </style>
@@ -680,26 +764,28 @@
           </div>
         </section>
         <section id="setupStagePanelDrill" class="setup-stage-panel hidden">
-          <div class="detail-grid">
-            <div>
-              <div class="control-label">Component</div>
-              <select id="fmeaDetailComponent"></select>
+          <div class="drill-layout">
+            <div class="drill-col">
+              <span class="control-label">Ref Des Components</span>
+              <div id="fmeaDetailComponent" class="pill-cloud"></div>
             </div>
-            <div>
-              <div class="control-label">Failure Mode</div>
-              <select id="fmeaDetailMode"></select>
-            </div>
-            <div style="grid-column:1 / -1;">
-              <div class="control-label">Failure Mode Description</div>
-              <textarea id="fmeaDetailDescription" rows="2"></textarea>
-            </div>
-            <div style="grid-column:1 / -1;">
-              <div class="control-label">Propagation Effects - Level 1</div>
-              <textarea id="fmeaDetailL1" rows="2"></textarea>
-            </div>
-            <div style="grid-column:1 / -1;">
-              <div class="control-label">Propagation Effects - Level 2</div>
-              <textarea id="fmeaDetailL2" rows="3"></textarea>
+            <div class="drill-col">
+              <span class="control-label">Failure Modes</span>
+              <div id="fmeaDetailMode" class="pill-cloud"></div>
+              <div class="drill-detail-grid">
+                <div id="fmeaDetailDescription" class="detail-pill" data-field="description">
+                  <span class="pill-title">Failure Mode Description</span>
+                  <div class="pill-text" contenteditable="false"></div>
+                </div>
+                <div id="fmeaDetailL1" class="detail-pill" data-field="l1">
+                  <span class="pill-title">Propagation Effects - Level 1</span>
+                  <div class="pill-text" contenteditable="false"></div>
+                </div>
+                <div id="fmeaDetailL2" class="detail-pill" data-field="l2">
+                  <span class="pill-title">Propagation Effects - Level 2</span>
+                  <div class="pill-text" contenteditable="false"></div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="detail-actions">
@@ -979,6 +1065,7 @@
 
 
      let sortState = { key: null, direction: 1, table: "primary" };
+     const drillSelection = { refdes: "", mode: "" };
 
 
 
@@ -993,8 +1080,6 @@
     tabRunBtn.addEventListener("click", () => activateTab("run"));
     tabResultsBtn.addEventListener("click", () => activateTab("results"));
     tabSavedBtn.addEventListener("click", () => activateTab("saved"));
-    fmeaDetailComponent.addEventListener("change", refreshFmeaDetailModeOptions);
-    fmeaDetailMode.addEventListener("change", populateFmeaDetailEditor);
     fmeaDetailSaveBtn.addEventListener("click", saveFmeaDetailOverride);
     fmeaDetailResetBtn.addEventListener("click", resetFmeaDetailOverride);
     saveSetupBtn.addEventListener("click", saveSetupFile);
@@ -1322,96 +1407,128 @@
 
     function refreshFmeaDetailComponentOptions() {
       if (!fmeaDetailComponent) return;
-      const prev = fmeaDetailComponent.value;
+      const prev = drillSelection.refdes;
       fmeaDetailComponent.innerHTML = "";
       const components = (state.netlist && Array.isArray(state.netlist.components)) ? state.netlist.components.slice() : [];
       components.sort((a, b) => String(a.refdes || "").localeCompare(String(b.refdes || "")));
       if (!components.length) {
-        const opt = document.createElement("option");
-        opt.value = "";
-        opt.textContent = "(no component loaded)";
-        fmeaDetailComponent.appendChild(opt);
+        drillSelection.refdes = "";
         refreshFmeaDetailModeOptions();
         return;
       }
-      for (const c of components) {
-        const ref = c.refdes || "UNASSIGNED";
-        const opt = document.createElement("option");
-        opt.value = ref;
-        opt.textContent = ref + " (" + classifyComponent(ref) + ")";
-        fmeaDetailComponent.appendChild(opt);
+      const refs = components.map((c) => c.refdes || "UNASSIGNED");
+      drillSelection.refdes = refs.includes(prev) ? prev : refs[0];
+      for (const ref of refs) {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "drill-pill" + (ref === drillSelection.refdes ? " active" : "");
+        pill.textContent = ref;
+        const color = getRefdesColor(ref);
+        pill.style.background = color.bg;
+        pill.style.borderColor = color.border;
+        pill.style.color = color.text;
+        pill.addEventListener("click", () => {
+          drillSelection.refdes = ref;
+          refreshFmeaDetailComponentOptions();
+        });
+        fmeaDetailComponent.appendChild(pill);
       }
-      if (prev) fmeaDetailComponent.value = prev;
-      if (!fmeaDetailComponent.value) fmeaDetailComponent.selectedIndex = 0;
       refreshFmeaDetailModeOptions();
     }
 
     function refreshFmeaDetailModeOptions() {
       if (!fmeaDetailMode) return;
-      const refdes = fmeaDetailComponent.value;
-      const prev = fmeaDetailMode.value;
+      const refdes = drillSelection.refdes;
+      const prev = drillSelection.mode;
       fmeaDetailMode.innerHTML = "";
       if (!refdes) {
-        const opt = document.createElement("option");
-        opt.value = "";
-        opt.textContent = "(no mode)";
-        fmeaDetailMode.appendChild(opt);
+        drillSelection.mode = "";
         populateFmeaDetailEditor();
         return;
       }
       const componentType = classifyComponent(refdes);
       const buckets = getFailureModeBucketsForComponent(componentType, refdes);
       const modes = dedupe([].concat(buckets.run, buckets.skip));
+      drillSelection.mode = modes.includes(prev) ? prev : (modes[0] || "");
       for (const mode of modes) {
-        const opt = document.createElement("option");
-        opt.value = mode;
-        opt.textContent = mode;
-        fmeaDetailMode.appendChild(opt);
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "drill-pill" + (mode === drillSelection.mode ? " active" : "");
+        pill.textContent = mode;
+        const modeIsRun = buckets.run.includes(mode);
+        pill.style.background = modeIsRun ? "rgba(46,204,113,0.2)" : "rgba(255,87,87,0.2)";
+        pill.style.borderColor = modeIsRun ? "rgba(46,204,113,0.52)" : "rgba(255,87,87,0.52)";
+        pill.style.color = modeIsRun ? "#d6ffe8" : "#ffd8d8";
+        pill.addEventListener("click", () => {
+          drillSelection.mode = mode;
+          refreshFmeaDetailModeOptions();
+        });
+        fmeaDetailMode.appendChild(pill);
       }
-      if (prev && modes.includes(prev)) fmeaDetailMode.value = prev;
-      if (!fmeaDetailMode.value && modes.length) fmeaDetailMode.selectedIndex = 0;
       populateFmeaDetailEditor();
     }
 
+    function setDetailPillContent(wrapper, text, disabled) {
+      const content = wrapper ? wrapper.querySelector(".pill-text") : null;
+      if (!wrapper || !content) return;
+      content.textContent = text || "";
+      content.contentEditable = disabled ? "false" : "true";
+      wrapper.classList.toggle("disabled", !!disabled);
+    }
+
+    function getDetailPillContent(wrapper) {
+      const content = wrapper ? wrapper.querySelector(".pill-text") : null;
+      return content ? String(content.textContent || "").trim() : "";
+    }
+
+    function getRefdesColor(refdes) {
+      const text = String(refdes || "X");
+      let hash = 0;
+      for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+      const hue = Math.abs(hash) % 360;
+      return {
+        bg: "hsla(" + hue + ", 65%, 25%, 0.42)",
+        border: "hsla(" + hue + ", 75%, 62%, 0.62)",
+        text: "hsla(" + hue + ", 92%, 90%, 1)"
+      };
+    }
+
     function populateFmeaDetailEditor() {
-      const refdes = fmeaDetailComponent.value;
-      const mode = fmeaDetailMode.value;
+      const refdes = drillSelection.refdes;
+      const mode = drillSelection.mode;
       const disable = !refdes || !mode;
-      fmeaDetailDescription.disabled = disable;
-      fmeaDetailL1.disabled = disable;
-      fmeaDetailL2.disabled = disable;
       fmeaDetailSaveBtn.disabled = disable;
       fmeaDetailResetBtn.disabled = disable;
       if (disable) {
-        fmeaDetailDescription.value = "";
-        fmeaDetailL1.value = "";
-        fmeaDetailL2.value = "";
+        setDetailPillContent(fmeaDetailDescription, "", true);
+        setDetailPillContent(fmeaDetailL1, "", true);
+        setDetailPillContent(fmeaDetailL2, "", true);
         return;
       }
       const componentType = classifyComponent(refdes);
       const k = getFailureModeKnowledge(componentType, mode);
-      fmeaDetailDescription.value = k.description || "";
-      fmeaDetailL1.value = k.l1 || "";
-      fmeaDetailL2.value = k.l2 || "";
+      setDetailPillContent(fmeaDetailDescription, k.description || "", false);
+      setDetailPillContent(fmeaDetailL1, k.l1 || "", false);
+      setDetailPillContent(fmeaDetailL2, k.l2 || "", false);
     }
 
     function saveFmeaDetailOverride() {
-      const refdes = fmeaDetailComponent.value;
-      const mode = fmeaDetailMode.value;
+      const refdes = drillSelection.refdes;
+      const mode = drillSelection.mode;
       if (!refdes || !mode) return;
       const componentType = classifyComponent(refdes);
       const key = buildKnowledgeKey(componentType, mode);
       state.fmeaKnowledgeOverrides[key] = {
-        description: String(fmeaDetailDescription.value || "").trim(),
-        l1: String(fmeaDetailL1.value || "").trim(),
-        l2: String(fmeaDetailL2.value || "").trim()
+        description: getDetailPillContent(fmeaDetailDescription),
+        l1: getDetailPillContent(fmeaDetailL1),
+        l2: getDetailPillContent(fmeaDetailL2)
       };
       fmeaAssumptionsStatus.textContent = "Saved detail override for " + componentType + " / " + mode + ".";
     }
 
     function resetFmeaDetailOverride() {
-      const refdes = fmeaDetailComponent.value;
-      const mode = fmeaDetailMode.value;
+      const refdes = drillSelection.refdes;
+      const mode = drillSelection.mode;
       if (!refdes || !mode) return;
       const componentType = classifyComponent(refdes);
       delete state.fmeaKnowledgeOverrides[buildKnowledgeKey(componentType, mode)];
