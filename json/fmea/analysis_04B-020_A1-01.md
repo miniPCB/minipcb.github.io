@@ -1,12 +1,12 @@
 # FMEA Report
 
 Engine Version: 0.2
-Generated On: 2026-02-20T01:51:50.280Z
+Generated On: 2026-02-20T01:52:10.312Z
 
 ## Summary
-- entries: 94
-- high_risk_count: 42
-- average_rpn: 213.79
+- entries: 97
+- high_risk_count: 55
+- average_rpn: 230.76
 
 ## Results
 | component | failure_mode | severity | occurrence | detection | RPN | coverage_status |
@@ -22,6 +22,13 @@ Generated On: 2026-02-20T01:51:50.280Z
 | Q1 | open_collector | 8 | 5 | 8 | 320 | uncovered |
 | Q1 | open_emitter | 8 | 5 | 8 | 320 | uncovered |
 | Q1 | leakage_high | 8 | 5 | 8 | 320 | uncovered |
+| Q2 | gain_low | 8 | 5 | 8 | 320 | uncovered |
+| Q2 | gain_high | 8 | 5 | 8 | 320 | uncovered |
+| Q2 | be_short | 8 | 5 | 8 | 320 | uncovered |
+| Q2 | ce_short | 8 | 5 | 8 | 320 | uncovered |
+| Q2 | open_collector | 8 | 5 | 8 | 320 | uncovered |
+| Q2 | open_emitter | 8 | 5 | 8 | 320 | uncovered |
+| Q2 | leakage_high | 8 | 5 | 8 | 320 | uncovered |
 | C1 | open | 9 | 4 | 8 | 288 | uncovered |
 | C1 | short | 9 | 4 | 8 | 288 | uncovered |
 | C1 | capacitance_low | 9 | 4 | 8 | 288 | uncovered |
@@ -34,6 +41,12 @@ Generated On: 2026-02-20T01:51:50.280Z
 | C4 | capacitance_high | 9 | 4 | 8 | 288 | uncovered |
 | C4 | esr_high | 9 | 4 | 8 | 288 | uncovered |
 | C4 | leakage_high | 9 | 4 | 8 | 288 | uncovered |
+| C5 | open | 9 | 4 | 8 | 288 | uncovered |
+| C5 | short | 9 | 4 | 8 | 288 | uncovered |
+| C5 | capacitance_low | 9 | 4 | 8 | 288 | uncovered |
+| C5 | capacitance_high | 9 | 4 | 8 | 288 | uncovered |
+| C5 | esr_high | 9 | 4 | 8 | 288 | uncovered |
+| C5 | leakage_high | 9 | 4 | 8 | 288 | uncovered |
 | C2 | open | 8 | 4 | 8 | 256 | uncovered |
 | C2 | short | 8 | 4 | 8 | 256 | uncovered |
 | C2 | capacitance_low | 8 | 4 | 8 | 256 | uncovered |
@@ -46,13 +59,13 @@ Generated On: 2026-02-20T01:51:50.280Z
 | C3 | capacitance_high | 8 | 4 | 8 | 256 | uncovered |
 | C3 | esr_high | 8 | 4 | 8 | 256 | uncovered |
 | C3 | leakage_high | 8 | 4 | 8 | 256 | uncovered |
-| R5 | open | 9 | 3 | 8 | 216 | uncovered |
-| R5 | short | 9 | 3 | 8 | 216 | uncovered |
-| R5 | oot_high | 9 | 3 | 8 | 216 | uncovered |
-| R5 | oot_low | 9 | 3 | 8 | 216 | uncovered |
-| R5 | drift_high | 9 | 3 | 8 | 216 | uncovered |
-| R5 | drift_low | 9 | 3 | 8 | 216 | uncovered |
-| R5 | noise_excess | 9 | 3 | 8 | 216 | uncovered |
+| R3 | open | 9 | 3 | 8 | 216 | uncovered |
+| R3 | short | 9 | 3 | 8 | 216 | uncovered |
+| R3 | oot_high | 9 | 3 | 8 | 216 | uncovered |
+| R3 | oot_low | 9 | 3 | 8 | 216 | uncovered |
+| R3 | drift_high | 9 | 3 | 8 | 216 | uncovered |
+| R3 | drift_low | 9 | 3 | 8 | 216 | uncovered |
+| R3 | noise_excess | 9 | 3 | 8 | 216 | uncovered |
 | R1 | open | 8 | 3 | 8 | 192 | uncovered |
 | R1 | short | 8 | 3 | 8 | 192 | uncovered |
 | R1 | oot_high | 8 | 3 | 8 | 192 | uncovered |
@@ -60,51 +73,41 @@ Generated On: 2026-02-20T01:51:50.280Z
 | R1 | drift_high | 8 | 3 | 8 | 192 | uncovered |
 | R1 | drift_low | 8 | 3 | 8 | 192 | uncovered |
 | R1 | noise_excess | 8 | 3 | 8 | 192 | uncovered |
-| R3 | open | 8 | 3 | 8 | 192 | uncovered |
-| R3 | short | 8 | 3 | 8 | 192 | uncovered |
-| R3 | oot_high | 8 | 3 | 8 | 192 | uncovered |
-| R3 | oot_low | 8 | 3 | 8 | 192 | uncovered |
-| R3 | drift_high | 8 | 3 | 8 | 192 | uncovered |
-| R3 | drift_low | 8 | 3 | 8 | 192 | uncovered |
-| R3 | noise_excess | 8 | 3 | 8 | 192 | uncovered |
-| R4 | open | 8 | 3 | 8 | 192 | uncovered |
-| R4 | short | 8 | 3 | 8 | 192 | uncovered |
-| R4 | oot_high | 8 | 3 | 8 | 192 | uncovered |
-| R4 | oot_low | 8 | 3 | 8 | 192 | uncovered |
-| R4 | drift_high | 8 | 3 | 8 | 192 | uncovered |
-| R4 | drift_low | 8 | 3 | 8 | 192 | uncovered |
-| R4 | noise_excess | 8 | 3 | 8 | 192 | uncovered |
-| R2 | open | 7 | 3 | 8 | 168 | uncovered |
-| R2 | short | 7 | 3 | 8 | 168 | uncovered |
-| R2 | oot_high | 7 | 3 | 8 | 168 | uncovered |
-| R2 | oot_low | 7 | 3 | 8 | 168 | uncovered |
-| R2 | drift_high | 7 | 3 | 8 | 168 | uncovered |
-| R2 | drift_low | 7 | 3 | 8 | 168 | uncovered |
-| R2 | noise_excess | 7 | 3 | 8 | 168 | uncovered |
+| R2 | open | 8 | 3 | 8 | 192 | uncovered |
+| R2 | short | 8 | 3 | 8 | 192 | uncovered |
+| R2 | oot_high | 8 | 3 | 8 | 192 | uncovered |
+| R2 | oot_low | 8 | 3 | 8 | 192 | uncovered |
+| R2 | drift_high | 8 | 3 | 8 | 192 | uncovered |
+| R2 | drift_low | 8 | 3 | 8 | 192 | uncovered |
+| R2 | noise_excess | 8 | 3 | 8 | 192 | uncovered |
+| R4 | open | 7 | 3 | 8 | 168 | uncovered |
+| R4 | short | 7 | 3 | 8 | 168 | uncovered |
+| R4 | oot_high | 7 | 3 | 8 | 168 | uncovered |
+| R4 | oot_low | 7 | 3 | 8 | 168 | uncovered |
+| R4 | drift_high | 7 | 3 | 8 | 168 | uncovered |
+| R4 | drift_low | 7 | 3 | 8 | 168 | uncovered |
+| R4 | noise_excess | 7 | 3 | 8 | 168 | uncovered |
 | TP1 | measurement_error | 9 | 2 | 8 | 144 | uncovered |
 | TP1 | probe_slip | 9 | 2 | 8 | 144 | uncovered |
 | TP1 | open_test_node | 9 | 2 | 8 | 144 | uncovered |
-| TP8 | measurement_error | 9 | 2 | 8 | 144 | uncovered |
-| TP8 | probe_slip | 9 | 2 | 8 | 144 | uncovered |
-| TP8 | open_test_node | 9 | 2 | 8 | 144 | uncovered |
+| TP6 | measurement_error | 9 | 2 | 8 | 144 | uncovered |
+| TP6 | probe_slip | 9 | 2 | 8 | 144 | uncovered |
+| TP6 | open_test_node | 9 | 2 | 8 | 144 | uncovered |
+| TP4 | measurement_error | 8 | 2 | 8 | 128 | uncovered |
+| TP4 | probe_slip | 8 | 2 | 8 | 128 | uncovered |
+| TP4 | open_test_node | 8 | 2 | 8 | 128 | uncovered |
 | TP5 | measurement_error | 8 | 2 | 8 | 128 | uncovered |
 | TP5 | probe_slip | 8 | 2 | 8 | 128 | uncovered |
 | TP5 | open_test_node | 8 | 2 | 8 | 128 | uncovered |
-| TP6 | measurement_error | 8 | 2 | 8 | 128 | uncovered |
-| TP6 | probe_slip | 8 | 2 | 8 | 128 | uncovered |
-| TP6 | open_test_node | 8 | 2 | 8 | 128 | uncovered |
 | TP2 | measurement_error | 7 | 2 | 8 | 112 | uncovered |
 | TP2 | probe_slip | 7 | 2 | 8 | 112 | uncovered |
 | TP2 | open_test_node | 7 | 2 | 8 | 112 | uncovered |
-| TP3 | measurement_error | 7 | 2 | 8 | 112 | uncovered |
-| TP3 | probe_slip | 7 | 2 | 8 | 112 | uncovered |
-| TP3 | open_test_node | 7 | 2 | 8 | 112 | uncovered |
-| TP4 | measurement_error | 7 | 2 | 8 | 112 | uncovered |
-| TP4 | probe_slip | 7 | 2 | 8 | 112 | uncovered |
-| TP4 | open_test_node | 7 | 2 | 8 | 112 | uncovered |
-| TP7 | measurement_error | 5 | 2 | 8 | 80 | uncovered |
-| TP7 | probe_slip | 5 | 2 | 8 | 80 | uncovered |
-| TP7 | open_test_node | 5 | 2 | 8 | 80 | uncovered |
+| TP7 | measurement_error | 7 | 2 | 8 | 112 | uncovered |
+| TP7 | probe_slip | 7 | 2 | 8 | 112 | uncovered |
+| TP7 | open_test_node | 7 | 2 | 8 | 112 | uncovered |
+| TP3 | measurement_error | 5 | 2 | 8 | 80 | uncovered |
+| TP3 | probe_slip | 5 | 2 | 8 | 80 | uncovered |
+| TP3 | open_test_node | 5 | 2 | 8 | 80 | uncovered |
 
 ## Failure Effects
 | Component | Failure Mode | Failure Effect | Propagation 1 | Propagation 2 |
@@ -120,6 +123,13 @@ Generated On: 2026-02-20T01:51:50.280Z
 | Q1 | open_collector | Collector conduction path opens. | Expected sink/source path disappears. | Downstream node floats or rails, causing interface-level functional loss. |
 | Q1 | open_emitter | Deterministic failure assumption for transistor mode 'open emitter'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | Q1 | leakage_high | Deterministic failure assumption for transistor mode 'leakage high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| Q2 | gain_low | Effective beta/transconductance is reduced. | Stage gain drops and bias point may move off center. | Signal chain compression/under-drive propagates to downstream nodes. |
+| Q2 | gain_high | Deterministic failure assumption for transistor mode 'gain high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| Q2 | be_short | Base-emitter junction is effectively shorted. | Bias network is heavily loaded and control action is lost. | Collector/emitter operating point collapses and output behavior saturates. |
+| Q2 | ce_short | Collector-emitter path is shorted or near short. | Load is forced toward supply/ground path unexpectedly. | Branch overcurrent and thermal stress can propagate into supply network. |
+| Q2 | open_collector | Collector conduction path opens. | Expected sink/source path disappears. | Downstream node floats or rails, causing interface-level functional loss. |
+| Q2 | open_emitter | Deterministic failure assumption for transistor mode 'open emitter'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| Q2 | leakage_high | Deterministic failure assumption for transistor mode 'leakage high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | C1 | open | Capacitive coupling/decoupling is lost. | AC path opens or local filtering is removed. | Noise and ripple propagation increase into dependent nodes. |
 | C1 | short | Capacitor behaves like a low-impedance fault. | Connected nets are forced together at low impedance. | Bias collapse or supply loading may trigger multi-node failure signatures. |
 | C1 | capacitance_low | Capacitance drops below expected value. | Time constants shorten and filtering weakens. | Dynamic stability margins degrade under transient loading. |
@@ -132,6 +142,12 @@ Generated On: 2026-02-20T01:51:50.280Z
 | C4 | capacitance_high | Deterministic failure assumption for capacitor mode 'capacitance high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | C4 | esr_high | Equivalent series resistance rises beyond expected. | Ripple attenuation and pulse-current support degrade. | Thermal self-heating and cross-stage noise coupling increase. |
 | C4 | leakage_high | Deterministic failure assumption for capacitor mode 'leakage high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| C5 | open | Capacitive coupling/decoupling is lost. | AC path opens or local filtering is removed. | Noise and ripple propagation increase into dependent nodes. |
+| C5 | short | Capacitor behaves like a low-impedance fault. | Connected nets are forced together at low impedance. | Bias collapse or supply loading may trigger multi-node failure signatures. |
+| C5 | capacitance_low | Capacitance drops below expected value. | Time constants shorten and filtering weakens. | Dynamic stability margins degrade under transient loading. |
+| C5 | capacitance_high | Deterministic failure assumption for capacitor mode 'capacitance high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| C5 | esr_high | Equivalent series resistance rises beyond expected. | Ripple attenuation and pulse-current support degrade. | Thermal self-heating and cross-stage noise coupling increase. |
+| C5 | leakage_high | Deterministic failure assumption for capacitor mode 'leakage high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | C2 | open | Capacitive coupling/decoupling is lost. | AC path opens or local filtering is removed. | Noise and ripple propagation increase into dependent nodes. |
 | C2 | short | Capacitor behaves like a low-impedance fault. | Connected nets are forced together at low impedance. | Bias collapse or supply loading may trigger multi-node failure signatures. |
 | C2 | capacitance_low | Capacitance drops below expected value. | Time constants shorten and filtering weakens. | Dynamic stability margins degrade under transient loading. |
@@ -144,20 +160,6 @@ Generated On: 2026-02-20T01:51:50.280Z
 | C3 | capacitance_high | Deterministic failure assumption for capacitor mode 'capacitance high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | C3 | esr_high | Equivalent series resistance rises beyond expected. | Ripple attenuation and pulse-current support degrade. | Thermal self-heating and cross-stage noise coupling increase. |
 | C3 | leakage_high | Deterministic failure assumption for capacitor mode 'leakage high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R5 | open | Conduction path opens and current flow drops to near zero. | Direct branch current collapses and node bias shifts. | Downstream gain/margin can collapse; detection often visible as static offset. |
-| R5 | short | Terminals effectively short and branch resistance drops strongly. | Branch current rises and neighboring node voltage compresses. | Upstream supply loading rises; thermal stress can propagate to adjacent parts. |
-| R5 | oot_high | Resistance drifts above nominal tolerance band. | Current reduces and divider/bias point moves low. | Stage gain and headroom reduce, increasing clipping or under-drive risk. |
-| R5 | oot_low | Resistance drifts below nominal tolerance band. | Current increases and divider/bias point moves high. | Power dissipation rises and later-stage bias can overdrive. |
-| R5 | drift_high | Deterministic failure assumption for resistor mode 'drift high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R5 | drift_low | Deterministic failure assumption for resistor mode 'drift low'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R5 | noise_excess | Deterministic failure assumption for resistor mode 'noise excess'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R1 | open | Conduction path opens and current flow drops to near zero. | Direct branch current collapses and node bias shifts. | Downstream gain/margin can collapse; detection often visible as static offset. |
-| R1 | short | Terminals effectively short and branch resistance drops strongly. | Branch current rises and neighboring node voltage compresses. | Upstream supply loading rises; thermal stress can propagate to adjacent parts. |
-| R1 | oot_high | Resistance drifts above nominal tolerance band. | Current reduces and divider/bias point moves low. | Stage gain and headroom reduce, increasing clipping or under-drive risk. |
-| R1 | oot_low | Resistance drifts below nominal tolerance band. | Current increases and divider/bias point moves high. | Power dissipation rises and later-stage bias can overdrive. |
-| R1 | drift_high | Deterministic failure assumption for resistor mode 'drift high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R1 | drift_low | Deterministic failure assumption for resistor mode 'drift low'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R1 | noise_excess | Deterministic failure assumption for resistor mode 'noise excess'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | R3 | open | Conduction path opens and current flow drops to near zero. | Direct branch current collapses and node bias shifts. | Downstream gain/margin can collapse; detection often visible as static offset. |
 | R3 | short | Terminals effectively short and branch resistance drops strongly. | Branch current rises and neighboring node voltage compresses. | Upstream supply loading rises; thermal stress can propagate to adjacent parts. |
 | R3 | oot_high | Resistance drifts above nominal tolerance band. | Current reduces and divider/bias point moves low. | Stage gain and headroom reduce, increasing clipping or under-drive risk. |
@@ -165,13 +167,13 @@ Generated On: 2026-02-20T01:51:50.280Z
 | R3 | drift_high | Deterministic failure assumption for resistor mode 'drift high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | R3 | drift_low | Deterministic failure assumption for resistor mode 'drift low'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | R3 | noise_excess | Deterministic failure assumption for resistor mode 'noise excess'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R4 | open | Conduction path opens and current flow drops to near zero. | Direct branch current collapses and node bias shifts. | Downstream gain/margin can collapse; detection often visible as static offset. |
-| R4 | short | Terminals effectively short and branch resistance drops strongly. | Branch current rises and neighboring node voltage compresses. | Upstream supply loading rises; thermal stress can propagate to adjacent parts. |
-| R4 | oot_high | Resistance drifts above nominal tolerance band. | Current reduces and divider/bias point moves low. | Stage gain and headroom reduce, increasing clipping or under-drive risk. |
-| R4 | oot_low | Resistance drifts below nominal tolerance band. | Current increases and divider/bias point moves high. | Power dissipation rises and later-stage bias can overdrive. |
-| R4 | drift_high | Deterministic failure assumption for resistor mode 'drift high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R4 | drift_low | Deterministic failure assumption for resistor mode 'drift low'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
-| R4 | noise_excess | Deterministic failure assumption for resistor mode 'noise excess'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| R1 | open | Conduction path opens and current flow drops to near zero. | Direct branch current collapses and node bias shifts. | Downstream gain/margin can collapse; detection often visible as static offset. |
+| R1 | short | Terminals effectively short and branch resistance drops strongly. | Branch current rises and neighboring node voltage compresses. | Upstream supply loading rises; thermal stress can propagate to adjacent parts. |
+| R1 | oot_high | Resistance drifts above nominal tolerance band. | Current reduces and divider/bias point moves low. | Stage gain and headroom reduce, increasing clipping or under-drive risk. |
+| R1 | oot_low | Resistance drifts below nominal tolerance band. | Current increases and divider/bias point moves high. | Power dissipation rises and later-stage bias can overdrive. |
+| R1 | drift_high | Deterministic failure assumption for resistor mode 'drift high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| R1 | drift_low | Deterministic failure assumption for resistor mode 'drift low'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| R1 | noise_excess | Deterministic failure assumption for resistor mode 'noise excess'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | R2 | open | Conduction path opens and current flow drops to near zero. | Direct branch current collapses and node bias shifts. | Downstream gain/margin can collapse; detection often visible as static offset. |
 | R2 | short | Terminals effectively short and branch resistance drops strongly. | Branch current rises and neighboring node voltage compresses. | Upstream supply loading rises; thermal stress can propagate to adjacent parts. |
 | R2 | oot_high | Resistance drifts above nominal tolerance band. | Current reduces and divider/bias point moves low. | Stage gain and headroom reduce, increasing clipping or under-drive risk. |
@@ -179,27 +181,31 @@ Generated On: 2026-02-20T01:51:50.280Z
 | R2 | drift_high | Deterministic failure assumption for resistor mode 'drift high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | R2 | drift_low | Deterministic failure assumption for resistor mode 'drift low'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | R2 | noise_excess | Deterministic failure assumption for resistor mode 'noise excess'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| R4 | open | Conduction path opens and current flow drops to near zero. | Direct branch current collapses and node bias shifts. | Downstream gain/margin can collapse; detection often visible as static offset. |
+| R4 | short | Terminals effectively short and branch resistance drops strongly. | Branch current rises and neighboring node voltage compresses. | Upstream supply loading rises; thermal stress can propagate to adjacent parts. |
+| R4 | oot_high | Resistance drifts above nominal tolerance band. | Current reduces and divider/bias point moves low. | Stage gain and headroom reduce, increasing clipping or under-drive risk. |
+| R4 | oot_low | Resistance drifts below nominal tolerance band. | Current increases and divider/bias point moves high. | Power dissipation rises and later-stage bias can overdrive. |
+| R4 | drift_high | Deterministic failure assumption for resistor mode 'drift high'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| R4 | drift_low | Deterministic failure assumption for resistor mode 'drift low'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
+| R4 | noise_excess | Deterministic failure assumption for resistor mode 'noise excess'. | Primary propagation: directly connected nets and bias points shift based on topology. | Secondary propagation: downstream interfaces, margins, and detection paths are impacted. |
 | TP1 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
 | TP1 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
 | TP1 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
-| TP8 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
-| TP8 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
-| TP8 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
-| TP5 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
-| TP5 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
-| TP5 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
 | TP6 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
 | TP6 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
 | TP6 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
-| TP2 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
-| TP2 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
-| TP2 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
-| TP3 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
-| TP3 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
-| TP3 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
 | TP4 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
 | TP4 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
 | TP4 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
+| TP5 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
+| TP5 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
+| TP5 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
+| TP2 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
+| TP2 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
+| TP2 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
 | TP7 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
 | TP7 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
 | TP7 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
+| TP3 | measurement_error | Probe setup or instrument coupling introduces error. | Observed value diverges from actual node condition. | Diagnostic decisions propagate incorrect fault isolation paths. |
+| TP3 | probe_slip | Probe contact moves to wrong node or loses contact. | Sampled signal is discontinuous or from unintended net. | Root-cause localization propagates to false suspects. |
+| TP3 | open_test_node | Test access path is open or inaccessible. | Required observability point is unavailable. | Coverage gaps increase and detection score worsens for related failures. |
