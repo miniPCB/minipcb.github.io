@@ -1,12 +1,12 @@
 # FMEA Report
 
 Engine Version: 0.1
-Generated On: 2026-02-18T01:22:12.785Z
+Generated On: 2026-02-19T03:19:08.096Z
 
 ## Summary
-- entries: 88
-- high_risk_count: 36
-- average_rpn: 209.82
+- entries: 91
+- high_risk_count: 39
+- average_rpn: 211.34
 
 ## Results
 | component | failure_mode | severity | occurrence | detection | RPN | coverage_status |
@@ -34,6 +34,9 @@ Generated On: 2026-02-18T01:22:12.785Z
 | C2 | open | 8 | 4 | 8 | 256 | uncovered |
 | C2 | short | 8 | 4 | 8 | 256 | uncovered |
 | C2 | capacitance_low | 8 | 4 | 8 | 256 | uncovered |
+| C2 | capacitance_high | 8 | 4 | 8 | 256 | uncovered |
+| C2 | esr_high | 8 | 4 | 8 | 256 | uncovered |
+| C2 | leakage_high | 8 | 4 | 8 | 256 | uncovered |
 | C3 | open | 8 | 4 | 8 | 256 | uncovered |
 | C3 | short | 8 | 4 | 8 | 256 | uncovered |
 | C3 | capacitance_low | 8 | 4 | 8 | 256 | uncovered |
