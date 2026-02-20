@@ -521,6 +521,59 @@
       color: #ffd6d6;
     }
 
+    .fmeaWrap{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .fmeaCard{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(255,255,255,0.02);
+      padding:10px;
+    }
+
+    .fmeaTitle{
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:0.6px;
+      color: var(--muted);
+      margin-bottom:8px;
+    }
+
+    .fmeaPath{
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:6px 10px;
+      font-size:12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+      font-family: var(--mono);
+      margin-bottom:8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .fmeaMdViewport{
+      border:1px solid rgba(42,52,71,0.6);
+      border-radius:10px;
+      background: rgba(15,20,30,0.45);
+      padding:10px;
+      max-height:34vh;
+      overflow:auto;
+    }
+
+    .fmeaJsonViewport{
+      border:1px solid rgba(42,52,71,0.6);
+      border-radius:10px;
+      background: rgba(15,20,30,0.45);
+      padding:10px;
+      max-height:34vh;
+      overflow:auto;
+    }
+
     .status{
       padding:8px 12px;
       border-radius:999px;
@@ -647,6 +700,7 @@
             <button class="tabBtn" data-tab="json">JSON</button>
             <button class="tabBtn" data-tab="schematic">Schematic</button>
             <button class="tabBtn" data-tab="layout">Layout</button>
+            <button class="tabBtn" data-tab="fmea">FMEA Report</button>
             <button class="tabBtn" data-tab="assembly">Assembly</button>
             <button class="tabBtn" data-tab="testing">Testing</button>
           </div>
@@ -674,6 +728,25 @@
           <div class="tabPanel" data-panel="layout">
             <div class="empty">Layout view placeholder. Add board renders or layout images here.</div>
           </div>
+          <div class="tabPanel" data-panel="fmea">
+            <div class="fmeaWrap">
+              <div class="fmeaCard">
+                <div class="fmeaTitle">FMEA Markdown</div>
+                <div class="fmeaPath" id="fmeaMdPath">Path: (none)</div>
+                <div class="fmeaMdViewport" id="fmeaMdContent">
+                  <div class="empty">Select a file to load FMEA markdown.</div>
+                </div>
+              </div>
+              <div class="fmeaCard">
+                <div class="fmeaTitle">FMEA JSON</div>
+                <div class="fmeaPath" id="fmeaJsonPath">Path: (none)</div>
+                <div class="jsonStatus" id="fmeaJsonStatus">Select a file to load FMEA JSON.</div>
+                <div class="fmeaJsonViewport">
+                  <div id="fmeaJsonContent" class="jsonStatus">No FMEA JSON loaded.</div>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="tabPanel" data-panel="assembly">
             <div class="empty">Assembly view placeholder. Add assembly drawings or BOM links here.</div>
           </div>
@@ -700,6 +773,8 @@
       currentJsonPath: "",
       currentJsonText: "",
       currentJsonValue: null,
+      currentFmeaMdPath: "",
+      currentFmeaJsonPath: "",
       pathExistsCache: {}
     };
 
@@ -1273,6 +1348,87 @@
       }
     }
 
+    function updateFmeaPane(mdPath, mdHtml, jsonPath, jsonStatus, jsonValue){
+      const mdPathEl = $("fmeaMdPath");
+      const mdContentEl = $("fmeaMdContent");
+      const jsonPathEl = $("fmeaJsonPath");
+      const jsonStatusEl = $("fmeaJsonStatus");
+      const jsonContentEl = $("fmeaJsonContent");
+
+      if(mdPathEl) mdPathEl.textContent = `Path: ${mdPath || "(none)"}`;
+      if(mdContentEl){
+        if(mdHtml){
+          mdContentEl.innerHTML = `<div class="md">${mdHtml}</div>`;
+        }else{
+          mdContentEl.innerHTML = `<div class="empty">No FMEA markdown found.</div>`;
+        }
+      }
+
+      if(jsonPathEl) jsonPathEl.textContent = `Path: ${jsonPath || "(none)"}`;
+      if(jsonStatusEl) jsonStatusEl.textContent = jsonStatus || "";
+      if(jsonContentEl){
+        jsonContentEl.innerHTML = "";
+        if(jsonValue && typeof jsonValue === "object"){
+          const tree = document.createElement("div");
+          tree.className = "jsonTree";
+          tree.appendChild(renderJsonValueTree(jsonValue, "root"));
+          jsonContentEl.className = "";
+          jsonContentEl.appendChild(tree);
+        }else{
+          jsonContentEl.className = "jsonStatus";
+          jsonContentEl.textContent = "No FMEA JSON loaded.";
+        }
+      }
+    }
+
+    async function loadFmeaForEntry(entry, requestId){
+      const pn = (entry && entry.pn) || "";
+      const rev = (entry && entry.rev) || "";
+      if(!pn || !rev){
+        state.currentFmeaMdPath = "";
+        state.currentFmeaJsonPath = "";
+        updateFmeaPane("", "", "", "Missing PN or REV for FMEA lookup.", null);
+        return;
+      }
+
+      const base = `json/fmea/analysis_${pn}_${rev}`;
+      const mdPath = `${base}.md`;
+      const jsonPath = `${base}.json`;
+      state.currentFmeaMdPath = mdPath;
+      state.currentFmeaJsonPath = jsonPath;
+
+      let mdHtml = "";
+      let jsonValue = null;
+      let jsonStatus = "FMEA JSON not found.";
+
+      try{
+        const mdRes = await fetch(mdPath + "?v=" + Date.now(), { cache: "no-store" });
+        if(requestId !== state.requestId) return;
+        if(mdRes.ok){
+          const mdText = await mdRes.text();
+          if(requestId !== state.requestId) return;
+          mdHtml = markdownToHtml(mdText);
+        }
+      }catch(_){}
+
+      try{
+        const jsonRes = await fetch(jsonPath + "?v=" + Date.now(), { cache: "no-store" });
+        if(requestId !== state.requestId) return;
+        if(jsonRes.ok){
+          const text = await jsonRes.text();
+          if(requestId !== state.requestId) return;
+          try{
+            jsonValue = JSON.parse(text);
+            jsonStatus = "FMEA JSON loaded.";
+          }catch(_){
+            jsonStatus = "FMEA JSON parse failed.";
+          }
+        }
+      }catch(_){}
+
+      updateFmeaPane(mdPath, mdHtml, jsonPath, jsonStatus, jsonValue);
+    }
+
     function getJsonCandidates(entry, mdPath){
       const candidates = [];
       const pushUnique = (v) => {
@@ -1351,6 +1507,7 @@
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml((entry && entry.href) || "#")}" target="_blank" rel="noopener">${escapeHtml((entry && entry.href) || "link")}</a>.</div>`;
         state.currentMarkdownText = "";
         await loadJsonForEntry(entry, "", requestId);
+        await loadFmeaForEntry(entry, requestId);
         return;
       }
         if(mdPanel) mdPanel.innerHTML = '<div class="empty">Loading...</div>';
@@ -1383,6 +1540,7 @@
         if(mdPanel) mdPanel.innerHTML = `<div class="md" data-path="${escapeHtml(path)}">${html}</div>`;
         state.currentMarkdownText = text;
         await loadJsonForEntry(entry, path, requestId);
+        await loadFmeaForEntry(entry, requestId);
       }catch(err){
         const msg = (err && err.message) || "Unknown error";
         const mdPanel = document.querySelector(".tabPanel[data-panel=\"markdown\"]");
@@ -1390,11 +1548,13 @@
           if(mdPanel) mdPanel.innerHTML = `<div class="empty">No markdown found for this miniPCB. Open schematic page: <a href="${escapeHtml((entry && entry.href) || "#")}" target="_blank" rel="noopener">${escapeHtml((entry && entry.href) || "link")}</a>.</div>`;
           state.currentMarkdownText = "";
           await loadJsonForEntry(entry, "", state.requestId);
+          await loadFmeaForEntry(entry, state.requestId);
           return;
         }
         if(mdPanel) mdPanel.innerHTML = `<div class="empty">${escapeHtml(msg)}</div>`;
         state.currentMarkdownText = "";
         await loadJsonForEntry(entry, path, state.requestId);
+        await loadFmeaForEntry(entry, state.requestId);
       }
 
       renderList();
