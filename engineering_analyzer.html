@@ -892,7 +892,7 @@
 </head>
 <body>
    <div class="page">
-     <h1 class="title">Engineering Analyzer v0.1</h1>
+     <h1 class="title">Engineering Analyzer v0.2</h1>
 
     <section class="tabbar">
       <button id="tabInputsBtn" class="tab-button active state-ready" type="button" data-tab="inputs">
@@ -1002,8 +1002,8 @@
         <div id="inputViewer" class="jsonViewport jsonStatus">No JSON loaded.</div>
       </details>
       <details>
-        <summary>Net Graph Viewer (v0.1 placeholder)</summary>
-        <div id="netGraphViewer" class="jsonViewport jsonStatus">Graph output is optional in v0.1. Net adjacency summary will appear here after upload.</div>
+        <summary>Net Graph Viewer (v0.2 placeholder)</summary>
+        <div id="netGraphViewer" class="jsonViewport jsonStatus">Graph output is optional in v0.2. Net adjacency summary will appear here after upload.</div>
       </details>
     </section>
 
@@ -1097,7 +1097,7 @@
    <script>
      "use strict";
 
-     const ENGINE_VERSION = "0.1";
+     const ENGINE_VERSION = "0.2";
 
     // Fixed UI/runtime defaults intentionally replacing removed Setup options:
     // 1) EPSA margin threshold is deterministic at 20%.
@@ -2661,6 +2661,7 @@
 
 
         for (const mode of failures) {
+          const knowledge = getFailureModeKnowledge(componentClass, mode);
           const severity = computeSeverity(nets);
           const occurrence = occurrenceByClass[componentClass] || occurrenceByClass.other;
           const detection = nets.some((n) => netCoverage[n]) ? detectionCovered : detectionUncovered;
@@ -2668,6 +2669,9 @@
           rows.push({
             component: component.refdes || "UNASSIGNED",
             failure_mode: mode,
+            failure_effect: knowledge.description || "",
+            propagation_1: knowledge.l1 || "",
+            propagation_2: knowledge.l2 || "",
             affected_nets: nets,
             affected_components: affectedComponents,
             affected_interface_pins: affectedInterfacePins,
@@ -2977,6 +2981,27 @@
            return String(value);
          });
          lines.push("| " + cells.join(" | ") + " |");
+       }
+       if (title === "FMEA") {
+         lines.push("");
+         lines.push("## Failure Effects");
+         for (let i = 0; i < maxRows; i += 1) {
+           const row = rows[i];
+           const component = String(row.component || "UNASSIGNED");
+           const mode = String(row.failure_mode || "unknown_mode");
+           const effect = String(row.failure_effect || "");
+           const p1 = String(row.propagation_1 || "");
+           const p2 = String(row.propagation_2 || "");
+           lines.push("");
+           lines.push("### Component: " + component);
+           lines.push("#### Failure Mode: " + mode);
+           lines.push("##### Failure Effect");
+           lines.push(effect || "(none)");
+           lines.push("##### Propagation 1");
+           lines.push(p1 || "(none)");
+           lines.push("##### Propagation 2");
+           lines.push(p2 || "(none)");
+         }
        }
        return lines.join("\n");
      }
