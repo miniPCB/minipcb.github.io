@@ -524,7 +524,8 @@
     .fmeaWrap{
       display:flex;
       flex-direction:column;
-      gap:12px;
+      gap:10px;
+      min-height:60vh;
     }
 
     .fmeaCard{
@@ -532,6 +533,20 @@
       border-radius:12px;
       background: rgba(255,255,255,0.02);
       padding:10px;
+      min-height:0;
+    }
+
+    .fmeaSubTabs{
+      margin-bottom:0;
+    }
+
+    .fmeaSubPanel{
+      display:none;
+      min-height:0;
+    }
+
+    .fmeaSubPanel.active{
+      display:block;
     }
 
     .fmeaTitle{
@@ -561,7 +576,7 @@
       border-radius:10px;
       background: rgba(15,20,30,0.45);
       padding:10px;
-      max-height:34vh;
+      min-height:58vh;
       overflow:auto;
     }
 
@@ -570,7 +585,7 @@
       border-radius:10px;
       background: rgba(15,20,30,0.45);
       padding:10px;
-      max-height:34vh;
+      min-height:58vh;
       overflow:auto;
     }
 
@@ -730,19 +745,27 @@
           </div>
           <div class="tabPanel" data-panel="fmea">
             <div class="fmeaWrap">
-              <div class="fmeaCard">
-                <div class="fmeaTitle">FMEA Markdown</div>
-                <div class="fmeaPath" id="fmeaMdPath">Path: (none)</div>
-                <div class="fmeaMdViewport" id="fmeaMdContent">
-                  <div class="empty">Select a file to load FMEA markdown.</div>
+              <div class="tabBar fmeaSubTabs" id="fmeaSubTabs">
+                <button class="tabBtn active" data-fmea-tab="md">Markdown</button>
+                <button class="tabBtn" data-fmea-tab="json">JSON</button>
+              </div>
+              <div class="fmeaSubPanel active" data-fmea-panel="md">
+                <div class="fmeaCard">
+                  <div class="fmeaTitle">FMEA Markdown</div>
+                  <div class="fmeaPath" id="fmeaMdPath">Path: (none)</div>
+                  <div class="fmeaMdViewport" id="fmeaMdContent">
+                    <div class="empty">Select a file to load FMEA markdown.</div>
+                  </div>
                 </div>
               </div>
-              <div class="fmeaCard">
-                <div class="fmeaTitle">FMEA JSON</div>
-                <div class="fmeaPath" id="fmeaJsonPath">Path: (none)</div>
-                <div class="jsonStatus" id="fmeaJsonStatus">Select a file to load FMEA JSON.</div>
-                <div class="fmeaJsonViewport">
-                  <div id="fmeaJsonContent" class="jsonStatus">No FMEA JSON loaded.</div>
+              <div class="fmeaSubPanel" data-fmea-panel="json">
+                <div class="fmeaCard">
+                  <div class="fmeaTitle">FMEA JSON</div>
+                  <div class="fmeaPath" id="fmeaJsonPath">Path: (none)</div>
+                  <div class="jsonStatus" id="fmeaJsonStatus">Select a file to load FMEA JSON.</div>
+                  <div class="fmeaJsonViewport">
+                    <div id="fmeaJsonContent" class="jsonStatus">No FMEA JSON loaded.</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1654,6 +1677,21 @@
       });
     }
 
+    function setupFmeaTabs(){
+      const tabs = document.querySelectorAll("#fmeaSubTabs .tabBtn");
+      const panels = document.querySelectorAll(".fmeaSubPanel");
+      tabs.forEach(btn => {
+        btn.addEventListener("click", () => {
+          tabs.forEach(t => t.classList.remove("active"));
+          btn.classList.add("active");
+          const id = btn.getAttribute("data-fmea-tab");
+          panels.forEach(p => {
+            p.classList.toggle("active", p.getAttribute("data-fmea-panel") === id);
+          });
+        });
+      });
+    }
+
     function setupJsonActions(){
       const reloadBtn = $("jsonReloadBtn");
       const copyBtn = $("jsonCopyBtn");
@@ -1684,6 +1722,7 @@
     });
 
     setupTabs();
+    setupFmeaTabs();
     setupJsonActions();
     loadIndex();
   </script>
