@@ -48,6 +48,7 @@ window.SCHEMATICS = [
   { title: '04A-020 | Instrumentation Amplifier', href: 'draft/04A/04A-020.html' },
   { title: '04A-021 | Instrumentation Amplifier', href: '04A/04A-021.html' },
   { title: '04A-021 | Instrumentation Amplifier', href: 'draft/04A/04A-021.html' },
+  { title: '04A-022 | Instrumentation Amplifier', href: '04A/04A-022.html' },
   { title: '04A-025 | Log Amplifier', href: '04A/04A-025.html' },
   { title: '04A-025 | Log Amplifier', href: 'draft/04A/04A-025.html' },
   { title: '04A-030 | Antilog Amplifier', href: '04A/04A-030.html' },

@@ -210,6 +210,11 @@ const siteIndex = [
     "keywords": "Instrumentation Amplifier, 04A-021, Details, Schematic, Board Layout, miniPCB, Amplifier Design, Basic Instrumentation Amplifier, YouTube, Coming Soon, Amplifier Schematic, PCB Schematic, Amplifier Board Layout, 04A-021 Amplifier, Electronics, Amplifier Components, Instrumentation, Electrical Schematics, PCB Design, Amplifier Circuit"
   },
   {
+    "title": "04A-022 | Instrumentation Amplifier",
+    "url": "04A/04A-022.html",
+    "keywords": "Instrumentation Amplifier, 04A-022, Details, Schematic, Board Layout, miniPCB, Amplifier Design, Basic Instrumentation Amplifier, YouTube, Coming Soon, Amplifier Schematic, PCB Schematic, Amplifier Board Layout, 04A-022 Amplifier, Electronics, Amplifier Components, Instrumentation, Electrical Schematics, PCB Design, Amplifier Circuit"
+  },
+  {
     "title": "04A-025 | Log Amplifier",
     "url": "04A/04A-025.html",
     "keywords": "04A-025, Log Amplifier, Details, Schematic, Board Layout, Coming Soon, YouTube, Image Schematic, Expanded Schematic, Top View of miniPCB, Basic Log Amplifier Design, Electronics, Amplifier Schematic, PCB Design, Log Amplifier Board, Amplifier Layout, MiniPCB, Electronic Components, Circuit Design, Amplifier Circuit"
