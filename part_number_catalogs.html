@@ -556,8 +556,8 @@
             <div class="group"><p class="group-title">Termination</p><div id="s311TermFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Packaging / Marking</p><div id="s311PackFilter" class="pill-cloud"></div></div>
             <div class="group">
-              <p class="group-title">S311-P838 Preferred Sizes (X7R)</p>
-              <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table).</div>
+              <p class="group-title">S311-P838 Preferred Sizes (X7R, AVX Size Codes)</p>
+              <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table). NASA-to-AVX map for highlight: D->B, E->C, F->D, S->E, R->F.</div>
               <div id="s311PrefTableWrap" style="overflow:auto; margin-top:6px;"></div>
             </div>
             <button id="s311ClearBtn" class="btn" type="button">Clear S-311 Filters</button>
@@ -1659,6 +1659,15 @@
       return String(rounded).padStart(2, "0") + String(exp);
     }
 
+    function mapS311NasaSizeToAvxPreferred(nasaSize) {
+      // AVX S311-P838 preferred table uses size codes B..F:
+      // B=0603, C=0805, D=1206, E=1210, F=1812.
+      // NASA S-311-P-829 size codes for those same footprints are:
+      // D=0603, E=0805, F=1206, S=1210, R=1812.
+      const map = { D: "B", E: "C", F: "D", S: "E", R: "F" };
+      return map[nasaSize] || null;
+    }
+
     function renderS311PreferredTable(selectedCapCode, selectedSize, selectedVoltage) {
       const table = document.createElement("table");
       table.className = "pref-table";
@@ -1680,8 +1689,9 @@
       }
       html += "</tr></thead><tbody>";
 
-      const selectedCol = (selectedSize && selectedVoltage)
-        ? selectedSize + selectedVoltage
+      const selectedAvxSize = mapS311NasaSizeToAvxPreferred(selectedSize);
+      const selectedCol = (selectedAvxSize && selectedVoltage)
+        ? selectedAvxSize + selectedVoltage
         : null;
 
       for (const row of s311P838PrefRows) {
@@ -1725,10 +1735,10 @@
       const selectedPrefCode = cap.ok ? s311PfToCode3(cap.pf) : null;
       const selectedPrefVoltage = s311State.voltage === "6" ? "16" : (s311State.voltage === "1" ? "25" : (s311State.voltage === "2" ? "50" : (s311State.voltage === "3" ? "100" : null)));
       renderS311PreferredTable(selectedPrefCode, s311State.size, selectedPrefVoltage);
-      if (selectedPrefCode && selectedPrefVoltage && ["B","C","D","E","F"].includes(s311State.size || "")) {
-        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838). Green outline marks your current cap/size/voltage.";
+      if (selectedPrefCode && selectedPrefVoltage && mapS311NasaSizeToAvxPreferred(s311State.size || "")) {
+        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838, AVX size codes). Green outline marks your mapped NASA selection: D->B, E->C, F->D, S->E, R->F.";
       } else {
-        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838). Selection highlight is available for sizes B-F at 16/25/50/100 V.";
+        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838, AVX size codes). Selection highlight is available when NASA size is D/E/F/S/R and voltage is 16/25/50/100 V.";
       }
 
       renderS311FilterGroup(s311Nodes.ultra, s311Options.ultrasonic, s311State.ultrasonic, (k) => s311CountWith("ultrasonic", k), (k) => {
