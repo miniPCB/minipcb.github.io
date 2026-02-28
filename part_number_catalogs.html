@@ -8,10 +8,8 @@
     :root {
       --bg: #0e1118;
       --panel: #151b25;
-      --panel-2: #1b2330;
       --text: #e8edf5;
       --muted: #98a7bb;
-      --accent: #2f88ff;
       --border: #2d3a4d;
       --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
       --mono: "Consolas", "Courier New", monospace;
@@ -41,36 +39,24 @@
       min-height: 100vh;
     }
 
-    .header {
+    .header, .pn-bar, .panel {
       border: 1px solid var(--border);
       background: var(--panel);
-      border-radius: 14px;
+      border-radius: 12px;
       box-shadow: var(--shadow);
-      padding: 14px;
     }
 
-    .title {
-      margin: 0;
-      font-size: 1.2rem;
-      letter-spacing: 0.02em;
-    }
-
-    .subtitle {
-      margin: 6px 0 0;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
+    .header { padding: 14px; }
+    .title { margin: 0; font-size: 1.2rem; letter-spacing: 0.02em; }
+    .subtitle { margin: 6px 0 0; color: var(--muted); font-size: 0.9rem; }
 
     .pn-bar {
-      border: 1px solid var(--border);
-      background: #101823;
-      border-radius: 10px;
-      box-shadow: var(--shadow);
       padding: 10px 12px;
       display: grid;
       grid-template-columns: auto 1fr auto;
       gap: 10px;
       align-items: center;
+      background: #101823;
     }
 
     .pn-label {
@@ -97,16 +83,12 @@
 
     .main {
       display: grid;
-      grid-template-columns: minmax(350px, 36%) minmax(420px, 64%);
+      grid-template-columns: minmax(360px, 36%) minmax(420px, 64%);
       gap: 12px;
       min-height: 0;
     }
 
     .panel {
-      border: 1px solid var(--border);
-      background: var(--panel);
-      border-radius: 12px;
-      box-shadow: var(--shadow);
       overflow: hidden;
       min-height: 0;
       display: flex;
@@ -121,10 +103,7 @@
       background: #1a2230;
     }
 
-    .panel-body {
-      padding: 10px;
-      overflow: auto;
-    }
+    .panel-body { padding: 10px; overflow: auto; }
 
     .group {
       border: 1px solid var(--border);
@@ -133,8 +112,6 @@
       padding: 10px;
       margin-bottom: 10px;
     }
-
-    .group:last-child { margin-bottom: 0; }
 
     .group-title {
       margin: 0 0 8px;
@@ -185,6 +162,20 @@
       cursor: not-allowed;
     }
 
+    .text-input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-height: 36px;
+      background: #1e2837;
+      color: var(--text);
+      padding: 0 10px;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+    }
+
+    .hint { margin-top: 6px; color: var(--muted); font-size: 0.78rem; }
+
     .btn {
       border: 1px solid var(--border);
       background: #1e2837;
@@ -195,8 +186,6 @@
       cursor: pointer;
       font-size: 0.82rem;
     }
-
-    .btn:hover { border-color: #496287; }
 
     .summary-line {
       display: grid;
@@ -255,16 +244,9 @@
       background: #142033;
     }
 
-    .note {
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 0.8rem;
-      line-height: 1.35;
-    }
-
     @media (max-width: 980px) {
       .pn-bar { grid-template-columns: 1fr; }
-      .pn-help { text-align: left; }
+      .pn-help { text-align: left; white-space: normal; }
       .main { grid-template-columns: 1fr; }
     }
   </style>
@@ -273,13 +255,13 @@
   <div class="page">
     <section class="header">
       <h1 class="title">M55342 / D55342 Part Number Generator</h1>
-      <p class="subtitle">Filter by datasheet code fields. Remaining results always show valid combinations under the current selections.</p>
+      <p class="subtitle">Resistance code now follows the datasheet style: three digits + one letter. Letter sets tolerance and multiplier/decimal location.</p>
     </section>
 
     <section class="pn-bar">
       <div class="pn-label">Selected PN</div>
       <div id="pnBarText" class="pn-text">M55342_ _ _ _ _ _ _</div>
-      <div class="pn-help">Format: Model + TCR + Case + Term + Value + FR + Pack + Thin Film</div>
+      <div class="pn-help">Format: Model + TCR + Case + Term + ValueCode + FR + Pack + ThinFilm</div>
     </section>
 
     <section class="main">
@@ -290,15 +272,19 @@
           <div class="group"><p class="group-title">TCR Code</p><div id="tcrFilter" class="pill-cloud"></div></div>
           <div class="group"><p class="group-title">Case Size / Slash</p><div id="sizeFilter" class="pill-cloud"></div></div>
           <div class="group"><p class="group-title">Termination</p><div id="termFilter" class="pill-cloud"></div></div>
-          <div class="group"><p class="group-title">Resistance Code</p><div id="valueFilter" class="pill-cloud"></div></div>
-          <div class="group"><p class="group-title">Tolerance (From Value Code)</p><div id="tolFilter" class="pill-cloud"></div></div>
+          <div class="group">
+            <p class="group-title">Resistance Input (Ohms)</p>
+            <input id="resInput" class="text-input" type="text" value="560k" />
+            <div class="hint">Examples: <span style="font-family:var(--mono)">560</span>, <span style="font-family:var(--mono)">16.67k</span>, <span style="font-family:var(--mono)">1M</span></div>
+          </div>
+          <div class="group"><p class="group-title">Tolerance / Multiplier Letter Code</p><div id="letterFilter" class="pill-cloud"></div></div>
           <div class="group"><p class="group-title">Failure Rate Code</p><div id="frFilter" class="pill-cloud"></div></div>
           <div class="group"><p class="group-title">Packaging</p><div id="pkgFilter" class="pill-cloud"></div></div>
           <div class="group"><p class="group-title">Thin Film Code</p><div id="tfFilter" class="pill-cloud"></div></div>
           <button id="clearBtn" class="btn" type="button">Clear All Filters</button>
-          <p class="note">
-            Datasheet-aligned code families used here: Model (`M55342`, `D55342`), TCR (`E/H/K/L/M`), case slash (`01...12`), termination (`B`), value code format (`digit + letter + two digits`), failure rate (`M/P/R/U/S/V/C`), and packaging code set (`BS/WS/W0/T0/T1/T3/T5/TF/TS/WI/WP/TI/TP`).
-          </p>
+          <div class="hint">
+            Letter set included: A B C, R U V, W Y Z, D E F, G H T, J K L, M N P.
+          </div>
         </div>
       </aside>
 
@@ -315,10 +301,9 @@
 
   <script>
     const modelOptions = [
-      { key: "M55342", label: "M55342 (Standard)" },
-      { key: "D55342", label: "D55342 (0502 only)" }
+      { key: "M55342", label: "M55342" },
+      { key: "D55342", label: "D55342" }
     ];
-
     const tcrOptions = [
       { key: "E", label: "E (25 ppm/C)" },
       { key: "H", label: "H (50 ppm/C)" },
@@ -326,101 +311,47 @@
       { key: "L", label: "L (150 ppm/C)" },
       { key: "M", label: "M (200 ppm/C)" }
     ];
-
     const sizeOptions = [
-      { key: "01", label: "/01 (0402, 1/16W, 75V)" },
-      { key: "02", label: "/02 (0603, 1/10W, 100V)" },
-      { key: "03", label: "/03 (0805, 1/8W, 150V)" },
-      { key: "04", label: "/04 (1206, 1/4W, 200V)" },
-      { key: "05", label: "/05 (2010, 1/2W, 300V)" },
-      { key: "06", label: "/06 (2512, 1W, 500V)" },
-      { key: "07", label: "/07 (0502, D55342 only)" },
-      { key: "08", label: "/08 (1005, 1/20W, 25V)" },
-      { key: "09", label: "/09 (1506, 1/10W, 75V)" },
-      { key: "10", label: "/10 (2008, 1/8W, 100V)" },
-      { key: "11", label: "/11 (1005, 1/16W, 75V)" },
-      { key: "12", label: "/12 (1506, 1/8W, 75V)" }
+      { key: "01", label: "/01" }, { key: "02", label: "/02" }, { key: "03", label: "/03" },
+      { key: "04", label: "/04" }, { key: "05", label: "/05" }, { key: "06", label: "/06" },
+      { key: "07", label: "/07 (D55342 only)" }, { key: "08", label: "/08" }, { key: "09", label: "/09" },
+      { key: "10", label: "/10" }, { key: "11", label: "/11" }, { key: "12", label: "/12" }
     ];
-
-    const terminationOptions = [
-      { key: "B", label: "B (Wraparound)" }
-    ];
-
-    const valueCodeOptions = [
-      { key: "1A00", tol: "0.1", label: "1A00 (0.1%)" },
-      { key: "5B60", tol: "0.1", label: "5B60 (0.1%)" },
-      { key: "1C00", tol: "0.1", label: "1C00 (0.1%)" },
-      { key: "0RT0", tol: "0.25", label: "0RT0 (0.25%)" },
-      { key: "1R00", tol: "0.25", label: "1R00 (0.25%)" },
-      { key: "5U60", tol: "0.25", label: "5U60 (0.25%)" },
-      { key: "1W00", tol: "0.5", label: "1W00 (0.5%)" },
-      { key: "5Y60", tol: "0.5", label: "5Y60 (0.5%)" },
-      { key: "1Z00", tol: "0.5", label: "1Z00 (0.5%)" },
-      { key: "1D00", tol: "1", label: "1D00 (1%)" },
-      { key: "5E60", tol: "1", label: "5E60 (1%)" },
-      { key: "1F00", tol: "1", label: "1F00 (1%)" },
-      { key: "1G00", tol: "2", label: "1G00 (2%)" },
-      { key: "5H60", tol: "2", label: "5H60 (2%)" },
-      { key: "1T00", tol: "2", label: "1T00 (2%)" },
-      { key: "1J00", tol: "5", label: "1J00 (5%)" },
-      { key: "5K60", tol: "5", label: "5K60 (5%)" },
-      { key: "1L00", tol: "5", label: "1L00 (5%)" },
-      { key: "1M00", tol: "10", label: "1M00 (10%)" },
-      { key: "5N60", tol: "10", label: "5N60 (10%)" },
-      { key: "1P00", tol: "10", label: "1P00 (10%)" }
-    ];
-
-    const toleranceOptions = [
-      { key: "0.1", label: "0.1%" },
-      { key: "0.25", label: "0.25%" },
-      { key: "0.5", label: "0.5%" },
-      { key: "1", label: "1%" },
-      { key: "2", label: "2%" },
-      { key: "5", label: "5%" },
-      { key: "10", label: "10%" }
-    ];
+    const terminationOptions = [{ key: "B", label: "B" }];
+    const letterOptions = [
+      { key: "A", tol: "0.1%", mult: 1 }, { key: "B", tol: "0.1%", mult: 1e3 }, { key: "C", tol: "0.1%", mult: 1e6 },
+      { key: "R", tol: "0.25%", mult: 1 }, { key: "U", tol: "0.25%", mult: 1e3 }, { key: "V", tol: "0.25%", mult: 1e6 },
+      { key: "W", tol: "0.5%", mult: 1 }, { key: "Y", tol: "0.5%", mult: 1e3 }, { key: "Z", tol: "0.5%", mult: 1e6 },
+      { key: "D", tol: "1%", mult: 1 }, { key: "E", tol: "1%", mult: 1e3 }, { key: "F", tol: "1%", mult: 1e6 },
+      { key: "G", tol: "2%", mult: 1 }, { key: "H", tol: "2%", mult: 1e3 }, { key: "T", tol: "2%", mult: 1e6 },
+      { key: "J", tol: "5%", mult: 1 }, { key: "K", tol: "5%", mult: 1e3 }, { key: "L", tol: "5%", mult: 1e6 },
+      { key: "M", tol: "10%", mult: 1 }, { key: "N", tol: "10%", mult: 1e3 }, { key: "P", tol: "10%", mult: 1e6 }
+    ].map((x) => ({ ...x, label: x.key + " (" + x.tol + ", x" + formatMultiplier(x.mult) + ")" }));
 
     const failureRateOptions = [
-      { key: "M", label: "M (1%)" },
-      { key: "P", label: "P (0.1%)" },
-      { key: "R", label: "R (0.01%)" },
-      { key: "U", label: "U (0.001%)" },
-      { key: "S", label: "S (0.005%)" },
-      { key: "V", label: "V (0.0001%)" },
-      { key: "C", label: "C (Non-ER)" }
+      { key: "M", label: "M" }, { key: "P", label: "P" }, { key: "R", label: "R" },
+      { key: "U", label: "U" }, { key: "S", label: "S" }, { key: "V", label: "V" }, { key: "C", label: "C" }
     ];
-
     const packagingOptions = [
-      { key: "BS", label: "BS (Bulk, 100 pcs)" },
-      { key: "WS", label: "WS (Waffle, 100 pcs)" },
-      { key: "W0", label: "W0 (Waffle, 1000 pcs)" },
-      { key: "T0", label: "T0 (Tape, 100 pcs)" },
-      { key: "T1", label: "T1 (Tape, 1000 pcs)" },
-      { key: "T3", label: "T3 (Tape, 3000 pcs)" },
-      { key: "T5", label: "T5 (Tape, 5000 pcs)" },
-      { key: "TF", label: "TF (Tape Full Reel)" },
-      { key: "TS", label: "TS (Tape Small Reel)" },
-      { key: "WI", label: "WI (Waffle Isolated)" },
-      { key: "WP", label: "WP (Waffle, quantity to size)" },
-      { key: "TI", label: "TI (Tape Isolated)" },
-      { key: "TP", label: "TP (Tape quantity to size)" }
+      { key: "BS", label: "BS" }, { key: "WS", label: "WS" }, { key: "W0", label: "W0" },
+      { key: "T0", label: "T0" }, { key: "T1", label: "T1" }, { key: "T3", label: "T3" },
+      { key: "T5", label: "T5" }, { key: "TF", label: "TF" }, { key: "TS", label: "TS" },
+      { key: "WI", label: "WI" }, { key: "WP", label: "WP" }, { key: "TI", label: "TI" }, { key: "TP", label: "TP" }
     ];
-
     const thinFilmOptions = [
       { key: "", label: "(none)" },
-      { key: "V", label: "V (Thin Film Code)" },
-      { key: "M", label: "M (Part Marked)" }
+      { key: "V", label: "V" },
+      { key: "M", label: "M" }
     ];
 
     const filters = {
-      model: null,
-      tcr: null,
-      size: null,
-      termination: null,
-      valueCode: null,
-      tolerance: null,
-      failure: null,
-      packaging: null,
+      model: "M55342",
+      tcr: "K",
+      size: "06",
+      termination: "B",
+      letter: "E",
+      failure: "R",
+      packaging: "WS",
       thinFilm: null
     };
 
@@ -429,11 +360,11 @@
       tcr: document.getElementById("tcrFilter"),
       size: document.getElementById("sizeFilter"),
       termination: document.getElementById("termFilter"),
-      valueCode: document.getElementById("valueFilter"),
-      tolerance: document.getElementById("tolFilter"),
+      letter: document.getElementById("letterFilter"),
       failure: document.getElementById("frFilter"),
       packaging: document.getElementById("pkgFilter"),
       thinFilm: document.getElementById("tfFilter"),
+      resInput: document.getElementById("resInput"),
       results: document.getElementById("results"),
       resultCount: document.getElementById("resultCount"),
       statusText: document.getElementById("statusText"),
@@ -441,53 +372,103 @@
       pnBarText: document.getElementById("pnBarText")
     };
 
-    const optionMap = {
-      model: modelOptions,
-      tcr: tcrOptions,
-      size: sizeOptions,
-      termination: terminationOptions,
-      valueCode: valueCodeOptions,
-      tolerance: toleranceOptions,
-      failure: failureRateOptions,
-      packaging: packagingOptions,
-      thinFilm: thinFilmOptions
-    };
+    function formatMultiplier(v) {
+      if (v === 1) return "1";
+      if (v === 1e3) return "1k";
+      if (v === 1e6) return "1M";
+      return String(v);
+    }
 
-    const partCatalog = buildCatalog();
+    function parseResistance(input) {
+      const s = String(input || "").trim().toLowerCase().replace(/,/g, "");
+      const m = s.match(/^([0-9]*\.?[0-9]+)\s*(m|meg|k|r|ohm|ohms|omega)?$/);
+      if (!m) return NaN;
+      const n = Number(m[1]);
+      if (!isFinite(n)) return NaN;
+      const suf = m[2] || "";
+      if (suf === "m" || suf === "meg") return n * 1e6;
+      if (suf === "k") return n * 1e3;
+      return n;
+    }
 
-    function buildCatalog() {
+    function letterInfo(key) {
+      return letterOptions.find((x) => x.key === key) || null;
+    }
+
+    function buildValueCode(ohms, letterKey) {
+      const li = letterInfo(letterKey);
+      if (!li || !isFinite(ohms) || ohms <= 0) return null;
+      const digits = Math.round(ohms / li.mult);
+      if (digits < 0 || digits > 999) return null;
+      const a = Math.floor(digits / 100);
+      const bc = String(digits % 100).padStart(2, "0");
+      const code = String(a) + li.key + bc;
+      const nominal = digits * li.mult;
+      const errorPct = ((nominal - ohms) / ohms) * 100;
+      return { code, nominal, errorPct, tol: li.tol };
+    }
+
+    function isValidRow(r) {
+      if (r.model === "D55342" && r.size !== "07") return false;
+      if (r.model === "M55342" && r.size === "07") return false;
+
+      if (r.thinFilm === "V") {
+        const t = Number(r.letterTol.replace("%", ""));
+        if (!(r.tcr === "K" || r.tcr === "L" || r.tcr === "M")) return false;
+        if (!(t >= 1)) return false;
+      }
+      if (r.thinFilm === "M" && (r.size === "01" || r.size === "02" || r.size === "11" || r.size === "12")) {
+        return false;
+      }
+      return true;
+    }
+
+    function selectedOrAll(key, options, localFilters) {
+      const sel = localFilters[key];
+      return sel === null ? options : options.filter((x) => x.key === sel);
+    }
+
+    function generateRows(localFilters) {
+      const ohms = parseResistance(nodes.resInput.value);
+      if (!isFinite(ohms) || ohms <= 0) return [];
+
       const rows = [];
-      for (const model of modelOptions) {
-        for (const tcr of tcrOptions) {
-          for (const size of sizeOptions) {
-            for (const term of terminationOptions) {
-              for (const value of valueCodeOptions) {
-                for (const fr of failureRateOptions) {
-                  for (const pkg of packagingOptions) {
-                    for (const tf of thinFilmOptions) {
+      const ms = selectedOrAll("model", modelOptions, localFilters);
+      const ts = selectedOrAll("tcr", tcrOptions, localFilters);
+      const ss = selectedOrAll("size", sizeOptions, localFilters);
+      const terms = selectedOrAll("termination", terminationOptions, localFilters);
+      const ls = selectedOrAll("letter", letterOptions, localFilters);
+      const frs = selectedOrAll("failure", failureRateOptions, localFilters);
+      const pkgs = selectedOrAll("packaging", packagingOptions, localFilters);
+      const tfs = selectedOrAll("thinFilm", thinFilmOptions, localFilters);
+
+      for (const m of ms) {
+        for (const t of ts) {
+          for (const s of ss) {
+            for (const term of terms) {
+              for (const l of ls) {
+                const vc = buildValueCode(ohms, l.key);
+                if (!vc) continue;
+                for (const fr of frs) {
+                  for (const p of pkgs) {
+                    for (const tf of tfs) {
                       const row = {
-                        model: model.key,
-                        modelLabel: model.label,
-                        tcr: tcr.key,
-                        tcrLabel: tcr.label,
-                        size: size.key,
-                        sizeLabel: size.label,
+                        model: m.key,
+                        tcr: t.key,
+                        size: s.key,
                         termination: term.key,
-                        terminationLabel: term.label,
-                        valueCode: value.key,
-                        valueCodeLabel: value.label,
-                        tolerance: value.tol,
+                        letter: l.key,
+                        letterTol: l.tol,
+                        valueCode: vc.code,
+                        valueNominal: vc.nominal,
+                        valueErrorPct: vc.errorPct,
                         failure: fr.key,
-                        failureLabel: fr.label,
-                        packaging: pkg.key,
-                        packagingLabel: pkg.label,
-                        thinFilm: tf.key,
-                        thinFilmLabel: tf.label
+                        packaging: p.key,
+                        thinFilm: tf.key
                       };
-                      if (isValidRow(row)) {
-                        row.pn = row.model + row.tcr + row.size + row.termination + row.valueCode + row.failure + row.packaging + row.thinFilm;
-                        rows.push(row);
-                      }
+                      if (!isValidRow(row)) continue;
+                      row.pn = row.model + row.tcr + row.size + row.termination + row.valueCode + row.failure + row.packaging + row.thinFilm;
+                      rows.push(row);
                     }
                   }
                 }
@@ -499,76 +480,47 @@
       return rows;
     }
 
-    function isValidRow(row) {
-      if (row.model === "D55342" && row.size !== "07") return false;
-      if (row.model === "M55342" && row.size === "07") return false;
-
-      if (row.thinFilm === "V") {
-        const tol = Number(row.tolerance);
-        if (!(row.tcr === "K" || row.tcr === "L" || row.tcr === "M")) return false;
-        if (!(tol >= 1)) return false;
-      }
-      return true;
+    function matches(optionKey, optionVal) {
+      const test = { ...filters, [optionKey]: optionVal };
+      return generateRows(test).length;
     }
 
-    function matchesFilters(item, ignoreKey) {
-      if (ignoreKey !== "model" && filters.model && item.model !== filters.model) return false;
-      if (ignoreKey !== "tcr" && filters.tcr && item.tcr !== filters.tcr) return false;
-      if (ignoreKey !== "size" && filters.size && item.size !== filters.size) return false;
-      if (ignoreKey !== "termination" && filters.termination && item.termination !== filters.termination) return false;
-      if (ignoreKey !== "valueCode" && filters.valueCode && item.valueCode !== filters.valueCode) return false;
-      if (ignoreKey !== "tolerance" && filters.tolerance && item.tolerance !== filters.tolerance) return false;
-      if (ignoreKey !== "failure" && filters.failure && item.failure !== filters.failure) return false;
-      if (ignoreKey !== "packaging" && filters.packaging && item.packaging !== filters.packaging) return false;
-      if (ignoreKey !== "thinFilm" && filters.thinFilm !== null && item.thinFilm !== filters.thinFilm) return false;
-      return true;
-    }
-
-    function filteredCatalog() {
-      return partCatalog.filter((item) => matchesFilters(item, null));
-    }
-
-    function countByKey(filterKey, optionKey) {
-      return partCatalog.filter((item) => matchesFilters(item, filterKey) && item[filterKey] === optionKey).length;
-    }
-
-    function renderFilterGroup(filterKey, host, options) {
+    function renderFilterGroup(key, host, options) {
       host.innerHTML = "";
       for (const opt of options) {
-        const count = countByKey(filterKey, opt.key);
+        const count = matches(key, opt.key);
         const pill = document.createElement("button");
         pill.type = "button";
         pill.className = "filter-pill";
-        if (filters[filterKey] === opt.key) pill.classList.add("active");
+        if (filters[key] === opt.key) pill.classList.add("active");
         if (count === 0) pill.classList.add("disabled");
-        pill.disabled = count === 0 && filters[filterKey] !== opt.key;
+        pill.disabled = count === 0 && filters[key] !== opt.key;
         pill.innerHTML = "<span>" + opt.label + "</span><span class=\"count\">" + count + "</span>";
         pill.addEventListener("click", () => {
-          filters[filterKey] = (filters[filterKey] === opt.key) ? null : opt.key;
+          filters[key] = (filters[key] === opt.key) ? null : opt.key;
           renderAll();
         });
         host.appendChild(pill);
       }
     }
 
-    function selectedOrPlaceholder(key, placeholder) {
-      return filters[key] === null ? placeholder : filters[key];
-    }
-
     function updatePnBar() {
-      const model = selectedOrPlaceholder("model", "M55342");
-      const tcr = selectedOrPlaceholder("tcr", "_");
-      const size = selectedOrPlaceholder("size", "__");
-      const term = selectedOrPlaceholder("termination", "_");
-      const value = selectedOrPlaceholder("valueCode", "____");
-      const fr = selectedOrPlaceholder("failure", "_");
-      const pkg = selectedOrPlaceholder("packaging", "__");
-      const tf = filters.thinFilm === null ? "_" : (filters.thinFilm === "" ? "-" : filters.thinFilm);
-      nodes.pnBarText.textContent = model + tcr + size + term + value + fr + pkg + tf;
+      const ohms = parseResistance(nodes.resInput.value);
+      const vc = (filters.letter && isFinite(ohms)) ? buildValueCode(ohms, filters.letter) : null;
+      const pn =
+        (filters.model || "M55342") +
+        (filters.tcr || "_") +
+        (filters.size || "__") +
+        (filters.termination || "_") +
+        (vc ? vc.code : "____") +
+        (filters.failure || "_") +
+        (filters.packaging || "__") +
+        (filters.thinFilm === null ? "_" : (filters.thinFilm === "" ? "-" : filters.thinFilm));
+      nodes.pnBarText.textContent = pn;
     }
 
     function renderResults() {
-      const rows = filteredCatalog();
+      const rows = generateRows(filters);
       nodes.resultCount.textContent = rows.length + " matches";
       nodes.statusText.textContent = rows.length ? "Filtered datasheet-code combinations" : "No matching combination";
       nodes.results.innerHTML = "";
@@ -576,30 +528,25 @@
       if (!rows.length) {
         const empty = document.createElement("div");
         empty.className = "result-card";
-        empty.innerHTML = "<div class=\"pn\">No valid part numbers for current selections.</div><div class=\"meta\"><span>Clear one or more filters.</span></div>";
+        empty.innerHTML = "<div class=\"pn\">No valid part numbers for current selections/resistance input.</div>";
         nodes.results.appendChild(empty);
         return;
       }
 
-      const maxShown = 400;
-      const shown = rows.slice(0, maxShown);
-      for (const row of shown) {
+      const maxShown = 300;
+      for (const row of rows.slice(0, maxShown)) {
         const card = document.createElement("article");
         card.className = "result-card";
         card.innerHTML =
           "<div class=\"pn\">" + row.pn + "</div>" +
           "<div class=\"meta\">" +
-          "<span>" + row.modelLabel + "</span>" +
-          "<span>" + row.tcrLabel + "</span>" +
-          "<span>" + row.sizeLabel + "</span>" +
-          "<span>" + row.valueCodeLabel + "</span>" +
-          "<span>" + row.failureLabel + "</span>" +
-          "<span>" + row.packagingLabel + "</span>" +
-          "<span>Thin Film: " + row.thinFilmLabel + "</span>" +
+          "<span>Value Code: " + row.valueCode + "</span>" +
+          "<span>Letter: " + row.letter + " (" + row.letterTol + ")</span>" +
+          "<span>Rounded: " + formatOhms(row.valueNominal) + "</span>" +
+          "<span>Error: " + row.valueErrorPct.toFixed(2) + "%</span>" +
           "</div>";
         nodes.results.appendChild(card);
       }
-
       if (rows.length > maxShown) {
         const more = document.createElement("div");
         more.className = "result-card";
@@ -608,13 +555,18 @@
       }
     }
 
+    function formatOhms(v) {
+      if (v >= 1e6) return (v / 1e6).toFixed(3).replace(/\.?0+$/, "") + " Mohm";
+      if (v >= 1e3) return (v / 1e3).toFixed(3).replace(/\.?0+$/, "") + " kohm";
+      return v.toFixed(3).replace(/\.?0+$/, "") + " ohm";
+    }
+
     function renderAll() {
       renderFilterGroup("model", nodes.model, modelOptions);
       renderFilterGroup("tcr", nodes.tcr, tcrOptions);
       renderFilterGroup("size", nodes.size, sizeOptions);
       renderFilterGroup("termination", nodes.termination, terminationOptions);
-      renderFilterGroup("valueCode", nodes.valueCode, valueCodeOptions);
-      renderFilterGroup("tolerance", nodes.tolerance, toleranceOptions);
+      renderFilterGroup("letter", nodes.letter, letterOptions);
       renderFilterGroup("failure", nodes.failure, failureRateOptions);
       renderFilterGroup("packaging", nodes.packaging, packagingOptions);
       renderFilterGroup("thinFilm", nodes.thinFilm, thinFilmOptions);
@@ -623,19 +575,18 @@
     }
 
     nodes.clearBtn.addEventListener("click", () => {
-      for (const k of Object.keys(filters)) filters[k] = null;
+      filters.model = null;
+      filters.tcr = null;
+      filters.size = null;
+      filters.termination = null;
+      filters.letter = null;
+      filters.failure = null;
+      filters.packaging = null;
+      filters.thinFilm = null;
       renderAll();
     });
 
-    filters.model = "M55342";
-    filters.tcr = "K";
-    filters.size = "06";
-    filters.termination = "B";
-    filters.valueCode = "5E60";
-    filters.tolerance = "1";
-    filters.failure = "R";
-    filters.packaging = "WS";
-    filters.thinFilm = "V";
+    nodes.resInput.addEventListener("input", renderAll);
     renderAll();
   </script>
 </body>
