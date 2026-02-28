@@ -191,6 +191,25 @@
     }
 
     .hint { margin-top: 6px; color: var(--muted); font-size: 0.78rem; }
+    .hint.ok { color: #7be6a8; }
+    .hint.bad { color: #ff9a9a; }
+    .mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      color: var(--muted);
+    }
+    .mini-table th, .mini-table td {
+      border: 1px solid var(--border);
+      padding: 5px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .mini-table th {
+      background: #1a2230;
+      color: var(--text);
+      font-weight: 600;
+    }
 
     .btn {
       border: 1px solid var(--border);
@@ -292,8 +311,22 @@
             <p class="group-title">Resistance Input (Ohms)</p>
             <input id="resInput" class="text-input" type="text" value="5.60" />
             <div id="resHint" class="hint">Required format: three digits + decimal point. Allowed: <span style="font-family:var(--mono)">.560</span>, <span style="font-family:var(--mono)">5.60</span>, <span style="font-family:var(--mono)">56.0</span>, <span style="font-family:var(--mono)">560.</span></div>
+            <div id="milHint" class="hint">MIL value check: waiting for tolerance letter selection.</div>
           </div>
           <div class="group"><p class="group-title">Tolerance / Multiplier Letter Code</p><div id="letterFilter" class="pill-cloud"></div></div>
+          <div class="group">
+            <p class="group-title">MIL Value/Tolerance Table Used For Check</p>
+            <table class="mini-table">
+              <thead>
+                <tr><th>Tolerance</th><th>Series</th><th>Allowed 3-digit Mantissas</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>0.1%, 0.25%, 0.5%, 1%</td><td>E96</td><td>100..976 preferred set</td></tr>
+                <tr><td>2%, 5%</td><td>E24</td><td>100..910 preferred set</td></tr>
+                <tr><td>10%</td><td>E12</td><td>100..820 preferred set</td></tr>
+              </tbody>
+            </table>
+          </div>
           <div class="group"><p class="group-title">Failure Rate Code</p><div id="frFilter" class="pill-cloud"></div></div>
           <div class="group"><p class="group-title">Packaging</p><div id="pkgFilter" class="pill-cloud"></div></div>
           <div class="group"><p class="group-title">Thin Film Code</p><div id="tfFilter" class="pill-cloud"></div></div>
@@ -419,6 +452,7 @@
       thinFilm: document.getElementById("tfFilter"),
       resInput: document.getElementById("resInput"),
       resHint: document.getElementById("resHint"),
+      milHint: document.getElementById("milHint"),
       results: document.getElementById("results"),
       resultCount: document.getElementById("resultCount"),
       statusText: document.getElementById("statusText"),
@@ -464,6 +498,43 @@
       return letterOptions.find((x) => x.key === key) || null;
     }
 
+    // MIL preferred value tables represented as 3-digit mantissa integers.
+    // Example: 5.60 => mantissa 560.
+    // Trace refs:
+    // - MIL part-number/value examples in MIL-PRF-55342 slash-sheet tables (NASA NPSL mirror)
+    // - Vishay E/H M/D55342 global PN table (eh.pdf): letter/tolerance/multiplier definition
+    const MIL_SERIES_E96 = new Set([
+      100,102,105,107,110,113,115,118,121,124,127,130,133,137,140,143,147,150,154,158,162,165,169,174,
+      178,182,187,191,196,200,205,210,215,221,226,232,237,243,249,255,261,267,274,280,287,294,301,309,
+      316,324,332,340,348,357,365,374,383,392,402,412,422,432,442,453,464,475,487,499,511,523,536,549,
+      562,576,590,604,619,634,649,665,681,698,715,732,750,768,787,806,825,845,866,887,909,931,953,976
+    ]);
+    const MIL_SERIES_E24 = new Set([100,110,120,130,150,160,180,200,220,240,270,300,330,360,390,430,470,510,560,620,680,750,820,910]);
+    const MIL_SERIES_E12 = new Set([100,120,150,180,220,270,330,390,470,560,680,820]);
+
+    function selectMilSeriesByTolerance(tolPercent) {
+      const t = Number(String(tolPercent || "").replace("%", ""));
+      if (!isFinite(t)) return null;
+      if (t <= 1) return MIL_SERIES_E96;
+      if (t <= 5) return MIL_SERIES_E24;
+      return MIL_SERIES_E12;
+    }
+
+    function milValueCheck(mantissa, letterKey) {
+      if (!mantissa) return { ok: false, message: "MIL check: invalid resistance input format." };
+      if (!letterKey) return { ok: null, message: "MIL check: select a tolerance letter to validate value membership." };
+      const li = letterInfo(letterKey);
+      if (!li) return { ok: false, message: "MIL check: unknown tolerance letter." };
+      const series = selectMilSeriesByTolerance(li.tol);
+      if (!series) return { ok: false, message: "MIL check: no series mapping for selected tolerance." };
+      const digits = Number(mantissa.digits);
+      const inSeries = series.has(digits);
+      if (inSeries) {
+        return { ok: true, message: "MIL check: in spec for " + li.tol + " tolerance (" + digits + " mantissa in allowed series)." };
+      }
+      return { ok: false, message: "MIL check: out of spec for " + li.tol + " tolerance (" + digits + " mantissa not in allowed series)." };
+    }
+
     // Resolve slash-code electrical data for display in results and reviewer checks.
     function sizeInfo(key) {
       return sizeOptions.find((x) => x.key === key) || null;
@@ -472,6 +543,8 @@
     function buildValueCode(mantissa, letterKey) {
       const li = letterInfo(letterKey);
       if (!li || !mantissa) return null;
+      const mil = milValueCheck(mantissa, letterKey);
+      if (mil.ok !== true) return null;
       const code = mantissa.digits.slice(0, mantissa.dotIndex) + li.key + mantissa.digits.slice(mantissa.dotIndex);
       const nominal = mantissa.value * li.mult;
       const errorPct = 0;
@@ -636,7 +709,12 @@
     }
 
     function renderAll() {
-      updateInputFormatting();
+      const mantissa = updateInputFormatting();
+      const mil = milValueCheck(mantissa, filters.letter);
+      nodes.milHint.textContent = mil.message;
+      nodes.milHint.classList.remove("ok", "bad");
+      if (mil.ok === true) nodes.milHint.classList.add("ok");
+      if (mil.ok === false) nodes.milHint.classList.add("bad");
       renderFilterGroup("model", nodes.model, modelOptions);
       renderFilterGroup("tcr", nodes.tcr, tcrOptions);
       renderFilterGroup("size", nodes.size, sizeOptions);
