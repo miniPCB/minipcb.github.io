@@ -370,6 +370,68 @@
       outline-offset: -2px;
     }
 
+    .pref-group {
+      position: relative;
+    }
+
+    .group-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .group-title-row .group-title {
+      margin: 0;
+    }
+
+    .pref-toggle-btn {
+      border: 1px solid var(--border);
+      background: #1e2837;
+      color: var(--text);
+      border-radius: 8px;
+      min-height: 28px;
+      padding: 0 9px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+
+    .pref-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 12, 0.72);
+      z-index: 1000;
+      display: none;
+    }
+
+    .pref-backdrop.active {
+      display: block;
+    }
+
+    .pref-group.expanded {
+      position: fixed;
+      inset: 10px;
+      z-index: 1001;
+      margin: 0;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .pref-group.expanded #s311PrefTableWrap {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .pref-group.expanded .pref-table {
+      font-size: 0.78rem;
+    }
+
     @media (max-width: 980px) {
       .pn-bar { grid-template-columns: 1fr; }
       .pn-help { text-align: left; white-space: normal; }
@@ -569,8 +631,11 @@
             <div class="group"><p class="group-title">Voltage (Vdc)</p><div id="s311VoltFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Termination</p><div id="s311TermFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Packaging / Marking</p><div id="s311PackFilter" class="pill-cloud"></div></div>
-            <div class="group">
-              <p class="group-title">S311-P838 Preferred Sizes (X7R, AVX Size Codes)</p>
+            <div id="s311PrefGroup" class="group pref-group">
+              <div class="group-title-row">
+                <p class="group-title">S311-P838 Preferred Sizes (X7R, AVX Size Codes)</p>
+                <button id="s311PrefToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
+              </div>
               <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table). Non-preferred NASA case sizes are shown unshaded. Click an available cell to apply cap/size/voltage.</div>
               <div id="s311PrefTableWrap" style="overflow:auto; margin-top:6px;"></div>
             </div>
@@ -588,6 +653,7 @@
       </section>
     </section>
   </div>
+  <div id="s311PrefBackdrop" class="pref-backdrop"></div>
 
   <script>
     // Datasheet field dictionary: model designator.
@@ -864,7 +930,8 @@
       tolerance: "F",
       voltage: "1",
       termination: "P",
-      packaging: "1"
+      packaging: "1",
+      prefExpanded: false
     };
 
     const s311Options = {
@@ -1037,6 +1104,9 @@
       dielectric: document.getElementById("s311DielectricFilter"),
       capInput: document.getElementById("s311CapInput"),
       capHint: document.getElementById("s311CapHint"),
+      prefGroup: document.getElementById("s311PrefGroup"),
+      prefToggleBtn: document.getElementById("s311PrefToggleBtn"),
+      prefBackdrop: document.getElementById("s311PrefBackdrop"),
       prefHint: document.getElementById("s311PrefHint"),
       prefTableWrap: document.getElementById("s311PrefTableWrap"),
       tol: document.getElementById("s311TolFilter"),
@@ -1049,6 +1119,13 @@
       resultCount: document.getElementById("s311ResultCount"),
       results: document.getElementById("s311Results")
     };
+
+    function setS311PrefExpanded(expanded) {
+      s311State.prefExpanded = !!expanded;
+      s311Nodes.prefGroup.classList.toggle("expanded", s311State.prefExpanded);
+      s311Nodes.prefBackdrop.classList.toggle("active", s311State.prefExpanded);
+      s311Nodes.prefToggleBtn.textContent = s311State.prefExpanded ? "Collapse" : "Expand";
+    }
 
     // AVX S311-P838 preferred-size matrix:
     // page 2 "PREFERRED SIZES ARE SHADED" (X7R, sizes B/C/D/E/F and voltages 16/25/50/100).
@@ -2234,6 +2311,9 @@
       s311Nodes.capInput.value = s311State.capCode;
       renderS311();
     });
+    s311Nodes.prefToggleBtn.addEventListener("click", () => {
+      setS311PrefExpanded(!s311State.prefExpanded);
+    });
     s311Nodes.clearBtn.addEventListener("click", () => {
       s311State.ultrasonic = null;
       s311State.size = null;
@@ -2251,6 +2331,7 @@
     renderT502();
     renderT54x();
     renderS311();
+    setS311PrefExpanded(false);
     setComponentView("m55342");
   </script>
 </body>
