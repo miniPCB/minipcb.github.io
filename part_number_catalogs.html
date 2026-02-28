@@ -380,10 +380,38 @@
       justify-content: space-between;
       gap: 8px;
       margin-bottom: 8px;
+      flex-wrap: wrap;
     }
 
     .group-title-row .group-title {
       margin: 0;
+    }
+
+    .pref-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pref-diel-btn {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      min-height: 28px;
+      padding: 0 10px;
+      background: #1a2638;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+
+    .pref-diel-btn.active {
+      border-color: rgba(102, 163, 255, 0.7);
+      background: rgba(102, 163, 255, 0.2);
+      color: #d9ebff;
+      box-shadow: inset 0 0 0 1px rgba(102, 163, 255, 0.28);
+      font-weight: 700;
     }
 
     .pref-toggle-btn {
@@ -634,7 +662,11 @@
             <div id="s311PrefGroup" class="group pref-group">
               <div class="group-title-row">
                 <p class="group-title">S311-P838 Preferred Sizes (X7R, AVX Size Codes)</p>
-                <button id="s311PrefToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
+                <div class="pref-controls">
+                  <button id="s311PrefX7rBtn" class="pref-diel-btn active" type="button">X7R</button>
+                  <button id="s311PrefNpoBtn" class="pref-diel-btn" type="button">NP0</button>
+                  <button id="s311PrefToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
+                </div>
               </div>
               <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table). Non-preferred NASA case sizes are shown unshaded. Click an available cell to apply cap/size/voltage.</div>
               <div id="s311PrefTableWrap" style="overflow:auto; margin-top:6px;"></div>
@@ -931,7 +963,8 @@
       voltage: "1",
       termination: "P",
       packaging: "1",
-      prefExpanded: false
+      prefExpanded: false,
+      prefTableDielectric: "X"
     };
 
     const s311Options = {
@@ -1105,6 +1138,8 @@
       capInput: document.getElementById("s311CapInput"),
       capHint: document.getElementById("s311CapHint"),
       prefGroup: document.getElementById("s311PrefGroup"),
+      prefX7rBtn: document.getElementById("s311PrefX7rBtn"),
+      prefNpoBtn: document.getElementById("s311PrefNpoBtn"),
       prefToggleBtn: document.getElementById("s311PrefToggleBtn"),
       prefBackdrop: document.getElementById("s311PrefBackdrop"),
       prefHint: document.getElementById("s311PrefHint"),
@@ -1125,6 +1160,12 @@
       s311Nodes.prefGroup.classList.toggle("expanded", s311State.prefExpanded);
       s311Nodes.prefBackdrop.classList.toggle("active", s311State.prefExpanded);
       s311Nodes.prefToggleBtn.textContent = s311State.prefExpanded ? "Collapse" : "Expand";
+    }
+
+    function setS311PrefDielectric(modeKey) {
+      s311State.prefTableDielectric = modeKey === "N" ? "N" : "X";
+      s311Nodes.prefX7rBtn.classList.toggle("active", s311State.prefTableDielectric === "X");
+      s311Nodes.prefNpoBtn.classList.toggle("active", s311State.prefTableDielectric === "N");
     }
 
     // AVX S311-P838 preferred-size matrix:
@@ -1750,23 +1791,60 @@
       return String(rounded).padStart(2, "0") + String(exp);
     }
 
-    function mapS311NasaSizeToAvxPreferred(nasaSize) {
-      // AVX S311-P838 preferred table uses size codes B..F:
-      // B=0603, C=0805, D=1206, E=1210, F=1812.
-      // NASA S-311-P-829 size codes for those same footprints are:
-      // D=0603, E=0805, F=1206, S=1210, R=1812.
-      const map = { D: "B", E: "C", F: "D", S: "E", R: "F" };
-      return map[nasaSize] || null;
+    function formatPfForPrefTable(pf) {
+      const n = Number(pf);
+      if (!isFinite(n) || n <= 0) return "";
+      if (n >= 1000000) {
+        const uf = n / 1000000;
+        return uf.toFixed(3).replace(/\.?0+$/, "") + " uF";
+      }
+      if (n >= 1000) {
+        const nf = n / 1000;
+        return nf.toFixed(3).replace(/\.?0+$/, "") + " nF";
+      }
+      return String(n) + " pF";
     }
 
-    function renderS311PreferredTable(selectedCapCode, selectedSize, selectedVoltageCode) {
+    function getS311RecommendedRowsForDielectric(dielectricKey) {
+      if (dielectricKey === "X") return s311P838PrefRows;
+
+      // NP0 recommendations are generated from an E24-like progression and
+      // clipped by NASA Table I max-capacitance limits per size/voltage.
+      const mantissas = [10,11,12,13,15,16,18,20,22,24,27,30,33,36,39,43,47,51,56,62,68,75,82,91];
+      const nasaSizeKeys = s311Options.size.map((x) => x.key);
+      const nasaVoltCodes = ["6", "1", "2", "3"];
+      const rows = [];
+      for (let exp = 0; exp <= 5; exp += 1) {
+        for (const m of mantissas) {
+          const pf = m * Math.pow(10, exp);
+          const code = String(m).padStart(2, "0") + String(exp);
+          let usableSomewhere = false;
+          for (const s of nasaSizeKeys) {
+            for (const v of nasaVoltCodes) {
+              const te = getS311TableEntry(s, v, "N");
+              if (te && pf <= te.maxPf) {
+                usableSomewhere = true;
+                break;
+              }
+            }
+            if (usableSomewhere) break;
+          }
+          if (!usableSomewhere) continue;
+          rows.push({ code, value: formatPfForPrefTable(pf), preferred: [] });
+        }
+      }
+      return rows;
+    }
+
+    function renderS311PreferredTable(selectedCapCode, selectedSize, selectedVoltageCode, dielectricKey) {
       const table = document.createElement("table");
       table.className = "pref-table";
       const avxVoltByNasaCode = { "6": "16", "1": "25", "2": "50", "3": "100" };
       const nasaVoltCodes = ["6", "1", "2", "3"];
       const nasaSizeDefs = s311Options.size.map((x) => ({ key: x.key, label: x.label.replace(/\s+/g, " ") }));
       const preferredCols = new Set();
-      for (const row of s311P838PrefRows) {
+      const rowsForMode = getS311RecommendedRowsForDielectric(dielectricKey);
+      for (const row of rowsForMode) {
         for (const avx of row.preferred) {
           const avxSize = avx.slice(0, 1);
           const avxVolt = avx.slice(1);
@@ -1791,12 +1869,12 @@
       }
       html += "</tr></thead><tbody>";
 
-      for (const row of s311P838PrefRows) {
+      for (const row of rowsForMode) {
         const capParsed = parseS311CapCode(row.code);
         html += "<tr><td class=\"code-col\">" + row.code + "</td><td class=\"val-col\">" + row.value + "</td>";
         for (const s of nasaSizeDefs) {
           for (const vc of nasaVoltCodes) {
-            const tableEntry = getS311TableEntry(s.key, vc, "X");
+            const tableEntry = getS311TableEntry(s.key, vc, dielectricKey);
             const available = !!(tableEntry && capParsed.ok && capParsed.pf <= tableEntry.maxPf);
             const preferred = preferredCols.has(row.code + "|" + s.key + "|" + vc);
             const sel = selectedCapCode === row.code && selectedSize === s.key && selectedVoltageCode === vc;
@@ -1816,13 +1894,18 @@
 
       for (const cell of Array.from(table.querySelectorAll("td.pref-cell.available"))) {
         cell.addEventListener("click", () => {
-          s311State.dielectric = "X";
+          s311State.dielectric = dielectricKey;
           s311State.size = cell.dataset.size;
           s311State.voltage = cell.dataset.voltage;
           s311State.capCode = cell.dataset.cap;
           s311Nodes.capInput.value = s311State.capCode;
-          // X7R parts >=10 pF in this model allow K/L only; use K for deterministic selection.
-          if (s311State.tolerance !== "K" && s311State.tolerance !== "L") s311State.tolerance = "K";
+          if (dielectricKey === "X") {
+            // X7R parts >=10 pF in this model allow K/L only; use K for deterministic selection.
+            if (s311State.tolerance !== "K" && s311State.tolerance !== "L") s311State.tolerance = "K";
+          } else {
+            // NP0 parts >=10 pF allow F/G/J/K/L; use F as default recommendation.
+            if (!["F","G","J","K","L"].includes(s311State.tolerance || "")) s311State.tolerance = "F";
+          }
           renderS311();
         });
       }
@@ -1853,11 +1936,11 @@
       }
       const selectedPrefCode = cap.ok ? s311PfToCode3(cap.pf) : null;
       const selectedPrefVoltageCode = ["6", "1", "2", "3"].includes(s311State.voltage || "") ? s311State.voltage : null;
-      renderS311PreferredTable(selectedPrefCode, s311State.size, selectedPrefVoltageCode);
-      if (selectedPrefCode && selectedPrefVoltageCode) {
-        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838). Click any available cell to set Size/Voltage/Capacitance in the PN.";
+      renderS311PreferredTable(selectedPrefCode, s311State.size, selectedPrefVoltageCode, s311State.prefTableDielectric);
+      if (s311State.prefTableDielectric === "X") {
+        s311Nodes.prefHint.textContent = "X7R mode: preferred sizes are shaded (AVX S311-P838). Click an available cell to set Size/Voltage/Capacitance in the PN.";
       } else {
-        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838). Click any available cell to set Size/Voltage/Capacitance in the PN.";
+        s311Nodes.prefHint.textContent = "NP0 mode: recommended values are generated and clipped by NASA Table I limits per size/voltage. Click an available cell to set Size/Voltage/Capacitance in the PN.";
       }
 
       renderS311FilterGroup(s311Nodes.ultra, s311Options.ultrasonic, s311State.ultrasonic, (k) => s311CountWith("ultrasonic", k), (k) => {
@@ -2311,6 +2394,14 @@
       s311Nodes.capInput.value = s311State.capCode;
       renderS311();
     });
+    s311Nodes.prefX7rBtn.addEventListener("click", () => {
+      setS311PrefDielectric("X");
+      renderS311();
+    });
+    s311Nodes.prefNpoBtn.addEventListener("click", () => {
+      setS311PrefDielectric("N");
+      renderS311();
+    });
     s311Nodes.prefToggleBtn.addEventListener("click", () => {
       setS311PrefExpanded(!s311State.prefExpanded);
     });
@@ -2330,6 +2421,7 @@
     renderAll();
     renderT502();
     renderT54x();
+    setS311PrefDielectric("X");
     renderS311();
     setS311PrefExpanded(false);
     setComponentView("m55342");
