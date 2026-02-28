@@ -333,6 +333,7 @@
       <span class="component-label">Component Type</span>
       <button type="button" class="component-btn active" data-component="m55342">M55342 / D55342 Resistor</button>
       <button type="button" class="component-btn" data-component="t502">T502 Capacitor</button>
+      <button type="button" class="component-btn" data-component="t54x">T540 / T541 Capacitor</button>
     </section>
 
     <section id="m55342View" class="component-view">
@@ -447,6 +448,45 @@
         </section>
       </section>
     </section>
+
+    <section id="t54xView" class="component-view hidden">
+      <section class="pn-bar">
+        <div class="pn-label">Selected PN</div>
+        <div id="t54xPnBarText" class="pn-text">T54x-?-?-???-?-???-?-?-??-??-PACK</div>
+        <div class="pn-help">Format: T + Series + Case + CapCode + Tol + Voltage + Failure + Term + Surge + ESR + Packaging</div>
+      </section>
+
+      <section class="main">
+        <aside class="panel">
+          <h2>T540 / T541 Filters</h2>
+          <div class="panel-body">
+            <div class="group"><p class="group-title">Series</p><div id="t54xSeriesFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Case Size</p><div id="t54xCaseFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Capacitance Code (pF)</p>
+              <input id="t54xCapInput" class="text-input" type="text" value="106" maxlength="3" />
+              <div id="t54xCapHint" class="hint">Use 3 digits: first 2 are significant, 3rd is number of zeros (e.g., 106).</div>
+            </div>
+            <div class="group"><p class="group-title">Capacitance Tolerance</p><div id="t54xTolFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Rated Voltage (VDC)</p><div id="t54xVoltFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Failure Rate / Design</p><div id="t54xFailureFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Termination Finish</p><div id="t54xTermFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Surge Current Option</p><div id="t54xSurgeFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">ESR</p><div id="t54xEsrFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Packaging (C-Spec)</p><div id="t54xPackFilter" class="pill-cloud"></div></div>
+            <button id="t54xClearBtn" class="btn" type="button">Clear T540/T541 Filters</button>
+          </div>
+        </aside>
+        <section class="panel">
+          <h2>T540 / T541 Results</h2>
+          <div class="summary-line">
+            <span id="t54xStatusText">Code-builder mode</span>
+            <strong id="t54xResultCount">1 result</strong>
+          </div>
+          <div id="t54xResults" class="results"></div>
+        </section>
+      </section>
+    </section>
   </div>
 
   <script>
@@ -546,6 +586,7 @@
       componentButtons: Array.from(document.querySelectorAll(".component-btn[data-component]")),
       m55342View: document.getElementById("m55342View"),
       t502View: document.getElementById("t502View"),
+      t54xView: document.getElementById("t54xView"),
       model: document.getElementById("modelFilter"),
       tcr: document.getElementById("tcrFilter"),
       size: document.getElementById("sizeFilter"),
@@ -631,6 +672,85 @@
       statusText: document.getElementById("t502StatusText"),
       resultCount: document.getElementById("t502ResultCount"),
       results: document.getElementById("t502Results")
+    };
+
+    // T540/T541 state tracks each MIL/COTS position in the assembled PN.
+    // We keep this explicit for easy human review against the datasheet table.
+    const t54xState = {
+      series: "540",
+      caseSize: "D",
+      capCode: "106",
+      tolerance: "K",
+      voltage: "035",
+      failure: "A",
+      termination: "H",
+      surge: "65",
+      esr: "10",
+      packaging: ""
+    };
+
+    const t54xOptions = {
+      series: [
+        { key: "540", label: "540 (Polymer COTS)" },
+        { key: "541", label: "541 (Polymer COTS Multiple Anode)" }
+      ],
+      caseSize: [
+        { key: "A", label: "A Case" }, { key: "B", label: "B Case" }, { key: "C", label: "C Case" },
+        { key: "D", label: "D Case" }, { key: "O", label: "O Case" }, { key: "X", label: "X Case" }, { key: "Y", label: "Y Case" }
+      ],
+      tolerance: [
+        { key: "K", label: "K (\u00b110%)" },
+        { key: "M", label: "M (\u00b120%)" }
+      ],
+      voltage: [
+        { key: "2R5", label: "2R5 (2.5 V)" }, { key: "003", label: "003 (3 V)" }, { key: "004", label: "004 (4 V)" },
+        { key: "006", label: "006 (6.3 V)" }, { key: "010", label: "010 (10 V)" }, { key: "016", label: "016 (16 V)" },
+        { key: "020", label: "020 (20 V)" }, { key: "025", label: "025 (25 V)" }, { key: "030", label: "030 (30 V)" },
+        { key: "035", label: "035 (35 V)" }, { key: "050", label: "050 (50 V)" }, { key: "063", label: "063 (63 V)" }
+      ],
+      failure: [
+        { key: "A", label: "A (N/A)" }, { key: "B", label: "B (0.1%/KHrs)" }, { key: "C", label: "C (0.01%/KHrs)" },
+        { key: "D", label: "D (0.001%/KHrs)" }, { key: "L", label: "L (Life +125C, 2000 hrs)" }, { key: "V", label: "V (Vib/Surge/Solder/Life)" }
+      ],
+      termination: [
+        { key: "H", label: "H (SnPb solder coat, 5% Pb min)" },
+        { key: "T", label: "T (100% matte tin)" }
+      ],
+      surge: [
+        { key: "65", label: "65 (4 cycles at 25C \u00b15C)" },
+        { key: "66", label: "66 (10 cycles at 25C \u00b15C)" },
+        { key: "67", label: "67 (10 cycles at -55C/+85C)" },
+        { key: "85", label: "85 (65 + improved humidity)" },
+        { key: "86", label: "86 (66 + improved humidity)" },
+        { key: "87", label: "87 (67 + improved humidity)" }
+      ],
+      esr: [
+        { key: "05", label: "05 (ESR High)" }, { key: "10", label: "10 (ESR Standard)" },
+        { key: "20", label: "20 (ESR Low)" }, { key: "30", label: "30 (ESR Ultra Low)" }
+      ],
+      packaging: [
+        { key: "", label: 'Blank (7" Reel)' }, { key: "7280", label: '7280 (13" Reel)' }, { key: "7611", label: "7611 (Bulk Bag)" },
+        { key: "7640", label: "7640 (Bulk Plastic Box)" }, { key: "WAFL", label: "WAFL (Waffle Pack)" }
+      ]
+    };
+
+    const t54xNodes = {
+      series: document.getElementById("t54xSeriesFilter"),
+      caseSize: document.getElementById("t54xCaseFilter"),
+      capInput: document.getElementById("t54xCapInput"),
+      capHint: document.getElementById("t54xCapHint"),
+      tolerance: document.getElementById("t54xTolFilter"),
+      voltage: document.getElementById("t54xVoltFilter"),
+      failure: document.getElementById("t54xFailureFilter"),
+      termination: document.getElementById("t54xTermFilter"),
+      surge: document.getElementById("t54xSurgeFilter"),
+      esr: document.getElementById("t54xEsrFilter"),
+      packaging: document.getElementById("t54xPackFilter"),
+      clearBtn: document.getElementById("t54xClearBtn"),
+      pnText: document.getElementById("t54xPnBarText"),
+      statusText: document.getElementById("t54xStatusText"),
+      resultCount: document.getElementById("t54xResultCount"),
+      results: document.getElementById("t54xResults")
     };
 
     // Derived capacitance options from the provided T502 row set.
@@ -898,6 +1018,121 @@
       }
     }
 
+    function renderT54xFilterGroup(host, options, selectedKey, onSelect) {
+      host.innerHTML = "";
+      for (const opt of options) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "filter-pill" + (selectedKey === opt.key ? " active" : "");
+        b.innerHTML = "<span>" + opt.label + "</span>";
+        b.addEventListener("click", () => onSelect(opt.key));
+        host.appendChild(b);
+      }
+    }
+
+    function normalizeT54xCapCode(raw) {
+      const cleaned = String(raw || "").trim().replace(/[^0-9]/g, "").slice(0, 3);
+      return cleaned;
+    }
+
+    function decodeT54xCapCode(capCode) {
+      if (!/^\d{3}$/.test(capCode)) return null;
+      const sig = Number(capCode.slice(0, 2));
+      const zeros = Number(capCode.slice(2, 3));
+      const pf = sig * Math.pow(10, zeros);
+      const uf = pf / 1e6;
+      return { pf, uf };
+    }
+
+    function buildT54xPn() {
+      const capCode = normalizeT54xCapCode(t54xState.capCode);
+      const capOk = /^\d{3}$/.test(capCode);
+      const packSegment = t54xState.packaging || "";
+      const pn = "T" +
+        (t54xState.series || "?") +
+        (t54xState.caseSize || "?") +
+        (capOk ? capCode : "???") +
+        (t54xState.tolerance || "?") +
+        (t54xState.voltage || "???") +
+        (t54xState.failure || "?") +
+        (t54xState.termination || "?") +
+        (t54xState.surge || "??") +
+        (t54xState.esr || "??") +
+        packSegment;
+      return { pn, capCode, capOk };
+    }
+
+    function renderT54x() {
+      renderT54xFilterGroup(t54xNodes.series, t54xOptions.series, t54xState.series, (k) => { t54xState.series = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.caseSize, t54xOptions.caseSize, t54xState.caseSize, (k) => { t54xState.caseSize = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.tolerance, t54xOptions.tolerance, t54xState.tolerance, (k) => { t54xState.tolerance = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.voltage, t54xOptions.voltage, t54xState.voltage, (k) => { t54xState.voltage = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.failure, t54xOptions.failure, t54xState.failure, (k) => { t54xState.failure = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.termination, t54xOptions.termination, t54xState.termination, (k) => { t54xState.termination = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.surge, t54xOptions.surge, t54xState.surge, (k) => { t54xState.surge = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.esr, t54xOptions.esr, t54xState.esr, (k) => { t54xState.esr = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.packaging, t54xOptions.packaging, t54xState.packaging, (k) => { t54xState.packaging = k; renderT54x(); });
+
+      const built = buildT54xPn();
+      const decoded = decodeT54xCapCode(built.capCode);
+      t54xNodes.capInput.classList.remove("valid", "invalid");
+      if (built.capOk) {
+        t54xNodes.capInput.classList.add("valid");
+        t54xNodes.capHint.classList.remove("bad");
+        t54xNodes.capHint.classList.add("ok");
+        t54xNodes.capHint.textContent = "Cap code " + built.capCode + " = " + decoded.pf + " pF (" + decoded.uf + " uF).";
+      } else {
+        t54xNodes.capInput.classList.add("invalid");
+        t54xNodes.capHint.classList.remove("ok");
+        t54xNodes.capHint.classList.add("bad");
+        t54xNodes.capHint.textContent = "Cap code must be exactly 3 digits.";
+      }
+
+      const previewPn = "T" +
+        t54xState.series +
+        t54xState.caseSize +
+        (built.capOk ? built.capCode : "???") +
+        t54xState.tolerance +
+        t54xState.voltage +
+        t54xState.failure +
+        t54xState.termination +
+        t54xState.surge +
+        t54xState.esr +
+        (t54xState.packaging ? t54xState.packaging : "-");
+      t54xNodes.pnText.textContent = previewPn;
+
+      t54xNodes.results.innerHTML = "";
+      if (!built.capOk) {
+        t54xNodes.resultCount.textContent = "0 results";
+        t54xNodes.statusText.textContent = "Invalid capacitance code";
+        const empty = document.createElement("div");
+        empty.className = "result-card";
+        empty.innerHTML = "<div class=\"pn\">Enter a valid 3-digit capacitance code.</div>";
+        t54xNodes.results.appendChild(empty);
+        return;
+      }
+
+      t54xNodes.resultCount.textContent = "1 result";
+      t54xNodes.statusText.textContent = "T540/T541 code mapping";
+      const card = document.createElement("article");
+      card.className = "result-card";
+      card.innerHTML =
+        "<div class=\"pn\">" + built.pn + "</div>" +
+        "<div class=\"meta\">" +
+        "<span>Series: " + t54xState.series + "</span>" +
+        "<span>Case: " + t54xState.caseSize + "</span>" +
+        "<span>Cap: " + built.capCode + " (" + decoded.uf + " uF)</span>" +
+        "<span>Tol: " + t54xState.tolerance + "</span>" +
+        "<span>Voltage: " + t54xState.voltage + "</span>" +
+        "<span>Failure: " + t54xState.failure + "</span>" +
+        "<span>Term: " + t54xState.termination + "</span>" +
+        "<span>Surge: " + t54xState.surge + "</span>" +
+        "<span>ESR: " + t54xState.esr + "</span>" +
+        "<span>Pack: " + (t54xState.packaging || "Blank") + "</span>" +
+        "</div>";
+      t54xNodes.results.appendChild(card);
+    }
+
     function findMatchingT502Rows() {
       const cap = Number(String(t502State.capacitanceUf || "").trim());
       if (!isFinite(cap) || cap <= 0) return [];
@@ -1004,8 +1239,11 @@
 
     function setComponentView(viewKey) {
       const isM55342 = viewKey === "m55342";
+      const isT502 = viewKey === "t502";
+      const isT54x = viewKey === "t54x";
       nodes.m55342View.classList.toggle("hidden", !isM55342);
-      nodes.t502View.classList.toggle("hidden", isM55342);
+      nodes.t502View.classList.toggle("hidden", !isT502);
+      nodes.t54xView.classList.toggle("hidden", !isT54x);
       for (const b of nodes.componentButtons) {
         b.classList.toggle("active", b.dataset.component === viewKey);
       }
@@ -1055,9 +1293,29 @@
       t502State.code2 = "61";
       renderT502();
     });
+    t54xNodes.capInput.addEventListener("input", () => {
+      t54xState.capCode = normalizeT54xCapCode(t54xNodes.capInput.value);
+      t54xNodes.capInput.value = t54xState.capCode;
+      renderT54x();
+    });
+    t54xNodes.clearBtn.addEventListener("click", () => {
+      t54xState.series = "540";
+      t54xState.caseSize = "D";
+      t54xState.capCode = "106";
+      t54xState.tolerance = "K";
+      t54xState.voltage = "035";
+      t54xState.failure = "A";
+      t54xState.termination = "H";
+      t54xState.surge = "65";
+      t54xState.esr = "10";
+      t54xState.packaging = "";
+      t54xNodes.capInput.value = t54xState.capCode;
+      renderT54x();
+    });
 
     renderAll();
     renderT502();
+    renderT54x();
     setComponentView("m55342");
   </script>
 </body>
