@@ -466,6 +466,7 @@
               <p class="group-title">Capacitance Code (pF)</p>
               <input id="t54xCapInput" class="text-input" type="text" value="106" maxlength="3" />
               <div id="t54xCapHint" class="hint">Use 3 digits: first 2 are significant, 3rd is number of zeros (e.g., 106).</div>
+              <div id="t54xCapFilter" class="pill-cloud" style="margin-top:8px;"></div>
             </div>
             <div class="group"><p class="group-title">Capacitance Tolerance</p><div id="t54xTolFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Rated Voltage (VDC)</p><div id="t54xVoltFilter" class="pill-cloud"></div></div>
@@ -739,6 +740,7 @@
       caseSize: document.getElementById("t54xCaseFilter"),
       capInput: document.getElementById("t54xCapInput"),
       capHint: document.getElementById("t54xCapHint"),
+      capFilter: document.getElementById("t54xCapFilter"),
       tolerance: document.getElementById("t54xTolFilter"),
       voltage: document.getElementById("t54xVoltFilter"),
       failure: document.getElementById("t54xFailureFilter"),
@@ -752,6 +754,167 @@
       resultCount: document.getElementById("t54xResultCount"),
       results: document.getElementById("t54xResults")
     };
+
+    // T540/T541 catalog availability rows derived from table values in:
+    // KEM_T2077_T540-541 (rev 1/22/2025), Table 1 voltage/case/capacitance listings.
+    // This set drives which value/package combinations remain selectable.
+    const t54xCatalogRows = [
+      { caseSize: "C", voltage: "003", capCode: "477" },
+      { caseSize: "C", voltage: "004", capCode: "477" },
+      { caseSize: "C", voltage: "006", capCode: "227" },
+      { caseSize: "C", voltage: "006", capCode: "337" },
+      { caseSize: "C", voltage: "010", capCode: "157" },
+      { caseSize: "C", voltage: "010", capCode: "227" },
+      { caseSize: "C", voltage: "010", capCode: "337" },
+      { caseSize: "C", voltage: "016", capCode: "106" },
+      { caseSize: "C", voltage: "016", capCode: "157" },
+      { caseSize: "C", voltage: "016", capCode: "227" },
+      { caseSize: "C", voltage: "016", capCode: "337" },
+      { caseSize: "C", voltage: "020", capCode: "106" },
+      { caseSize: "C", voltage: "020", capCode: "157" },
+      { caseSize: "C", voltage: "020", capCode: "227" },
+      { caseSize: "C", voltage: "020", capCode: "337" },
+      { caseSize: "C", voltage: "025", capCode: "106" },
+      { caseSize: "C", voltage: "025", capCode: "157" },
+      { caseSize: "C", voltage: "025", capCode: "227" },
+      { caseSize: "C", voltage: "030", capCode: "106" },
+      { caseSize: "C", voltage: "030", capCode: "157" },
+      { caseSize: "C", voltage: "030", capCode: "227" },
+      { caseSize: "C", voltage: "035", capCode: "106" },
+      { caseSize: "C", voltage: "035", capCode: "157" },
+      { caseSize: "C", voltage: "035", capCode: "227" },
+      { caseSize: "C", voltage: "050", capCode: "106" },
+      { caseSize: "C", voltage: "050", capCode: "157" },
+      { caseSize: "C", voltage: "063", capCode: "106" },
+      { caseSize: "C", voltage: "063", capCode: "157" },
+      { caseSize: "D", voltage: "004", capCode: "227" },
+      { caseSize: "D", voltage: "004", capCode: "337" },
+      { caseSize: "D", voltage: "006", capCode: "157" },
+      { caseSize: "D", voltage: "006", capCode: "227" },
+      { caseSize: "D", voltage: "006", capCode: "337" },
+      { caseSize: "D", voltage: "006", capCode: "477" },
+      { caseSize: "D", voltage: "010", capCode: "106" },
+      { caseSize: "D", voltage: "010", capCode: "157" },
+      { caseSize: "D", voltage: "010", capCode: "227" },
+      { caseSize: "D", voltage: "010", capCode: "337" },
+      { caseSize: "D", voltage: "010", capCode: "477" },
+      { caseSize: "D", voltage: "016", capCode: "106" },
+      { caseSize: "D", voltage: "016", capCode: "157" },
+      { caseSize: "D", voltage: "016", capCode: "227" },
+      { caseSize: "D", voltage: "016", capCode: "337" },
+      { caseSize: "D", voltage: "016", capCode: "477" },
+      { caseSize: "D", voltage: "020", capCode: "106" },
+      { caseSize: "D", voltage: "020", capCode: "157" },
+      { caseSize: "D", voltage: "020", capCode: "227" },
+      { caseSize: "D", voltage: "020", capCode: "337" },
+      { caseSize: "D", voltage: "020", capCode: "477" },
+      { caseSize: "D", voltage: "025", capCode: "106" },
+      { caseSize: "D", voltage: "025", capCode: "157" },
+      { caseSize: "D", voltage: "025", capCode: "227" },
+      { caseSize: "D", voltage: "025", capCode: "337" },
+      { caseSize: "D", voltage: "030", capCode: "106" },
+      { caseSize: "D", voltage: "030", capCode: "157" },
+      { caseSize: "D", voltage: "030", capCode: "227" },
+      { caseSize: "D", voltage: "030", capCode: "337" },
+      { caseSize: "D", voltage: "030", capCode: "476" },
+      { caseSize: "D", voltage: "035", capCode: "106" },
+      { caseSize: "D", voltage: "035", capCode: "157" },
+      { caseSize: "D", voltage: "035", capCode: "226" },
+      { caseSize: "D", voltage: "035", capCode: "336" },
+      { caseSize: "D", voltage: "050", capCode: "106" },
+      { caseSize: "D", voltage: "050", capCode: "157" },
+      { caseSize: "D", voltage: "050", capCode: "226" },
+      { caseSize: "D", voltage: "050", capCode: "336" },
+      { caseSize: "D", voltage: "063", capCode: "106" },
+      { caseSize: "D", voltage: "063", capCode: "157" },
+      { caseSize: "D", voltage: "063", capCode: "475" },
+      { caseSize: "O", voltage: "004", capCode: "107" },
+      { caseSize: "O", voltage: "004", capCode: "157" },
+      { caseSize: "O", voltage: "004", capCode: "227" },
+      { caseSize: "O", voltage: "006", capCode: "686" },
+      { caseSize: "O", voltage: "010", capCode: "476" },
+      { caseSize: "O", voltage: "010", capCode: "686" },
+      { caseSize: "O", voltage: "016", capCode: "227" },
+      { caseSize: "O", voltage: "016", capCode: "337" },
+      { caseSize: "O", voltage: "016", capCode: "476" },
+      { caseSize: "O", voltage: "016", capCode: "686" },
+      { caseSize: "O", voltage: "020", capCode: "157" },
+      { caseSize: "O", voltage: "020", capCode: "227" },
+      { caseSize: "O", voltage: "020", capCode: "337" },
+      { caseSize: "O", voltage: "020", capCode: "476" },
+      { caseSize: "O", voltage: "020", capCode: "686" },
+      { caseSize: "O", voltage: "025", capCode: "157" },
+      { caseSize: "O", voltage: "025", capCode: "227" },
+      { caseSize: "O", voltage: "025", capCode: "337" },
+      { caseSize: "O", voltage: "025", capCode: "476" },
+      { caseSize: "O", voltage: "030", capCode: "107" },
+      { caseSize: "O", voltage: "030", capCode: "157" },
+      { caseSize: "O", voltage: "030", capCode: "227" },
+      { caseSize: "O", voltage: "030", capCode: "337" },
+      { caseSize: "O", voltage: "030", capCode: "476" },
+      { caseSize: "O", voltage: "030", capCode: "686" },
+      { caseSize: "O", voltage: "035", capCode: "107" },
+      { caseSize: "O", voltage: "035", capCode: "157" },
+      { caseSize: "O", voltage: "035", capCode: "227" },
+      { caseSize: "O", voltage: "035", capCode: "337" },
+      { caseSize: "O", voltage: "035", capCode: "476" },
+      { caseSize: "O", voltage: "050", capCode: "107" },
+      { caseSize: "O", voltage: "050", capCode: "157" },
+      { caseSize: "O", voltage: "050", capCode: "226" },
+      { caseSize: "O", voltage: "050", capCode: "337" },
+      { caseSize: "O", voltage: "063", capCode: "106" },
+      { caseSize: "O", voltage: "063", capCode: "157" },
+      { caseSize: "O", voltage: "063", capCode: "226" },
+      { caseSize: "X", voltage: "004", capCode: "476" },
+      { caseSize: "X", voltage: "004", capCode: "686" },
+      { caseSize: "X", voltage: "006", capCode: "106" },
+      { caseSize: "X", voltage: "006", capCode: "156" },
+      { caseSize: "X", voltage: "006", capCode: "226" },
+      { caseSize: "X", voltage: "006", capCode: "336" },
+      { caseSize: "X", voltage: "006", capCode: "476" },
+      { caseSize: "X", voltage: "006", capCode: "686" },
+      { caseSize: "X", voltage: "010", capCode: "106" },
+      { caseSize: "X", voltage: "010", capCode: "156" },
+      { caseSize: "X", voltage: "010", capCode: "226" },
+      { caseSize: "X", voltage: "010", capCode: "336" },
+      { caseSize: "X", voltage: "010", capCode: "476" },
+      { caseSize: "X", voltage: "010", capCode: "686" },
+      { caseSize: "X", voltage: "016", capCode: "106" },
+      { caseSize: "X", voltage: "016", capCode: "156" },
+      { caseSize: "X", voltage: "016", capCode: "226" },
+      { caseSize: "X", voltage: "016", capCode: "336" },
+      { caseSize: "X", voltage: "016", capCode: "476" },
+      { caseSize: "X", voltage: "020", capCode: "106" },
+      { caseSize: "X", voltage: "020", capCode: "156" },
+      { caseSize: "X", voltage: "020", capCode: "226" },
+      { caseSize: "X", voltage: "020", capCode: "336" },
+      { caseSize: "X", voltage: "025", capCode: "106" },
+      { caseSize: "X", voltage: "025", capCode: "156" },
+      { caseSize: "X", voltage: "025", capCode: "226" },
+      { caseSize: "X", voltage: "025", capCode: "336" },
+      { caseSize: "X", voltage: "025", capCode: "476" },
+      { caseSize: "X", voltage: "025", capCode: "686" },
+      { caseSize: "X", voltage: "030", capCode: "106" },
+      { caseSize: "X", voltage: "030", capCode: "156" },
+      { caseSize: "X", voltage: "030", capCode: "226" },
+      { caseSize: "X", voltage: "030", capCode: "336" },
+      { caseSize: "X", voltage: "030", capCode: "476" },
+      { caseSize: "X", voltage: "030", capCode: "686" },
+      { caseSize: "X", voltage: "035", capCode: "106" },
+      { caseSize: "X", voltage: "035", capCode: "156" },
+      { caseSize: "X", voltage: "035", capCode: "226" },
+      { caseSize: "X", voltage: "035", capCode: "336" },
+      { caseSize: "X", voltage: "035", capCode: "476" },
+      { caseSize: "X", voltage: "050", capCode: "106" },
+      { caseSize: "X", voltage: "050", capCode: "156" },
+      { caseSize: "X", voltage: "050", capCode: "226" },
+      { caseSize: "X", voltage: "050", capCode: "336" },
+      { caseSize: "X", voltage: "063", capCode: "106" },
+      { caseSize: "X", voltage: "063", capCode: "156" },
+      { caseSize: "Y", voltage: "010", capCode: "106" },
+      { caseSize: "Y", voltage: "016", capCode: "106" },
+      { caseSize: "Y", voltage: "020", capCode: "106" }
+    ];
 
     // Derived capacitance options from the provided T502 row set.
     const t502CapOptions = Array.from(new Set(t502Rows.map((r) => String(r.cap))))
@@ -1018,13 +1181,18 @@
       }
     }
 
-    function renderT54xFilterGroup(host, options, selectedKey, onSelect) {
+    function renderT54xFilterGroup(host, options, selectedKey, countFn, onSelect) {
       host.innerHTML = "";
       for (const opt of options) {
+        const count = countFn(opt.key);
         const b = document.createElement("button");
         b.type = "button";
         b.className = "filter-pill" + (selectedKey === opt.key ? " active" : "");
-        b.innerHTML = "<span>" + opt.label + "</span>";
+        if (count === 0 && selectedKey !== opt.key) {
+          b.classList.add("disabled");
+          b.disabled = true;
+        }
+        b.innerHTML = "<span>" + opt.label + "</span><span class=\"count\">" + count + "</span>";
         b.addEventListener("click", () => onSelect(opt.key));
         host.appendChild(b);
       }
@@ -1062,19 +1230,101 @@
       return { pn, capCode, capOk };
     }
 
+    function t54xCaseAllowedBySeries(series, caseSize) {
+      if (!series) return true;
+      // 541 family is constrained to larger multi-anode style packages in this model.
+      if (series === "541") return caseSize === "D" || caseSize === "O" || caseSize === "X" || caseSize === "Y";
+      return caseSize === "C" || caseSize === "D" || caseSize === "O" || caseSize === "X";
+    }
+
+    function t54xPackagingAllowed(caseSize, packaging) {
+      if (packaging === "" || packaging === "7280" || packaging === "7611" || packaging === "7640") return true;
+      if (packaging === "WAFL") return caseSize === "D" || caseSize === "O" || caseSize === "X" || caseSize === "Y";
+      return true;
+    }
+
+    function t54xEsrcodeAllowed(series, esr) {
+      if (!series || !esr) return true;
+      if (series === "540") return esr === "05" || esr === "10" || esr === "20";
+      if (series === "541") return esr === "10" || esr === "20" || esr === "30";
+      return true;
+    }
+
+    function t54xRowMatchesState(row, state) {
+      if (state.caseSize && row.caseSize !== state.caseSize) return false;
+      if (state.voltage && row.voltage !== state.voltage) return false;
+      if (state.capCode && row.capCode !== state.capCode) return false;
+      if (state.series && !t54xCaseAllowedBySeries(state.series, row.caseSize)) return false;
+      if (state.packaging && !t54xPackagingAllowed(row.caseSize, state.packaging)) return false;
+      if (state.esr && !t54xEsrcodeAllowed(state.series, state.esr)) return false;
+      return true;
+    }
+
+    function findMatchingT54xRows(state) {
+      return t54xCatalogRows.filter((row) => t54xRowMatchesState(row, state));
+    }
+
+    function t54xCountWith(key, keyValue) {
+      const test = { ...t54xState, [key]: keyValue };
+      return findMatchingT54xRows(test).length;
+    }
+
+    function t54xCapFilterOptions() {
+      const baseState = { ...t54xState, capCode: null };
+      const rows = findMatchingT54xRows(baseState);
+      const caps = Array.from(new Set(rows.map((r) => r.capCode))).sort((a, b) => Number(a) - Number(b));
+      return caps.map((c) => {
+        const d = decodeT54xCapCode(c);
+        return { key: c, label: c + " (" + (d ? d.uf : "?") + " uF)" };
+      });
+    }
+
     function renderT54x() {
-      renderT54xFilterGroup(t54xNodes.series, t54xOptions.series, t54xState.series, (k) => { t54xState.series = k; renderT54x(); });
-      renderT54xFilterGroup(t54xNodes.caseSize, t54xOptions.caseSize, t54xState.caseSize, (k) => { t54xState.caseSize = k; renderT54x(); });
-      renderT54xFilterGroup(t54xNodes.tolerance, t54xOptions.tolerance, t54xState.tolerance, (k) => { t54xState.tolerance = k; renderT54x(); });
-      renderT54xFilterGroup(t54xNodes.voltage, t54xOptions.voltage, t54xState.voltage, (k) => { t54xState.voltage = k; renderT54x(); });
-      renderT54xFilterGroup(t54xNodes.failure, t54xOptions.failure, t54xState.failure, (k) => { t54xState.failure = k; renderT54x(); });
-      renderT54xFilterGroup(t54xNodes.termination, t54xOptions.termination, t54xState.termination, (k) => { t54xState.termination = k; renderT54x(); });
-      renderT54xFilterGroup(t54xNodes.surge, t54xOptions.surge, t54xState.surge, (k) => { t54xState.surge = k; renderT54x(); });
-      renderT54xFilterGroup(t54xNodes.esr, t54xOptions.esr, t54xState.esr, (k) => { t54xState.esr = k; renderT54x(); });
-      renderT54xFilterGroup(t54xNodes.packaging, t54xOptions.packaging, t54xState.packaging, (k) => { t54xState.packaging = k; renderT54x(); });
+      renderT54xFilterGroup(t54xNodes.series, t54xOptions.series, t54xState.series, (k) => t54xCountWith("series", k), (k) => {
+        t54xState.series = (t54xState.series === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.caseSize, t54xOptions.caseSize, t54xState.caseSize, (k) => t54xCountWith("caseSize", k), (k) => {
+        t54xState.caseSize = (t54xState.caseSize === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.tolerance, t54xOptions.tolerance, t54xState.tolerance, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.tolerance = (t54xState.tolerance === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.voltage, t54xOptions.voltage, t54xState.voltage, (k) => t54xCountWith("voltage", k), (k) => {
+        t54xState.voltage = (t54xState.voltage === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.failure, t54xOptions.failure, t54xState.failure, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.failure = (t54xState.failure === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.termination, t54xOptions.termination, t54xState.termination, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.termination = (t54xState.termination === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.surge, t54xOptions.surge, t54xState.surge, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.surge = (t54xState.surge === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.esr, t54xOptions.esr, t54xState.esr, (k) => t54xCountWith("esr", k), (k) => {
+        t54xState.esr = (t54xState.esr === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.packaging, t54xOptions.packaging, t54xState.packaging, (k) => t54xCountWith("packaging", k), (k) => {
+        t54xState.packaging = (t54xState.packaging === k) ? null : k;
+        renderT54x();
+      });
 
       const built = buildT54xPn();
       const decoded = decodeT54xCapCode(built.capCode);
+      const capPills = t54xCapFilterOptions();
+      renderT54xFilterGroup(t54xNodes.capFilter, capPills, t54xState.capCode, (k) => t54xCountWith("capCode", k), (k) => {
+        t54xState.capCode = (t54xState.capCode === k) ? null : k;
+        t54xNodes.capInput.value = t54xState.capCode || "";
+        renderT54x();
+      });
       t54xNodes.capInput.classList.remove("valid", "invalid");
       if (built.capOk) {
         t54xNodes.capInput.classList.add("valid");
@@ -1085,52 +1335,71 @@
         t54xNodes.capInput.classList.add("invalid");
         t54xNodes.capHint.classList.remove("ok");
         t54xNodes.capHint.classList.add("bad");
-        t54xNodes.capHint.textContent = "Cap code must be exactly 3 digits.";
+        t54xNodes.capHint.textContent = "Cap code must be exactly 3 digits, or click an available value pill.";
       }
 
       const previewPn = "T" +
-        t54xState.series +
-        t54xState.caseSize +
+        (t54xState.series || "?") +
+        (t54xState.caseSize || "?") +
         (built.capOk ? built.capCode : "???") +
-        t54xState.tolerance +
-        t54xState.voltage +
-        t54xState.failure +
-        t54xState.termination +
-        t54xState.surge +
-        t54xState.esr +
-        (t54xState.packaging ? t54xState.packaging : "-");
+        (t54xState.tolerance || "?") +
+        (t54xState.voltage || "???") +
+        (t54xState.failure || "?") +
+        (t54xState.termination || "?") +
+        (t54xState.surge || "??") +
+        (t54xState.esr || "??") +
+        (t54xState.packaging === null ? "-" : (t54xState.packaging || ""));
       t54xNodes.pnText.textContent = previewPn;
 
+      const matchedRows = findMatchingT54xRows(t54xState);
       t54xNodes.results.innerHTML = "";
-      if (!built.capOk) {
+      if (!built.capOk || !matchedRows.length) {
         t54xNodes.resultCount.textContent = "0 results";
-        t54xNodes.statusText.textContent = "Invalid capacitance code";
+        t54xNodes.statusText.textContent = !built.capOk ? "Invalid capacitance code" : "No datasheet row match";
         const empty = document.createElement("div");
         empty.className = "result-card";
-        empty.innerHTML = "<div class=\"pn\">Enter a valid 3-digit capacitance code.</div>";
+        empty.innerHTML = "<div class=\"pn\">" +
+          (!built.capOk
+            ? "Enter a valid 3-digit capacitance code."
+            : "No matching voltage/case/capacitance row from T540/T541 table for current filters.") +
+          "</div>";
         t54xNodes.results.appendChild(empty);
         return;
       }
 
-      t54xNodes.resultCount.textContent = "1 result";
-      t54xNodes.statusText.textContent = "T540/T541 code mapping";
-      const card = document.createElement("article");
-      card.className = "result-card";
-      card.innerHTML =
-        "<div class=\"pn\">" + built.pn + "</div>" +
-        "<div class=\"meta\">" +
-        "<span>Series: " + t54xState.series + "</span>" +
-        "<span>Case: " + t54xState.caseSize + "</span>" +
-        "<span>Cap: " + built.capCode + " (" + decoded.uf + " uF)</span>" +
-        "<span>Tol: " + t54xState.tolerance + "</span>" +
-        "<span>Voltage: " + t54xState.voltage + "</span>" +
-        "<span>Failure: " + t54xState.failure + "</span>" +
-        "<span>Term: " + t54xState.termination + "</span>" +
-        "<span>Surge: " + t54xState.surge + "</span>" +
-        "<span>ESR: " + t54xState.esr + "</span>" +
-        "<span>Pack: " + (t54xState.packaging || "Blank") + "</span>" +
-        "</div>";
-      t54xNodes.results.appendChild(card);
+      t54xNodes.resultCount.textContent = matchedRows.length + " result" + (matchedRows.length === 1 ? "" : "s");
+      t54xNodes.statusText.textContent = "Datasheet-filtered value availability";
+      for (const row of matchedRows.slice(0, 160)) {
+        const rowDecoded = decodeT54xCapCode(row.capCode);
+        const pn = "T" +
+          (t54xState.series || "?") +
+          row.caseSize +
+          row.capCode +
+          (t54xState.tolerance || "?") +
+          row.voltage +
+          (t54xState.failure || "?") +
+          (t54xState.termination || "?") +
+          (t54xState.surge || "??") +
+          (t54xState.esr || "??") +
+          (t54xState.packaging || "");
+        const card = document.createElement("article");
+        card.className = "result-card";
+        card.innerHTML =
+          "<div class=\"pn\">" + pn + "</div>" +
+          "<div class=\"meta\">" +
+          "<span>Series: " + (t54xState.series || "540/541") + "</span>" +
+          "<span>Case: " + row.caseSize + "</span>" +
+          "<span>Cap: " + row.capCode + " (" + (rowDecoded ? rowDecoded.uf : "?") + " uF)</span>" +
+          "<span>Volt: " + row.voltage + "</span>" +
+          "<span>Tol: " + (t54xState.tolerance || "?") + "</span>" +
+          "<span>Failure: " + (t54xState.failure || "?") + "</span>" +
+          "<span>Term: " + (t54xState.termination || "?") + "</span>" +
+          "<span>Surge: " + (t54xState.surge || "??") + "</span>" +
+          "<span>ESR: " + (t54xState.esr || "??") + "</span>" +
+          "<span>Pack: " + (t54xState.packaging || "Blank") + "</span>" +
+          "</div>";
+        t54xNodes.results.appendChild(card);
+      }
     }
 
     function findMatchingT502Rows() {
@@ -1299,16 +1568,16 @@
       renderT54x();
     });
     t54xNodes.clearBtn.addEventListener("click", () => {
-      t54xState.series = "540";
-      t54xState.caseSize = "D";
-      t54xState.capCode = "106";
-      t54xState.tolerance = "K";
-      t54xState.voltage = "035";
-      t54xState.failure = "A";
-      t54xState.termination = "H";
-      t54xState.surge = "65";
-      t54xState.esr = "10";
-      t54xState.packaging = "";
+      t54xState.series = null;
+      t54xState.caseSize = null;
+      t54xState.capCode = "";
+      t54xState.tolerance = null;
+      t54xState.voltage = null;
+      t54xState.failure = null;
+      t54xState.termination = null;
+      t54xState.surge = null;
+      t54xState.esr = null;
+      t54xState.packaging = null;
       t54xNodes.capInput.value = t54xState.capCode;
       renderT54x();
     });
