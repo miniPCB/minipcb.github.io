@@ -410,8 +410,8 @@
             <div class="group"><p class="group-title">Case</p><div id="t502CaseFilter" class="pill-cloud"></div></div>
             <div class="group">
               <p class="group-title">Capacitance (uF)</p>
-              <input id="t502CapInput" class="text-input" type="text" value="10" />
-              <div id="t502CapHint" class="hint">Enter capacitance in uF.</div>
+              <div id="t502CapFilter" class="pill-cloud"></div>
+              <div id="t502CapHint" class="hint">Select capacitance from table options.</div>
             </div>
             <div class="group"><p class="group-title">Voltage</p><div id="t502VoltFilter" class="pill-cloud"></div></div>
             <div class="group">
@@ -600,7 +600,7 @@
 
     const t502Nodes = {
       caseSize: document.getElementById("t502CaseFilter"),
-      capInput: document.getElementById("t502CapInput"),
+      capFilter: document.getElementById("t502CapFilter"),
       capHint: document.getElementById("t502CapHint"),
       voltage: document.getElementById("t502VoltFilter"),
       code1Input: document.getElementById("t502Code1Input"),
@@ -611,6 +611,11 @@
       resultCount: document.getElementById("t502ResultCount"),
       results: document.getElementById("t502Results")
     };
+
+    // Derived capacitance options from the provided T502 row set.
+    const t502CapOptions = Array.from(new Set(t502Rows.map((r) => String(r.cap))))
+      .sort((a, b) => Number(a) - Number(b))
+      .map((c) => ({ key: c, label: c + " uF" }));
 
     function formatMultiplier(v) {
       if (v === 1) return "1";
@@ -890,16 +895,18 @@
 
     function renderT502() {
       renderT502FilterGroup(t502Nodes.caseSize, t502Options.caseSize, t502State.caseSize, (k) => { t502State.caseSize = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.capFilter, t502CapOptions, String(t502State.capacitanceUf), (k) => { t502State.capacitanceUf = k; renderT502(); });
       renderT502FilterGroup(t502Nodes.voltage, t502Options.voltage, t502State.voltage, (k) => { t502State.voltage = k; renderT502(); });
       const matches = findMatchingT502Rows();
-      t502Nodes.capInput.classList.remove("valid", "invalid");
       if (matches.length > 0) {
-        t502Nodes.capInput.classList.add("valid");
         const codes = Array.from(new Set(matches.map((m) => m.pattern.match(/T502[A-Z](\d{3})/)?.[1]).filter(Boolean)));
         t502Nodes.capHint.textContent = "Matched table row(s): " + matches.length + " (" + codes.join(", ") + ").";
+        t502Nodes.capHint.classList.remove("bad");
+        t502Nodes.capHint.classList.add("ok");
       } else {
-        t502Nodes.capInput.classList.add("invalid");
         t502Nodes.capHint.textContent = "No exact table row for selected Case/Voltage/Capacitance.";
+        t502Nodes.capHint.classList.remove("ok");
+        t502Nodes.capHint.classList.add("bad");
       }
 
       const pn = matches.length ? applyT502Substitutions(matches[0].pattern) : "T502-?-???-?-??-??";
@@ -986,10 +993,6 @@
     }
 
     nodes.resInput.addEventListener("input", renderAll);
-    t502Nodes.capInput.addEventListener("input", () => {
-      t502State.capacitanceUf = t502Nodes.capInput.value.trim();
-      renderT502();
-    });
     t502Nodes.code1Input.addEventListener("input", () => {
       t502State.code1 = t502Nodes.code1Input.value.trim().toUpperCase();
       renderT502();
@@ -1004,7 +1007,6 @@
       t502State.voltage = "16";
       t502State.code1 = "K";
       t502State.code2 = "R";
-      t502Nodes.capInput.value = t502State.capacitanceUf;
       t502Nodes.code1Input.value = t502State.code1;
       t502Nodes.code2Input.value = t502State.code2;
       renderT502();
