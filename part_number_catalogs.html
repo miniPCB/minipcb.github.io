@@ -315,6 +315,47 @@
       background: #142033;
     }
 
+    .pref-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+      color: var(--muted);
+      table-layout: fixed;
+    }
+
+    .pref-table th, .pref-table td {
+      border: 1px solid var(--border);
+      padding: 4px 5px;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .pref-table th {
+      background: #1a2230;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .pref-table .code-col {
+      text-align: left;
+      font-family: var(--mono);
+      width: 58px;
+    }
+
+    .pref-table .val-col {
+      text-align: left;
+      width: 74px;
+    }
+
+    .pref-table td.pref-cell.preferred {
+      background: rgba(0, 160, 220, 0.33);
+    }
+
+    .pref-table td.pref-cell.selected {
+      outline: 2px solid rgba(123, 230, 168, 0.95);
+      outline-offset: -2px;
+    }
+
     @media (max-width: 980px) {
       .pn-bar { grid-template-columns: 1fr; }
       .pn-help { text-align: left; white-space: normal; }
@@ -514,6 +555,11 @@
             <div class="group"><p class="group-title">Voltage (Vdc)</p><div id="s311VoltFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Termination</p><div id="s311TermFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Packaging / Marking</p><div id="s311PackFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">S311-P838 Preferred Sizes (X7R)</p>
+              <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table).</div>
+              <div id="s311PrefTableWrap" style="overflow:auto; margin-top:6px;"></div>
+            </div>
             <button id="s311ClearBtn" class="btn" type="button">Clear S-311 Filters</button>
           </div>
         </aside>
@@ -977,6 +1023,8 @@
       dielectric: document.getElementById("s311DielectricFilter"),
       capInput: document.getElementById("s311CapInput"),
       capHint: document.getElementById("s311CapHint"),
+      prefHint: document.getElementById("s311PrefHint"),
+      prefTableWrap: document.getElementById("s311PrefTableWrap"),
       tol: document.getElementById("s311TolFilter"),
       volt: document.getElementById("s311VoltFilter"),
       term: document.getElementById("s311TermFilter"),
@@ -987,6 +1035,57 @@
       resultCount: document.getElementById("s311ResultCount"),
       results: document.getElementById("s311Results")
     };
+
+    // AVX S311-P838 preferred-size matrix:
+    // page 2 "PREFERRED SIZES ARE SHADED" (X7R, sizes B/C/D/E/F and voltages 16/25/50/100).
+    // `preferred` lists columns where the cell is shaded in the datasheet.
+    const s311P838PrefRows = [
+      { code: "222", value: "2.2 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "272", value: "2.7 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "332", value: "3.3 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "392", value: "3.9 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "472", value: "4.7 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "562", value: "5.6 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "682", value: "6.8 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "822", value: "8.2 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "103", value: "10 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "123", value: "12 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "153", value: "15 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "183", value: "18 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "223", value: "22 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "273", value: "27 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "333", value: "33 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "393", value: "39 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "473", value: "47 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "563", value: "56 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "683", value: "68 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "823", value: "82 nF", preferred: ["B16","B25","C16","C25","C50","C100","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "104", value: "100 nF", preferred: ["B16","B25","C16","C25","C50","C100","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "124", value: "120 nF", preferred: ["B16","B25","C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "154", value: "150 nF", preferred: ["B16","B25","C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "184", value: "180 nF", preferred: ["B16","B25","C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "224", value: "220 nF", preferred: ["C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "274", value: "270 nF", preferred: ["C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "334", value: "330 nF", preferred: ["C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "394", value: "390 nF", preferred: ["C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "474", value: "470 nF", preferred: ["C16","C25","C50","D16","D25","D50","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "564", value: "560 nF", preferred: ["C16","C25","D16","D25","D50","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "684", value: "680 nF", preferred: ["C16","C25","D16","D25","D50","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "824", value: "820 nF", preferred: ["C16","C25","D16","D25","D50","E16","E25","E50","F16","F25","F50","F100"] },
+      { code: "105", value: "1 uF", preferred: ["C16","C25","D16","D25","D50","E16","E25","E50","F16","F25","F50","F100"] },
+      { code: "125", value: "1.2 uF", preferred: ["D16","D25","F16","F25","F50","F100"] },
+      { code: "155", value: "1.5 uF", preferred: ["D16","D25","F16","F25","F50","F100"] },
+      { code: "185", value: "1.8 uF", preferred: ["D16","D25","F16","F25","F50","F100"] },
+      { code: "225", value: "2.2 uF", preferred: ["D16","D25","F16","F25","F50","F100"] },
+      { code: "275", value: "2.7 uF", preferred: ["F16","F25","F50"] },
+      { code: "335", value: "3.3 uF", preferred: ["F16","F25","F50"] },
+      { code: "395", value: "3.9 uF", preferred: ["F16","F25","F50"] },
+      { code: "475", value: "4.7 uF", preferred: ["F16","F25","F50"] },
+      { code: "565", value: "5.6 uF", preferred: ["F16","F25"] },
+      { code: "685", value: "6.8 uF", preferred: ["F16","F25"] },
+      { code: "825", value: "8.2 uF", preferred: ["F16","F25"] },
+      { code: "106", value: "10 uF", preferred: [] }
+    ];
 
     // T540/T541 catalog availability rows derived from table values in:
     // KEM_T2077_T540-541 (rev 1/22/2025), Table 1 voltage/case/capacitance listings.
@@ -1544,6 +1643,62 @@
       return generateS311Rows(test).length;
     }
 
+    function s311PfToCode3(pf) {
+      const n = Number(pf);
+      if (!isFinite(n) || n <= 0) return null;
+      if (n < 10) return null;
+      // Limit to EIA-like 3-digit code space used in the AVX table (2 sig figs + exponent).
+      let exp = 0;
+      let sig = n;
+      while (sig >= 100 && exp < 9) {
+        sig /= 10;
+        exp += 1;
+      }
+      const rounded = Math.round(sig);
+      if (rounded < 10 || rounded > 99) return null;
+      return String(rounded).padStart(2, "0") + String(exp);
+    }
+
+    function renderS311PreferredTable(selectedCapCode, selectedSize, selectedVoltage) {
+      const table = document.createElement("table");
+      table.className = "pref-table";
+      const colKeys = ["B16","B25","B50","B100","C16","C25","C50","C100","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"];
+      const groups = [
+        { size: "B", label: "B (0603)" },
+        { size: "C", label: "C (0805)" },
+        { size: "D", label: "D (1206)" },
+        { size: "E", label: "E (1210)" },
+        { size: "F", label: "F (1812)" }
+      ];
+      const volts = ["16","25","50","100"];
+
+      let html = "<thead><tr><th class=\"code-col\" rowspan=\"2\">Code</th><th class=\"val-col\" rowspan=\"2\">Value</th>";
+      for (const g of groups) html += "<th colspan=\"4\">" + g.label + "</th>";
+      html += "</tr><tr>";
+      for (let i = 0; i < groups.length; i += 1) {
+        for (const v of volts) html += "<th>" + v + "V</th>";
+      }
+      html += "</tr></thead><tbody>";
+
+      const selectedCol = (selectedSize && selectedVoltage)
+        ? selectedSize + selectedVoltage
+        : null;
+
+      for (const row of s311P838PrefRows) {
+        html += "<tr><td class=\"code-col\">" + row.code + "</td><td class=\"val-col\">" + row.value + "</td>";
+        for (const c of colKeys) {
+          const pref = row.preferred.includes(c);
+          const sel = selectedCol && c === selectedCol && selectedCapCode === row.code;
+          html += "<td class=\"pref-cell" + (pref ? " preferred" : "") + (sel ? " selected" : "") + "\"></td>";
+        }
+        html += "</tr>";
+      }
+      html += "</tbody>";
+      table.innerHTML = html;
+      s311Nodes.prefTableWrap.innerHTML = "";
+      s311Nodes.prefTableWrap.appendChild(table);
+    }
+
     function getS311TableEntry(size, voltage, dielectric) {
       return s311Table1Max.find((x) => x.size === size && x.voltage === voltage && x.dielectric === dielectric) || null;
     }
@@ -1566,6 +1721,14 @@
         s311Nodes.capHint.classList.remove("ok");
         s311Nodes.capHint.classList.add("bad");
         s311Nodes.capHint.textContent = cap.message;
+      }
+      const selectedPrefCode = cap.ok ? s311PfToCode3(cap.pf) : null;
+      const selectedPrefVoltage = s311State.voltage === "6" ? "16" : (s311State.voltage === "1" ? "25" : (s311State.voltage === "2" ? "50" : (s311State.voltage === "3" ? "100" : null));
+      renderS311PreferredTable(selectedPrefCode, s311State.size, selectedPrefVoltage);
+      if (selectedPrefCode && selectedPrefVoltage && ["B","C","D","E","F"].includes(s311State.size || "")) {
+        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838). Green outline marks your current cap/size/voltage.";
+      } else {
+        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838). Selection highlight is available for sizes B-F at 16/25/50/100 V.";
       }
 
       renderS311FilterGroup(s311Nodes.ultra, s311Options.ultrasonic, s311State.ultrasonic, (k) => s311CountWith("ultrasonic", k), (k) => {
