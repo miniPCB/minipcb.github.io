@@ -334,6 +334,7 @@
       <button type="button" class="component-btn active" data-component="m55342">M55342 / D55342 Resistor</button>
       <button type="button" class="component-btn" data-component="t502">T502 Capacitor</button>
       <button type="button" class="component-btn" data-component="t54x">T540 / T541 Capacitor</button>
+      <button type="button" class="component-btn" data-component="s311">S-311-P-829 Capacitor</button>
     </section>
 
     <section id="m55342View" class="component-view">
@@ -488,6 +489,44 @@
         </section>
       </section>
     </section>
+
+    <section id="s311View" class="component-view hidden">
+      <section class="pn-bar">
+        <div class="pn-label">Selected PN</div>
+        <div id="s311PnBarText" class="pn-text">G311P829-?-?-?-???-?-?-?-?</div>
+        <div class="pn-help">Format: GSFC + Ultrasonic + Size + Dielectric + CapCode + Tol + Volt + Term + Pack</div>
+      </section>
+
+      <section class="main">
+        <aside class="panel">
+          <h2>S-311-P-829 Filters</h2>
+          <div class="panel-body">
+            <div class="group"><p class="group-title">GSFC Identifier</p><div class="pill-cloud"><span class="filter-pill active">G311P829</span></div></div>
+            <div class="group"><p class="group-title">Ultrasonic Examination</p><div id="s311UltraFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Size Code</p><div id="s311SizeFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Dielectric Type</p><div id="s311DielectricFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Capacitance Code (pF)</p>
+              <input id="s311CapInput" class="text-input" type="text" value="100" />
+              <div id="s311CapHint" class="hint">Use 3 digits for >=10 pF (e.g. 100=10 pF), or R-format for <10 pF (e.g. 1R0, R75, 0R5).</div>
+            </div>
+            <div class="group"><p class="group-title">Tolerance</p><div id="s311TolFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Voltage (Vdc)</p><div id="s311VoltFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Termination</p><div id="s311TermFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Packaging / Marking</p><div id="s311PackFilter" class="pill-cloud"></div></div>
+            <button id="s311ClearBtn" class="btn" type="button">Clear S-311 Filters</button>
+          </div>
+        </aside>
+        <section class="panel">
+          <h2>S-311-P-829 Results</h2>
+          <div class="summary-line">
+            <span id="s311StatusText">Rule-based mapping</span>
+            <strong id="s311ResultCount">0 results</strong>
+          </div>
+          <div id="s311Results" class="results"></div>
+        </section>
+      </section>
+    </section>
   </div>
 
   <script>
@@ -588,6 +627,7 @@
       m55342View: document.getElementById("m55342View"),
       t502View: document.getElementById("t502View"),
       t54xView: document.getElementById("t54xView"),
+      s311View: document.getElementById("s311View"),
       model: document.getElementById("modelFilter"),
       tcr: document.getElementById("tcrFilter"),
       size: document.getElementById("sizeFilter"),
@@ -753,6 +793,79 @@
       statusText: document.getElementById("t54xStatusText"),
       resultCount: document.getElementById("t54xResultCount"),
       results: document.getElementById("t54xResults")
+    };
+
+    const s311State = {
+      gsfc: "G311P829",
+      ultrasonic: "A",
+      size: "A",
+      dielectric: "N",
+      capCode: "100",
+      tolerance: "F",
+      voltage: "1",
+      termination: "P",
+      packaging: "1"
+    };
+
+    const s311Options = {
+      ultrasonic: [
+        { key: "A", label: "A (100% ultrasonic exam)" }
+      ],
+      size: [
+        { key: "A", label: "A (0402)" }, { key: "B", label: "B (0403)" }, { key: "C", label: "C (0504)" }, { key: "D", label: "D (0603)" },
+        { key: "E", label: "E (0805)" }, { key: "F", label: "F (1206)" }, { key: "G", label: "G (1209)" }, { key: "H", label: "H (1725)" },
+        { key: "J", label: "J (2225)" }, { key: "K", label: "K (1712)" }, { key: "L", label: "L (0502)" }, { key: "M", label: "M (0306)" },
+        { key: "N", label: "N (0508)" }, { key: "P", label: "P (0612)" }, { key: "Q", label: "Q (0912)" }, { key: "R", label: "R (1812)" },
+        { key: "S", label: "S (1210)" }, { key: "T", label: "T (1825)" }, { key: "U", label: "U (0201)" }
+      ],
+      dielectric: [
+        { key: "N", label: "N (NPO)" },
+        { key: "X", label: "X (X7R)" }
+      ],
+      tolerance: [
+        { key: "A", label: "A (±0.05 pF; NPO <10 pF)" },
+        { key: "B", label: "B (±0.10 pF; NPO <10 pF)" },
+        { key: "C", label: "C (±0.25 pF; NPO <10 pF)" },
+        { key: "D", label: "D (±0.50 pF; NPO <10 pF)" },
+        { key: "F", label: "F (±1%; NPO >=10 pF)" },
+        { key: "G", label: "G (±2%; NPO >=10 pF)" },
+        { key: "J", label: "J (±5%; NPO >=10 pF)" },
+        { key: "K", label: "K (±10%; NPO/X7R >=10 pF)" },
+        { key: "L", label: "L (+20/-10%; NPO/X7R >=10 pF)" }
+      ],
+      voltage: [
+        { key: "1", label: "1 (25 V)" }, { key: "2", label: "2 (50 V)" }, { key: "3", label: "3 (100 V)" }, { key: "4", label: "4 (5 V)" },
+        { key: "5", label: "5 (10 V)" }, { key: "6", label: "6 (16 V)" }, { key: "7", label: "7 (6.3 V)" }, { key: "8", label: "8 (4 V)" }
+      ],
+      termination: [
+        { key: "P", label: "P (PdAg alloy)" },
+        { key: "N", label: "N (Ni-Sn/Pb plated)" },
+        { key: "G", label: "G (Ag-Ni-Au plated)" },
+        { key: "H", label: "H (Gold, thick film)" }
+      ],
+      packaging: [
+        { key: "1", label: "1 (7in T/R, unmarked)" },
+        { key: "2", label: "2 (7in T/R, marked)" },
+        { key: "3", label: "3 (Waffle, unmarked)" },
+        { key: "4", label: "4 (Waffle, marked)" }
+      ]
+    };
+
+    const s311Nodes = {
+      ultra: document.getElementById("s311UltraFilter"),
+      size: document.getElementById("s311SizeFilter"),
+      dielectric: document.getElementById("s311DielectricFilter"),
+      capInput: document.getElementById("s311CapInput"),
+      capHint: document.getElementById("s311CapHint"),
+      tol: document.getElementById("s311TolFilter"),
+      volt: document.getElementById("s311VoltFilter"),
+      term: document.getElementById("s311TermFilter"),
+      pack: document.getElementById("s311PackFilter"),
+      clearBtn: document.getElementById("s311ClearBtn"),
+      pnText: document.getElementById("s311PnBarText"),
+      statusText: document.getElementById("s311StatusText"),
+      resultCount: document.getElementById("s311ResultCount"),
+      results: document.getElementById("s311Results")
     };
 
     // T540/T541 catalog availability rows derived from table values in:
@@ -1202,6 +1315,202 @@
       }
     }
 
+    function renderS311FilterGroup(host, options, selectedKey, countFn, onSelect) {
+      host.innerHTML = "";
+      for (const opt of options) {
+        const count = countFn(opt.key);
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "filter-pill" + (selectedKey === opt.key ? " active" : "");
+        if (count === 0 && selectedKey !== opt.key) {
+          b.classList.add("disabled");
+          b.disabled = true;
+        }
+        b.innerHTML = "<span>" + opt.label + "</span><span class=\"count\">" + count + "</span>";
+        b.addEventListener("click", () => onSelect(opt.key));
+        host.appendChild(b);
+      }
+    }
+
+    function parseS311CapCode(raw) {
+      const code = String(raw || "").trim().toUpperCase();
+      if (/^\d{3}$/.test(code)) {
+        const sig = Number(code.slice(0, 2));
+        const zeros = Number(code.slice(2, 3));
+        const pf = sig * Math.pow(10, zeros);
+        return { ok: true, mode: "num", code, pf };
+      }
+      if (/^(?:\d?R\d{1,2}|R\d{1,2})$/.test(code)) {
+        const pf = Number(code.replace("R", "."));
+        if (!isFinite(pf) || pf <= 0 || pf >= 10) return { ok: false, code, message: "R-format is only for values <10 pF." };
+        return { ok: true, mode: "r", code, pf };
+      }
+      return { ok: false, code, message: "Use 3 digits (>=10 pF) or R-format (<10 pF)." };
+    }
+
+    function isValidS311Row(row) {
+      const cap = parseS311CapCode(row.capCode);
+      if (!cap.ok) return false;
+      const under10 = cap.pf < 10;
+
+      if (under10) {
+        if (row.dielectric !== "N") return false;
+        return row.tolerance === "A" || row.tolerance === "B" || row.tolerance === "C" || row.tolerance === "D";
+      }
+
+      if (row.dielectric === "N") {
+        return row.tolerance === "F" || row.tolerance === "G" || row.tolerance === "J" || row.tolerance === "K" || row.tolerance === "L";
+      }
+      if (row.dielectric === "X") {
+        return row.tolerance === "K" || row.tolerance === "L";
+      }
+      return false;
+    }
+
+    function generateS311Rows(localState) {
+      const cap = parseS311CapCode(localState.capCode);
+      if (!cap.ok) return [];
+
+      const rows = [];
+      const ultras = localState.ultrasonic === null ? s311Options.ultrasonic : s311Options.ultrasonic.filter((x) => x.key === localState.ultrasonic);
+      const sizes = localState.size === null ? s311Options.size : s311Options.size.filter((x) => x.key === localState.size);
+      const dielectrics = localState.dielectric === null ? s311Options.dielectric : s311Options.dielectric.filter((x) => x.key === localState.dielectric);
+      const tolerances = localState.tolerance === null ? s311Options.tolerance : s311Options.tolerance.filter((x) => x.key === localState.tolerance);
+      const voltages = localState.voltage === null ? s311Options.voltage : s311Options.voltage.filter((x) => x.key === localState.voltage);
+      const terms = localState.termination === null ? s311Options.termination : s311Options.termination.filter((x) => x.key === localState.termination);
+      const packs = localState.packaging === null ? s311Options.packaging : s311Options.packaging.filter((x) => x.key === localState.packaging);
+
+      for (const u of ultras) {
+        for (const s of sizes) {
+          for (const d of dielectrics) {
+            for (const t of tolerances) {
+              for (const v of voltages) {
+                for (const term of terms) {
+                  for (const p of packs) {
+                    const row = {
+                      gsfc: "G311P829",
+                      ultrasonic: u.key,
+                      size: s.key,
+                      dielectric: d.key,
+                      capCode: cap.code,
+                      capPf: cap.pf,
+                      tolerance: t.key,
+                      voltage: v.key,
+                      termination: term.key,
+                      packaging: p.key
+                    };
+                    if (!isValidS311Row(row)) continue;
+                    row.pn = row.gsfc + row.ultrasonic + row.size + row.dielectric + row.capCode + row.tolerance + row.voltage + row.termination + row.packaging;
+                    rows.push(row);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return rows;
+    }
+
+    function s311CountWith(key, keyValue) {
+      const test = { ...s311State, [key]: keyValue };
+      return generateS311Rows(test).length;
+    }
+
+    function renderS311() {
+      const cap = parseS311CapCode(s311State.capCode);
+      s311Nodes.capInput.classList.remove("valid", "invalid");
+      if (cap.ok) {
+        s311Nodes.capInput.classList.add("valid");
+        s311Nodes.capHint.classList.remove("bad");
+        s311Nodes.capHint.classList.add("ok");
+        s311Nodes.capHint.textContent = "Cap code " + cap.code + " = " + cap.pf + " pF.";
+      } else {
+        s311Nodes.capInput.classList.add("invalid");
+        s311Nodes.capHint.classList.remove("ok");
+        s311Nodes.capHint.classList.add("bad");
+        s311Nodes.capHint.textContent = cap.message;
+      }
+
+      renderS311FilterGroup(s311Nodes.ultra, s311Options.ultrasonic, s311State.ultrasonic, (k) => s311CountWith("ultrasonic", k), (k) => {
+        s311State.ultrasonic = (s311State.ultrasonic === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.size, s311Options.size, s311State.size, (k) => s311CountWith("size", k), (k) => {
+        s311State.size = (s311State.size === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.dielectric, s311Options.dielectric, s311State.dielectric, (k) => s311CountWith("dielectric", k), (k) => {
+        s311State.dielectric = (s311State.dielectric === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.tol, s311Options.tolerance, s311State.tolerance, (k) => s311CountWith("tolerance", k), (k) => {
+        s311State.tolerance = (s311State.tolerance === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.volt, s311Options.voltage, s311State.voltage, (k) => s311CountWith("voltage", k), (k) => {
+        s311State.voltage = (s311State.voltage === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.term, s311Options.termination, s311State.termination, (k) => s311CountWith("termination", k), (k) => {
+        s311State.termination = (s311State.termination === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.pack, s311Options.packaging, s311State.packaging, (k) => s311CountWith("packaging", k), (k) => {
+        s311State.packaging = (s311State.packaging === k) ? null : k;
+        renderS311();
+      });
+
+      const preview = "G311P829" +
+        (s311State.ultrasonic || "?") +
+        (s311State.size || "?") +
+        (s311State.dielectric || "?") +
+        (cap.ok ? cap.code : "???") +
+        (s311State.tolerance || "?") +
+        (s311State.voltage || "?") +
+        (s311State.termination || "?") +
+        (s311State.packaging || "?");
+      s311Nodes.pnText.textContent = preview;
+
+      const rows = generateS311Rows(s311State);
+      s311Nodes.results.innerHTML = "";
+      if (!rows.length) {
+        s311Nodes.resultCount.textContent = "0 results";
+        s311Nodes.statusText.textContent = cap.ok ? "No valid combination" : "Invalid capacitance code";
+        const empty = document.createElement("div");
+        empty.className = "result-card";
+        empty.innerHTML = "<div class=\"pn\">No valid S-311-P-829 part numbers for current selections.</div>";
+        s311Nodes.results.appendChild(empty);
+        return;
+      }
+
+      s311Nodes.resultCount.textContent = rows.length + " result" + (rows.length === 1 ? "" : "s");
+      s311Nodes.statusText.textContent = "Rules applied from S-311-P-829 identifying-number table";
+      const maxShown = 300;
+      for (const row of rows.slice(0, maxShown)) {
+        const card = document.createElement("article");
+        card.className = "result-card";
+        card.innerHTML =
+          "<div class=\"pn\">" + row.pn + "</div>" +
+          "<div class=\"meta\">" +
+          "<span>Size: " + row.size + "</span>" +
+          "<span>Dielectric: " + row.dielectric + "</span>" +
+          "<span>Cap: " + row.capCode + " (" + row.capPf + " pF)</span>" +
+          "<span>Tol: " + row.tolerance + "</span>" +
+          "<span>Volt: " + row.voltage + "</span>" +
+          "<span>Term: " + row.termination + "</span>" +
+          "<span>Pack: " + row.packaging + "</span>" +
+          "</div>";
+        s311Nodes.results.appendChild(card);
+      }
+      if (rows.length > maxShown) {
+        const more = document.createElement("div");
+        more.className = "result-card";
+        more.innerHTML = "<div class=\"pn\">Showing first " + maxShown + " of " + rows.length + " matches.</div>";
+        s311Nodes.results.appendChild(more);
+      }
+    }
+
     function normalizeT54xCapCode(raw) {
       const cleaned = String(raw || "").trim().replace(/[^0-9]/g, "").slice(0, 3);
       return cleaned;
@@ -1493,9 +1802,11 @@
       const isM55342 = viewKey === "m55342";
       const isT502 = viewKey === "t502";
       const isT54x = viewKey === "t54x";
+      const isS311 = viewKey === "s311";
       nodes.m55342View.classList.toggle("hidden", !isM55342);
       nodes.t502View.classList.toggle("hidden", !isT502);
       nodes.t54xView.classList.toggle("hidden", !isT54x);
+      nodes.s311View.classList.toggle("hidden", !isS311);
       for (const b of nodes.componentButtons) {
         b.classList.toggle("active", b.dataset.component === viewKey);
       }
@@ -1564,10 +1875,28 @@
       t54xNodes.capInput.value = t54xState.capCode;
       renderT54x();
     });
+    s311Nodes.capInput.addEventListener("input", () => {
+      s311State.capCode = String(s311Nodes.capInput.value || "").trim().toUpperCase();
+      s311Nodes.capInput.value = s311State.capCode;
+      renderS311();
+    });
+    s311Nodes.clearBtn.addEventListener("click", () => {
+      s311State.ultrasonic = null;
+      s311State.size = null;
+      s311State.dielectric = null;
+      s311State.capCode = "";
+      s311State.tolerance = null;
+      s311State.voltage = null;
+      s311State.termination = null;
+      s311State.packaging = null;
+      s311Nodes.capInput.value = s311State.capCode;
+      renderS311();
+    });
 
     renderAll();
     renderT502();
     renderT54x();
+    renderS311();
     setComponentView("m55342");
   </script>
 </body>
