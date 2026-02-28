@@ -413,9 +413,17 @@
               <input id="t502CapInput" class="text-input" type="text" value="10" />
               <div id="t502CapHint" class="hint">Enter capacitance in uF.</div>
             </div>
-            <div class="group"><p class="group-title">Tolerance</p><div id="t502TolFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Voltage</p><div id="t502VoltFilter" class="pill-cloud"></div></div>
-            <div class="group"><p class="group-title">Packaging</p><div id="t502PackFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Code (1) Substitution</p>
+              <input id="t502Code1Input" class="text-input" type="text" value="K" />
+              <div class="hint">Replaces <span style="font-family:var(--mono)">(1)</span> in table PN pattern.</div>
+            </div>
+            <div class="group">
+              <p class="group-title">Code (2) Substitution</p>
+              <input id="t502Code2Input" class="text-input" type="text" value="R" />
+              <div class="hint">Replaces <span style="font-family:var(--mono)">(2)</span> in table PN pattern.</div>
+            </div>
             <button id="t502ClearBtn" class="btn" type="button">Clear T502 Filters</button>
           </div>
         </aside>
@@ -549,41 +557,54 @@
     // Initial T502 workspace state and code dictionaries.
     // This is intentionally a first-pass model for iterative refinement.
     const t502State = {
-      caseSize: "C",
-      capacitanceUf: "10",
-      tolerance: "K",
+      caseSize: "D",
+      capacitanceUf: "22",
       voltage: "16",
-      packaging: "TR"
+      code1: "K",
+      code2: "R"
     };
 
     const t502Options = {
-      // T502 case mapping (datasheet family): B / C / D.
-      // Labels include common EIA size code and nominal L x W x H dimensions.
+      // T502 case mapping (from provided table rows).
       caseSize: [
         { key: "B", label: "B (EIA 3528-21, 3.5 x 2.8 x 2.1 mm)" },
         { key: "C", label: "C (EIA 6032-28, 6.0 x 3.2 x 2.8 mm)" },
         { key: "D", label: "D (EIA 7343-31, 7.3 x 4.3 x 3.1 mm)" }
       ],
-      tolerance: [
-        { key: "K", label: "K (10%)" }, { key: "M", label: "M (20%)" }
-      ],
       voltage: [
-        { key: "2R5", label: "2.5 V" }, { key: "4", label: "4 V" }, { key: "6R3", label: "6.3 V" },
-        { key: "10", label: "10 V" }, { key: "16", label: "16 V" }, { key: "20", label: "20 V" },
-        { key: "25", label: "25 V" }, { key: "35", label: "35 V" }, { key: "50", label: "50 V" }
-      ],
-      packaging: [
-        { key: "TR", label: "TR (Tape & Reel)" }, { key: "BU", label: "BU (Bulk)" }
+        { key: "16", label: "16 V" }, { key: "20", label: "20 V" }, { key: "25", label: "25 V" }, { key: "35", label: "35 V" }
       ]
     };
+
+    // T502 rows encoded directly from user-provided table for deterministic matching.
+    const t502Rows = [
+      { v: "16", cap: 10, case: "B", outline: "3528-21", pattern: "T502B106(1)016AG(2)10", dcl: "1.6", df: "6", esr: "2.8", ripple: "174", surge: "230" },
+      { v: "16", cap: 33, case: "D", outline: "7343-31", pattern: "T502D336(1)016AG(2)10", dcl: "5.3", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "20", cap: 4.7, case: "C", outline: "6032-28", pattern: "T502C475(1)020AG(2)10", dcl: "0.9", df: "6", esr: "2.0", ripple: "235", surge: "230" },
+      { v: "20", cap: 10, case: "C", outline: "6032-28", pattern: "T502C106(1)020AG(2)10", dcl: "2.0", df: "6", esr: "1.5", ripple: "271", surge: "230" },
+      { v: "20", cap: 22, case: "D", outline: "7343-31", pattern: "T502D226(1)020AG(2)10", dcl: "4.4", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "20", cap: 33, case: "D", outline: "7343-31", pattern: "T502D336(1)020AG(2)10", dcl: "6.6", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "25", cap: 4.7, case: "C", outline: "6032-28", pattern: "T502C475(1)025AG(2)10", dcl: "1.2", df: "6", esr: "2.0", ripple: "235", surge: "230" },
+      { v: "25", cap: 6.8, case: "C", outline: "6032-28", pattern: "T502C685(1)025AG(2)10", dcl: "1.7", df: "6", esr: "1.9", ripple: "271", surge: "230" },
+      { v: "25", cap: 10, case: "C", outline: "6032-28", pattern: "T502C106(1)025AG(2)10", dcl: "2.5", df: "6", esr: "1.5", ripple: "271", surge: "230" },
+      { v: "25", cap: 10, case: "D", outline: "7343-31", pattern: "T502D106(1)025AG(2)10", dcl: "2.5", df: "6", esr: "1.8", ripple: "289", surge: "230" },
+      { v: "25", cap: 15, case: "D", outline: "7343-31", pattern: "T502D156(1)025AG(2)10", dcl: "3.8", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "25", cap: 22, case: "D", outline: "7343-31", pattern: "T502D226(1)025AG(2)10", dcl: "5.5", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "25", cap: 33, case: "D", outline: "7343-31", pattern: "T502D336(1)025AG(2)10", dcl: "8.3", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "35", cap: 4.7, case: "C", outline: "6032-28", pattern: "T502C475(1)035AG(2)10", dcl: "1.7", df: "6", esr: "2.0", ripple: "235", surge: "230" },
+      { v: "35", cap: 6.8, case: "D", outline: "7343-31", pattern: "T502D685(1)035AG(2)10", dcl: "2.4", df: "6", esr: "1.8", ripple: "289", surge: "230" },
+      { v: "35", cap: 10, case: "D", outline: "7343-31", pattern: "T502D106(1)035AG(2)10", dcl: "3.5", df: "6", esr: "1.0", ripple: "390", surge: "230" },
+      { v: "35", cap: 15, case: "D", outline: "7343-31", pattern: "T502D156(1)035AG(2)10", dcl: "5.3", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "35", cap: 22, case: "D", outline: "7343-31", pattern: "T502D226(1)035AG(2)10", dcl: "7.7", df: "6", esr: "0.7", ripple: "460", surge: "230" }
+    ];
 
     const t502Nodes = {
       caseSize: document.getElementById("t502CaseFilter"),
       capInput: document.getElementById("t502CapInput"),
       capHint: document.getElementById("t502CapHint"),
-      tolerance: document.getElementById("t502TolFilter"),
       voltage: document.getElementById("t502VoltFilter"),
-      packaging: document.getElementById("t502PackFilter"),
+      code1Input: document.getElementById("t502Code1Input"),
+      code2Input: document.getElementById("t502Code2Input"),
       clearBtn: document.getElementById("t502ClearBtn"),
       pnText: document.getElementById("t502PnBarText"),
       statusText: document.getElementById("t502StatusText"),
@@ -839,30 +860,6 @@
       return v.toFixed(3).replace(/\.?0+$/, "") + " ohm";
     }
 
-    // T502 capacitance code = 3-digit EIA style:
-    // value in pF represented as XY * 10^Z (e.g., 22 uF => 22,000,000 pF => 226).
-    function toT502CapCode(ufText) {
-      const uf = Number(String(ufText || "").trim());
-      if (!isFinite(uf) || uf <= 0) return null;
-      const pf = uf * 1e6;
-      const exp = Math.floor(Math.log10(pf)) - 1;
-      const sig = Math.round(pf / Math.pow(10, exp));
-      if (sig < 10 || sig > 99 || exp < 0 || exp > 9) return null;
-      return String(sig) + String(exp);
-    }
-
-    // Voltage code formatter for PN construction:
-    // numeric voltages are zero-padded to 3 digits (e.g., 35 => 035).
-    // alphanumeric values (e.g., 2R5) are kept as-is.
-    function toT502VoltageCode(v) {
-      const s = String(v || "").trim().toUpperCase();
-      if (!s) return "___";
-      const normalized = s.replace("R", ".");
-      const n = Number(normalized);
-      if (isFinite(n)) return String(Math.round(n)).padStart(3, "0");
-      return s;
-    }
-
     function renderT502FilterGroup(host, options, selectedKey, onSelect) {
       host.innerHTML = "";
       for (const opt of options) {
@@ -875,55 +872,73 @@
       }
     }
 
+    function findMatchingT502Rows() {
+      const cap = Number(String(t502State.capacitanceUf || "").trim());
+      if (!isFinite(cap) || cap <= 0) return [];
+      return t502Rows.filter((r) =>
+        r.case === t502State.caseSize &&
+        r.v === t502State.voltage &&
+        Math.abs(r.cap - cap) < 1e-9
+      );
+    }
+
+    function applyT502Substitutions(pattern) {
+      return pattern
+        .replace("(1)", t502State.code1 || "_")
+        .replace("(2)", t502State.code2 || "_");
+    }
+
     function renderT502() {
       renderT502FilterGroup(t502Nodes.caseSize, t502Options.caseSize, t502State.caseSize, (k) => { t502State.caseSize = k; renderT502(); });
-      renderT502FilterGroup(t502Nodes.tolerance, t502Options.tolerance, t502State.tolerance, (k) => { t502State.tolerance = k; renderT502(); });
       renderT502FilterGroup(t502Nodes.voltage, t502Options.voltage, t502State.voltage, (k) => { t502State.voltage = k; renderT502(); });
-      renderT502FilterGroup(t502Nodes.packaging, t502Options.packaging, t502State.packaging, (k) => { t502State.packaging = k; renderT502(); });
-
-      const capCode = toT502CapCode(t502State.capacitanceUf);
+      const matches = findMatchingT502Rows();
       t502Nodes.capInput.classList.remove("valid", "invalid");
-      if (capCode) {
+      if (matches.length > 0) {
         t502Nodes.capInput.classList.add("valid");
-        t502Nodes.capHint.textContent = "Capacitance code: " + capCode + " (from " + t502State.capacitanceUf + " uF).";
+        const codes = Array.from(new Set(matches.map((m) => m.pattern.match(/T502[A-Z](\d{3})/)?.[1]).filter(Boolean)));
+        t502Nodes.capHint.textContent = "Matched table row(s): " + matches.length + " (" + codes.join(", ") + ").";
       } else {
         t502Nodes.capInput.classList.add("invalid");
-        t502Nodes.capHint.textContent = "Enter positive capacitance in uF (for example: 1, 10, 47, 100).";
+        t502Nodes.capHint.textContent = "No exact table row for selected Case/Voltage/Capacitance.";
       }
 
-      const vCode = toT502VoltageCode(t502State.voltage);
-      const pn = capCode
-        ? ("T502" + t502State.caseSize + capCode + t502State.tolerance + vCode + t502State.packaging)
-        : "T502-?-???-?-??-??";
+      const pn = matches.length ? applyT502Substitutions(matches[0].pattern) : "T502-?-???-?-??-??";
       t502Nodes.pnText.textContent = pn;
       t502Nodes.results.innerHTML = "";
 
-      if (!capCode) {
+      if (!matches.length) {
         t502Nodes.resultCount.textContent = "0 results";
-        t502Nodes.statusText.textContent = "Capacitance input invalid";
+        t502Nodes.statusText.textContent = "No table match";
         const empty = document.createElement("div");
         empty.className = "result-card";
-        empty.innerHTML = "<div class=\"pn\">No valid T502 code with current capacitance input.</div>";
+        empty.innerHTML = "<div class=\"pn\">No encoded row for this Case + Voltage + Capacitance combination.</div>";
         t502Nodes.results.appendChild(empty);
         return;
       }
 
-      t502Nodes.resultCount.textContent = "1 result";
-      t502Nodes.statusText.textContent = "Prototype T502 mapping";
-      const card = document.createElement("article");
-      card.className = "result-card";
+      t502Nodes.resultCount.textContent = matches.length + " result" + (matches.length === 1 ? "" : "s");
+      t502Nodes.statusText.textContent = "Table-driven T502 mapping";
       const caseInfo = t502Options.caseSize.find((x) => x.key === t502State.caseSize);
-      card.innerHTML =
-        "<div class=\"pn\">" + pn + "</div>" +
-        "<div class=\"meta\">" +
-        "<span>Case: " + (caseInfo ? caseInfo.label : t502State.caseSize) + "</span>" +
-        "<span>Cap: " + t502State.capacitanceUf + " uF</span>" +
-        "<span>Code: " + capCode + "</span>" +
-        "<span>Tol: " + t502State.tolerance + "</span>" +
-        "<span>Volt: " + t502State.voltage + " (code " + vCode + ")</span>" +
-        "<span>Pack: " + t502State.packaging + "</span>" +
-        "</div>";
-      t502Nodes.results.appendChild(card);
+
+      for (const row of matches) {
+        const filledPn = applyT502Substitutions(row.pattern);
+        const card = document.createElement("article");
+        card.className = "result-card";
+        card.innerHTML =
+          "<div class=\"pn\">" + filledPn + "</div>" +
+          "<div class=\"meta\">" +
+          "<span>Pattern: " + row.pattern + "</span>" +
+          "<span>Case: " + (caseInfo ? caseInfo.label : row.case) + "</span>" +
+          "<span>Cap: " + row.cap + " uF</span>" +
+          "<span>Volt: " + row.v + " V</span>" +
+          "<span>DCL: " + row.dcl + "</span>" +
+          "<span>DF: " + row.df + "</span>" +
+          "<span>ESR: " + row.esr + "</span>" +
+          "<span>Ripple: " + row.ripple + "</span>" +
+          "<span>Surge: " + row.surge + "</span>" +
+          "</div>";
+        t502Nodes.results.appendChild(card);
+      }
     }
 
     function setComponentView(viewKey) {
@@ -975,13 +990,23 @@
       t502State.capacitanceUf = t502Nodes.capInput.value.trim();
       renderT502();
     });
+    t502Nodes.code1Input.addEventListener("input", () => {
+      t502State.code1 = t502Nodes.code1Input.value.trim().toUpperCase();
+      renderT502();
+    });
+    t502Nodes.code2Input.addEventListener("input", () => {
+      t502State.code2 = t502Nodes.code2Input.value.trim().toUpperCase();
+      renderT502();
+    });
     t502Nodes.clearBtn.addEventListener("click", () => {
-      t502State.caseSize = "C";
-      t502State.capacitanceUf = "10";
-      t502State.tolerance = "K";
+      t502State.caseSize = "D";
+      t502State.capacitanceUf = "22";
       t502State.voltage = "16";
-      t502State.packaging = "TR";
+      t502State.code1 = "K";
+      t502State.code2 = "R";
       t502Nodes.capInput.value = t502State.capacitanceUf;
+      t502Nodes.code1Input.value = t502State.code1;
+      t502Nodes.code2Input.value = t502State.code2;
       renderT502();
     });
 
