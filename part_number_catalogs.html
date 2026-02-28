@@ -415,8 +415,8 @@
             </div>
             <div class="group"><p class="group-title">Voltage</p><div id="t502VoltFilter" class="pill-cloud"></div></div>
             <div class="group">
-              <p class="group-title">Code (1) Substitution</p>
-              <input id="t502Code1Input" class="text-input" type="text" value="K" />
+              <p class="group-title">Tolerance Selection</p>
+              <div id="t502Code1Filter" class="pill-cloud"></div>
               <div id="t502Code1Hint" class="hint">
                 Replaces <span style="font-family:var(--mono)">(1)</span>. Allowed:
                 <span style="font-family:var(--mono)">K</span> = ±10%,
@@ -425,8 +425,8 @@
               </div>
             </div>
             <div class="group">
-              <p class="group-title">Code (2) Substitution</p>
-              <input id="t502Code2Input" class="text-input" type="text" value="61" />
+              <p class="group-title">Surge Current Testing</p>
+              <div id="t502Code2Filter" class="pill-cloud"></div>
               <div id="t502Code2Hint" class="hint">
                 Replaces <span style="font-family:var(--mono)">(2)</span>. Allowed:
                 <span style="font-family:var(--mono)">61</span> = No additional surge current testing,
@@ -583,6 +583,15 @@
       ],
       voltage: [
         { key: "16", label: "16 V" }, { key: "20", label: "20 V" }, { key: "25", label: "25 V" }, { key: "35", label: "35 V" }
+      ],
+      code1: [
+        { key: "K", label: "K (±10%)" },
+        { key: "M", label: "M (±20%)" }
+      ],
+      code2: [
+        { key: "61", label: "61 (No additional surge testing)" },
+        { key: "62", label: "62 (10 cycles at 25°C ±5°C after Weibull)" },
+        { key: "63", label: "63 (10 cycles at -55°C ±5°C and +85°C ±5°C after Weibull)" }
       ]
     };
 
@@ -613,8 +622,8 @@
       capFilter: document.getElementById("t502CapFilter"),
       capHint: document.getElementById("t502CapHint"),
       voltage: document.getElementById("t502VoltFilter"),
-      code1Input: document.getElementById("t502Code1Input"),
-      code2Input: document.getElementById("t502Code2Input"),
+      code1Filter: document.getElementById("t502Code1Filter"),
+      code2Filter: document.getElementById("t502Code2Filter"),
       code1Hint: document.getElementById("t502Code1Hint"),
       code2Hint: document.getElementById("t502Code2Hint"),
       clearBtn: document.getElementById("t502ClearBtn"),
@@ -913,24 +922,18 @@
       // 63 = 10 cycles at -55C +/-5C and +85C +/-5C after Weibull
       const code2Ok = t502State.code2 === "61" || t502State.code2 === "62" || t502State.code2 === "63";
 
-      t502Nodes.code1Input.classList.remove("valid", "invalid");
-      t502Nodes.code2Input.classList.remove("valid", "invalid");
       t502Nodes.code1Hint.classList.remove("ok", "bad");
       t502Nodes.code2Hint.classList.remove("ok", "bad");
 
       if (code1Ok) {
-        t502Nodes.code1Input.classList.add("valid");
         t502Nodes.code1Hint.classList.add("ok");
       } else {
-        t502Nodes.code1Input.classList.add("invalid");
         t502Nodes.code1Hint.classList.add("bad");
       }
 
       if (code2Ok) {
-        t502Nodes.code2Input.classList.add("valid");
         t502Nodes.code2Hint.classList.add("ok");
       } else {
-        t502Nodes.code2Input.classList.add("invalid");
         t502Nodes.code2Hint.classList.add("bad");
       }
 
@@ -942,6 +945,8 @@
       renderT502FilterGroup(t502Nodes.caseSize, t502Options.caseSize, t502State.caseSize, (k) => { t502State.caseSize = k; renderT502(); });
       renderT502FilterGroup(t502Nodes.capFilter, t502CapOptions, String(t502State.capacitanceUf), (k) => { t502State.capacitanceUf = k; renderT502(); });
       renderT502FilterGroup(t502Nodes.voltage, t502Options.voltage, t502State.voltage, (k) => { t502State.voltage = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.code1Filter, t502Options.code1, t502State.code1, (k) => { t502State.code1 = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.code2Filter, t502Options.code2, t502State.code2, (k) => { t502State.code2 = k; renderT502(); });
       const matches = findMatchingT502Rows();
       if (matches.length > 0) {
         const codes = Array.from(new Set(matches.map((m) => m.pattern.match(/T502[A-Z](\d{3})/)?.[1]).filter(Boolean)));
@@ -1042,22 +1047,12 @@
     }
 
     nodes.resInput.addEventListener("input", renderAll);
-    t502Nodes.code1Input.addEventListener("input", () => {
-      t502State.code1 = t502Nodes.code1Input.value.trim().toUpperCase();
-      renderT502();
-    });
-    t502Nodes.code2Input.addEventListener("input", () => {
-      t502State.code2 = t502Nodes.code2Input.value.trim().toUpperCase();
-      renderT502();
-    });
     t502Nodes.clearBtn.addEventListener("click", () => {
       t502State.caseSize = "D";
       t502State.capacitanceUf = "22";
       t502State.voltage = "16";
       t502State.code1 = "K";
       t502State.code2 = "61";
-      t502Nodes.code1Input.value = t502State.code1;
-      t502Nodes.code2Input.value = t502State.code2;
       renderT502();
     });
 
