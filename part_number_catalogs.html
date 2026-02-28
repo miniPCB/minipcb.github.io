@@ -370,6 +370,60 @@
       outline-offset: -2px;
     }
 
+    .avail-box {
+      border-bottom: 1px solid var(--border);
+      background: #111a28;
+      padding: 8px 10px;
+    }
+
+    .avail-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .avail-title {
+      margin: 0;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+
+    .avail-wrap {
+      margin-top: 8px;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.18s ease;
+    }
+
+    .avail-wrap.expanded {
+      max-height: 48vh;
+      overflow: auto;
+    }
+
+    .avail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .avail-table th, .avail-table td {
+      border: 1px solid var(--border);
+      padding: 4px 6px;
+      text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+
+    .avail-table th {
+      background: #1a2230;
+      color: var(--text);
+      font-weight: 600;
+    }
+
     .pref-group {
       position: relative;
     }
@@ -590,6 +644,13 @@
             <span id="t502StatusText">Prototype generator active</span>
             <strong id="t502ResultCount">1 result</strong>
           </div>
+          <div class="avail-box">
+            <div class="avail-head">
+              <p class="avail-title">Available Parts Table</p>
+              <button id="t502AvailToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
+            </div>
+            <div id="t502AvailWrap" class="avail-wrap"></div>
+          </div>
           <div id="t502Results" class="results"></div>
         </section>
       </section>
@@ -629,6 +690,13 @@
           <div class="summary-line">
             <span id="t54xStatusText">Code-builder mode</span>
             <strong id="t54xResultCount">1 result</strong>
+          </div>
+          <div class="avail-box">
+            <div class="avail-head">
+              <p class="avail-title">Available Parts Table</p>
+              <button id="t54xAvailToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
+            </div>
+            <div id="t54xAvailWrap" class="avail-wrap"></div>
           </div>
           <div id="t54xResults" class="results"></div>
         </section>
@@ -811,7 +879,8 @@
       capacitanceUf: "22",
       voltage: "16",
       code1: "K",
-      code2: "61"
+      code2: "61",
+      availExpanded: false
     };
 
     const t502Options = {
@@ -870,7 +939,9 @@
       pnText: document.getElementById("t502PnBarText"),
       statusText: document.getElementById("t502StatusText"),
       resultCount: document.getElementById("t502ResultCount"),
-      results: document.getElementById("t502Results")
+      results: document.getElementById("t502Results"),
+      availToggleBtn: document.getElementById("t502AvailToggleBtn"),
+      availWrap: document.getElementById("t502AvailWrap")
     };
 
     // T540/T541 state tracks each MIL/COTS position in the assembled PN.
@@ -885,7 +956,8 @@
       termination: "H",
       surge: "65",
       esr: "10",
-      packaging: ""
+      packaging: "",
+      availExpanded: false
     };
 
     const t54xOptions = {
@@ -950,7 +1022,9 @@
       pnText: document.getElementById("t54xPnBarText"),
       statusText: document.getElementById("t54xStatusText"),
       resultCount: document.getElementById("t54xResultCount"),
-      results: document.getElementById("t54xResults")
+      results: document.getElementById("t54xResults"),
+      availToggleBtn: document.getElementById("t54xAvailToggleBtn"),
+      availWrap: document.getElementById("t54xAvailWrap")
     };
 
     const s311State = {
@@ -1666,6 +1740,65 @@
       }
     }
 
+    function setT502AvailExpanded(expanded) {
+      t502State.availExpanded = !!expanded;
+      t502Nodes.availWrap.classList.toggle("expanded", t502State.availExpanded);
+      t502Nodes.availToggleBtn.textContent = t502State.availExpanded ? "Collapse" : "Expand";
+    }
+
+    function renderT502AvailableTable() {
+      const table = document.createElement("table");
+      table.className = "avail-table";
+      let html = "<thead><tr><th>Series</th><th>Case</th><th>Voltage</th><th>Cap (uF)</th><th>Pattern</th><th>ESR</th></tr></thead><tbody>";
+      for (const row of t502Rows) {
+        const active = row.case === t502State.caseSize &&
+          row.v === t502State.voltage &&
+          String(row.cap) === String(t502State.capacitanceUf);
+        html += "<tr" + (active ? " style=\"background:rgba(123,230,168,0.12);\"" : "") + ">" +
+          "<td>T502</td>" +
+          "<td>" + row.case + " (" + row.outline + ")</td>" +
+          "<td>" + row.v + " V</td>" +
+          "<td>" + row.cap + "</td>" +
+          "<td style=\"font-family:var(--mono);\">" + row.pattern + "</td>" +
+          "<td>" + row.esr + "</td>" +
+          "</tr>";
+      }
+      html += "</tbody>";
+      table.innerHTML = html;
+      t502Nodes.availWrap.innerHTML = "";
+      t502Nodes.availWrap.appendChild(table);
+    }
+
+    function setT54xAvailExpanded(expanded) {
+      t54xState.availExpanded = !!expanded;
+      t54xNodes.availWrap.classList.toggle("expanded", t54xState.availExpanded);
+      t54xNodes.availToggleBtn.textContent = t54xState.availExpanded ? "Collapse" : "Expand";
+    }
+
+    function renderT54xAvailableTable() {
+      const table = document.createElement("table");
+      table.className = "avail-table";
+      let html = "<thead><tr><th>Series</th><th>Case</th><th>Cap Code</th><th>Voltage</th><th>ESR</th></tr></thead><tbody>";
+      for (const row of t54xCatalogRows) {
+        const active = (!t54xState.series || row.series === t54xState.series) &&
+          (!t54xState.caseSize || row.caseSize === t54xState.caseSize) &&
+          (!t54xState.voltage || row.voltage === t54xState.voltage) &&
+          (!t54xState.capCode || row.capCode === t54xState.capCode) &&
+          (!t54xState.esr || row.esr === t54xState.esr);
+        html += "<tr" + (active ? " style=\"background:rgba(123,230,168,0.12);\"" : "") + ">" +
+          "<td>" + row.series + "</td>" +
+          "<td>" + row.caseSize + "</td>" +
+          "<td style=\"font-family:var(--mono);\">" + row.capCode + "</td>" +
+          "<td>" + row.voltage + "</td>" +
+          "<td>" + row.esr + "</td>" +
+          "</tr>";
+      }
+      html += "</tbody>";
+      table.innerHTML = html;
+      t54xNodes.availWrap.innerHTML = "";
+      t54xNodes.availWrap.appendChild(table);
+    }
+
     function renderS311FilterGroup(host, options, selectedKey, countFn, onSelect) {
       host.innerHTML = "";
       for (const opt of options) {
@@ -2083,6 +2216,7 @@
     }
 
     function renderT54x() {
+      renderT54xAvailableTable();
       renderT54xFilterGroup(t54xNodes.series, t54xOptions.series, t54xState.series, (k) => t54xCountWith("series", k), (k) => {
         t54xState.series = (t54xState.series === k) ? null : k;
         renderT54x();
@@ -2248,6 +2382,7 @@
     }
 
     function renderT502() {
+      renderT502AvailableTable();
       const codesValid = validateT502Codes();
       renderT502FilterGroup(t502Nodes.caseSize, t502Options.caseSize, t502State.caseSize, (k) => { t502State.caseSize = k; renderT502(); });
       renderT502FilterGroup(t502Nodes.capFilter, t502CapOptions, String(t502State.capacitanceUf), (k) => { t502State.capacitanceUf = k; renderT502(); });
@@ -2362,6 +2497,9 @@
     }
 
     nodes.resInput.addEventListener("input", renderAll);
+    t502Nodes.availToggleBtn.addEventListener("click", () => {
+      setT502AvailExpanded(!t502State.availExpanded);
+    });
     t502Nodes.clearBtn.addEventListener("click", () => {
       t502State.caseSize = "D";
       t502State.capacitanceUf = "22";
@@ -2369,6 +2507,9 @@
       t502State.code1 = "K";
       t502State.code2 = "61";
       renderT502();
+    });
+    t54xNodes.availToggleBtn.addEventListener("click", () => {
+      setT54xAvailExpanded(!t54xState.availExpanded);
     });
     t54xNodes.capInput.addEventListener("input", () => {
       t54xState.capCode = normalizeT54xCapCode(t54xNodes.capInput.value);
@@ -2419,7 +2560,9 @@
     });
 
     renderAll();
+    setT502AvailExpanded(false);
     renderT502();
+    setT54xAvailExpanded(false);
     renderT54x();
     setS311PrefDielectric("X");
     renderS311();
