@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>M55342 / D55342 Part Number Generator</title>
+  <title>Component Part Number Generator</title>
   <style>
     :root {
       --bg: #0e1118;
@@ -39,7 +39,7 @@
       min-height: 100vh;
     }
 
-    .header, .pn-bar, .panel {
+    .header, .pn-bar, .panel, .component-bar {
       border: 1px solid var(--border);
       background: var(--panel);
       border-radius: 12px;
@@ -49,6 +49,42 @@
     .header { padding: 14px; }
     .title { margin: 0; font-size: 1.2rem; letter-spacing: 0.02em; }
     .subtitle { margin: 6px 0 0; color: var(--muted); font-size: 0.9rem; }
+
+    .component-bar {
+      padding: 10px 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .component-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-right: 4px;
+    }
+
+    .component-btn {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 11px;
+      font-size: 0.8rem;
+      color: var(--text);
+      background: #1a2638;
+      cursor: pointer;
+    }
+
+    .component-btn.active {
+      border-color: rgba(102, 163, 255, 0.7);
+      background: rgba(102, 163, 255, 0.2);
+      color: #d9ebff;
+      box-shadow: inset 0 0 0 1px rgba(102, 163, 255, 0.28);
+      font-weight: 700;
+    }
+
+    .component-view.hidden { display: none; }
 
     .pn-bar {
       padding: 10px 12px;
@@ -289,10 +325,17 @@
 <body>
   <div class="page">
     <section class="header">
-      <h1 class="title">M55342 / D55342 Part Number Generator</h1>
-      <p class="subtitle">Resistance code now follows the datasheet style: three digits + one letter. Letter sets tolerance and multiplier/decimal location.</p>
+      <h1 class="title">Component Part Number Generator</h1>
+      <p class="subtitle">Select a component family, then configure part-number code fields.</p>
     </section>
 
+    <section class="component-bar">
+      <span class="component-label">Component Type</span>
+      <button type="button" class="component-btn active" data-component="m55342">M55342 / D55342 Resistor</button>
+      <button type="button" class="component-btn" data-component="t502">T502 Capacitor</button>
+    </section>
+
+    <section id="m55342View" class="component-view">
     <section class="pn-bar">
       <div class="pn-label">Selected PN</div>
       <div id="pnBarText" class="pn-text">M55342_ _ _ _ _ _ _</div>
@@ -344,6 +387,45 @@
           <strong id="resultCount">0 matches</strong>
         </div>
         <div id="results" class="results"></div>
+      </section>
+    </section>
+    </section>
+
+    <section id="t502View" class="component-view hidden">
+      <section class="pn-bar">
+        <div class="pn-label">Selected PN</div>
+        <div id="t502PnBarText" class="pn-text">T502-?-???-?-??-??</div>
+        <div class="pn-help">Prototype format: Series + Case + CapCode + Tol + Voltage + Pack</div>
+      </section>
+
+      <section class="main">
+        <aside class="panel">
+          <h2>T502 Filters</h2>
+          <div class="panel-body">
+            <div class="group">
+              <p class="group-title">Series</p>
+              <div class="pill-cloud"><span class="filter-pill active">T502</span></div>
+            </div>
+            <div class="group"><p class="group-title">Case</p><div id="t502CaseFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Capacitance (uF)</p>
+              <input id="t502CapInput" class="text-input" type="text" value="10" />
+              <div id="t502CapHint" class="hint">Enter capacitance in uF.</div>
+            </div>
+            <div class="group"><p class="group-title">Tolerance</p><div id="t502TolFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Voltage</p><div id="t502VoltFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Packaging</p><div id="t502PackFilter" class="pill-cloud"></div></div>
+            <button id="t502ClearBtn" class="btn" type="button">Clear T502 Filters</button>
+          </div>
+        </aside>
+        <section class="panel">
+          <h2>T502 Results</h2>
+          <div class="summary-line">
+            <span id="t502StatusText">Prototype generator active</span>
+            <strong id="t502ResultCount">1 result</strong>
+          </div>
+          <div id="t502Results" class="results"></div>
+        </section>
       </section>
     </section>
   </div>
@@ -442,6 +524,9 @@
     };
 
     const nodes = {
+      componentButtons: Array.from(document.querySelectorAll(".component-btn[data-component]")),
+      m55342View: document.getElementById("m55342View"),
+      t502View: document.getElementById("t502View"),
       model: document.getElementById("modelFilter"),
       tcr: document.getElementById("tcrFilter"),
       size: document.getElementById("sizeFilter"),
@@ -458,6 +543,48 @@
       statusText: document.getElementById("statusText"),
       clearBtn: document.getElementById("clearBtn"),
       pnBarText: document.getElementById("pnBarText")
+    };
+
+    // Initial T502 workspace state and code dictionaries.
+    // This is intentionally a first-pass model for iterative refinement.
+    const t502State = {
+      caseSize: "C",
+      capacitanceUf: "10",
+      tolerance: "K",
+      voltage: "16",
+      packaging: "TR"
+    };
+
+    const t502Options = {
+      caseSize: [
+        { key: "A", label: "A" }, { key: "B", label: "B" }, { key: "C", label: "C" },
+        { key: "D", label: "D" }, { key: "E", label: "E" }, { key: "V", label: "V" }
+      ],
+      tolerance: [
+        { key: "K", label: "K (10%)" }, { key: "M", label: "M (20%)" }
+      ],
+      voltage: [
+        { key: "2R5", label: "2.5 V" }, { key: "4", label: "4 V" }, { key: "6R3", label: "6.3 V" },
+        { key: "10", label: "10 V" }, { key: "16", label: "16 V" }, { key: "20", label: "20 V" },
+        { key: "25", label: "25 V" }, { key: "35", label: "35 V" }, { key: "50", label: "50 V" }
+      ],
+      packaging: [
+        { key: "TR", label: "TR (Tape & Reel)" }, { key: "BU", label: "BU (Bulk)" }
+      ]
+    };
+
+    const t502Nodes = {
+      caseSize: document.getElementById("t502CaseFilter"),
+      capInput: document.getElementById("t502CapInput"),
+      capHint: document.getElementById("t502CapHint"),
+      tolerance: document.getElementById("t502TolFilter"),
+      voltage: document.getElementById("t502VoltFilter"),
+      packaging: document.getElementById("t502PackFilter"),
+      clearBtn: document.getElementById("t502ClearBtn"),
+      pnText: document.getElementById("t502PnBarText"),
+      statusText: document.getElementById("t502StatusText"),
+      resultCount: document.getElementById("t502ResultCount"),
+      results: document.getElementById("t502Results")
     };
 
     function formatMultiplier(v) {
@@ -708,6 +835,86 @@
       return v.toFixed(3).replace(/\.?0+$/, "") + " ohm";
     }
 
+    function toT502CapCode(ufText) {
+      const uf = Number(String(ufText || "").trim());
+      if (!isFinite(uf) || uf <= 0) return null;
+      const pf = uf * 1e6;
+      const exp = Math.floor(Math.log10(pf)) - 2;
+      const sig = Math.round(pf / Math.pow(10, exp));
+      if (sig < 100 || sig > 999 || exp < 0 || exp > 9) return null;
+      return String(sig) + String(exp);
+    }
+
+    function renderT502FilterGroup(host, options, selectedKey, onSelect) {
+      host.innerHTML = "";
+      for (const opt of options) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "filter-pill" + (selectedKey === opt.key ? " active" : "");
+        b.innerHTML = "<span>" + opt.label + "</span>";
+        b.addEventListener("click", () => onSelect(opt.key));
+        host.appendChild(b);
+      }
+    }
+
+    function renderT502() {
+      renderT502FilterGroup(t502Nodes.caseSize, t502Options.caseSize, t502State.caseSize, (k) => { t502State.caseSize = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.tolerance, t502Options.tolerance, t502State.tolerance, (k) => { t502State.tolerance = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.voltage, t502Options.voltage, t502State.voltage, (k) => { t502State.voltage = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.packaging, t502Options.packaging, t502State.packaging, (k) => { t502State.packaging = k; renderT502(); });
+
+      const capCode = toT502CapCode(t502State.capacitanceUf);
+      t502Nodes.capInput.classList.remove("valid", "invalid");
+      if (capCode) {
+        t502Nodes.capInput.classList.add("valid");
+        t502Nodes.capHint.textContent = "Capacitance code: " + capCode + " (from " + t502State.capacitanceUf + " uF).";
+      } else {
+        t502Nodes.capInput.classList.add("invalid");
+        t502Nodes.capHint.textContent = "Enter positive capacitance in uF (for example: 1, 10, 47, 100).";
+      }
+
+      const pn = capCode
+        ? ("T502" + t502State.caseSize + capCode + t502State.tolerance + t502State.voltage + t502State.packaging)
+        : "T502-?-???-?-??-??";
+      t502Nodes.pnText.textContent = pn;
+      t502Nodes.results.innerHTML = "";
+
+      if (!capCode) {
+        t502Nodes.resultCount.textContent = "0 results";
+        t502Nodes.statusText.textContent = "Capacitance input invalid";
+        const empty = document.createElement("div");
+        empty.className = "result-card";
+        empty.innerHTML = "<div class=\"pn\">No valid T502 code with current capacitance input.</div>";
+        t502Nodes.results.appendChild(empty);
+        return;
+      }
+
+      t502Nodes.resultCount.textContent = "1 result";
+      t502Nodes.statusText.textContent = "Prototype T502 mapping";
+      const card = document.createElement("article");
+      card.className = "result-card";
+      card.innerHTML =
+        "<div class=\"pn\">" + pn + "</div>" +
+        "<div class=\"meta\">" +
+        "<span>Case: " + t502State.caseSize + "</span>" +
+        "<span>Cap: " + t502State.capacitanceUf + " uF</span>" +
+        "<span>Code: " + capCode + "</span>" +
+        "<span>Tol: " + t502State.tolerance + "</span>" +
+        "<span>Volt: " + t502State.voltage + "</span>" +
+        "<span>Pack: " + t502State.packaging + "</span>" +
+        "</div>";
+      t502Nodes.results.appendChild(card);
+    }
+
+    function setComponentView(viewKey) {
+      const isM55342 = viewKey === "m55342";
+      nodes.m55342View.classList.toggle("hidden", !isM55342);
+      nodes.t502View.classList.toggle("hidden", isM55342);
+      for (const b of nodes.componentButtons) {
+        b.classList.toggle("active", b.dataset.component === viewKey);
+      }
+    }
+
     function renderAll() {
       const mantissa = updateInputFormatting();
       const mil = milValueCheck(mantissa, filters.letter);
@@ -739,8 +946,28 @@
       renderAll();
     });
 
+    for (const b of nodes.componentButtons) {
+      b.addEventListener("click", () => setComponentView(b.dataset.component));
+    }
+
     nodes.resInput.addEventListener("input", renderAll);
+    t502Nodes.capInput.addEventListener("input", () => {
+      t502State.capacitanceUf = t502Nodes.capInput.value.trim();
+      renderT502();
+    });
+    t502Nodes.clearBtn.addEventListener("click", () => {
+      t502State.caseSize = "C";
+      t502State.capacitanceUf = "10";
+      t502State.tolerance = "K";
+      t502State.voltage = "16";
+      t502State.packaging = "TR";
+      t502Nodes.capInput.value = t502State.capacitanceUf;
+      renderT502();
+    });
+
     renderAll();
+    renderT502();
+    setComponentView("m55342");
   </script>
 </body>
 </html>
