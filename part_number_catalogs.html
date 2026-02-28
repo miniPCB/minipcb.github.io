@@ -351,6 +351,20 @@
       background: rgba(0, 160, 220, 0.33);
     }
 
+    .pref-table td.pref-cell.available {
+      cursor: pointer;
+      background: rgba(43, 57, 77, 0.45);
+    }
+
+    .pref-table td.pref-cell.available:hover {
+      background: rgba(71, 112, 166, 0.45);
+    }
+
+    .pref-table td.pref-cell.unavailable {
+      background: rgba(17, 24, 34, 0.65);
+      opacity: 0.45;
+    }
+
     .pref-table td.pref-cell.selected {
       outline: 2px solid rgba(123, 230, 168, 0.95);
       outline-offset: -2px;
@@ -557,7 +571,7 @@
             <div class="group"><p class="group-title">Packaging / Marking</p><div id="s311PackFilter" class="pill-cloud"></div></div>
             <div class="group">
               <p class="group-title">S311-P838 Preferred Sizes (X7R, AVX Size Codes)</p>
-              <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table). NASA-to-AVX map for highlight: D->B, E->C, F->D, S->E, R->F.</div>
+              <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table). Non-preferred NASA case sizes are shown unshaded. Click an available cell to apply cap/size/voltage.</div>
               <div id="s311PrefTableWrap" style="overflow:auto; margin-top:6px;"></div>
             </div>
             <button id="s311ClearBtn" class="btn" type="button">Clear S-311 Filters</button>
@@ -1668,38 +1682,53 @@
       return map[nasaSize] || null;
     }
 
-    function renderS311PreferredTable(selectedCapCode, selectedSize, selectedVoltage) {
+    function renderS311PreferredTable(selectedCapCode, selectedSize, selectedVoltageCode) {
       const table = document.createElement("table");
       table.className = "pref-table";
-      const colKeys = ["B16","B25","B50","B100","C16","C25","C50","C100","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"];
-      const groups = [
-        { size: "B", label: "B (0603)" },
-        { size: "C", label: "C (0805)" },
-        { size: "D", label: "D (1206)" },
-        { size: "E", label: "E (1210)" },
-        { size: "F", label: "F (1812)" }
-      ];
-      const volts = ["16","25","50","100"];
+      const avxVoltByNasaCode = { "6": "16", "1": "25", "2": "50", "3": "100" };
+      const nasaVoltCodes = ["6", "1", "2", "3"];
+      const nasaSizeDefs = s311Options.size.map((x) => ({ key: x.key, label: x.label.replace(/\s+/g, " ") }));
+      const preferredCols = new Set();
+      for (const row of s311P838PrefRows) {
+        for (const avx of row.preferred) {
+          const avxSize = avx.slice(0, 1);
+          const avxVolt = avx.slice(1);
+          let nasaSize = null;
+          if (avxSize === "B") nasaSize = "D";
+          else if (avxSize === "C") nasaSize = "E";
+          else if (avxSize === "D") nasaSize = "F";
+          else if (avxSize === "E") nasaSize = "S";
+          else if (avxSize === "F") nasaSize = "R";
+          const nasaVoltCode = Object.keys(avxVoltByNasaCode).find((k) => avxVoltByNasaCode[k] === avxVolt);
+          if (nasaSize && nasaVoltCode) {
+            preferredCols.add(row.code + "|" + nasaSize + "|" + nasaVoltCode);
+          }
+        }
+      }
 
       let html = "<thead><tr><th class=\"code-col\" rowspan=\"2\">Code</th><th class=\"val-col\" rowspan=\"2\">Value</th>";
-      for (const g of groups) html += "<th colspan=\"4\">" + g.label + "</th>";
+      for (const g of nasaSizeDefs) html += "<th colspan=\"4\">" + g.label + "</th>";
       html += "</tr><tr>";
-      for (let i = 0; i < groups.length; i += 1) {
-        for (const v of volts) html += "<th>" + v + "V</th>";
+      for (let i = 0; i < nasaSizeDefs.length; i += 1) {
+        for (const vc of nasaVoltCodes) html += "<th>" + avxVoltByNasaCode[vc] + "V</th>";
       }
       html += "</tr></thead><tbody>";
 
-      const selectedAvxSize = mapS311NasaSizeToAvxPreferred(selectedSize);
-      const selectedCol = (selectedAvxSize && selectedVoltage)
-        ? selectedAvxSize + selectedVoltage
-        : null;
-
       for (const row of s311P838PrefRows) {
+        const capParsed = parseS311CapCode(row.code);
         html += "<tr><td class=\"code-col\">" + row.code + "</td><td class=\"val-col\">" + row.value + "</td>";
-        for (const c of colKeys) {
-          const pref = row.preferred.includes(c);
-          const sel = selectedCol && c === selectedCol && selectedCapCode === row.code;
-          html += "<td class=\"pref-cell" + (pref ? " preferred" : "") + (sel ? " selected" : "") + "\"></td>";
+        for (const s of nasaSizeDefs) {
+          for (const vc of nasaVoltCodes) {
+            const tableEntry = getS311TableEntry(s.key, vc, "X");
+            const available = !!(tableEntry && capParsed.ok && capParsed.pf <= tableEntry.maxPf);
+            const preferred = preferredCols.has(row.code + "|" + s.key + "|" + vc);
+            const sel = selectedCapCode === row.code && selectedSize === s.key && selectedVoltageCode === vc;
+            const classes = "pref-cell" +
+              (available ? " available" : " unavailable") +
+              (preferred ? " preferred" : "") +
+              (sel ? " selected" : "");
+            html += "<td class=\"" + classes + "\" data-cap=\"" + row.code + "\" data-size=\"" + s.key + "\" data-voltage=\"" + vc + "\"></td>";
+          }
         }
         html += "</tr>";
       }
@@ -1707,6 +1736,19 @@
       table.innerHTML = html;
       s311Nodes.prefTableWrap.innerHTML = "";
       s311Nodes.prefTableWrap.appendChild(table);
+
+      for (const cell of Array.from(table.querySelectorAll("td.pref-cell.available"))) {
+        cell.addEventListener("click", () => {
+          s311State.dielectric = "X";
+          s311State.size = cell.dataset.size;
+          s311State.voltage = cell.dataset.voltage;
+          s311State.capCode = cell.dataset.cap;
+          s311Nodes.capInput.value = s311State.capCode;
+          // X7R parts >=10 pF in this model allow K/L only; use K for deterministic selection.
+          if (s311State.tolerance !== "K" && s311State.tolerance !== "L") s311State.tolerance = "K";
+          renderS311();
+        });
+      }
     }
 
     function getS311TableEntry(size, voltage, dielectric) {
@@ -1733,12 +1775,12 @@
         s311Nodes.capHint.textContent = cap.message;
       }
       const selectedPrefCode = cap.ok ? s311PfToCode3(cap.pf) : null;
-      const selectedPrefVoltage = s311State.voltage === "6" ? "16" : (s311State.voltage === "1" ? "25" : (s311State.voltage === "2" ? "50" : (s311State.voltage === "3" ? "100" : null)));
-      renderS311PreferredTable(selectedPrefCode, s311State.size, selectedPrefVoltage);
-      if (selectedPrefCode && selectedPrefVoltage && mapS311NasaSizeToAvxPreferred(s311State.size || "")) {
-        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838, AVX size codes). Green outline marks your mapped NASA selection: D->B, E->C, F->D, S->E, R->F.";
+      const selectedPrefVoltageCode = ["6", "1", "2", "3"].includes(s311State.voltage || "") ? s311State.voltage : null;
+      renderS311PreferredTable(selectedPrefCode, s311State.size, selectedPrefVoltageCode);
+      if (selectedPrefCode && selectedPrefVoltageCode) {
+        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838). Click any available cell to set Size/Voltage/Capacitance in the PN.";
       } else {
-        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838, AVX size codes). Selection highlight is available when NASA size is D/E/F/S/R and voltage is 16/25/50/100 V.";
+        s311Nodes.prefHint.textContent = "Preferred sizes are shaded (AVX S311-P838). Click any available cell to set Size/Voltage/Capacitance in the PN.";
       }
 
       renderS311FilterGroup(s311Nodes.ultra, s311Options.ultrasonic, s311State.ultrasonic, (k) => s311CountWith("ultrasonic", k), (k) => {
