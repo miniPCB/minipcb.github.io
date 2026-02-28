@@ -333,19 +333,21 @@
     // Case/slash code mapping from reviewed dataset:
     // 01=0502, 02=0505, 03=1005, 04=1505, 05=2208, 06=0805,
     // 07=1206, 08=2010, 09=2512, 10=1010, 11=0402, 12=0603.
+    // Power/operating-voltage values below come from the user-provided
+    // M55342/D55342 table in this review thread.
     const sizeOptions = [
-      { key: "01", label: "/01 (0502)" },
-      { key: "02", label: "/02 (0505)" },
-      { key: "03", label: "/03 (1005)" },
-      { key: "04", label: "/04 (1505)" },
-      { key: "05", label: "/05 (2208)" },
-      { key: "06", label: "/06 (0805)" },
-      { key: "07", label: "/07 (1206)" },
-      { key: "08", label: "/08 (2010)" },
-      { key: "09", label: "/09 (2512)" },
-      { key: "10", label: "/10 (1010)" },
-      { key: "11", label: "/11 (0402)" },
-      { key: "12", label: "/12 (0603)" }
+      { key: "01", footprint: "0502", powerMw: 50, opV: 40, label: "/01 (0502, 50 mW, 40 V op)" },
+      { key: "02", footprint: "0505", powerMw: 125, opV: 40, label: "/02 (0505, 125 mW, 40 V op)" },
+      { key: "03", footprint: "1005", powerMw: 200, opV: 75, label: "/03 (1005, 200 mW, 75 V op)" },
+      { key: "04", footprint: "1505", powerMw: 150, opV: 125, label: "/04 (1505, 150 mW, 125 V op)" },
+      { key: "05", footprint: "2208", powerMw: 225, opV: 175, label: "/05 (2208, 225 mW, 175 V op)" },
+      { key: "06", footprint: "0805", powerMw: 150, opV: 50, label: "/06 (0805, 150 mW, 50 V op)" },
+      { key: "07", footprint: "1206", powerMw: 250, opV: 100, label: "/07 (1206, 250 mW, 100 V op)" },
+      { key: "08", footprint: "2010", powerMw: 800, opV: 150, label: "/08 (2010, 800 mW, 150 V op)" },
+      { key: "09", footprint: "2512", powerMw: 1000, opV: 200, label: "/09 (2512, 1000 mW, 200 V op)" },
+      { key: "10", footprint: "1010", powerMw: 500, opV: 75, label: "/10 (1010, 500 mW, 75 V op)" },
+      { key: "11", footprint: "0402", powerMw: 50, opV: 30, label: "/11 (0402, 50 mW, 30 V op)" },
+      { key: "12", footprint: "0603", powerMw: 100, opV: 50, label: "/12 (0603, 100 mW, 50 V op)" }
     ];
     // Termination code map (kept explicit even though only one option is active).
     const terminationOptions = [{ key: "B", label: "B" }];
@@ -460,6 +462,11 @@
 
     function letterInfo(key) {
       return letterOptions.find((x) => x.key === key) || null;
+    }
+
+    // Resolve slash-code electrical data for display in results and reviewer checks.
+    function sizeInfo(key) {
+      return sizeOptions.find((x) => x.key === key) || null;
     }
 
     function buildValueCode(mantissa, letterKey) {
@@ -598,11 +605,15 @@
 
       const maxShown = 300;
       for (const row of rows.slice(0, maxShown)) {
+        const sz = sizeInfo(row.size);
         const card = document.createElement("article");
         card.className = "result-card";
         card.innerHTML =
           "<div class=\"pn\">" + row.pn + "</div>" +
           "<div class=\"meta\">" +
+          "<span>Slash: /" + row.size + (sz ? (" (" + sz.footprint + ")") : "") + "</span>" +
+          "<span>Power: " + (sz ? (sz.powerMw + " mW") : "N/A") + "</span>" +
+          "<span>V op: " + (sz ? (sz.opV + " V") : "N/A") + "</span>" +
           "<span>Value Code: " + row.valueCode + "</span>" +
           "<span>Letter: " + row.letter + " (" + row.letterTol + ")</span>" +
           "<span>Rounded: " + formatOhms(row.valueNominal) + "</span>" +
