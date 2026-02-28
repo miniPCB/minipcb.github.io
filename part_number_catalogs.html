@@ -839,14 +839,28 @@
       return v.toFixed(3).replace(/\.?0+$/, "") + " ohm";
     }
 
+    // T502 capacitance code = 3-digit EIA style:
+    // value in pF represented as XY * 10^Z (e.g., 22 uF => 22,000,000 pF => 226).
     function toT502CapCode(ufText) {
       const uf = Number(String(ufText || "").trim());
       if (!isFinite(uf) || uf <= 0) return null;
       const pf = uf * 1e6;
-      const exp = Math.floor(Math.log10(pf)) - 2;
+      const exp = Math.floor(Math.log10(pf)) - 1;
       const sig = Math.round(pf / Math.pow(10, exp));
-      if (sig < 100 || sig > 999 || exp < 0 || exp > 9) return null;
+      if (sig < 10 || sig > 99 || exp < 0 || exp > 9) return null;
       return String(sig) + String(exp);
+    }
+
+    // Voltage code formatter for PN construction:
+    // numeric voltages are zero-padded to 3 digits (e.g., 35 => 035).
+    // alphanumeric values (e.g., 2R5) are kept as-is.
+    function toT502VoltageCode(v) {
+      const s = String(v || "").trim().toUpperCase();
+      if (!s) return "___";
+      const normalized = s.replace("R", ".");
+      const n = Number(normalized);
+      if (isFinite(n)) return String(Math.round(n)).padStart(3, "0");
+      return s;
     }
 
     function renderT502FilterGroup(host, options, selectedKey, onSelect) {
@@ -877,8 +891,9 @@
         t502Nodes.capHint.textContent = "Enter positive capacitance in uF (for example: 1, 10, 47, 100).";
       }
 
+      const vCode = toT502VoltageCode(t502State.voltage);
       const pn = capCode
-        ? ("T502" + t502State.caseSize + capCode + t502State.tolerance + t502State.voltage + t502State.packaging)
+        ? ("T502" + t502State.caseSize + capCode + t502State.tolerance + vCode + t502State.packaging)
         : "T502-?-???-?-??-??";
       t502Nodes.pnText.textContent = pn;
       t502Nodes.results.innerHTML = "";
@@ -905,7 +920,7 @@
         "<span>Cap: " + t502State.capacitanceUf + " uF</span>" +
         "<span>Code: " + capCode + "</span>" +
         "<span>Tol: " + t502State.tolerance + "</span>" +
-        "<span>Volt: " + t502State.voltage + "</span>" +
+        "<span>Volt: " + t502State.voltage + " (code " + vCode + ")</span>" +
         "<span>Pack: " + t502State.packaging + "</span>" +
         "</div>";
       t502Nodes.results.appendChild(card);
