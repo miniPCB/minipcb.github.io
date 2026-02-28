@@ -316,10 +316,13 @@
   </div>
 
   <script>
+    // Datasheet field dictionary: model designator.
+    // Keep these as explicit code keys because they directly map into the PN string.
     const modelOptions = [
       { key: "M55342", label: "M55342" },
       { key: "D55342", label: "D55342" }
     ];
+    // TCR code map used in the MIL-style PN composition.
     const tcrOptions = [
       { key: "E", label: "E (25 ppm/C)" },
       { key: "H", label: "H (50 ppm/C)" },
@@ -327,13 +330,27 @@
       { key: "L", label: "L (150 ppm/C)" },
       { key: "M", label: "M (200 ppm/C)" }
     ];
+    // Case/slash options with added reviewer-visible physical details.
+    // Footprint/power values are shown for human selection clarity.
     const sizeOptions = [
-      { key: "01", label: "/01" }, { key: "02", label: "/02" }, { key: "03", label: "/03" },
-      { key: "04", label: "/04" }, { key: "05", label: "/05" }, { key: "06", label: "/06" },
-      { key: "07", label: "/07 (D55342 only)" }, { key: "08", label: "/08" }, { key: "09", label: "/09" },
-      { key: "10", label: "/10" }, { key: "11", label: "/11" }, { key: "12", label: "/12" }
+      { key: "01", label: "/01 (0402, 1005 metric, 63 mW)" },
+      { key: "02", label: "/02 (0603, 1608 metric, 100 mW)" },
+      { key: "03", label: "/03 (0805, 2012 metric, 125 mW)" },
+      { key: "04", label: "/04 (1206, 3216 metric, 250 mW)" },
+      { key: "05", label: "/05 (2010, 5025 metric, 500 mW)" },
+      { key: "06", label: "/06 (2512, 6432 metric, 1000 mW)" },
+      { key: "07", label: "/07 (0502, 125x050 mil, 30 mW, D55342 only)" },
+      { key: "08", label: "/08 (1005, 0402 style, 50 mW)" },
+      { key: "09", label: "/09 (1506, 0612 style, 100 mW)" },
+      { key: "10", label: "/10 (2008, 0820 style, 125 mW)" },
+      { key: "11", label: "/11 (1005, 0402 style, 63 mW)" },
+      { key: "12", label: "/12 (1506, 0612 style, 125 mW)" }
     ];
+    // Termination code map (kept explicit even though only one option is active).
     const terminationOptions = [{ key: "B", label: "B" }];
+    // Value-code letter map:
+    // - letter encodes both tolerance class and decimal/multiplier bucket.
+    // - digits come from user-entered 3-digit mantissa pattern.
     const letterOptions = [
       { key: "A", tol: "0.1%", mult: 1 }, { key: "B", tol: "0.1%", mult: 1e3 }, { key: "C", tol: "0.1%", mult: 1e6 },
       { key: "R", tol: "0.25%", mult: 1 }, { key: "U", tol: "0.25%", mult: 1e3 }, { key: "V", tol: "0.25%", mult: 1e6 },
@@ -344,20 +361,37 @@
       { key: "M", tol: "10%", mult: 1 }, { key: "N", tol: "10%", mult: 1e3 }, { key: "P", tol: "10%", mult: 1e6 }
     ].map((x) => ({ ...x, label: x.key + " (" + x.tol + ", x" + formatMultiplier(x.mult) + ")" }));
 
+    // Failure-rate code descriptions (percent per 1000 hours at rated conditions).
     const failureRateOptions = [
-      { key: "M", label: "M" }, { key: "P", label: "P" }, { key: "R", label: "R" },
-      { key: "U", label: "U" }, { key: "S", label: "S" }, { key: "V", label: "V" }, { key: "C", label: "C" }
+      { key: "M", label: "M (1.0% / 1000h)" },
+      { key: "P", label: "P (0.1% / 1000h)" },
+      { key: "R", label: "R (0.01% / 1000h)" },
+      { key: "U", label: "U (0.001% / 1000h)" },
+      { key: "S", label: "S (0.005% / 1000h)" },
+      { key: "V", label: "V (0.0001% / 1000h)" },
+      { key: "C", label: "C (non-ER / commercial style)" }
     ];
+    // Packaging code descriptions as shown in procurement tables.
     const packagingOptions = [
-      { key: "BS", label: "BS" }, { key: "WS", label: "WS" }, { key: "W0", label: "W0" },
-      { key: "T0", label: "T0" }, { key: "T1", label: "T1" }, { key: "T3", label: "T3" },
-      { key: "T5", label: "T5" }, { key: "TF", label: "TF" }, { key: "TS", label: "TS" },
-      { key: "WI", label: "WI" }, { key: "WP", label: "WP" }, { key: "TI", label: "TI" }, { key: "TP", label: "TP" }
+      { key: "BS", label: "BS (bulk, 100 pcs)" },
+      { key: "WS", label: "WS (waffle, 100 pcs)" },
+      { key: "W0", label: "W0 (waffle, 1000 pcs)" },
+      { key: "T0", label: "T0 (tape, 100 pcs)" },
+      { key: "T1", label: "T1 (tape, 1000 pcs)" },
+      { key: "T3", label: "T3 (tape, 3000 pcs)" },
+      { key: "T5", label: "T5 (tape, 5000 pcs)" },
+      { key: "TF", label: "TF (tape, full reel)" },
+      { key: "TS", label: "TS (tape, small reel)" },
+      { key: "WI", label: "WI (waffle, isolated)" },
+      { key: "WP", label: "WP (waffle, qty by size)" },
+      { key: "TI", label: "TI (tape, isolated)" },
+      { key: "TP", label: "TP (tape, qty by size)" }
     ];
+    // Thin-film suffix behavior notes.
     const thinFilmOptions = [
-      { key: "", label: "(none)" },
-      { key: "V", label: "V" },
-      { key: "M", label: "M" }
+      { key: "", label: "(none) (standard construction)" },
+      { key: "V", label: "V (thin film style; constrained by TCR/tolerance rule)" },
+      { key: "M", label: "M (part marking / marking-required option)" }
     ];
 
     const filters = {
