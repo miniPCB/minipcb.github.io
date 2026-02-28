@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>M55342 Part Number Generator</title>
+  <title>M55342 / D55342 Part Number Generator</title>
   <style>
     :root {
       --bg: #0e1118;
@@ -12,10 +12,7 @@
       --text: #e8edf5;
       --muted: #98a7bb;
       --accent: #2f88ff;
-      --accent-2: #37c3ff;
       --border: #2d3a4d;
-      --ok: #2ecc71;
-      --warn: #f1c40f;
       --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
       --mono: "Consolas", "Courier New", monospace;
       --sans: "Segoe UI", "Trebuchet MS", sans-serif;
@@ -39,7 +36,7 @@
       margin: 0 auto;
       padding: 16px;
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto 1fr;
       gap: 12px;
       min-height: 100vh;
     }
@@ -54,7 +51,7 @@
 
     .title {
       margin: 0;
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       letter-spacing: 0.02em;
     }
 
@@ -64,9 +61,43 @@
       font-size: 0.9rem;
     }
 
+    .pn-bar {
+      border: 1px solid var(--border);
+      background: #101823;
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .pn-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .pn-text {
+      font-family: var(--mono);
+      font-size: 0.98rem;
+      color: #c6e3ff;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .pn-help {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: right;
+      white-space: nowrap;
+    }
+
     .main {
       display: grid;
-      grid-template-columns: minmax(320px, 34%) minmax(420px, 66%);
+      grid-template-columns: minmax(350px, 36%) minmax(420px, 64%);
       gap: 12px;
       min-height: 0;
     }
@@ -107,7 +138,7 @@
 
     .group-title {
       margin: 0 0 8px;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       color: var(--muted);
@@ -123,8 +154,7 @@
       border: 1px solid var(--border);
       border-radius: 999px;
       padding: 6px 11px;
-      font-size: 0.82rem;
-      line-height: 1.25;
+      font-size: 0.8rem;
       color: var(--text);
       background: #1a2638;
       cursor: pointer;
@@ -133,11 +163,12 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      line-height: 1.2;
     }
 
     .filter-pill .count {
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.74rem;
       font-family: var(--mono);
     }
 
@@ -153,6 +184,19 @@
       opacity: 0.45;
       cursor: not-allowed;
     }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: #1e2837;
+      color: var(--text);
+      border-radius: 8px;
+      min-height: 34px;
+      padding: 0 10px;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+
+    .btn:hover { border-color: #496287; }
 
     .summary-line {
       display: grid;
@@ -171,19 +215,6 @@
       font-family: var(--mono);
       font-size: 0.95rem;
     }
-
-    .btn {
-      border: 1px solid var(--border);
-      background: #1e2837;
-      color: var(--text);
-      border-radius: 8px;
-      min-height: 34px;
-      padding: 0 10px;
-      cursor: pointer;
-      font-size: 0.82rem;
-    }
-
-    .btn:hover { border-color: #496287; }
 
     .results {
       overflow: auto;
@@ -214,7 +245,7 @@
       flex-wrap: wrap;
       gap: 7px;
       color: var(--muted);
-      font-size: 0.8rem;
+      font-size: 0.78rem;
     }
 
     .meta span {
@@ -227,11 +258,13 @@
     .note {
       margin-top: 10px;
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       line-height: 1.35;
     }
 
     @media (max-width: 980px) {
+      .pn-bar { grid-template-columns: 1fr; }
+      .pn-help { text-align: left; }
       .main { grid-template-columns: 1fr; }
     }
   </style>
@@ -239,42 +272,32 @@
 <body>
   <div class="page">
     <section class="header">
-      <h1 class="title">M55342 Part Number Generator</h1>
-      <p class="subtitle">Select filter parameters. The result list always shows only remaining valid M55342 part number combinations.</p>
+      <h1 class="title">M55342 / D55342 Part Number Generator</h1>
+      <p class="subtitle">Filter by datasheet code fields. Remaining results always show valid combinations under the current selections.</p>
+    </section>
+
+    <section class="pn-bar">
+      <div class="pn-label">Selected PN</div>
+      <div id="pnBarText" class="pn-text">M55342_ _ _ _ _ _ _</div>
+      <div class="pn-help">Format: Model + TCR + Case + Term + Value + FR + Pack + Thin Film</div>
     </section>
 
     <section class="main">
       <aside class="panel">
         <h2>Filters</h2>
         <div class="panel-body">
-          <div class="group">
-            <p class="group-title">Case Size / Slash</p>
-            <div id="sizeFilter" class="pill-cloud"></div>
-          </div>
-          <div class="group">
-            <p class="group-title">Resistance</p>
-            <div id="resFilter" class="pill-cloud"></div>
-          </div>
-          <div class="group">
-            <p class="group-title">Tolerance Code</p>
-            <div id="tolFilter" class="pill-cloud"></div>
-          </div>
-          <div class="group">
-            <p class="group-title">TCR Code</p>
-            <div id="tcrFilter" class="pill-cloud"></div>
-          </div>
-          <div class="group">
-            <p class="group-title">Failure Rate Code</p>
-            <div id="frFilter" class="pill-cloud"></div>
-          </div>
-          <div class="group">
-            <p class="group-title">Packaging</p>
-            <div id="pkgFilter" class="pill-cloud"></div>
-          </div>
+          <div class="group"><p class="group-title">Model</p><div id="modelFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">TCR Code</p><div id="tcrFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Case Size / Slash</p><div id="sizeFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Termination</p><div id="termFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Resistance Code</p><div id="valueFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Tolerance (From Value Code)</p><div id="tolFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Failure Rate Code</p><div id="frFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Packaging</p><div id="pkgFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Thin Film Code</p><div id="tfFilter" class="pill-cloud"></div></div>
           <button id="clearBtn" class="btn" type="button">Clear All Filters</button>
           <p class="note">
-            Generator model format: <span style="font-family: var(--mono);">M55342K[Slash][TCR][ResCode][Tol][FR][Pkg]</span><br />
-            This page uses a constrained in-browser M55342 code model for interactive filtering.
+            Datasheet-aligned code families used here: Model (`M55342`, `D55342`), TCR (`E/H/K/L/M`), case slash (`01...12`), termination (`B`), value code format (`digit + letter + two digits`), failure rate (`M/P/R/U/S/V/C`), and packaging code set (`BS/WS/W0/T0/T1/T3/T5/TF/TS/WI/WP/TI/TP`).
           </p>
         </div>
       </aside>
@@ -283,7 +306,7 @@
         <h2>Remaining Part Numbers</h2>
         <div class="summary-line">
           <span id="statusText">Ready</span>
-          <strong id="resultCount">0</strong>
+          <strong id="resultCount">0 matches</strong>
         </div>
         <div id="results" class="results"></div>
       </section>
@@ -291,116 +314,182 @@
   </div>
 
   <script>
-    const sizeOptions = [
-      { key: "01", label: "01 (0402, 1/16W)" },
-      { key: "02", label: "02 (0603, 1/10W)" },
-      { key: "03", label: "03 (0805, 1/8W)" },
-      { key: "04", label: "04 (1206, 1/4W)" },
-      { key: "05", label: "05 (2010, 1/2W)" },
-      { key: "06", label: "06 (2512, 1W)" }
-    ];
-
-    const resistanceOptions = [
-      { key: "10R0", ohms: 10, label: "10 ohm" },
-      { key: "24R9", ohms: 24.9, label: "24.9 ohm" },
-      { key: "49R9", ohms: 49.9, label: "49.9 ohm" },
-      { key: "1000", ohms: 100, label: "100 ohm" },
-      { key: "2210", ohms: 221, label: "221 ohm" },
-      { key: "4990", ohms: 499, label: "499 ohm" },
-      { key: "1K00", ohms: 1000, label: "1 kohm" },
-      { key: "2K49", ohms: 2490, label: "2.49 kohm" },
-      { key: "4K99", ohms: 4990, label: "4.99 kohm" },
-      { key: "10K0", ohms: 10000, label: "10 kohm" },
-      { key: "16K7", ohms: 16670, label: "16.67 kohm" },
-      { key: "24K9", ohms: 24900, label: "24.9 kohm" },
-      { key: "49K9", ohms: 49900, label: "49.9 kohm" },
-      { key: "100K", ohms: 100000, label: "100 kohm" },
-      { key: "249K", ohms: 249000, label: "249 kohm" },
-      { key: "499K", ohms: 499000, label: "499 kohm" },
-      { key: "1M00", ohms: 1000000, label: "1 Mohm" }
-    ];
-
-    const toleranceOptions = [
-      { key: "F", label: "F (1%)" },
-      { key: "D", label: "D (0.5%)" },
-      { key: "C", label: "C (0.25%)" },
-      { key: "B", label: "B (0.1%)" }
+    const modelOptions = [
+      { key: "M55342", label: "M55342 (Standard)" },
+      { key: "D55342", label: "D55342 (0502 only)" }
     ];
 
     const tcrOptions = [
-      { key: "A", label: "A (25 ppm/C)" },
-      { key: "B", label: "B (50 ppm/C)" },
-      { key: "C", label: "C (100 ppm/C)" }
+      { key: "E", label: "E (25 ppm/C)" },
+      { key: "H", label: "H (50 ppm/C)" },
+      { key: "K", label: "K (100 ppm/C)" },
+      { key: "L", label: "L (150 ppm/C)" },
+      { key: "M", label: "M (200 ppm/C)" }
+    ];
+
+    const sizeOptions = [
+      { key: "01", label: "/01 (0402, 1/16W, 75V)" },
+      { key: "02", label: "/02 (0603, 1/10W, 100V)" },
+      { key: "03", label: "/03 (0805, 1/8W, 150V)" },
+      { key: "04", label: "/04 (1206, 1/4W, 200V)" },
+      { key: "05", label: "/05 (2010, 1/2W, 300V)" },
+      { key: "06", label: "/06 (2512, 1W, 500V)" },
+      { key: "07", label: "/07 (0502, D55342 only)" },
+      { key: "08", label: "/08 (1005, 1/20W, 25V)" },
+      { key: "09", label: "/09 (1506, 1/10W, 75V)" },
+      { key: "10", label: "/10 (2008, 1/8W, 100V)" },
+      { key: "11", label: "/11 (1005, 1/16W, 75V)" },
+      { key: "12", label: "/12 (1506, 1/8W, 75V)" }
+    ];
+
+    const terminationOptions = [
+      { key: "B", label: "B (Wraparound)" }
+    ];
+
+    const valueCodeOptions = [
+      { key: "1A00", tol: "0.1", label: "1A00 (0.1%)" },
+      { key: "5B60", tol: "0.1", label: "5B60 (0.1%)" },
+      { key: "1C00", tol: "0.1", label: "1C00 (0.1%)" },
+      { key: "0RT0", tol: "0.25", label: "0RT0 (0.25%)" },
+      { key: "1R00", tol: "0.25", label: "1R00 (0.25%)" },
+      { key: "5U60", tol: "0.25", label: "5U60 (0.25%)" },
+      { key: "1W00", tol: "0.5", label: "1W00 (0.5%)" },
+      { key: "5Y60", tol: "0.5", label: "5Y60 (0.5%)" },
+      { key: "1Z00", tol: "0.5", label: "1Z00 (0.5%)" },
+      { key: "1D00", tol: "1", label: "1D00 (1%)" },
+      { key: "5E60", tol: "1", label: "5E60 (1%)" },
+      { key: "1F00", tol: "1", label: "1F00 (1%)" },
+      { key: "1G00", tol: "2", label: "1G00 (2%)" },
+      { key: "5H60", tol: "2", label: "5H60 (2%)" },
+      { key: "1T00", tol: "2", label: "1T00 (2%)" },
+      { key: "1J00", tol: "5", label: "1J00 (5%)" },
+      { key: "5K60", tol: "5", label: "5K60 (5%)" },
+      { key: "1L00", tol: "5", label: "1L00 (5%)" },
+      { key: "1M00", tol: "10", label: "1M00 (10%)" },
+      { key: "5N60", tol: "10", label: "5N60 (10%)" },
+      { key: "1P00", tol: "10", label: "1P00 (10%)" }
+    ];
+
+    const toleranceOptions = [
+      { key: "0.1", label: "0.1%" },
+      { key: "0.25", label: "0.25%" },
+      { key: "0.5", label: "0.5%" },
+      { key: "1", label: "1%" },
+      { key: "2", label: "2%" },
+      { key: "5", label: "5%" },
+      { key: "10", label: "10%" }
     ];
 
     const failureRateOptions = [
       { key: "M", label: "M (1%)" },
       { key: "P", label: "P (0.1%)" },
-      { key: "R", label: "R (0.01%)" }
+      { key: "R", label: "R (0.01%)" },
+      { key: "U", label: "U (0.001%)" },
+      { key: "S", label: "S (0.005%)" },
+      { key: "V", label: "V (0.0001%)" },
+      { key: "C", label: "C (Non-ER)" }
     ];
 
     const packagingOptions = [
-      { key: "T", label: "T (Tape)" },
-      { key: "B", label: "B (Bulk)" }
+      { key: "BS", label: "BS (Bulk, 100 pcs)" },
+      { key: "WS", label: "WS (Waffle, 100 pcs)" },
+      { key: "W0", label: "W0 (Waffle, 1000 pcs)" },
+      { key: "T0", label: "T0 (Tape, 100 pcs)" },
+      { key: "T1", label: "T1 (Tape, 1000 pcs)" },
+      { key: "T3", label: "T3 (Tape, 3000 pcs)" },
+      { key: "T5", label: "T5 (Tape, 5000 pcs)" },
+      { key: "TF", label: "TF (Tape Full Reel)" },
+      { key: "TS", label: "TS (Tape Small Reel)" },
+      { key: "WI", label: "WI (Waffle Isolated)" },
+      { key: "WP", label: "WP (Waffle, quantity to size)" },
+      { key: "TI", label: "TI (Tape Isolated)" },
+      { key: "TP", label: "TP (Tape quantity to size)" }
+    ];
+
+    const thinFilmOptions = [
+      { key: "", label: "(none)" },
+      { key: "V", label: "V (Thin Film Code)" },
+      { key: "M", label: "M (Part Marked)" }
     ];
 
     const filters = {
-      size: null,
-      resistance: null,
-      tolerance: null,
+      model: null,
       tcr: null,
+      size: null,
+      termination: null,
+      valueCode: null,
+      tolerance: null,
       failure: null,
-      packaging: null
+      packaging: null,
+      thinFilm: null
     };
 
     const nodes = {
-      size: document.getElementById("sizeFilter"),
-      resistance: document.getElementById("resFilter"),
-      tolerance: document.getElementById("tolFilter"),
+      model: document.getElementById("modelFilter"),
       tcr: document.getElementById("tcrFilter"),
+      size: document.getElementById("sizeFilter"),
+      termination: document.getElementById("termFilter"),
+      valueCode: document.getElementById("valueFilter"),
+      tolerance: document.getElementById("tolFilter"),
       failure: document.getElementById("frFilter"),
       packaging: document.getElementById("pkgFilter"),
+      thinFilm: document.getElementById("tfFilter"),
       results: document.getElementById("results"),
       resultCount: document.getElementById("resultCount"),
       statusText: document.getElementById("statusText"),
-      clearBtn: document.getElementById("clearBtn")
+      clearBtn: document.getElementById("clearBtn"),
+      pnBarText: document.getElementById("pnBarText")
     };
 
     const optionMap = {
-      size: sizeOptions,
-      resistance: resistanceOptions,
-      tolerance: toleranceOptions,
+      model: modelOptions,
       tcr: tcrOptions,
+      size: sizeOptions,
+      termination: terminationOptions,
+      valueCode: valueCodeOptions,
+      tolerance: toleranceOptions,
       failure: failureRateOptions,
-      packaging: packagingOptions
+      packaging: packagingOptions,
+      thinFilm: thinFilmOptions
     };
 
     const partCatalog = buildCatalog();
 
     function buildCatalog() {
       const rows = [];
-      for (const sz of sizeOptions) {
-        for (const rs of resistanceOptions) {
-          for (const tol of toleranceOptions) {
-            for (const tcr of tcrOptions) {
-              for (const fr of failureRateOptions) {
-                for (const pkg of packagingOptions) {
-                  rows.push({
-                    size: sz.key,
-                    sizeLabel: sz.label,
-                    resistance: rs.key,
-                    resistanceLabel: rs.label,
-                    resistanceOhms: rs.ohms,
-                    tolerance: tol.key,
-                    toleranceLabel: tol.label,
-                    tcr: tcr.key,
-                    tcrLabel: tcr.label,
-                    failure: fr.key,
-                    failureLabel: fr.label,
-                    packaging: pkg.key,
-                    packagingLabel: pkg.label,
-                    pn: "M55342K" + sz.key + tcr.key + rs.key + tol.key + fr.key + pkg.key
-                  });
+      for (const model of modelOptions) {
+        for (const tcr of tcrOptions) {
+          for (const size of sizeOptions) {
+            for (const term of terminationOptions) {
+              for (const value of valueCodeOptions) {
+                for (const fr of failureRateOptions) {
+                  for (const pkg of packagingOptions) {
+                    for (const tf of thinFilmOptions) {
+                      const row = {
+                        model: model.key,
+                        modelLabel: model.label,
+                        tcr: tcr.key,
+                        tcrLabel: tcr.label,
+                        size: size.key,
+                        sizeLabel: size.label,
+                        termination: term.key,
+                        terminationLabel: term.label,
+                        valueCode: value.key,
+                        valueCodeLabel: value.label,
+                        tolerance: value.tol,
+                        failure: fr.key,
+                        failureLabel: fr.label,
+                        packaging: pkg.key,
+                        packagingLabel: pkg.label,
+                        thinFilm: tf.key,
+                        thinFilmLabel: tf.label
+                      };
+                      if (isValidRow(row)) {
+                        row.pn = row.model + row.tcr + row.size + row.termination + row.valueCode + row.failure + row.packaging + row.thinFilm;
+                        rows.push(row);
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -410,13 +499,28 @@
       return rows;
     }
 
+    function isValidRow(row) {
+      if (row.model === "D55342" && row.size !== "07") return false;
+      if (row.model === "M55342" && row.size === "07") return false;
+
+      if (row.thinFilm === "V") {
+        const tol = Number(row.tolerance);
+        if (!(row.tcr === "K" || row.tcr === "L" || row.tcr === "M")) return false;
+        if (!(tol >= 1)) return false;
+      }
+      return true;
+    }
+
     function matchesFilters(item, ignoreKey) {
-      if (ignoreKey !== "size" && filters.size && item.size !== filters.size) return false;
-      if (ignoreKey !== "resistance" && filters.resistance && item.resistance !== filters.resistance) return false;
-      if (ignoreKey !== "tolerance" && filters.tolerance && item.tolerance !== filters.tolerance) return false;
+      if (ignoreKey !== "model" && filters.model && item.model !== filters.model) return false;
       if (ignoreKey !== "tcr" && filters.tcr && item.tcr !== filters.tcr) return false;
+      if (ignoreKey !== "size" && filters.size && item.size !== filters.size) return false;
+      if (ignoreKey !== "termination" && filters.termination && item.termination !== filters.termination) return false;
+      if (ignoreKey !== "valueCode" && filters.valueCode && item.valueCode !== filters.valueCode) return false;
+      if (ignoreKey !== "tolerance" && filters.tolerance && item.tolerance !== filters.tolerance) return false;
       if (ignoreKey !== "failure" && filters.failure && item.failure !== filters.failure) return false;
       if (ignoreKey !== "packaging" && filters.packaging && item.packaging !== filters.packaging) return false;
+      if (ignoreKey !== "thinFilm" && filters.thinFilm !== null && item.thinFilm !== filters.thinFilm) return false;
       return true;
     }
 
@@ -437,8 +541,8 @@
         pill.className = "filter-pill";
         if (filters[filterKey] === opt.key) pill.classList.add("active");
         if (count === 0) pill.classList.add("disabled");
-        pill.innerHTML = "<span>" + opt.label + "</span><span class=\"count\">" + count + "</span>";
         pill.disabled = count === 0 && filters[filterKey] !== opt.key;
+        pill.innerHTML = "<span>" + opt.label + "</span><span class=\"count\">" + count + "</span>";
         pill.addEventListener("click", () => {
           filters[filterKey] = (filters[filterKey] === opt.key) ? null : opt.key;
           renderAll();
@@ -447,16 +551,32 @@
       }
     }
 
+    function selectedOrPlaceholder(key, placeholder) {
+      return filters[key] === null ? placeholder : filters[key];
+    }
+
+    function updatePnBar() {
+      const model = selectedOrPlaceholder("model", "M55342");
+      const tcr = selectedOrPlaceholder("tcr", "_");
+      const size = selectedOrPlaceholder("size", "__");
+      const term = selectedOrPlaceholder("termination", "_");
+      const value = selectedOrPlaceholder("valueCode", "____");
+      const fr = selectedOrPlaceholder("failure", "_");
+      const pkg = selectedOrPlaceholder("packaging", "__");
+      const tf = filters.thinFilm === null ? "_" : (filters.thinFilm === "" ? "-" : filters.thinFilm);
+      nodes.pnBarText.textContent = model + tcr + size + term + value + fr + pkg + tf;
+    }
+
     function renderResults() {
       const rows = filteredCatalog();
       nodes.resultCount.textContent = rows.length + " matches";
-      nodes.statusText.textContent = rows.length ? "Filtered M55342 catalog results" : "No matching combination";
+      nodes.statusText.textContent = rows.length ? "Filtered datasheet-code combinations" : "No matching combination";
       nodes.results.innerHTML = "";
 
       if (!rows.length) {
         const empty = document.createElement("div");
         empty.className = "result-card";
-        empty.innerHTML = "<div class=\"pn\">No valid M55342 part numbers for current selections.</div><div class=\"meta\"><span>Adjust or clear one filter.</span></div>";
+        empty.innerHTML = "<div class=\"pn\">No valid part numbers for current selections.</div><div class=\"meta\"><span>Clear one or more filters.</span></div>";
         nodes.results.appendChild(empty);
         return;
       }
@@ -469,12 +589,13 @@
         card.innerHTML =
           "<div class=\"pn\">" + row.pn + "</div>" +
           "<div class=\"meta\">" +
-          "<span>" + row.sizeLabel + "</span>" +
-          "<span>" + row.resistanceLabel + "</span>" +
-          "<span>" + row.toleranceLabel + "</span>" +
+          "<span>" + row.modelLabel + "</span>" +
           "<span>" + row.tcrLabel + "</span>" +
+          "<span>" + row.sizeLabel + "</span>" +
+          "<span>" + row.valueCodeLabel + "</span>" +
           "<span>" + row.failureLabel + "</span>" +
           "<span>" + row.packagingLabel + "</span>" +
+          "<span>Thin Film: " + row.thinFilmLabel + "</span>" +
           "</div>";
         nodes.results.appendChild(card);
       }
@@ -488,12 +609,16 @@
     }
 
     function renderAll() {
-      renderFilterGroup("size", nodes.size, sizeOptions);
-      renderFilterGroup("resistance", nodes.resistance, resistanceOptions);
-      renderFilterGroup("tolerance", nodes.tolerance, toleranceOptions);
+      renderFilterGroup("model", nodes.model, modelOptions);
       renderFilterGroup("tcr", nodes.tcr, tcrOptions);
+      renderFilterGroup("size", nodes.size, sizeOptions);
+      renderFilterGroup("termination", nodes.termination, terminationOptions);
+      renderFilterGroup("valueCode", nodes.valueCode, valueCodeOptions);
+      renderFilterGroup("tolerance", nodes.tolerance, toleranceOptions);
       renderFilterGroup("failure", nodes.failure, failureRateOptions);
       renderFilterGroup("packaging", nodes.packaging, packagingOptions);
+      renderFilterGroup("thinFilm", nodes.thinFilm, thinFilmOptions);
+      updatePnBar();
       renderResults();
     }
 
@@ -502,8 +627,15 @@
       renderAll();
     });
 
-    filters.size = "03";
-    filters.resistance = "16K7";
+    filters.model = "M55342";
+    filters.tcr = "K";
+    filters.size = "06";
+    filters.termination = "B";
+    filters.valueCode = "5E60";
+    filters.tolerance = "1";
+    filters.failure = "R";
+    filters.packaging = "WS";
+    filters.thinFilm = "V";
     renderAll();
   </script>
 </body>
