@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>miniPCB Board Finder</title>
+  <style>
+    :root {
+      --bg: #0f1720;
+      --panel: #172433;
+      --text: #e7eef7;
+      --muted: #a9b8ca;
+      --border: #2d3f56;
+      --accent: #63c9ff;
+      --ok: #86f7be;
+      --warn: #ffcf7a;
+      --bad: #ff9d9d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(99, 201, 255, 0.18) 0%, transparent 45%),
+        radial-gradient(circle at 90% 95%, rgba(99, 201, 255, 0.12) 0%, transparent 40%),
+        var(--bg);
+    }
+
+    main {
+      width: min(1040px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      background: var(--panel);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+      display: grid;
+      gap: 14px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 1.45rem;
+      letter-spacing: 0.02em;
+    }
+
+    p { margin: 0; }
+
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .back-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .back-link:hover,
+    .back-link:focus-visible {
+      text-decoration: underline;
+      outline: none;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 14px;
+    }
+
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 1.1rem;
+    }
+
+    .progress-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+
+    .progress-text {
+      font-size: 0.86rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .question-title {
+      margin: 0 0 8px;
+      font-size: 1.2rem;
+    }
+
+    .question-subtitle {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .option-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .option-btn,
+    .action-btn,
+    .result-link,
+    .send-btn {
+      display: block;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      text-decoration: none;
+      background: rgba(255, 255, 255, 0.02);
+      transition: border-color 0.15s ease, transform 0.15s ease;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+    }
+
+    .option-btn,
+    .action-btn,
+    .result-link,
+    .send-btn {
+      padding: 11px 12px;
+    }
+
+    .option-btn:hover,
+    .option-btn:focus-visible,
+    .action-btn:hover,
+    .action-btn:focus-visible,
+    .result-link:hover,
+    .result-link:focus-visible,
+    .send-btn:hover,
+    .send-btn:focus-visible {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    .option-btn.selected {
+      border-color: var(--accent);
+      background: rgba(99, 201, 255, 0.12);
+    }
+
+    .option-label {
+      font-weight: 600;
+      margin-bottom: 2px;
+      display: block;
+    }
+
+    .option-help {
+      color: var(--muted);
+      font-size: 0.86rem;
+      display: block;
+    }
+
+    .wizard-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      width: auto;
+      min-width: 120px;
+      text-align: center;
+      padding: 9px 12px;
+    }
+
+    .action-btn[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .summary-line {
+      color: var(--muted);
+      margin: 0 0 10px;
+      font-size: 0.92rem;
+    }
+
+    .result-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .result-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .result-name {
+      margin: 0 0 4px;
+      font-size: 1rem;
+    }
+
+    .result-copy {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .result-match {
+      margin: 0 0 8px;
+      font-size: 0.83rem;
+      color: var(--warn);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .result-link {
+      display: inline-block;
+      width: auto;
+      padding: 8px 10px;
+      font-size: 0.88rem;
+    }
+
+    .feedback-title {
+      margin: 0 0 6px;
+      font-size: 1.02rem;
+    }
+
+    .feedback-intro {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .form-row {
+      margin-bottom: 9px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #1d2c3d;
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 102px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: var(--accent);
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(99, 201, 255, 0.12);
+    }
+
+    .send-btn {
+      text-align: center;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    .feedback-status {
+      margin-top: 8px;
+      font-size: 0.84rem;
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+
+    .feedback-status.ok { color: var(--ok); }
+    .feedback-status.bad { color: var(--bad); }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .action-btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>miniPCB Board Finder</h1>
+      <p class="subtitle">Answer a few questions and get a focused list of miniPCB recommendations.</p>
+      <a class="back-link" href="main_navigation.html">Back to Main Navigation</a>
+    </header>
+
+    <div class="layout">
+      <section class="card" aria-live="polite">
+        <div class="progress-row">
+          <div id="progressText" class="progress-text">Step 1 of 3</div>
+          <button id="restartBtn" type="button" class="action-btn">Start Over</button>
+        </div>
+        <div id="wizardHost"></div>
+        <div class="wizard-actions">
+          <button id="backBtn" type="button" class="action-btn" disabled>Back</button>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h2 class="feedback-title">Send Feedback</h2>
+        <p class="feedback-intro">This form stays available at every step so you can report gaps or ask for specific board help.</p>
+        <form id="feedbackForm" novalidate>
+          <div class="form-row">
+            <label for="fbName">Name</label>
+            <input id="fbName" name="name" type="text" required />
+          </div>
+          <div class="form-row">
+            <label for="fbEmail">Email</label>
+            <input id="fbEmail" name="email" type="email" required />
+          </div>
+          <div class="form-row">
+            <label for="fbOrganization">Organization (Optional)</label>
+            <input id="fbOrganization" name="organization" type="text" />
+          </div>
+          <div class="form-row">
+            <label for="fbFocus">What are you trying to build?</label>
+            <input id="fbFocus" name="focus" type="text" required />
+          </div>
+          <div class="form-row">
+            <label for="fbDetails">Feedback Details</label>
+            <textarea id="fbDetails" name="details" required></textarea>
+          </div>
+          <button id="sendFeedbackBtn" type="submit" class="send-btn">Send Feedback</button>
+          <p id="feedbackStatus" class="feedback-status">Feedback is sent to the miniPCB librarian.</p>
+        </form>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    const PART_REQUEST_API_URL = "https://minipcb-github-io.vercel.app/api/part-request";
+    const PART_REQUEST_PROXY_KEY = "";
+
+    const QUESTIONS = [
+      {
+        key: "topic",
+        title: "What should learners explore first?",
+        subtitle: "Choose the core technical area for this lab set.",
+        options: [
+          { value: "amplifiers", label: "Amplifiers", help: "Signal gain, transistor stages, and op-amp behavior." },
+          { value: "filters", label: "Filters and frequency response", help: "Low-pass, high-pass, and active filter labs." },
+          { value: "power", label: "Power and regulation", help: "Supply rails, switching, and charge-pump concepts." },
+          { value: "digital", label: "Digital and timing", help: "555 timing, waveform generation, and logic fundamentals." },
+          { value: "interfaces", label: "Interfaces and measurement", help: "Probe points, instrumentation, and interface boards." }
+        ]
+      },
+      {
+        key: "level",
+        title: "What learner level are you planning for?",
+        subtitle: "This controls how foundational versus specialized the recommendations are.",
+        options: [
+          { value: "beginner", label: "Beginner", help: "Simple board setups for first-pass lab confidence." },
+          { value: "intermediate", label: "Intermediate", help: "Balanced fundamentals with practical variation." },
+          { value: "advanced", label: "Advanced", help: "Denser workflows and deeper analysis opportunities." }
+        ]
+      },
+      {
+        key: "style",
+        title: "Which lab style fits best?",
+        subtitle: "Pick the strongest emphasis for your class workflow.",
+        options: [
+          { value: "guided", label: "Guided experiments", help: "Step-by-step boards with clear checkpoints." },
+          { value: "hands-on", label: "Build and measure", help: "Frequent probe use and live tuning." },
+          { value: "analysis", label: "Analyze and compare", help: "Explore tradeoffs across variants and topologies." },
+          { value: "system", label: "System integration", help: "Boards used in larger workflows and interfaces." }
+        ]
+      }
+    ];
+
+    const RECOMMENDATIONS = [
+      {
+        title: "Transistor Amplifiers",
+        url: "collections/transistor-amplifiers.html",
+        summary: "Single and multi-stage transistor amplifier boards with clear teaching points.",
+        tags: { topic: ["amplifiers"], level: ["beginner", "intermediate"], style: ["guided", "hands-on", "analysis"] }
+      },
+      {
+        title: "Op-Amp Amplifiers",
+        url: "collections/opamp-amplifiers.html",
+        summary: "Op-amp gain blocks and practical conditioning circuits for analog labs.",
+        tags: { topic: ["amplifiers"], level: ["intermediate", "advanced"], style: ["hands-on", "analysis", "system"] }
+      },
+      {
+        title: "RC Filters",
+        url: "collections/rc-filters.html",
+        summary: "Filter behavior boards that make cutoff and response changes easy to observe.",
+        tags: { topic: ["filters"], level: ["beginner", "intermediate"], style: ["guided", "hands-on", "analysis"] }
+      },
+      {
+        title: "Oscillators",
+        url: "collections/oscillators.html",
+        summary: "Oscillator boards for waveform generation, startup, and stability exploration.",
+        tags: { topic: ["filters", "digital"], level: ["intermediate", "advanced"], style: ["hands-on", "analysis"] }
+      },
+      {
+        title: "555 Timer Circuits",
+        url: "collections/555-timer-circuits.html",
+        summary: "Timer-based circuits for pulse generation, duty cycle, and classroom timing labs.",
+        tags: { topic: ["digital"], level: ["beginner", "intermediate"], style: ["guided", "hands-on"] }
+      },
+      {
+        title: "Digital Fundamentals",
+        url: "collections/digital-fundamentals.html",
+        summary: "Core digital behavior boards for logic and timing demonstrations.",
+        tags: { topic: ["digital"], level: ["beginner", "intermediate"], style: ["guided", "system"] }
+      },
+      {
+        title: "Power and Voltage",
+        url: "collections/power-voltage.html",
+        summary: "Boards focused on regulated rails, references, and voltage behavior.",
+        tags: { topic: ["power"], level: ["beginner", "intermediate"], style: ["guided", "hands-on", "system"] }
+      },
+      {
+        title: "Power Switching",
+        url: "collections/power-switching.html",
+        summary: "Switching-oriented board set for efficiency, control, and load behavior labs.",
+        tags: { topic: ["power"], level: ["intermediate", "advanced"], style: ["analysis", "system"] }
+      },
+      {
+        title: "Power Charge Pumps",
+        url: "collections/power-charge-pumps.html",
+        summary: "Charge-pump and conversion examples for compact power architecture lessons.",
+        tags: { topic: ["power"], level: ["intermediate", "advanced"], style: ["analysis", "system"] }
+      },
+      {
+        title: "Interface Boards",
+        url: "collections/interface-boards.html",
+        summary: "Signal and connector interface boards for larger bench setups.",
+        tags: { topic: ["interfaces"], level: ["beginner", "intermediate", "advanced"], style: ["hands-on", "system"] }
+      },
+      {
+        title: "Probe Boards",
+        url: "collections/probe-boards.html",
+        summary: "Probe-friendly boards that simplify measurement access and debugging.",
+        tags: { topic: ["interfaces"], level: ["beginner", "intermediate", "advanced"], style: ["hands-on", "analysis"] }
+      },
+      {
+        title: "Prototyping Boards",
+        url: "collections/prototyping-boards.html",
+        summary: "Flexible starting boards for quick experimentation and idea validation.",
+        tags: { topic: ["interfaces", "digital", "amplifiers", "power", "filters"], level: ["beginner", "intermediate"], style: ["guided", "hands-on", "system"] }
+      },
+      {
+        title: "Comparators",
+        url: "collections/comparators.html",
+        summary: "Threshold and decision circuits useful for mixed analog-digital exercises.",
+        tags: { topic: ["digital", "interfaces"], level: ["intermediate", "advanced"], style: ["analysis", "system"] }
+      }
+    ];
+
+    const state = {
+      stepIndex: 0,
+      answers: {
+        topic: null,
+        level: null,
+        style: null
+      }
+    };
+
+    const nodes = {
+      progressText: document.getElementById("progressText"),
+      wizardHost: document.getElementById("wizardHost"),
+      backBtn: document.getElementById("backBtn"),
+      restartBtn: document.getElementById("restartBtn"),
+      feedbackForm: document.getElementById("feedbackForm"),
+      feedbackStatus: document.getElementById("feedbackStatus"),
+      fbName: document.getElementById("fbName"),
+      fbEmail: document.getElementById("fbEmail"),
+      fbOrganization: document.getElementById("fbOrganization"),
+      fbFocus: document.getElementById("fbFocus"),
+      fbDetails: document.getElementById("fbDetails"),
+      sendFeedbackBtn: document.getElementById("sendFeedbackBtn")
+    };
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function labelFor(key, value) {
+      const question = QUESTIONS.find((item) => item.key === key);
+      if (!question) return String(value || "");
+      const option = question.options.find((item) => item.value === value);
+      return option ? option.label : String(value || "");
+    }
+
+    function selectionSummaryText() {
+      const topic = state.answers.topic ? labelFor("topic", state.answers.topic) : "Not selected";
+      const level = state.answers.level ? labelFor("level", state.answers.level) : "Not selected";
+      const style = state.answers.style ? labelFor("style", state.answers.style) : "Not selected";
+      return "Topic: " + topic + " | Level: " + level + " | Style: " + style;
+    }
+
+    function stepCount() {
+      return QUESTIONS.length;
+    }
+
+    function renderQuestionStep(question) {
+      const currentValue = state.answers[question.key];
+      const optionsHtml = question.options.map((option) => {
+        const selectedClass = option.value === currentValue ? " selected" : "";
+        return "<button type=\"button\" class=\"option-btn" + selectedClass + "\" data-option=\"" +
+          escapeHtml(option.value) + "\">" +
+          "<span class=\"option-label\">" + escapeHtml(option.label) + "</span>" +
+          "<span class=\"option-help\">" + escapeHtml(option.help) + "</span>" +
+          "</button>";
+      }).join("");
+
+      nodes.wizardHost.innerHTML =
+        "<h2 class=\"question-title\">" + escapeHtml(question.title) + "</h2>" +
+        "<p class=\"question-subtitle\">" + escapeHtml(question.subtitle) + "</p>" +
+        "<div class=\"option-list\">" + optionsHtml + "</div>";
+
+      for (const button of nodes.wizardHost.querySelectorAll("[data-option]")) {
+        button.addEventListener("click", () => {
+          state.answers[question.key] = button.getAttribute("data-option");
+          if (state.stepIndex < stepCount() - 1) {
+            state.stepIndex += 1;
+          } else {
+            state.stepIndex = stepCount();
+          }
+          render();
+        });
+      }
+    }
+
+    function scoreRecommendation(item) {
+      let score = 0;
+      const reasons = [];
+
+      if (state.answers.topic && item.tags.topic.includes(state.answers.topic)) {
+        score += 5;
+        reasons.push("topic match");
+      }
+      if (state.answers.level && item.tags.level.includes(state.answers.level)) {
+        score += 3;
+        reasons.push("level match");
+      }
+      if (state.answers.style && item.tags.style.includes(state.answers.style)) {
+        score += 2;
+        reasons.push("lab style match");
+      }
+
+      return { score, reasons };
+    }
+
+    function rankRecommendations() {
+      const scored = RECOMMENDATIONS.map((item) => {
+        const scoreMeta = scoreRecommendation(item);
+        return {
+          item,
+          score: scoreMeta.score,
+          reasons: scoreMeta.reasons
+        };
+      });
+
+      scored.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.item.title.localeCompare(b.item.title);
+      });
+
+      const top = scored.slice(0, 6);
+      return top;
+    }
+
+    function renderResultsStep() {
+      const picks = rankRecommendations();
+      const resultsHtml = picks.map((row) => {
+        const reasonText = row.reasons.length ? row.reasons.join(" | ") : "general fit";
+        return "<article class=\"result-item\">" +
+          "<h3 class=\"result-name\">" + escapeHtml(row.item.title) + "</h3>" +
+          "<p class=\"result-copy\">" + escapeHtml(row.item.summary) + "</p>" +
+          "<p class=\"result-match\">Match: " + escapeHtml(reasonText) + "</p>" +
+          "<a class=\"result-link\" href=\"" + escapeHtml(row.item.url) + "\">Open Collection</a>" +
+          "</article>";
+      }).join("");
+
+      nodes.wizardHost.innerHTML =
+        "<h2 class=\"question-title\">Recommended miniPCB Collections</h2>" +
+        "<p class=\"summary-line\">" + escapeHtml(selectionSummaryText()) + "</p>" +
+        "<div class=\"result-list\">" + resultsHtml + "</div>";
+    }
+
+    function render() {
+      if (state.stepIndex < stepCount()) {
+        const stepNumber = state.stepIndex + 1;
+        nodes.progressText.textContent = "Step " + stepNumber + " of " + stepCount();
+        renderQuestionStep(QUESTIONS[state.stepIndex]);
+      } else {
+        nodes.progressText.textContent = "Recommendations Ready";
+        renderResultsStep();
+      }
+
+      nodes.backBtn.disabled = state.stepIndex === 0;
+    }
+
+    nodes.backBtn.addEventListener("click", () => {
+      if (state.stepIndex === 0) return;
+      if (state.stepIndex > stepCount() - 1) {
+        state.stepIndex = stepCount() - 1;
+      } else {
+        state.stepIndex -= 1;
+      }
+      render();
+    });
+
+    nodes.restartBtn.addEventListener("click", () => {
+      state.stepIndex = 0;
+      state.answers.topic = null;
+      state.answers.level = null;
+      state.answers.style = null;
+      render();
+    });
+
+    nodes.feedbackForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      if (!nodes.feedbackForm.reportValidity()) {
+        nodes.feedbackStatus.textContent = "Complete all required feedback fields before sending.";
+        nodes.feedbackStatus.className = "feedback-status bad";
+        return;
+      }
+
+      const payload = {
+        name: nodes.fbName.value.trim(),
+        email: nodes.fbEmail.value.trim(),
+        organization: nodes.fbOrganization.value.trim(),
+        family: "Board Finder Feedback",
+        partNumber: nodes.fbFocus.value.trim(),
+        details: nodes.fbDetails.value.trim() + "\n\nBoard Finder selections:\n" + selectionSummaryText()
+      };
+
+      nodes.sendFeedbackBtn.disabled = true;
+      nodes.feedbackStatus.textContent = "Sending feedback...";
+      nodes.feedbackStatus.className = "feedback-status";
+
+      try {
+        const headers = {
+          "Content-Type": "application/json"
+        };
+        if (PART_REQUEST_PROXY_KEY) headers["X-Proxy-Key"] = PART_REQUEST_PROXY_KEY;
+
+        const response = await fetch(PART_REQUEST_API_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok || !result.ok) {
+          const message = result && result.error ? result.error : "Feedback request failed.";
+          throw new Error(message);
+        }
+
+        nodes.feedbackStatus.textContent = "Feedback sent successfully.";
+        nodes.feedbackStatus.className = "feedback-status ok";
+        nodes.feedbackForm.reset();
+      } catch (err) {
+        nodes.feedbackStatus.textContent = "Unable to send feedback: " + String(err && err.message ? err.message : err);
+        nodes.feedbackStatus.className = "feedback-status bad";
+      } finally {
+        nodes.sendFeedbackBtn.disabled = false;
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
