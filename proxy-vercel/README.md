@@ -7,6 +7,9 @@
 3) Add Environment Variables:
    - `OPENAI_API_KEY` (required)
    - `PROXY_KEY` (optional; if set, clients must send `X-Proxy-Key`)
+   - `RESEND_API_KEY` (required for part requests)
+   - `REQUEST_TO_EMAIL` (required for part requests)
+   - `REQUEST_FROM_EMAIL` (required for part requests; must be a verified sender)
 4) Deploy.
 
 ## Endpoints
@@ -17,6 +20,7 @@
 - `POST /api/suggest`
 - `POST /api/chat`
 - `POST /api/create`
+- `POST /api/part-request`
 
 ## Frontend Setup
 
