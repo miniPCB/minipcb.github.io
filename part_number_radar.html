@@ -1,0 +1,2974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Component Part Number Radar</title>
+  <style>
+    :root {
+      --bg: #081016;
+      --panel: #13202c;
+      --text: #eaf6ff;
+      --muted: #a8bece;
+      --border: #2f495d;
+      --shadow: 0 14px 34px rgba(1, 10, 17, 0.48);
+      --mono: "Consolas", "Courier New", monospace;
+      --sans: "Bahnschrift", "Trebuchet MS", "Segoe UI", sans-serif;
+      --accent: #54d2ff;
+      --accent-soft: rgba(84, 210, 255, 0.2);
+      --accent-2: #ffba52;
+      --ok: #6ee7ac;
+      --bad: #ff8e8e;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 5%, rgba(84, 210, 255, 0.2) 0%, transparent 46%),
+        radial-gradient(circle at 84% 94%, rgba(255, 186, 82, 0.2) 0%, transparent 42%),
+        linear-gradient(150deg, #061018 0%, #0d1a24 45%, #111f2a 100%);
+      min-height: 100vh;
+    }
+
+    .page {
+      width: min(1920px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 18px 16px 22px;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 14px;
+      min-height: 100vh;
+    }
+
+    .header, .pn-bar, .panel, .component-bar {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .header { padding: 16px 18px; background: linear-gradient(120deg, rgba(30, 54, 73, 0.95), rgba(19, 32, 44, 0.95)); }
+    .title { margin: 0; font-size: 1.32rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    .subtitle { margin: 7px 0 0; color: #d3e6f4; font-size: 0.92rem; }
+
+    .component-bar {
+      padding: 11px 13px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      background: linear-gradient(120deg, #152636, #1a3043);
+    }
+
+    .component-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-right: 4px;
+    }
+
+    .component-btn {
+      border: 1px solid #47647a;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 0.8rem;
+      color: var(--text);
+      background: linear-gradient(120deg, #1f3345, #1a2a39);
+      cursor: pointer;
+    }
+
+    .component-btn.active {
+      border-color: rgba(84, 210, 255, 0.9);
+      background: linear-gradient(120deg, rgba(84, 210, 255, 0.28), rgba(84, 210, 255, 0.1));
+      color: #eaf8ff;
+      box-shadow: inset 0 0 0 1px rgba(84, 210, 255, 0.34);
+      font-weight: 700;
+    }
+
+    .component-view.hidden { display: none; }
+
+    .pn-bar {
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+      background: #101823;
+      position: sticky;
+      top: 8px;
+      z-index: 50;
+    }
+
+    .pn-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .pn-text {
+      font-family: var(--mono);
+      font-size: 0.98rem;
+      color: #c6e3ff;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .pn-help {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: minmax(360px, 36%) minmax(420px, 64%);
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .panel {
+      overflow: hidden;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel h2 {
+      margin: 0;
+      padding: 10px 12px;
+      font-size: 1rem;
+      border-bottom: 1px solid var(--border);
+      background: #1a2230;
+    }
+
+    .panel-body { padding: 10px; overflow: auto; }
+
+    .group {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #101823;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    .group-title {
+      margin: 0 0 8px;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+
+    .pill-cloud {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filter-pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 11px;
+      font-size: 0.8rem;
+      color: var(--text);
+      background: #1a2638;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      line-height: 1.2;
+    }
+
+    .filter-pill .count {
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-family: var(--mono);
+    }
+
+    .filter-pill.active {
+      border-color: rgba(102, 163, 255, 0.7);
+      background: rgba(102, 163, 255, 0.2);
+      color: #d9ebff;
+      box-shadow: inset 0 0 0 1px rgba(102, 163, 255, 0.28);
+      font-weight: 700;
+    }
+
+    .filter-pill.disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .text-input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-height: 36px;
+      background: #1e2837;
+      color: var(--text);
+      padding: 0 10px;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .text-input.valid {
+      border-color: rgba(46, 204, 113, 0.75);
+      background: rgba(46, 204, 113, 0.12);
+      box-shadow: inset 0 0 0 1px rgba(46, 204, 113, 0.25);
+    }
+
+    .text-input.invalid {
+      border-color: rgba(255, 87, 87, 0.8);
+      background: rgba(255, 87, 87, 0.1);
+      box-shadow: inset 0 0 0 1px rgba(255, 87, 87, 0.28);
+    }
+
+    .hint { margin-top: 6px; color: var(--muted); font-size: 0.78rem; }
+    .hint.ok { color: #7be6a8; }
+    .hint.bad { color: #ff9a9a; }
+    .mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      color: var(--muted);
+    }
+    .mini-table th, .mini-table td {
+      border: 1px solid var(--border);
+      padding: 5px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .mini-table th {
+      background: #1a2230;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: #1e2837;
+      color: var(--text);
+      border-radius: 8px;
+      min-height: 34px;
+      padding: 0 10px;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+
+    .summary-line {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      background: #1a2230;
+    }
+
+    .summary-line strong {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.95rem;
+    }
+
+    .results {
+      overflow: auto;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .result-card {
+      border: 1px solid var(--border);
+      background: #101823;
+      border-radius: 10px;
+      padding: 9px 11px;
+    }
+
+    .pn {
+      font-family: var(--mono);
+      font-weight: 700;
+      color: #c6e3ff;
+      word-break: break-all;
+      font-size: 0.94rem;
+    }
+
+    .meta {
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .meta span {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #142033;
+    }
+
+    .pref-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+      color: var(--muted);
+      table-layout: fixed;
+    }
+
+    .pref-table th, .pref-table td {
+      border: 1px solid var(--border);
+      padding: 4px 5px;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .pref-table th {
+      background: #1a2230;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .pref-table .code-col {
+      text-align: left;
+      font-family: var(--mono);
+      width: 58px;
+    }
+
+    .pref-table .val-col {
+      text-align: left;
+      width: 74px;
+    }
+
+    .pref-table td.pref-cell.preferred {
+      background: rgba(0, 160, 220, 0.33);
+    }
+
+    .pref-table td.pref-cell.available {
+      cursor: pointer;
+      background: rgba(43, 57, 77, 0.45);
+    }
+
+    .pref-table td.pref-cell.available:hover {
+      background: rgba(71, 112, 166, 0.45);
+    }
+
+    .pref-table td.pref-cell.unavailable {
+      background: rgba(17, 24, 34, 0.65);
+      opacity: 0.45;
+    }
+
+    .pref-table td.pref-cell.selected {
+      outline: 2px solid rgba(123, 230, 168, 0.95);
+      outline-offset: -2px;
+    }
+
+    .avail-box {
+      border-bottom: 1px solid var(--border);
+      background: #111a28;
+      padding: 8px 10px;
+    }
+
+    .avail-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .avail-title {
+      margin: 0;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+
+    .avail-wrap {
+      margin-top: 8px;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.18s ease;
+    }
+
+    .avail-wrap.expanded {
+      max-height: 48vh;
+      overflow: auto;
+    }
+
+    .avail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .avail-table th, .avail-table td {
+      border: 1px solid var(--border);
+      padding: 4px 6px;
+      text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+
+    .avail-table th {
+      background: #1a2230;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .pref-group {
+      position: relative;
+    }
+
+    .group-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .group-title-row .group-title {
+      margin: 0;
+    }
+
+    .pref-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pref-diel-btn {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      min-height: 28px;
+      padding: 0 10px;
+      background: #1a2638;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+
+    .pref-diel-btn.active {
+      border-color: rgba(102, 163, 255, 0.7);
+      background: rgba(102, 163, 255, 0.2);
+      color: #d9ebff;
+      box-shadow: inset 0 0 0 1px rgba(102, 163, 255, 0.28);
+      font-weight: 700;
+    }
+
+    .pref-toggle-btn {
+      border: 1px solid var(--border);
+      background: #1e2837;
+      color: var(--text);
+      border-radius: 8px;
+      min-height: 28px;
+      padding: 0 9px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+
+    .pref-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 12, 0.72);
+      z-index: 1000;
+      display: none;
+    }
+
+    .pref-backdrop.active {
+      display: block;
+    }
+
+    .pref-group.expanded {
+      position: fixed;
+      inset: 10px;
+      z-index: 1001;
+      margin: 0;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .pref-group.expanded #s311PrefTableWrap {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .pref-group.expanded .pref-table {
+      font-size: 0.78rem;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .splash-flow {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .splash-card {
+      width: min(760px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: linear-gradient(130deg, rgba(27, 46, 60, 0.96), rgba(13, 27, 38, 0.96));
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .splash-step {
+      display: none;
+      animation: stepIn 0.28s ease;
+    }
+
+    .splash-step.active {
+      display: block;
+    }
+
+    .splash-kicker {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .splash-title {
+      margin: 0;
+      font-size: 1.35rem;
+      line-height: 1.22;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .splash-subtitle {
+      margin: 10px 0 0;
+      color: #c3d9e8;
+      font-size: 0.92rem;
+    }
+
+    .splash-grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .splash-choice {
+      border: 1px solid #4c6a80;
+      border-radius: 14px;
+      background: linear-gradient(120deg, #22384a, #1b2f40);
+      color: var(--text);
+      padding: 14px;
+      text-align: left;
+      cursor: pointer;
+      min-height: 88px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .splash-choice strong {
+      font-size: 0.97rem;
+      letter-spacing: 0.02em;
+    }
+
+    .splash-choice span {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .splash-actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .btn-accent {
+      border: 1px solid #66dcff;
+      background: linear-gradient(120deg, #39a8d6, #217a9f);
+      color: #f2fbff;
+      border-radius: 10px;
+      min-height: 34px;
+      padding: 0 11px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .request-panel {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(25, 44, 59, 0.95), rgba(16, 27, 37, 0.95));
+      box-shadow: var(--shadow);
+      padding: 12px;
+    }
+
+    .request-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .request-title {
+      margin: 0;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .request-status {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .request-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .request-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin: 0 0 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-control {
+      width: 100%;
+      border: 1px solid #456277;
+      border-radius: 8px;
+      min-height: 36px;
+      background: rgba(8, 17, 24, 0.72);
+      color: var(--text);
+      padding: 8px 10px;
+      font-family: var(--sans);
+      font-size: 0.86rem;
+    }
+
+    textarea.form-control {
+      min-height: 94px;
+      resize: vertical;
+    }
+
+    .request-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    @keyframes stepIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 980px) {
+      .pn-bar { grid-template-columns: 1fr; }
+      .pn-help { text-align: left; white-space: normal; }
+      .main { grid-template-columns: 1fr; }
+      .splash-grid { grid-template-columns: 1fr; }
+      .request-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="splashFlow" class="splash-flow">
+    <section class="splash-card">
+      <div id="splashStep1" class="splash-step active">
+        <p class="splash-kicker">Step 1 of 3</p>
+        <h1 class="splash-title">What type of component are you trying to find?</h1>
+        <p class="splash-subtitle">Start broad and we will route you to the matching radar view.</p>
+        <div class="splash-grid">
+          <button type="button" class="splash-choice" data-choice-type="resistor">
+            <strong>Resistor</strong>
+            <span>M55342 / D55342 thin film or chip resistor codes.</span>
+          </button>
+          <button type="button" class="splash-choice" data-choice-type="capacitor">
+            <strong>Capacitor</strong>
+            <span>T502, T540/T541, or S-311 style capacitor part numbers.</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="splashStep2" class="splash-step">
+        <p class="splash-kicker">Step 2 of 3</p>
+        <h2 class="splash-title">Pick the capacitor family</h2>
+        <p class="splash-subtitle">Choose the part family closest to your requirement.</p>
+        <div class="splash-grid">
+          <button type="button" class="splash-choice" data-choice-family="t502">
+            <strong>T502</strong>
+            <span>Molded tantalum, table-driven matching rows.</span>
+          </button>
+          <button type="button" class="splash-choice" data-choice-family="t54x">
+            <strong>T540 / T541</strong>
+            <span>Polymer COTS family with expanded code positions.</span>
+          </button>
+          <button type="button" class="splash-choice" data-choice-family="s311">
+            <strong>S-311-P-829</strong>
+            <span>GSFC mapping with preferred-size guide table.</span>
+          </button>
+        </div>
+        <div class="splash-actions">
+          <button id="splashBackToStep1" type="button" class="btn">Back</button>
+        </div>
+      </div>
+
+      <div id="splashStep3" class="splash-step">
+        <p class="splash-kicker">Step 3 of 3</p>
+        <h2 class="splash-title">Ready to launch the radar</h2>
+        <p id="splashSummary" class="splash-subtitle"></p>
+        <div class="splash-actions">
+          <button id="splashRestart" type="button" class="btn">Start Over</button>
+          <button id="splashLaunch" type="button" class="btn-accent">Open Radar View</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="workspace" class="page hidden">
+    <section class="header">
+      <h1 class="title">Component Part Number Radar</h1>
+      <p class="subtitle">Use splash routing to jump into a family, then configure and narrow to valid part numbers.</p>
+    </section>
+
+    <section class="component-bar">
+      <span class="component-label">Component Type</span>
+      <button type="button" class="component-btn active" data-component="m55342">M55342 / D55342 Resistor</button>
+      <button type="button" class="component-btn" data-component="t502">T502 Capacitor</button>
+      <button type="button" class="component-btn" data-component="t54x">T540 / T541 Capacitor</button>
+      <button type="button" class="component-btn" data-component="s311">S-311-P-829 Capacitor</button>
+    </section>
+
+    <section class="request-panel">
+      <div class="request-head">
+        <h2 class="request-title">Request A New Part</h2>
+        <span id="requestStatus" class="request-status">Submits through your default email client.</span>
+      </div>
+      <form id="partRequestForm">
+        <div class="request-grid">
+          <div>
+            <label class="form-label" for="reqName">Name</label>
+            <input id="reqName" name="reqName" class="form-control" type="text" required />
+          </div>
+          <div>
+            <label class="form-label" for="reqEmail">Email</label>
+            <input id="reqEmail" name="reqEmail" class="form-control" type="email" required />
+          </div>
+          <div>
+            <label class="form-label" for="reqOrg">Organization</label>
+            <input id="reqOrg" name="reqOrg" class="form-control" type="text" />
+          </div>
+          <div>
+            <label class="form-label" for="reqFamily">Component Family</label>
+            <select id="reqFamily" name="reqFamily" class="form-control" required>
+              <option value="">Select a family</option>
+              <option value="M55342 / D55342">M55342 / D55342 Resistor</option>
+              <option value="T502">T502 Capacitor</option>
+              <option value="T540 / T541">T540 / T541 Capacitor</option>
+              <option value="S-311-P-829">S-311-P-829 Capacitor</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="full">
+            <label class="form-label" for="reqPart">Requested Part Number Or Pattern</label>
+            <input id="reqPart" name="reqPart" class="form-control" type="text" placeholder="Example: T502D226K025AG6210" required />
+          </div>
+          <div class="full">
+            <label class="form-label" for="reqDetails">Specs / Notes</label>
+            <textarea id="reqDetails" name="reqDetails" class="form-control" placeholder="List target values, case size, voltage, tolerance, or qualification notes." required></textarea>
+          </div>
+        </div>
+        <div class="request-actions">
+          <button id="reqClearBtn" type="reset" class="btn">Clear</button>
+          <button type="submit" class="btn-accent">Send Request Email</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="m55342View" class="component-view">
+    <section class="pn-bar">
+      <div class="pn-label">Selected PN</div>
+      <div id="pnBarText" class="pn-text">M55342_ _ _ _ _ _ _</div>
+      <div class="pn-help">Format: Model + TCR + Case + Term + ValueCode + FR + Pack + ThinFilm</div>
+    </section>
+
+    <section class="main">
+      <aside class="panel">
+        <h2>Filters</h2>
+        <div class="panel-body">
+          <div class="group"><p class="group-title">Model</p><div id="modelFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">TCR Code</p><div id="tcrFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Case Size / Slash</p><div id="sizeFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Termination</p><div id="termFilter" class="pill-cloud"></div></div>
+          <div class="group">
+            <p class="group-title">Resistance Input (Ohms)</p>
+            <input id="resInput" class="text-input" type="text" value="5.60" />
+            <div id="resHint" class="hint">Required format: three digits + decimal point. Allowed: <span style="font-family:var(--mono)">.560</span>, <span style="font-family:var(--mono)">5.60</span>, <span style="font-family:var(--mono)">56.0</span>, <span style="font-family:var(--mono)">560.</span></div>
+            <div id="milHint" class="hint">MIL value check: waiting for tolerance letter selection.</div>
+          </div>
+          <div class="group"><p class="group-title">Tolerance / Multiplier Letter Code</p><div id="letterFilter" class="pill-cloud"></div></div>
+          <div class="group">
+            <p class="group-title">MIL Value/Tolerance Table Used For Check</p>
+            <table class="mini-table">
+              <thead>
+                <tr><th>Tolerance</th><th>Series</th><th>Allowed 3-digit Mantissas</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>0.1%, 0.25%, 0.5%, 1%</td><td>E96</td><td>100..976 preferred set</td></tr>
+                <tr><td>2%, 5%</td><td>E24</td><td>100..910 preferred set</td></tr>
+                <tr><td>10%</td><td>E12</td><td>100..820 preferred set</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="group"><p class="group-title">Failure Rate Code</p><div id="frFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Packaging</p><div id="pkgFilter" class="pill-cloud"></div></div>
+          <div class="group"><p class="group-title">Thin Film Code</p><div id="tfFilter" class="pill-cloud"></div></div>
+          <button id="clearBtn" class="btn" type="button">Clear All Filters</button>
+          <div class="hint">
+            Letter set included: A B C, R U V, W Y Z, D E F, G H T, J K L, M N P.
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <h2>Remaining Part Numbers</h2>
+        <div class="summary-line">
+          <span id="statusText">Ready</span>
+          <strong id="resultCount">0 matches</strong>
+        </div>
+        <div id="results" class="results"></div>
+      </section>
+    </section>
+    </section>
+
+    <section id="t502View" class="component-view hidden">
+      <section class="pn-bar">
+        <div class="pn-label">Selected PN</div>
+        <div id="t502PnBarText" class="pn-text">T502-?-???-?-??-??</div>
+        <div class="pn-help">Prototype format: Series + Case + CapCode + Tol + Voltage + Pack</div>
+      </section>
+
+      <section class="main">
+        <aside class="panel">
+          <h2>T502 Filters</h2>
+          <div class="panel-body">
+            <div class="group">
+              <p class="group-title">Series</p>
+              <div class="pill-cloud"><span class="filter-pill active">T502</span></div>
+            </div>
+            <div class="hint">T502 case set uses B/C/D molded tantalum outlines.</div>
+            <div class="group"><p class="group-title">Case</p><div id="t502CaseFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Capacitance (uF)</p>
+              <div id="t502CapFilter" class="pill-cloud"></div>
+              <div id="t502CapHint" class="hint">Select capacitance from table options.</div>
+            </div>
+            <div class="group"><p class="group-title">Voltage</p><div id="t502VoltFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Tolerance Selection</p>
+              <div id="t502Code1Filter" class="pill-cloud"></div>
+              <div id="t502Code1Hint" class="hint">
+                Replaces <span style="font-family:var(--mono)">(1)</span>. Allowed:
+                <span style="font-family:var(--mono)">K</span> = ±10%,
+                <span style="font-family:var(--mono)">M</span> = ±20%
+                (capacitance tolerance designator).
+              </div>
+            </div>
+            <div class="group">
+              <p class="group-title">Surge Current Testing</p>
+              <div id="t502Code2Filter" class="pill-cloud"></div>
+              <div id="t502Code2Hint" class="hint">
+                Replaces <span style="font-family:var(--mono)">(2)</span>. Allowed:
+                <span style="font-family:var(--mono)">61</span> = No additional surge current testing,
+                <span style="font-family:var(--mono)">62</span> = 10 cycles at 25&deg;C &plusmn;5&deg;C (after Weibull),
+                <span style="font-family:var(--mono)">63</span> = 10 cycles at -55&deg;C &plusmn;5&deg;C and +85&deg;C &plusmn;5&deg;C (after Weibull).
+              </div>
+            </div>
+            <button id="t502ClearBtn" class="btn" type="button">Clear T502 Filters</button>
+          </div>
+        </aside>
+        <section class="panel">
+          <h2>T502 Results</h2>
+          <div class="summary-line">
+            <span id="t502StatusText">Prototype generator active</span>
+            <strong id="t502ResultCount">1 result</strong>
+          </div>
+          <div class="avail-box">
+            <div class="avail-head">
+              <p class="avail-title">Available Parts Table</p>
+              <button id="t502AvailToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
+            </div>
+            <div id="t502AvailWrap" class="avail-wrap"></div>
+          </div>
+          <div id="t502Results" class="results"></div>
+        </section>
+      </section>
+    </section>
+
+    <section id="t54xView" class="component-view hidden">
+      <section class="pn-bar">
+        <div class="pn-label">Selected PN</div>
+        <div id="t54xPnBarText" class="pn-text">T54x-?-?-???-?-???-?-?-??-??-PACK</div>
+        <div class="pn-help">Format: T + Series + Case + CapCode + Tol + Voltage + Failure + Term + Surge + ESR + Packaging</div>
+      </section>
+
+      <section class="main">
+        <aside class="panel">
+          <h2>T540 / T541 Filters</h2>
+          <div class="panel-body">
+            <div class="group"><p class="group-title">Series</p><div id="t54xSeriesFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Case Size</p><div id="t54xCaseFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Capacitance Code (pF)</p>
+              <input id="t54xCapInput" class="text-input" type="text" value="106" maxlength="3" />
+              <div id="t54xCapHint" class="hint">Use 3 digits: first 2 are significant, 3rd is number of zeros (e.g., 106).</div>
+              <div id="t54xCapFilter" class="pill-cloud" style="margin-top:8px;"></div>
+            </div>
+            <div class="group"><p class="group-title">Capacitance Tolerance</p><div id="t54xTolFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Rated Voltage (VDC)</p><div id="t54xVoltFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Failure Rate / Design</p><div id="t54xFailureFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Termination Finish</p><div id="t54xTermFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Surge Current Option</p><div id="t54xSurgeFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">ESR</p><div id="t54xEsrFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Packaging (C-Spec)</p><div id="t54xPackFilter" class="pill-cloud"></div></div>
+            <button id="t54xClearBtn" class="btn" type="button">Clear T540/T541 Filters</button>
+          </div>
+        </aside>
+        <section class="panel">
+          <h2>T540 / T541 Results</h2>
+          <div class="summary-line">
+            <span id="t54xStatusText">Code-builder mode</span>
+            <strong id="t54xResultCount">1 result</strong>
+          </div>
+          <div class="avail-box">
+            <div class="avail-head">
+              <p class="avail-title">Available Parts Table</p>
+              <button id="t54xAvailToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
+            </div>
+            <div id="t54xAvailWrap" class="avail-wrap"></div>
+          </div>
+          <div id="t54xResults" class="results"></div>
+        </section>
+      </section>
+    </section>
+
+    <section id="s311View" class="component-view hidden">
+      <section class="pn-bar">
+        <div class="pn-label">Selected PN</div>
+        <div id="s311PnBarText" class="pn-text">G311P829-?-?-?-???-?-?-?-?</div>
+        <div class="pn-help">Format: GSFC + Ultrasonic + Size + Dielectric + CapCode + Tol + Volt + Term + Pack</div>
+      </section>
+
+      <section class="main">
+        <aside class="panel">
+          <h2>S-311-P-829 Filters</h2>
+          <div class="panel-body">
+            <div class="group"><p class="group-title">GSFC Identifier</p><div class="pill-cloud"><span class="filter-pill active">G311P829</span></div></div>
+            <div class="group"><p class="group-title">Ultrasonic Examination</p><div id="s311UltraFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Size Code</p><div id="s311SizeFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Dielectric Type</p><div id="s311DielectricFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Capacitance Code (pF)</p>
+              <input id="s311CapInput" class="text-input" type="text" value="100" />
+              <div id="s311CapHint" class="hint">Use 3 digits for >=10 pF (e.g. 100=10 pF), or R-format for <10 pF (e.g. 1R0, R75, 0R5).</div>
+            </div>
+            <div class="group"><p class="group-title">Tolerance</p><div id="s311TolFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Voltage (Vdc)</p><div id="s311VoltFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Termination</p><div id="s311TermFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Packaging / Marking</p><div id="s311PackFilter" class="pill-cloud"></div></div>
+            <div id="s311PrefGroup" class="group pref-group">
+              <div class="group-title-row">
+                <p class="group-title">S311-P838 Preferred Sizes (X7R, AVX Size Codes)</p>
+                <div class="pref-controls">
+                  <button id="s311PrefX7rBtn" class="pref-diel-btn active" type="button">X7R</button>
+                  <button id="s311PrefNpoBtn" class="pref-diel-btn" type="button">NP0</button>
+                  <button id="s311PrefToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
+                </div>
+              </div>
+              <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table). Non-preferred NASA case sizes are shown unshaded. Click an available cell to apply cap/size/voltage.</div>
+              <div id="s311PrefTableWrap" style="overflow:auto; margin-top:6px;"></div>
+            </div>
+            <button id="s311ClearBtn" class="btn" type="button">Clear S-311 Filters</button>
+          </div>
+        </aside>
+        <section class="panel">
+          <h2>S-311-P-829 Results</h2>
+          <div class="summary-line">
+            <span id="s311StatusText">Rule-based mapping</span>
+            <strong id="s311ResultCount">0 results</strong>
+          </div>
+          <div id="s311Results" class="results"></div>
+        </section>
+      </section>
+    </section>
+  </div>
+  <div id="s311PrefBackdrop" class="pref-backdrop"></div>
+
+  <script>
+    // Datasheet field dictionary: model designator.
+    // Keep these as explicit code keys because they directly map into the PN string.
+    const modelOptions = [
+      { key: "M55342", label: "M55342" },
+      { key: "D55342", label: "D55342" }
+    ];
+    // TCR code map used in the MIL-style PN composition.
+    const tcrOptions = [
+      { key: "E", label: "E (25 ppm/C)" },
+      { key: "H", label: "H (50 ppm/C)" },
+      { key: "K", label: "K (100 ppm/C)" },
+      { key: "L", label: "L (150 ppm/C)" },
+      { key: "M", label: "M (200 ppm/C)" }
+    ];
+    // Case/slash code mapping from reviewed dataset:
+    // 01=0502, 02=0505, 03=1005, 04=1505, 05=2208, 06=0805,
+    // 07=1206, 08=2010, 09=2512, 10=1010, 11=0402, 12=0603.
+    // Power/operating-voltage values below come from the user-provided
+    // M55342/D55342 table in this review thread.
+    const sizeOptions = [
+      { key: "01", footprint: "0502", powerMw: 50, opV: 40, label: "/01 (0502, 50 mW, 40 V op)" },
+      { key: "02", footprint: "0505", powerMw: 125, opV: 40, label: "/02 (0505, 125 mW, 40 V op)" },
+      { key: "03", footprint: "1005", powerMw: 200, opV: 75, label: "/03 (1005, 200 mW, 75 V op)" },
+      { key: "04", footprint: "1505", powerMw: 150, opV: 125, label: "/04 (1505, 150 mW, 125 V op)" },
+      { key: "05", footprint: "2208", powerMw: 225, opV: 175, label: "/05 (2208, 225 mW, 175 V op)" },
+      { key: "06", footprint: "0805", powerMw: 150, opV: 50, label: "/06 (0805, 150 mW, 50 V op)" },
+      { key: "07", footprint: "1206", powerMw: 250, opV: 100, label: "/07 (1206, 250 mW, 100 V op)" },
+      { key: "08", footprint: "2010", powerMw: 800, opV: 150, label: "/08 (2010, 800 mW, 150 V op)" },
+      { key: "09", footprint: "2512", powerMw: 1000, opV: 200, label: "/09 (2512, 1000 mW, 200 V op)" },
+      { key: "10", footprint: "1010", powerMw: 500, opV: 75, label: "/10 (1010, 500 mW, 75 V op)" },
+      { key: "11", footprint: "0402", powerMw: 50, opV: 30, label: "/11 (0402, 50 mW, 30 V op)" },
+      { key: "12", footprint: "0603", powerMw: 100, opV: 50, label: "/12 (0603, 100 mW, 50 V op)" }
+    ];
+    // Termination code map (kept explicit even though only one option is active).
+    const terminationOptions = [{ key: "B", label: "B" }];
+    // Value-code letter map:
+    // - letter encodes both tolerance class and decimal/multiplier bucket.
+    // - digits come from user-entered 3-digit mantissa pattern.
+    const letterOptions = [
+      { key: "A", tol: "0.1%", mult: 1 }, { key: "B", tol: "0.1%", mult: 1e3 }, { key: "C", tol: "0.1%", mult: 1e6 },
+      { key: "R", tol: "0.25%", mult: 1 }, { key: "U", tol: "0.25%", mult: 1e3 }, { key: "V", tol: "0.25%", mult: 1e6 },
+      { key: "W", tol: "0.5%", mult: 1 }, { key: "Y", tol: "0.5%", mult: 1e3 }, { key: "Z", tol: "0.5%", mult: 1e6 },
+      { key: "D", tol: "1%", mult: 1 }, { key: "E", tol: "1%", mult: 1e3 }, { key: "F", tol: "1%", mult: 1e6 },
+      { key: "G", tol: "2%", mult: 1 }, { key: "H", tol: "2%", mult: 1e3 }, { key: "T", tol: "2%", mult: 1e6 },
+      { key: "J", tol: "5%", mult: 1 }, { key: "K", tol: "5%", mult: 1e3 }, { key: "L", tol: "5%", mult: 1e6 },
+      { key: "M", tol: "10%", mult: 1 }, { key: "N", tol: "10%", mult: 1e3 }, { key: "P", tol: "10%", mult: 1e6 }
+    ].map((x) => ({ ...x, label: x.key + " (" + x.tol + ", x" + formatMultiplier(x.mult) + ")" }));
+
+    // Failure-rate code descriptions (percent per 1000 hours at rated conditions).
+    const failureRateOptions = [
+      { key: "M", label: "M (1.0% / 1000h)" },
+      { key: "P", label: "P (0.1% / 1000h)" },
+      { key: "R", label: "R (0.01% / 1000h)" },
+      { key: "U", label: "U (0.001% / 1000h)" },
+      { key: "S", label: "S (0.005% / 1000h)" },
+      { key: "V", label: "V (0.0001% / 1000h)" },
+      { key: "C", label: "C (non-ER / commercial style)" }
+    ];
+    // Packaging code descriptions as shown in procurement tables.
+    const packagingOptions = [
+      { key: "BS", label: "BS (bulk, 100 pcs)" },
+      { key: "WS", label: "WS (waffle, 100 pcs)" },
+      { key: "W0", label: "W0 (waffle, 1000 pcs)" },
+      { key: "T0", label: "T0 (tape, 100 pcs)" },
+      { key: "T1", label: "T1 (tape, 1000 pcs)" },
+      { key: "T3", label: "T3 (tape, 3000 pcs)" },
+      { key: "T5", label: "T5 (tape, 5000 pcs)" },
+      { key: "TF", label: "TF (tape, full reel)" },
+      { key: "TS", label: "TS (tape, small reel)" },
+      { key: "WI", label: "WI (waffle, isolated)" },
+      { key: "WP", label: "WP (waffle, qty by size)" },
+      { key: "TI", label: "TI (tape, isolated)" },
+      { key: "TP", label: "TP (tape, qty by size)" }
+    ];
+    // Thin-film suffix behavior notes.
+    const thinFilmOptions = [
+      { key: "", label: "(none) (standard construction)" },
+      { key: "V", label: "V (thin film style; constrained by TCR/tolerance rule)" },
+      { key: "M", label: "M (part marking / marking-required option)" }
+    ];
+
+    const REQUEST_TARGET_EMAIL = "parts-requests@example.com";
+    const splashState = {
+      componentType: null,
+      targetView: "m55342"
+    };
+    const splashViewLabels = {
+      m55342: "M55342 / D55342 resistor radar",
+      t502: "T502 capacitor radar",
+      t54x: "T540 / T541 capacitor radar",
+      s311: "S-311-P-829 capacitor radar"
+    };
+
+    const filters = {
+      model: "M55342",
+      tcr: "K",
+      size: "06",
+      termination: "B",
+      letter: "E",
+      failure: "R",
+      packaging: "WS",
+      thinFilm: null
+    };
+
+    const nodes = {
+      workspace: document.getElementById("workspace"),
+      splashFlow: document.getElementById("splashFlow"),
+      splashStep1: document.getElementById("splashStep1"),
+      splashStep2: document.getElementById("splashStep2"),
+      splashStep3: document.getElementById("splashStep3"),
+      splashSummary: document.getElementById("splashSummary"),
+      splashTypeChoices: Array.from(document.querySelectorAll("[data-choice-type]")),
+      splashFamilyChoices: Array.from(document.querySelectorAll("[data-choice-family]")),
+      splashBackToStep1: document.getElementById("splashBackToStep1"),
+      splashRestart: document.getElementById("splashRestart"),
+      splashLaunch: document.getElementById("splashLaunch"),
+      componentButtons: Array.from(document.querySelectorAll(".component-btn[data-component]")),
+      m55342View: document.getElementById("m55342View"),
+      t502View: document.getElementById("t502View"),
+      t54xView: document.getElementById("t54xView"),
+      s311View: document.getElementById("s311View"),
+      model: document.getElementById("modelFilter"),
+      tcr: document.getElementById("tcrFilter"),
+      size: document.getElementById("sizeFilter"),
+      termination: document.getElementById("termFilter"),
+      letter: document.getElementById("letterFilter"),
+      failure: document.getElementById("frFilter"),
+      packaging: document.getElementById("pkgFilter"),
+      thinFilm: document.getElementById("tfFilter"),
+      resInput: document.getElementById("resInput"),
+      resHint: document.getElementById("resHint"),
+      milHint: document.getElementById("milHint"),
+      results: document.getElementById("results"),
+      resultCount: document.getElementById("resultCount"),
+      statusText: document.getElementById("statusText"),
+      clearBtn: document.getElementById("clearBtn"),
+      pnBarText: document.getElementById("pnBarText"),
+      partRequestForm: document.getElementById("partRequestForm"),
+      requestStatus: document.getElementById("requestStatus"),
+      reqName: document.getElementById("reqName"),
+      reqEmail: document.getElementById("reqEmail"),
+      reqOrg: document.getElementById("reqOrg"),
+      reqFamily: document.getElementById("reqFamily"),
+      reqPart: document.getElementById("reqPart"),
+      reqDetails: document.getElementById("reqDetails")
+    };
+
+    // Initial T502 workspace state and code dictionaries.
+    // This is intentionally a first-pass model for iterative refinement.
+    const t502State = {
+      caseSize: "D",
+      capacitanceUf: "22",
+      voltage: "16",
+      code1: "K",
+      code2: "61",
+      availExpanded: false
+    };
+
+    const t502Options = {
+      // T502 case mapping (from provided table rows).
+      caseSize: [
+        { key: "B", label: "B (EIA 3528-21, 3.5 x 2.8 x 2.1 mm)" },
+        { key: "C", label: "C (EIA 6032-28, 6.0 x 3.2 x 2.8 mm)" },
+        { key: "D", label: "D (EIA 7343-31, 7.3 x 4.3 x 3.1 mm)" }
+      ],
+      voltage: [
+        { key: "16", label: "16 V" }, { key: "20", label: "20 V" }, { key: "25", label: "25 V" }, { key: "35", label: "35 V" }
+      ],
+      code1: [
+        { key: "K", label: "K (±10%)" },
+        { key: "M", label: "M (±20%)" }
+      ],
+      code2: [
+        { key: "61", label: "61 (No additional surge testing)" },
+        { key: "62", label: "62 (10 cycles at 25°C ±5°C after Weibull)" },
+        { key: "63", label: "63 (10 cycles at -55°C ±5°C and +85°C ±5°C after Weibull)" }
+      ]
+    };
+
+    // T502 rows encoded directly from user-provided table for deterministic matching.
+    const t502Rows = [
+      { v: "16", cap: 10, case: "B", outline: "3528-21", pattern: "T502B106(1)016AG(2)10", dcl: "1.6", df: "6", esr: "2.8", ripple: "174", surge: "230" },
+      { v: "16", cap: 33, case: "D", outline: "7343-31", pattern: "T502D336(1)016AG(2)10", dcl: "5.3", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "20", cap: 4.7, case: "C", outline: "6032-28", pattern: "T502C475(1)020AG(2)10", dcl: "0.9", df: "6", esr: "2.0", ripple: "235", surge: "230" },
+      { v: "20", cap: 10, case: "C", outline: "6032-28", pattern: "T502C106(1)020AG(2)10", dcl: "2.0", df: "6", esr: "1.5", ripple: "271", surge: "230" },
+      { v: "20", cap: 22, case: "D", outline: "7343-31", pattern: "T502D226(1)020AG(2)10", dcl: "4.4", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "20", cap: 33, case: "D", outline: "7343-31", pattern: "T502D336(1)020AG(2)10", dcl: "6.6", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "25", cap: 4.7, case: "C", outline: "6032-28", pattern: "T502C475(1)025AG(2)10", dcl: "1.2", df: "6", esr: "2.0", ripple: "235", surge: "230" },
+      { v: "25", cap: 6.8, case: "C", outline: "6032-28", pattern: "T502C685(1)025AG(2)10", dcl: "1.7", df: "6", esr: "1.9", ripple: "271", surge: "230" },
+      { v: "25", cap: 10, case: "C", outline: "6032-28", pattern: "T502C106(1)025AG(2)10", dcl: "2.5", df: "6", esr: "1.5", ripple: "271", surge: "230" },
+      { v: "25", cap: 10, case: "D", outline: "7343-31", pattern: "T502D106(1)025AG(2)10", dcl: "2.5", df: "6", esr: "1.8", ripple: "289", surge: "230" },
+      { v: "25", cap: 15, case: "D", outline: "7343-31", pattern: "T502D156(1)025AG(2)10", dcl: "3.8", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "25", cap: 22, case: "D", outline: "7343-31", pattern: "T502D226(1)025AG(2)10", dcl: "5.5", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "25", cap: 33, case: "D", outline: "7343-31", pattern: "T502D336(1)025AG(2)10", dcl: "8.3", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "35", cap: 4.7, case: "C", outline: "6032-28", pattern: "T502C475(1)035AG(2)10", dcl: "1.7", df: "6", esr: "2.0", ripple: "235", surge: "230" },
+      { v: "35", cap: 6.8, case: "D", outline: "7343-31", pattern: "T502D685(1)035AG(2)10", dcl: "2.4", df: "6", esr: "1.8", ripple: "289", surge: "230" },
+      { v: "35", cap: 10, case: "D", outline: "7343-31", pattern: "T502D106(1)035AG(2)10", dcl: "3.5", df: "6", esr: "1.0", ripple: "390", surge: "230" },
+      { v: "35", cap: 15, case: "D", outline: "7343-31", pattern: "T502D156(1)035AG(2)10", dcl: "5.3", df: "6", esr: "0.7", ripple: "460", surge: "230" },
+      { v: "35", cap: 22, case: "D", outline: "7343-31", pattern: "T502D226(1)035AG(2)10", dcl: "7.7", df: "6", esr: "0.7", ripple: "460", surge: "230" }
+    ];
+
+    const t502Nodes = {
+      caseSize: document.getElementById("t502CaseFilter"),
+      capFilter: document.getElementById("t502CapFilter"),
+      capHint: document.getElementById("t502CapHint"),
+      voltage: document.getElementById("t502VoltFilter"),
+      code1Filter: document.getElementById("t502Code1Filter"),
+      code2Filter: document.getElementById("t502Code2Filter"),
+      code1Hint: document.getElementById("t502Code1Hint"),
+      code2Hint: document.getElementById("t502Code2Hint"),
+      clearBtn: document.getElementById("t502ClearBtn"),
+      pnText: document.getElementById("t502PnBarText"),
+      statusText: document.getElementById("t502StatusText"),
+      resultCount: document.getElementById("t502ResultCount"),
+      results: document.getElementById("t502Results"),
+      availToggleBtn: document.getElementById("t502AvailToggleBtn"),
+      availWrap: document.getElementById("t502AvailWrap")
+    };
+
+    // T540/T541 state tracks each MIL/COTS position in the assembled PN.
+    // We keep this explicit for easy human review against the datasheet table.
+    const t54xState = {
+      series: "540",
+      caseSize: "D",
+      capCode: "106",
+      tolerance: "K",
+      voltage: "035",
+      failure: "A",
+      termination: "H",
+      surge: "65",
+      esr: "10",
+      packaging: "",
+      availExpanded: false
+    };
+
+    const t54xOptions = {
+      series: [
+        { key: "540", label: "540 (Polymer COTS)" },
+        { key: "541", label: "541 (Polymer COTS Multiple Anode)" }
+      ],
+      caseSize: [
+        { key: "A", label: "A Case" }, { key: "B", label: "B Case" }, { key: "C", label: "C Case" },
+        { key: "D", label: "D Case" }, { key: "O", label: "O Case" }, { key: "X", label: "X Case" }, { key: "Y", label: "Y Case" }
+      ],
+      tolerance: [
+        { key: "K", label: "K (\u00b110%)" },
+        { key: "M", label: "M (\u00b120%)" }
+      ],
+      voltage: [
+        { key: "2R5", label: "2R5 (2.5 V)" }, { key: "003", label: "003 (3 V)" }, { key: "004", label: "004 (4 V)" },
+        { key: "006", label: "006 (6.3 V)" }, { key: "010", label: "010 (10 V)" }, { key: "016", label: "016 (16 V)" },
+        { key: "020", label: "020 (20 V)" }, { key: "025", label: "025 (25 V)" }, { key: "030", label: "030 (30 V)" },
+        { key: "035", label: "035 (35 V)" }, { key: "050", label: "050 (50 V)" }, { key: "063", label: "063 (63 V)" }
+      ],
+      failure: [
+        { key: "A", label: "A (N/A)" }, { key: "B", label: "B (0.1%/KHrs)" }, { key: "C", label: "C (0.01%/KHrs)" },
+        { key: "D", label: "D (0.001%/KHrs)" }, { key: "L", label: "L (Life +125C, 2000 hrs)" }, { key: "V", label: "V (Vib/Surge/Solder/Life)" }
+      ],
+      termination: [
+        { key: "H", label: "H (SnPb solder coat, 5% Pb min)" },
+        { key: "T", label: "T (100% matte tin)" }
+      ],
+      surge: [
+        { key: "65", label: "65 (4 cycles at 25C \u00b15C)" },
+        { key: "66", label: "66 (10 cycles at 25C \u00b15C)" },
+        { key: "67", label: "67 (10 cycles at -55C/+85C)" },
+        { key: "85", label: "85 (65 + improved humidity)" },
+        { key: "86", label: "86 (66 + improved humidity)" },
+        { key: "87", label: "87 (67 + improved humidity)" }
+      ],
+      esr: [
+        { key: "05", label: "05 (ESR High)" }, { key: "10", label: "10 (ESR Standard)" },
+        { key: "20", label: "20 (ESR Low)" }, { key: "30", label: "30 (ESR Ultra Low)" }
+      ],
+      packaging: [
+        { key: "", label: 'Blank (7" Reel)' }, { key: "7280", label: '7280 (13" Reel)' }, { key: "7611", label: "7611 (Bulk Bag)" },
+        { key: "7640", label: "7640 (Bulk Plastic Box)" }, { key: "WAFL", label: "WAFL (Waffle Pack)" }
+      ]
+    };
+
+    const t54xNodes = {
+      series: document.getElementById("t54xSeriesFilter"),
+      caseSize: document.getElementById("t54xCaseFilter"),
+      capInput: document.getElementById("t54xCapInput"),
+      capHint: document.getElementById("t54xCapHint"),
+      capFilter: document.getElementById("t54xCapFilter"),
+      tolerance: document.getElementById("t54xTolFilter"),
+      voltage: document.getElementById("t54xVoltFilter"),
+      failure: document.getElementById("t54xFailureFilter"),
+      termination: document.getElementById("t54xTermFilter"),
+      surge: document.getElementById("t54xSurgeFilter"),
+      esr: document.getElementById("t54xEsrFilter"),
+      packaging: document.getElementById("t54xPackFilter"),
+      clearBtn: document.getElementById("t54xClearBtn"),
+      pnText: document.getElementById("t54xPnBarText"),
+      statusText: document.getElementById("t54xStatusText"),
+      resultCount: document.getElementById("t54xResultCount"),
+      results: document.getElementById("t54xResults"),
+      availToggleBtn: document.getElementById("t54xAvailToggleBtn"),
+      availWrap: document.getElementById("t54xAvailWrap")
+    };
+
+    const s311State = {
+      gsfc: "G311P829",
+      ultrasonic: "A",
+      size: "A",
+      dielectric: "N",
+      capCode: "100",
+      tolerance: "F",
+      voltage: "1",
+      termination: "P",
+      packaging: "1",
+      prefExpanded: false,
+      prefTableDielectric: "X"
+    };
+
+    const s311Options = {
+      ultrasonic: [
+        { key: "A", label: "A (100% ultrasonic exam)" }
+      ],
+      size: [
+        { key: "A", label: "A (0402)" }, { key: "B", label: "B (0403)" }, { key: "C", label: "C (0504)" }, { key: "D", label: "D (0603)" },
+        { key: "E", label: "E (0805)" }, { key: "F", label: "F (1206)" }, { key: "G", label: "G (1209)" }, { key: "H", label: "H (1725)" },
+        { key: "J", label: "J (2225)" }, { key: "K", label: "K (1712)" }, { key: "L", label: "L (0502)" }, { key: "M", label: "M (0306)" },
+        { key: "N", label: "N (0508)" }, { key: "P", label: "P (0612)" }, { key: "Q", label: "Q (0912)" }, { key: "R", label: "R (1812)" },
+        { key: "S", label: "S (1210)" }, { key: "T", label: "T (1825)" }, { key: "U", label: "U (0201)" }
+      ],
+      dielectric: [
+        { key: "N", label: "N (NPO)" },
+        { key: "X", label: "X (X7R)" }
+      ],
+      tolerance: [
+        { key: "A", label: "A (±0.05 pF; NPO <10 pF)" },
+        { key: "B", label: "B (±0.10 pF; NPO <10 pF)" },
+        { key: "C", label: "C (±0.25 pF; NPO <10 pF)" },
+        { key: "D", label: "D (±0.50 pF; NPO <10 pF)" },
+        { key: "F", label: "F (±1%; NPO >=10 pF)" },
+        { key: "G", label: "G (±2%; NPO >=10 pF)" },
+        { key: "J", label: "J (±5%; NPO >=10 pF)" },
+        { key: "K", label: "K (±10%; NPO/X7R >=10 pF)" },
+        { key: "L", label: "L (+20/-10%; NPO/X7R >=10 pF)" }
+      ],
+      voltage: [
+        { key: "1", label: "1 (25 V)" }, { key: "2", label: "2 (50 V)" }, { key: "3", label: "3 (100 V)" }, { key: "4", label: "4 (5 V)" },
+        { key: "5", label: "5 (10 V)" }, { key: "6", label: "6 (16 V)" }, { key: "7", label: "7 (6.3 V)" }, { key: "8", label: "8 (4 V)" }
+      ],
+      termination: [
+        { key: "P", label: "P (PdAg alloy)" },
+        { key: "N", label: "N (Ni-Sn/Pb plated)" },
+        { key: "G", label: "G (Ag-Ni-Au plated)" },
+        { key: "H", label: "H (Gold, thick film)" }
+      ],
+      packaging: [
+        { key: "1", label: "1 (7in T/R, unmarked)" },
+        { key: "2", label: "2 (7in T/R, marked)" },
+        { key: "3", label: "3 (Waffle, unmarked)" },
+        { key: "4", label: "4 (Waffle, marked)" }
+      ]
+    };
+
+    // Table I: Allowable Capacitance/Voltage combinations from S-311-P-829 rev M.
+    // Each row sets the maximum capacitance allowed for the dielectric at that size+voltage.
+    // NA entries are intentionally omitted and treated as not allowed.
+    const s311Table1Max = [
+      { size: "U", voltage: "4", dielectric: "X", maxPf: 22000 },
+      { size: "U", voltage: "5", dielectric: "N", maxPf: 100 },
+      { size: "U", voltage: "5", dielectric: "X", maxPf: 10000 },
+      { size: "A", voltage: "4", dielectric: "X", maxPf: 220000 },
+      { size: "A", voltage: "5", dielectric: "X", maxPf: 100000 },
+      { size: "A", voltage: "6", dielectric: "X", maxPf: 10000 },
+      { size: "A", voltage: "1", dielectric: "N", maxPf: 120 },
+      { size: "A", voltage: "1", dielectric: "X", maxPf: 4700 },
+      { size: "A", voltage: "2", dielectric: "N", maxPf: 100 },
+      { size: "A", voltage: "2", dielectric: "X", maxPf: 3900 },
+      { size: "A", voltage: "3", dielectric: "N", maxPf: 39 },
+      { size: "A", voltage: "3", dielectric: "X", maxPf: 1200 },
+      { size: "B", voltage: "6", dielectric: "X", maxPf: 22000 },
+      { size: "B", voltage: "1", dielectric: "N", maxPf: 390 },
+      { size: "B", voltage: "1", dielectric: "X", maxPf: 15000 },
+      { size: "B", voltage: "2", dielectric: "N", maxPf: 330 },
+      { size: "B", voltage: "2", dielectric: "X", maxPf: 12000 },
+      { size: "B", voltage: "3", dielectric: "N", maxPf: 68 },
+      { size: "B", voltage: "3", dielectric: "X", maxPf: 2200 },
+      { size: "L", voltage: "7", dielectric: "X", maxPf: 100000 },
+      { size: "C", voltage: "6", dielectric: "X", maxPf: 82000 },
+      { size: "C", voltage: "1", dielectric: "N", maxPf: 1500 },
+      { size: "C", voltage: "1", dielectric: "X", maxPf: 47000 },
+      { size: "C", voltage: "2", dielectric: "N", maxPf: 1200 },
+      { size: "C", voltage: "2", dielectric: "X", maxPf: 39000 },
+      { size: "C", voltage: "3", dielectric: "N", maxPf: 180 },
+      { size: "C", voltage: "3", dielectric: "X", maxPf: 6800 },
+      { size: "M", voltage: "4", dielectric: "X", maxPf: 100000 },
+      { size: "M", voltage: "6", dielectric: "X", maxPf: 100000 },
+      { size: "M", voltage: "1", dielectric: "X", maxPf: 22000 },
+      { size: "D", voltage: "5", dielectric: "X", maxPf: 220000 },
+      { size: "D", voltage: "6", dielectric: "X", maxPf: 100000 },
+      { size: "D", voltage: "1", dielectric: "N", maxPf: 680 },
+      { size: "D", voltage: "1", dielectric: "X", maxPf: 27000 },
+      { size: "D", voltage: "2", dielectric: "N", maxPf: 560 },
+      { size: "D", voltage: "2", dielectric: "X", maxPf: 22000 },
+      { size: "D", voltage: "3", dielectric: "N", maxPf: 100 },
+      { size: "D", voltage: "3", dielectric: "X", maxPf: 3300 },
+      { size: "N", voltage: "7", dielectric: "X", maxPf: 180000 },
+      { size: "N", voltage: "5", dielectric: "X", maxPf: 120000 },
+      { size: "N", voltage: "6", dielectric: "X", maxPf: 100000 },
+      { size: "N", voltage: "1", dielectric: "X", maxPf: 47000 },
+      { size: "E", voltage: "5", dielectric: "X", maxPf: 1000000 },
+      { size: "E", voltage: "6", dielectric: "X", maxPf: 220000 },
+      { size: "E", voltage: "1", dielectric: "N", maxPf: 2700 },
+      { size: "E", voltage: "1", dielectric: "X", maxPf: 100000 },
+      { size: "E", voltage: "2", dielectric: "N", maxPf: 2200 },
+      { size: "E", voltage: "2", dielectric: "X", maxPf: 100000 },
+      { size: "E", voltage: "3", dielectric: "N", maxPf: 560 },
+      { size: "E", voltage: "3", dielectric: "X", maxPf: 22000 },
+      { size: "P", voltage: "6", dielectric: "X", maxPf: 270000 },
+      { size: "P", voltage: "1", dielectric: "X", maxPf: 220000 },
+      { size: "F", voltage: "5", dielectric: "X", maxPf: 1800000 },
+      { size: "F", voltage: "6", dielectric: "X", maxPf: 390000 },
+      { size: "F", voltage: "1", dielectric: "N", maxPf: 6800 },
+      { size: "F", voltage: "1", dielectric: "X", maxPf: 270000 },
+      { size: "F", voltage: "2", dielectric: "N", maxPf: 5600 },
+      { size: "F", voltage: "2", dielectric: "X", maxPf: 220000 },
+      { size: "F", voltage: "3", dielectric: "N", maxPf: 1500 },
+      { size: "F", voltage: "3", dielectric: "X", maxPf: 100000 },
+      { size: "Q", voltage: "6", dielectric: "X", maxPf: 680000 },
+      { size: "Q", voltage: "1", dielectric: "X", maxPf: 470000 },
+      { size: "G", voltage: "5", dielectric: "X", maxPf: 2700000 },
+      { size: "G", voltage: "6", dielectric: "X", maxPf: 680000 },
+      { size: "G", voltage: "1", dielectric: "N", maxPf: 10000 },
+      { size: "G", voltage: "1", dielectric: "X", maxPf: 470000 },
+      { size: "G", voltage: "2", dielectric: "N", maxPf: 8200 },
+      { size: "G", voltage: "2", dielectric: "X", maxPf: 390000 },
+      { size: "G", voltage: "3", dielectric: "N", maxPf: 3900 },
+      { size: "G", voltage: "3", dielectric: "X", maxPf: 150000 },
+      { size: "S", voltage: "5", dielectric: "X", maxPf: 2700000 },
+      { size: "S", voltage: "6", dielectric: "X", maxPf: 680000 },
+      { size: "S", voltage: "1", dielectric: "N", maxPf: 10000 },
+      { size: "S", voltage: "1", dielectric: "X", maxPf: 470000 },
+      { size: "S", voltage: "2", dielectric: "N", maxPf: 8200 },
+      { size: "S", voltage: "2", dielectric: "X", maxPf: 390000 },
+      { size: "S", voltage: "3", dielectric: "N", maxPf: 3900 },
+      { size: "S", voltage: "3", dielectric: "X", maxPf: 150000 },
+      { size: "K", voltage: "6", dielectric: "X", maxPf: 1200000 },
+      { size: "K", voltage: "1", dielectric: "N", maxPf: 22000 },
+      { size: "K", voltage: "1", dielectric: "X", maxPf: 1000000 },
+      { size: "K", voltage: "2", dielectric: "N", maxPf: 15000 },
+      { size: "K", voltage: "2", dielectric: "X", maxPf: 680000 },
+      { size: "K", voltage: "3", dielectric: "N", maxPf: 6800 },
+      { size: "K", voltage: "3", dielectric: "X", maxPf: 270000 },
+      { size: "R", voltage: "5", dielectric: "X", maxPf: 4700000 },
+      { size: "R", voltage: "6", dielectric: "X", maxPf: 1200000 },
+      { size: "R", voltage: "1", dielectric: "N", maxPf: 22000 },
+      { size: "R", voltage: "1", dielectric: "X", maxPf: 1000000 },
+      { size: "R", voltage: "2", dielectric: "N", maxPf: 15000 },
+      { size: "R", voltage: "2", dielectric: "X", maxPf: 680000 },
+      { size: "R", voltage: "3", dielectric: "N", maxPf: 6800 },
+      { size: "R", voltage: "3", dielectric: "X", maxPf: 270000 },
+      { size: "H", voltage: "6", dielectric: "X", maxPf: 3300000 },
+      { size: "H", voltage: "1", dielectric: "N", maxPf: 56000 },
+      { size: "H", voltage: "1", dielectric: "X", maxPf: 2200000 },
+      { size: "H", voltage: "2", dielectric: "N", maxPf: 39000 },
+      { size: "H", voltage: "2", dielectric: "X", maxPf: 1800000 },
+      { size: "H", voltage: "3", dielectric: "N", maxPf: 18000 },
+      { size: "H", voltage: "3", dielectric: "X", maxPf: 680000 },
+      { size: "T", voltage: "6", dielectric: "X", maxPf: 3300000 },
+      { size: "T", voltage: "1", dielectric: "N", maxPf: 56000 },
+      { size: "T", voltage: "1", dielectric: "X", maxPf: 2200000 },
+      { size: "T", voltage: "2", dielectric: "N", maxPf: 39000 },
+      { size: "T", voltage: "2", dielectric: "X", maxPf: 1800000 },
+      { size: "T", voltage: "3", dielectric: "N", maxPf: 18000 },
+      { size: "T", voltage: "3", dielectric: "X", maxPf: 680000 },
+      { size: "J", voltage: "6", dielectric: "X", maxPf: 3900000 },
+      { size: "J", voltage: "1", dielectric: "N", maxPf: 68000 },
+      { size: "J", voltage: "1", dielectric: "X", maxPf: 3300000 },
+      { size: "J", voltage: "2", dielectric: "N", maxPf: 56000 },
+      { size: "J", voltage: "2", dielectric: "X", maxPf: 2200000 },
+      { size: "J", voltage: "3", dielectric: "N", maxPf: 27000 },
+      { size: "J", voltage: "3", dielectric: "X", maxPf: 1000000 }
+    ];
+
+    const s311Nodes = {
+      ultra: document.getElementById("s311UltraFilter"),
+      size: document.getElementById("s311SizeFilter"),
+      dielectric: document.getElementById("s311DielectricFilter"),
+      capInput: document.getElementById("s311CapInput"),
+      capHint: document.getElementById("s311CapHint"),
+      prefGroup: document.getElementById("s311PrefGroup"),
+      prefX7rBtn: document.getElementById("s311PrefX7rBtn"),
+      prefNpoBtn: document.getElementById("s311PrefNpoBtn"),
+      prefToggleBtn: document.getElementById("s311PrefToggleBtn"),
+      prefBackdrop: document.getElementById("s311PrefBackdrop"),
+      prefHint: document.getElementById("s311PrefHint"),
+      prefTableWrap: document.getElementById("s311PrefTableWrap"),
+      tol: document.getElementById("s311TolFilter"),
+      volt: document.getElementById("s311VoltFilter"),
+      term: document.getElementById("s311TermFilter"),
+      pack: document.getElementById("s311PackFilter"),
+      clearBtn: document.getElementById("s311ClearBtn"),
+      pnText: document.getElementById("s311PnBarText"),
+      statusText: document.getElementById("s311StatusText"),
+      resultCount: document.getElementById("s311ResultCount"),
+      results: document.getElementById("s311Results")
+    };
+
+    function setS311PrefExpanded(expanded) {
+      s311State.prefExpanded = !!expanded;
+      s311Nodes.prefGroup.classList.toggle("expanded", s311State.prefExpanded);
+      s311Nodes.prefBackdrop.classList.toggle("active", s311State.prefExpanded);
+      s311Nodes.prefToggleBtn.textContent = s311State.prefExpanded ? "Collapse" : "Expand";
+    }
+
+    function setS311PrefDielectric(modeKey) {
+      s311State.prefTableDielectric = modeKey === "N" ? "N" : "X";
+      s311Nodes.prefX7rBtn.classList.toggle("active", s311State.prefTableDielectric === "X");
+      s311Nodes.prefNpoBtn.classList.toggle("active", s311State.prefTableDielectric === "N");
+    }
+
+    // AVX S311-P838 preferred-size matrix:
+    // page 2 "PREFERRED SIZES ARE SHADED" (X7R, sizes B/C/D/E/F and voltages 16/25/50/100).
+    // `preferred` lists columns where the cell is shaded in the datasheet.
+    const s311P838PrefRows = [
+      { code: "222", value: "2.2 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "272", value: "2.7 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "332", value: "3.3 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "392", value: "3.9 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "472", value: "4.7 nF", preferred: ["B16","B25","B50","B100"] },
+      { code: "562", value: "5.6 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "682", value: "6.8 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "822", value: "8.2 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "103", value: "10 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "123", value: "12 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "153", value: "15 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100"] },
+      { code: "183", value: "18 nF", preferred: ["B16","B25","B50","B100","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "223", value: "22 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "273", value: "27 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "333", value: "33 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "393", value: "39 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "473", value: "47 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "563", value: "56 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100"] },
+      { code: "683", value: "68 nF", preferred: ["B16","B25","B50","C16","C25","C50","C100","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "823", value: "82 nF", preferred: ["B16","B25","C16","C25","C50","C100","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "104", value: "100 nF", preferred: ["B16","B25","C16","C25","C50","C100","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "124", value: "120 nF", preferred: ["B16","B25","C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "154", value: "150 nF", preferred: ["B16","B25","C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100"] },
+      { code: "184", value: "180 nF", preferred: ["B16","B25","C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "224", value: "220 nF", preferred: ["C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "274", value: "270 nF", preferred: ["C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "334", value: "330 nF", preferred: ["C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "394", value: "390 nF", preferred: ["C16","C25","C50","D16","D25","D50","D100","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "474", value: "470 nF", preferred: ["C16","C25","C50","D16","D25","D50","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "564", value: "560 nF", preferred: ["C16","C25","D16","D25","D50","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "684", value: "680 nF", preferred: ["C16","C25","D16","D25","D50","E16","E25","E50","E100","F16","F25","F50","F100"] },
+      { code: "824", value: "820 nF", preferred: ["C16","C25","D16","D25","D50","E16","E25","E50","F16","F25","F50","F100"] },
+      { code: "105", value: "1 uF", preferred: ["C16","C25","D16","D25","D50","E16","E25","E50","F16","F25","F50","F100"] },
+      { code: "125", value: "1.2 uF", preferred: ["D16","D25","F16","F25","F50","F100"] },
+      { code: "155", value: "1.5 uF", preferred: ["D16","D25","F16","F25","F50","F100"] },
+      { code: "185", value: "1.8 uF", preferred: ["D16","D25","F16","F25","F50","F100"] },
+      { code: "225", value: "2.2 uF", preferred: ["D16","D25","F16","F25","F50","F100"] },
+      { code: "275", value: "2.7 uF", preferred: ["F16","F25","F50"] },
+      { code: "335", value: "3.3 uF", preferred: ["F16","F25","F50"] },
+      { code: "395", value: "3.9 uF", preferred: ["F16","F25","F50"] },
+      { code: "475", value: "4.7 uF", preferred: ["F16","F25","F50"] },
+      { code: "565", value: "5.6 uF", preferred: ["F16","F25"] },
+      { code: "685", value: "6.8 uF", preferred: ["F16","F25"] },
+      { code: "825", value: "8.2 uF", preferred: ["F16","F25"] },
+      { code: "106", value: "10 uF", preferred: [] }
+    ];
+
+    // T540/T541 catalog availability rows derived from table values in:
+    // KEM_T2077_T540-541 (rev 1/22/2025), Table 1 voltage/case/capacitance listings.
+    // This set drives which value/package combinations remain selectable.
+    const t54xCatalogRows = [
+      { series: "540", caseSize: "A", capCode: "226", voltage: "010", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "107", voltage: "003", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "107", voltage: "004", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "157", voltage: "003", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "226", voltage: "010", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "336", voltage: "006", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "336", voltage: "010", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "476", voltage: "006", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "476", voltage: "010", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "476", voltage: "010", esr: "20" },
+      { series: "540", caseSize: "B", capCode: "686", voltage: "004", esr: "10" },
+      { series: "540", caseSize: "B", capCode: "686", voltage: "006", esr: "10" },
+      { series: "540", caseSize: "C", capCode: "106", voltage: "025", esr: "10" },
+      { series: "540", caseSize: "C", capCode: "685", voltage: "025", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "106", voltage: "050", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "106", voltage: "050", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "107", voltage: "010", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "107", voltage: "010", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "107", voltage: "016", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "107", voltage: "016", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "156", voltage: "025", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "156", voltage: "025", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "156", voltage: "035", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "156", voltage: "035", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "157", voltage: "006", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "157", voltage: "006", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "157", voltage: "010", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "157", voltage: "010", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "226", voltage: "020", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "226", voltage: "020", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "226", voltage: "025", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "226", voltage: "025", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "226", voltage: "030", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "226", voltage: "030", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "227", voltage: "004", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "227", voltage: "004", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "227", voltage: "006", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "227", voltage: "006", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "227", voltage: "010", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "227", voltage: "010", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "336", voltage: "020", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "336", voltage: "020", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "336", voltage: "025", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "336", voltage: "025", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "336", voltage: "030", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "337", voltage: "003", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "337", voltage: "003", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "337", voltage: "004", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "337", voltage: "004", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "337", voltage: "006", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "337", voltage: "006", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "337", voltage: "2R5", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "337", voltage: "2R5", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "475", voltage: "063", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "475", voltage: "063", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "476", voltage: "016", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "476", voltage: "016", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "476", voltage: "020", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "476", voltage: "020", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "477", voltage: "003", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "477", voltage: "003", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "477", voltage: "004", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "477", voltage: "004", esr: "20" },
+      { series: "540", caseSize: "D", capCode: "477", voltage: "2R5", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "477", voltage: "2R5", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "686", voltage: "016", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "687", voltage: "003", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "687", voltage: "003", esr: "10" },
+      { series: "540", caseSize: "D", capCode: "687", voltage: "2R5", esr: "05" },
+      { series: "540", caseSize: "D", capCode: "687", voltage: "2R5", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "157", voltage: "010", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "157", voltage: "010", esr: "20" },
+      { series: "541", caseSize: "D", capCode: "227", voltage: "006", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "227", voltage: "006", esr: "20" },
+      { series: "541", caseSize: "D", capCode: "227", voltage: "010", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "227", voltage: "010", esr: "20" },
+      { series: "541", caseSize: "D", capCode: "337", voltage: "004", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "337", voltage: "004", esr: "20" },
+      { series: "541", caseSize: "D", capCode: "337", voltage: "006", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "477", voltage: "003", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "477", voltage: "004", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "477", voltage: "2R5", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "477", voltage: "2R5", esr: "20" },
+      { series: "541", caseSize: "D", capCode: "687", voltage: "003", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "687", voltage: "2R5", esr: "10" },
+      { series: "541", caseSize: "D", capCode: "687", voltage: "2R5", esr: "20" },
+      { series: "541", caseSize: "O", capCode: "108", voltage: "006", esr: "10" },
+      { series: "541", caseSize: "O", capCode: "157", voltage: "025", esr: "10" },
+      { series: "541", caseSize: "O", capCode: "157", voltage: "030", esr: "10" },
+      { series: "541", caseSize: "O", capCode: "157", voltage: "030", esr: "20" },
+      { series: "541", caseSize: "O", capCode: "158", voltage: "004", esr: "10" },
+      { series: "541", caseSize: "O", capCode: "208", voltage: "003", esr: "10" },
+      { series: "541", caseSize: "O", capCode: "477", voltage: "016", esr: "10" },
+      { series: "541", caseSize: "O", capCode: "477", voltage: "016", esr: "20" },
+      { series: "541", caseSize: "O", capCode: "687", voltage: "010", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "106", voltage: "063", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "106", voltage: "063", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "106", voltage: "063", esr: "30" },
+      { series: "541", caseSize: "X", capCode: "107", voltage: "020", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "107", voltage: "020", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "107", voltage: "025", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "107", voltage: "025", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "107", voltage: "030", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "107", voltage: "030", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "003", esr: "05" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "003", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "004", esr: "05" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "004", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "004", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "2R5", esr: "05" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "2R5", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "2R5", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "108", voltage: "2R5", esr: "30" },
+      { series: "541", caseSize: "X", capCode: "156", voltage: "063", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "157", voltage: "016", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "157", voltage: "016", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "158", voltage: "003", esr: "05" },
+      { series: "541", caseSize: "X", capCode: "158", voltage: "003", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "158", voltage: "2R5", esr: "05" },
+      { series: "541", caseSize: "X", capCode: "158", voltage: "2R5", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "158", voltage: "2R5", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "158", voltage: "2R5", esr: "30" },
+      { series: "541", caseSize: "X", capCode: "226", voltage: "050", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "227", voltage: "016", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "227", voltage: "016", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "336", voltage: "035", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "336", voltage: "050", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "337", voltage: "010", esr: "05" },
+      { series: "541", caseSize: "X", capCode: "337", voltage: "010", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "337", voltage: "010", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "337", voltage: "010", esr: "30" },
+      { series: "541", caseSize: "X", capCode: "337", voltage: "016", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "337", voltage: "016", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "476", voltage: "030", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "476", voltage: "035", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "477", voltage: "006", esr: "05" },
+      { series: "541", caseSize: "X", capCode: "477", voltage: "006", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "477", voltage: "006", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "477", voltage: "006", esr: "30" },
+      { series: "541", caseSize: "X", capCode: "477", voltage: "010", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "686", voltage: "025", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "686", voltage: "030", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "686", voltage: "030", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "687", voltage: "004", esr: "05" },
+      { series: "541", caseSize: "X", capCode: "687", voltage: "004", esr: "10" },
+      { series: "541", caseSize: "X", capCode: "687", voltage: "004", esr: "20" },
+      { series: "541", caseSize: "X", capCode: "687", voltage: "004", esr: "30" },
+      { series: "541", caseSize: "X", capCode: "687", voltage: "006", esr: "10" },
+      { series: "541", caseSize: "Y", capCode: "227", voltage: "010", esr: "10" },
+      { series: "541", caseSize: "Y", capCode: "227", voltage: "010", esr: "20" },
+      { series: "541", caseSize: "Y", capCode: "337", voltage: "006", esr: "10" },
+      { series: "541", caseSize: "Y", capCode: "337", voltage: "006", esr: "20" },
+      { series: "541", caseSize: "Y", capCode: "337", voltage: "006", esr: "30" },
+      { series: "541", caseSize: "Y", capCode: "477", voltage: "004", esr: "10" },
+      { series: "541", caseSize: "Y", capCode: "477", voltage: "004", esr: "20" },
+      { series: "541", caseSize: "Y", capCode: "477", voltage: "004", esr: "30" },
+      { series: "541", caseSize: "Y", capCode: "687", voltage: "2R5", esr: "10" },
+      { series: "541", caseSize: "Y", capCode: "687", voltage: "2R5", esr: "20" },
+      { series: "541", caseSize: "Y", capCode: "687", voltage: "2R5", esr: "30" },
+    ];
+
+    // Derived capacitance options from the provided T502 row set.
+    const t502CapOptions = Array.from(new Set(t502Rows.map((r) => String(r.cap))))
+      .sort((a, b) => Number(a) - Number(b))
+      .map((c) => ({ key: c, label: c + " uF" }));
+
+    function formatMultiplier(v) {
+      if (v === 1) return "1";
+      if (v === 1e3) return "1k";
+      if (v === 1e6) return "1M";
+      return String(v);
+    }
+
+    function parseMantissa(input) {
+      const s = String(input || "").trim();
+      const m = s.match(/^(\.[0-9]{3}|[0-9]\.[0-9]{2}|[0-9]{2}\.[0-9]|[0-9]{3}\.)$/);
+      if (!m) return null;
+      const dotIndex = s.indexOf(".");
+      const digits = s.replace(".", "");
+      return {
+        raw: s,
+        dotIndex,
+        digits,
+        value: Number(s)
+      };
+    }
+
+    function updateInputFormatting() {
+      const parsed = parseMantissa(nodes.resInput.value);
+      nodes.resInput.classList.remove("valid", "invalid");
+      if (parsed) {
+        nodes.resInput.classList.add("valid");
+        nodes.resHint.textContent = "Valid format. Unselected letter preview: " + parsed.raw.replace(".", "_");
+      } else {
+        nodes.resInput.classList.add("invalid");
+        nodes.resHint.textContent = "Invalid format. Use three digits with decimal point (.560, 5.60, 56.0, or 560.).";
+      }
+      return parsed;
+    }
+
+    function letterInfo(key) {
+      return letterOptions.find((x) => x.key === key) || null;
+    }
+
+    // MIL preferred value tables represented as 3-digit mantissa integers.
+    // Example: 5.60 => mantissa 560.
+    // Trace refs:
+    // - MIL part-number/value examples in MIL-PRF-55342 slash-sheet tables (NASA NPSL mirror)
+    // - Vishay E/H M/D55342 global PN table (eh.pdf): letter/tolerance/multiplier definition
+    const MIL_SERIES_E96 = new Set([
+      100,102,105,107,110,113,115,118,121,124,127,130,133,137,140,143,147,150,154,158,162,165,169,174,
+      178,182,187,191,196,200,205,210,215,221,226,232,237,243,249,255,261,267,274,280,287,294,301,309,
+      316,324,332,340,348,357,365,374,383,392,402,412,422,432,442,453,464,475,487,499,511,523,536,549,
+      562,576,590,604,619,634,649,665,681,698,715,732,750,768,787,806,825,845,866,887,909,931,953,976
+    ]);
+    const MIL_SERIES_E24 = new Set([100,110,120,130,150,160,180,200,220,240,270,300,330,360,390,430,470,510,560,620,680,750,820,910]);
+    const MIL_SERIES_E12 = new Set([100,120,150,180,220,270,330,390,470,560,680,820]);
+
+    function selectMilSeriesByTolerance(tolPercent) {
+      const t = Number(String(tolPercent || "").replace("%", ""));
+      if (!isFinite(t)) return null;
+      if (t <= 1) return MIL_SERIES_E96;
+      if (t <= 5) return MIL_SERIES_E24;
+      return MIL_SERIES_E12;
+    }
+
+    function milValueCheck(mantissa, letterKey) {
+      if (!mantissa) return { ok: false, message: "MIL check: invalid resistance input format." };
+      if (!letterKey) return { ok: null, message: "MIL check: select a tolerance letter to validate value membership." };
+      const li = letterInfo(letterKey);
+      if (!li) return { ok: false, message: "MIL check: unknown tolerance letter." };
+      const series = selectMilSeriesByTolerance(li.tol);
+      if (!series) return { ok: false, message: "MIL check: no series mapping for selected tolerance." };
+      const digits = Number(mantissa.digits);
+      const inSeries = series.has(digits);
+      if (inSeries) {
+        return { ok: true, message: "MIL check: in spec for " + li.tol + " tolerance (" + digits + " mantissa in allowed series)." };
+      }
+      return { ok: false, message: "MIL check: out of spec for " + li.tol + " tolerance (" + digits + " mantissa not in allowed series)." };
+    }
+
+    // Resolve slash-code electrical data for display in results and reviewer checks.
+    function sizeInfo(key) {
+      return sizeOptions.find((x) => x.key === key) || null;
+    }
+
+    function buildValueCode(mantissa, letterKey) {
+      const li = letterInfo(letterKey);
+      if (!li || !mantissa) return null;
+      const mil = milValueCheck(mantissa, letterKey);
+      if (mil.ok !== true) return null;
+      const code = mantissa.digits.slice(0, mantissa.dotIndex) + li.key + mantissa.digits.slice(mantissa.dotIndex);
+      const nominal = mantissa.value * li.mult;
+      const errorPct = 0;
+      return { code, nominal, errorPct, tol: li.tol };
+    }
+
+    function isValidRow(r) {
+      if (r.thinFilm === "V") {
+        const t = Number(r.letterTol.replace("%", ""));
+        if (!(r.tcr === "K" || r.tcr === "L" || r.tcr === "M")) return false;
+        if (!(t >= 1)) return false;
+      }
+      if (r.thinFilm === "M" && (r.size === "01" || r.size === "02" || r.size === "11" || r.size === "12")) {
+        return false;
+      }
+      return true;
+    }
+
+    function selectedOrAll(key, options, localFilters) {
+      const sel = localFilters[key];
+      return sel === null ? options : options.filter((x) => x.key === sel);
+    }
+
+    function generateRows(localFilters) {
+      const mantissa = parseMantissa(nodes.resInput.value);
+      if (!mantissa) return [];
+
+      const rows = [];
+      const ms = selectedOrAll("model", modelOptions, localFilters);
+      const ts = selectedOrAll("tcr", tcrOptions, localFilters);
+      const ss = selectedOrAll("size", sizeOptions, localFilters);
+      const terms = selectedOrAll("termination", terminationOptions, localFilters);
+      const ls = selectedOrAll("letter", letterOptions, localFilters);
+      const frs = selectedOrAll("failure", failureRateOptions, localFilters);
+      const pkgs = selectedOrAll("packaging", packagingOptions, localFilters);
+      const tfs = selectedOrAll("thinFilm", thinFilmOptions, localFilters);
+
+      for (const m of ms) {
+        for (const t of ts) {
+          for (const s of ss) {
+            for (const term of terms) {
+              for (const l of ls) {
+                const vc = buildValueCode(mantissa, l.key);
+                if (!vc) continue;
+                for (const fr of frs) {
+                  for (const p of pkgs) {
+                    for (const tf of tfs) {
+                      const row = {
+                        model: m.key,
+                        tcr: t.key,
+                        size: s.key,
+                        termination: term.key,
+                        letter: l.key,
+                        letterTol: l.tol,
+                        valueCode: vc.code,
+                        valueNominal: vc.nominal,
+                        valueErrorPct: vc.errorPct,
+                        failure: fr.key,
+                        packaging: p.key,
+                        thinFilm: tf.key
+                      };
+                      if (!isValidRow(row)) continue;
+                      row.pn = row.model + row.tcr + row.size + row.termination + row.valueCode + row.failure + row.packaging + row.thinFilm;
+                      rows.push(row);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return rows;
+    }
+
+    function matches(optionKey, optionVal) {
+      const test = { ...filters, [optionKey]: optionVal };
+      return generateRows(test).length;
+    }
+
+    function renderFilterGroup(key, host, options) {
+      host.innerHTML = "";
+      for (const opt of options) {
+        const count = matches(key, opt.key);
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "filter-pill";
+        if (filters[key] === opt.key) pill.classList.add("active");
+        if (count === 0) pill.classList.add("disabled");
+        pill.disabled = count === 0 && filters[key] !== opt.key;
+        pill.innerHTML = "<span>" + opt.label + "</span><span class=\"count\">" + count + "</span>";
+        pill.addEventListener("click", () => {
+          filters[key] = (filters[key] === opt.key) ? null : opt.key;
+          renderAll();
+        });
+        host.appendChild(pill);
+      }
+    }
+
+    function updatePnBar() {
+      const mantissa = parseMantissa(nodes.resInput.value);
+      const vc = (filters.letter && mantissa) ? buildValueCode(mantissa, filters.letter) : null;
+      const valueSegment = vc
+        ? vc.code
+        : (mantissa ? mantissa.raw.replace(".", "_") : "____");
+      const pn =
+        (filters.model || "M55342") +
+        (filters.tcr || "_") +
+        (filters.size || "__") +
+        (filters.termination || "_") +
+        valueSegment +
+        (filters.failure || "_") +
+        (filters.packaging || "__") +
+        (filters.thinFilm === null ? "_" : (filters.thinFilm === "" ? "-" : filters.thinFilm));
+      nodes.pnBarText.textContent = pn;
+    }
+
+    function renderResults() {
+      const rows = generateRows(filters);
+      nodes.resultCount.textContent = rows.length + " matches";
+      nodes.statusText.textContent = rows.length ? "Filtered datasheet-code combinations" : "No matching combination";
+      nodes.results.innerHTML = "";
+
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "result-card";
+        empty.innerHTML = "<div class=\"pn\">No valid part numbers for current selections/resistance input.</div>";
+        nodes.results.appendChild(empty);
+        return;
+      }
+
+      const maxShown = 300;
+      for (const row of rows.slice(0, maxShown)) {
+        const sz = sizeInfo(row.size);
+        const card = document.createElement("article");
+        card.className = "result-card";
+        card.innerHTML =
+          "<div class=\"pn\">" + row.pn + "</div>" +
+          "<div class=\"meta\">" +
+          "<span>Slash: /" + row.size + (sz ? (" (" + sz.footprint + ")") : "") + "</span>" +
+          "<span>Power: " + (sz ? (sz.powerMw + " mW") : "N/A") + "</span>" +
+          "<span>V op: " + (sz ? (sz.opV + " V") : "N/A") + "</span>" +
+          "<span>Value Code: " + row.valueCode + "</span>" +
+          "<span>Letter: " + row.letter + " (" + row.letterTol + ")</span>" +
+          "<span>Rounded: " + formatOhms(row.valueNominal) + "</span>" +
+          "<span>Error: " + row.valueErrorPct.toFixed(2) + "%</span>" +
+          "</div>";
+        nodes.results.appendChild(card);
+      }
+      if (rows.length > maxShown) {
+        const more = document.createElement("div");
+        more.className = "result-card";
+        more.innerHTML = "<div class=\"pn\">Showing first " + maxShown + " of " + rows.length + " matches.</div>";
+        nodes.results.appendChild(more);
+      }
+    }
+
+    function formatOhms(v) {
+      if (v >= 1e6) return (v / 1e6).toFixed(3).replace(/\.?0+$/, "") + " Mohm";
+      if (v >= 1e3) return (v / 1e3).toFixed(3).replace(/\.?0+$/, "") + " kohm";
+      return v.toFixed(3).replace(/\.?0+$/, "") + " ohm";
+    }
+
+    function renderT502FilterGroup(host, options, selectedKey, onSelect) {
+      host.innerHTML = "";
+      for (const opt of options) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "filter-pill" + (selectedKey === opt.key ? " active" : "");
+        b.innerHTML = "<span>" + opt.label + "</span>";
+        b.addEventListener("click", () => onSelect(opt.key));
+        host.appendChild(b);
+      }
+    }
+
+    function renderT54xFilterGroup(host, options, selectedKey, countFn, onSelect) {
+      host.innerHTML = "";
+      for (const opt of options) {
+        const count = countFn(opt.key);
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "filter-pill" + (selectedKey === opt.key ? " active" : "");
+        if (count === 0 && selectedKey !== opt.key) {
+          b.classList.add("disabled");
+          b.disabled = true;
+        }
+        b.innerHTML = "<span>" + opt.label + "</span><span class=\"count\">" + count + "</span>";
+        b.addEventListener("click", () => onSelect(opt.key));
+        host.appendChild(b);
+      }
+    }
+
+    function setT502AvailExpanded(expanded) {
+      t502State.availExpanded = !!expanded;
+      t502Nodes.availWrap.classList.toggle("expanded", t502State.availExpanded);
+      t502Nodes.availToggleBtn.textContent = t502State.availExpanded ? "Collapse" : "Expand";
+    }
+
+    function renderT502AvailableTable() {
+      const table = document.createElement("table");
+      table.className = "avail-table";
+      let html = "<thead><tr><th>Series</th><th>Case</th><th>Voltage</th><th>Cap (uF)</th><th>Pattern</th><th>ESR</th></tr></thead><tbody>";
+      for (const row of t502Rows) {
+        const active = row.case === t502State.caseSize &&
+          row.v === t502State.voltage &&
+          String(row.cap) === String(t502State.capacitanceUf);
+        html += "<tr" + (active ? " style=\"background:rgba(123,230,168,0.12);\"" : "") + ">" +
+          "<td>T502</td>" +
+          "<td>" + row.case + " (" + row.outline + ")</td>" +
+          "<td>" + row.v + " V</td>" +
+          "<td>" + row.cap + "</td>" +
+          "<td style=\"font-family:var(--mono);\">" + row.pattern + "</td>" +
+          "<td>" + row.esr + "</td>" +
+          "</tr>";
+      }
+      html += "</tbody>";
+      table.innerHTML = html;
+      t502Nodes.availWrap.innerHTML = "";
+      t502Nodes.availWrap.appendChild(table);
+    }
+
+    function setT54xAvailExpanded(expanded) {
+      t54xState.availExpanded = !!expanded;
+      t54xNodes.availWrap.classList.toggle("expanded", t54xState.availExpanded);
+      t54xNodes.availToggleBtn.textContent = t54xState.availExpanded ? "Collapse" : "Expand";
+    }
+
+    function renderT54xAvailableTable() {
+      const table = document.createElement("table");
+      table.className = "avail-table";
+      let html = "<thead><tr><th>Series</th><th>Case</th><th>Cap Code</th><th>Voltage</th><th>ESR</th></tr></thead><tbody>";
+      for (const row of t54xCatalogRows) {
+        const active = (!t54xState.series || row.series === t54xState.series) &&
+          (!t54xState.caseSize || row.caseSize === t54xState.caseSize) &&
+          (!t54xState.voltage || row.voltage === t54xState.voltage) &&
+          (!t54xState.capCode || row.capCode === t54xState.capCode) &&
+          (!t54xState.esr || row.esr === t54xState.esr);
+        html += "<tr" + (active ? " style=\"background:rgba(123,230,168,0.12);\"" : "") + ">" +
+          "<td>" + row.series + "</td>" +
+          "<td>" + row.caseSize + "</td>" +
+          "<td style=\"font-family:var(--mono);\">" + row.capCode + "</td>" +
+          "<td>" + row.voltage + "</td>" +
+          "<td>" + row.esr + "</td>" +
+          "</tr>";
+      }
+      html += "</tbody>";
+      table.innerHTML = html;
+      t54xNodes.availWrap.innerHTML = "";
+      t54xNodes.availWrap.appendChild(table);
+    }
+
+    function renderS311FilterGroup(host, options, selectedKey, countFn, onSelect) {
+      host.innerHTML = "";
+      for (const opt of options) {
+        const count = countFn(opt.key);
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "filter-pill" + (selectedKey === opt.key ? " active" : "");
+        if (count === 0 && selectedKey !== opt.key) {
+          b.classList.add("disabled");
+          b.disabled = true;
+        }
+        b.innerHTML = "<span>" + opt.label + "</span><span class=\"count\">" + count + "</span>";
+        b.addEventListener("click", () => onSelect(opt.key));
+        host.appendChild(b);
+      }
+    }
+
+    function parseS311CapCode(raw) {
+      const code = String(raw || "").trim().toUpperCase();
+      if (/^\d{3}$/.test(code)) {
+        const sig = Number(code.slice(0, 2));
+        const zeros = Number(code.slice(2, 3));
+        const pf = sig * Math.pow(10, zeros);
+        return { ok: true, mode: "num", code, pf };
+      }
+      if (/^(?:\d?R\d{1,2}|R\d{1,2})$/.test(code)) {
+        const pf = Number(code.replace("R", "."));
+        if (!isFinite(pf) || pf <= 0 || pf >= 10) return { ok: false, code, message: "R-format is only for values <10 pF." };
+        return { ok: true, mode: "r", code, pf };
+      }
+      return { ok: false, code, message: "Use 3 digits (>=10 pF) or R-format (<10 pF)." };
+    }
+
+    function isValidS311Row(row) {
+      const cap = parseS311CapCode(row.capCode);
+      if (!cap.ok) return false;
+      const under10 = cap.pf < 10;
+      const tableEntry = s311Table1Max.find((x) =>
+        x.size === row.size &&
+        x.voltage === row.voltage &&
+        x.dielectric === row.dielectric
+      );
+      if (!tableEntry) return false;
+      if (cap.pf > tableEntry.maxPf) return false;
+
+      if (under10) {
+        if (row.dielectric !== "N") return false;
+        return row.tolerance === "A" || row.tolerance === "B" || row.tolerance === "C" || row.tolerance === "D";
+      }
+
+      if (row.dielectric === "N") {
+        return row.tolerance === "F" || row.tolerance === "G" || row.tolerance === "J" || row.tolerance === "K" || row.tolerance === "L";
+      }
+      if (row.dielectric === "X") {
+        return row.tolerance === "K" || row.tolerance === "L";
+      }
+      return false;
+    }
+
+    function generateS311Rows(localState) {
+      const cap = parseS311CapCode(localState.capCode);
+      if (!cap.ok) return [];
+
+      const rows = [];
+      const ultras = localState.ultrasonic === null ? s311Options.ultrasonic : s311Options.ultrasonic.filter((x) => x.key === localState.ultrasonic);
+      const sizes = localState.size === null ? s311Options.size : s311Options.size.filter((x) => x.key === localState.size);
+      const dielectrics = localState.dielectric === null ? s311Options.dielectric : s311Options.dielectric.filter((x) => x.key === localState.dielectric);
+      const tolerances = localState.tolerance === null ? s311Options.tolerance : s311Options.tolerance.filter((x) => x.key === localState.tolerance);
+      const voltages = localState.voltage === null ? s311Options.voltage : s311Options.voltage.filter((x) => x.key === localState.voltage);
+      const terms = localState.termination === null ? s311Options.termination : s311Options.termination.filter((x) => x.key === localState.termination);
+      const packs = localState.packaging === null ? s311Options.packaging : s311Options.packaging.filter((x) => x.key === localState.packaging);
+
+      for (const u of ultras) {
+        for (const s of sizes) {
+          for (const d of dielectrics) {
+            for (const t of tolerances) {
+              for (const v of voltages) {
+                for (const term of terms) {
+                  for (const p of packs) {
+                    const row = {
+                      gsfc: "G311P829",
+                      ultrasonic: u.key,
+                      size: s.key,
+                      dielectric: d.key,
+                      capCode: cap.code,
+                      capPf: cap.pf,
+                      tolerance: t.key,
+                      voltage: v.key,
+                      termination: term.key,
+                      packaging: p.key
+                    };
+                    if (!isValidS311Row(row)) continue;
+                    row.pn = row.gsfc + row.ultrasonic + row.size + row.dielectric + row.capCode + row.tolerance + row.voltage + row.termination + row.packaging;
+                    rows.push(row);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return rows;
+    }
+
+    function s311CountWith(key, keyValue) {
+      const test = { ...s311State, [key]: keyValue };
+      return generateS311Rows(test).length;
+    }
+
+    function s311PfToCode3(pf) {
+      const n = Number(pf);
+      if (!isFinite(n) || n <= 0) return null;
+      if (n < 10) return null;
+      // Limit to EIA-like 3-digit code space used in the AVX table (2 sig figs + exponent).
+      let exp = 0;
+      let sig = n;
+      while (sig >= 100 && exp < 9) {
+        sig /= 10;
+        exp += 1;
+      }
+      const rounded = Math.round(sig);
+      if (rounded < 10 || rounded > 99) return null;
+      return String(rounded).padStart(2, "0") + String(exp);
+    }
+
+    function formatPfForPrefTable(pf) {
+      const n = Number(pf);
+      if (!isFinite(n) || n <= 0) return "";
+      if (n >= 1000000) {
+        const uf = n / 1000000;
+        return uf.toFixed(3).replace(/\.?0+$/, "") + " uF";
+      }
+      if (n >= 1000) {
+        const nf = n / 1000;
+        return nf.toFixed(3).replace(/\.?0+$/, "") + " nF";
+      }
+      return String(n) + " pF";
+    }
+
+    function getS311RecommendedRowsForDielectric(dielectricKey) {
+      if (dielectricKey === "X") return s311P838PrefRows;
+
+      // NP0 recommendations are generated from an E24-like progression and
+      // clipped by NASA Table I max-capacitance limits per size/voltage.
+      const mantissas = [10,11,12,13,15,16,18,20,22,24,27,30,33,36,39,43,47,51,56,62,68,75,82,91];
+      const nasaSizeKeys = s311Options.size.map((x) => x.key);
+      const nasaVoltCodes = ["6", "1", "2", "3"];
+      const rows = [];
+      for (let exp = 0; exp <= 5; exp += 1) {
+        for (const m of mantissas) {
+          const pf = m * Math.pow(10, exp);
+          const code = String(m).padStart(2, "0") + String(exp);
+          let usableSomewhere = false;
+          for (const s of nasaSizeKeys) {
+            for (const v of nasaVoltCodes) {
+              const te = getS311TableEntry(s, v, "N");
+              if (te && pf <= te.maxPf) {
+                usableSomewhere = true;
+                break;
+              }
+            }
+            if (usableSomewhere) break;
+          }
+          if (!usableSomewhere) continue;
+          rows.push({ code, value: formatPfForPrefTable(pf), preferred: [] });
+        }
+      }
+      return rows;
+    }
+
+    function renderS311PreferredTable(selectedCapCode, selectedSize, selectedVoltageCode, dielectricKey) {
+      const table = document.createElement("table");
+      table.className = "pref-table";
+      const avxVoltByNasaCode = { "6": "16", "1": "25", "2": "50", "3": "100" };
+      const nasaVoltCodes = ["6", "1", "2", "3"];
+      const nasaSizeDefs = s311Options.size.map((x) => ({ key: x.key, label: x.label.replace(/\s+/g, " ") }));
+      const preferredCols = new Set();
+      const rowsForMode = getS311RecommendedRowsForDielectric(dielectricKey);
+      for (const row of rowsForMode) {
+        for (const avx of row.preferred) {
+          const avxSize = avx.slice(0, 1);
+          const avxVolt = avx.slice(1);
+          let nasaSize = null;
+          if (avxSize === "B") nasaSize = "D";
+          else if (avxSize === "C") nasaSize = "E";
+          else if (avxSize === "D") nasaSize = "F";
+          else if (avxSize === "E") nasaSize = "S";
+          else if (avxSize === "F") nasaSize = "R";
+          const nasaVoltCode = Object.keys(avxVoltByNasaCode).find((k) => avxVoltByNasaCode[k] === avxVolt);
+          if (nasaSize && nasaVoltCode) {
+            preferredCols.add(row.code + "|" + nasaSize + "|" + nasaVoltCode);
+          }
+        }
+      }
+
+      let html = "<thead><tr><th class=\"code-col\" rowspan=\"2\">Code</th><th class=\"val-col\" rowspan=\"2\">Value</th>";
+      for (const g of nasaSizeDefs) html += "<th colspan=\"4\">" + g.label + "</th>";
+      html += "</tr><tr>";
+      for (let i = 0; i < nasaSizeDefs.length; i += 1) {
+        for (const vc of nasaVoltCodes) html += "<th>" + avxVoltByNasaCode[vc] + "V</th>";
+      }
+      html += "</tr></thead><tbody>";
+
+      for (const row of rowsForMode) {
+        const capParsed = parseS311CapCode(row.code);
+        html += "<tr><td class=\"code-col\">" + row.code + "</td><td class=\"val-col\">" + row.value + "</td>";
+        for (const s of nasaSizeDefs) {
+          for (const vc of nasaVoltCodes) {
+            const tableEntry = getS311TableEntry(s.key, vc, dielectricKey);
+            const available = !!(tableEntry && capParsed.ok && capParsed.pf <= tableEntry.maxPf);
+            const preferred = preferredCols.has(row.code + "|" + s.key + "|" + vc);
+            const sel = selectedCapCode === row.code && selectedSize === s.key && selectedVoltageCode === vc;
+            const classes = "pref-cell" +
+              (available ? " available" : " unavailable") +
+              (preferred ? " preferred" : "") +
+              (sel ? " selected" : "");
+            html += "<td class=\"" + classes + "\" data-cap=\"" + row.code + "\" data-size=\"" + s.key + "\" data-voltage=\"" + vc + "\"></td>";
+          }
+        }
+        html += "</tr>";
+      }
+      html += "</tbody>";
+      table.innerHTML = html;
+      s311Nodes.prefTableWrap.innerHTML = "";
+      s311Nodes.prefTableWrap.appendChild(table);
+
+      for (const cell of Array.from(table.querySelectorAll("td.pref-cell.available"))) {
+        cell.addEventListener("click", () => {
+          s311State.dielectric = dielectricKey;
+          s311State.size = cell.dataset.size;
+          s311State.voltage = cell.dataset.voltage;
+          s311State.capCode = cell.dataset.cap;
+          s311Nodes.capInput.value = s311State.capCode;
+          if (dielectricKey === "X") {
+            // X7R parts >=10 pF in this model allow K/L only; use K for deterministic selection.
+            if (s311State.tolerance !== "K" && s311State.tolerance !== "L") s311State.tolerance = "K";
+          } else {
+            // NP0 parts >=10 pF allow F/G/J/K/L; use F as default recommendation.
+            if (!["F","G","J","K","L"].includes(s311State.tolerance || "")) s311State.tolerance = "F";
+          }
+          renderS311();
+        });
+      }
+    }
+
+    function getS311TableEntry(size, voltage, dielectric) {
+      return s311Table1Max.find((x) => x.size === size && x.voltage === voltage && x.dielectric === dielectric) || null;
+    }
+
+    function renderS311() {
+      const cap = parseS311CapCode(s311State.capCode);
+      const tableEntry = getS311TableEntry(s311State.size, s311State.voltage, s311State.dielectric);
+      s311Nodes.capInput.classList.remove("valid", "invalid");
+      if (cap.ok) {
+        s311Nodes.capInput.classList.add("valid");
+        s311Nodes.capHint.classList.remove("bad");
+        s311Nodes.capHint.classList.add("ok");
+        if (tableEntry) {
+          s311Nodes.capHint.textContent = "Cap code " + cap.code + " = " + cap.pf + " pF. Table I max for current size/voltage/dielectric: " + tableEntry.maxPf + " pF.";
+        } else {
+          s311Nodes.capHint.textContent = "Cap code " + cap.code + " = " + cap.pf + " pF. Current size/voltage/dielectric is not an allowed Table I combination.";
+        }
+      } else {
+        s311Nodes.capInput.classList.add("invalid");
+        s311Nodes.capHint.classList.remove("ok");
+        s311Nodes.capHint.classList.add("bad");
+        s311Nodes.capHint.textContent = cap.message;
+      }
+      const selectedPrefCode = cap.ok ? s311PfToCode3(cap.pf) : null;
+      const selectedPrefVoltageCode = ["6", "1", "2", "3"].includes(s311State.voltage || "") ? s311State.voltage : null;
+      renderS311PreferredTable(selectedPrefCode, s311State.size, selectedPrefVoltageCode, s311State.prefTableDielectric);
+      if (s311State.prefTableDielectric === "X") {
+        s311Nodes.prefHint.textContent = "X7R mode: preferred sizes are shaded (AVX S311-P838). Click an available cell to set Size/Voltage/Capacitance in the PN.";
+      } else {
+        s311Nodes.prefHint.textContent = "NP0 mode: recommended values are generated and clipped by NASA Table I limits per size/voltage. Click an available cell to set Size/Voltage/Capacitance in the PN.";
+      }
+
+      renderS311FilterGroup(s311Nodes.ultra, s311Options.ultrasonic, s311State.ultrasonic, (k) => s311CountWith("ultrasonic", k), (k) => {
+        s311State.ultrasonic = (s311State.ultrasonic === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.size, s311Options.size, s311State.size, (k) => s311CountWith("size", k), (k) => {
+        s311State.size = (s311State.size === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.dielectric, s311Options.dielectric, s311State.dielectric, (k) => s311CountWith("dielectric", k), (k) => {
+        s311State.dielectric = (s311State.dielectric === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.tol, s311Options.tolerance, s311State.tolerance, (k) => s311CountWith("tolerance", k), (k) => {
+        s311State.tolerance = (s311State.tolerance === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.volt, s311Options.voltage, s311State.voltage, (k) => s311CountWith("voltage", k), (k) => {
+        s311State.voltage = (s311State.voltage === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.term, s311Options.termination, s311State.termination, (k) => s311CountWith("termination", k), (k) => {
+        s311State.termination = (s311State.termination === k) ? null : k;
+        renderS311();
+      });
+      renderS311FilterGroup(s311Nodes.pack, s311Options.packaging, s311State.packaging, (k) => s311CountWith("packaging", k), (k) => {
+        s311State.packaging = (s311State.packaging === k) ? null : k;
+        renderS311();
+      });
+
+      const preview = "G311P829" +
+        (s311State.ultrasonic || "?") +
+        (s311State.size || "?") +
+        (s311State.dielectric || "?") +
+        (cap.ok ? cap.code : "???") +
+        (s311State.tolerance || "?") +
+        (s311State.voltage || "?") +
+        (s311State.termination || "?") +
+        (s311State.packaging || "?");
+      s311Nodes.pnText.textContent = preview;
+
+      const rows = generateS311Rows(s311State);
+      s311Nodes.results.innerHTML = "";
+      if (!rows.length) {
+        s311Nodes.resultCount.textContent = "0 results";
+        s311Nodes.statusText.textContent = cap.ok ? "No valid combination" : "Invalid capacitance code";
+        const empty = document.createElement("div");
+        empty.className = "result-card";
+        empty.innerHTML = "<div class=\"pn\">No valid S-311-P-829 part numbers for current selections.</div>";
+        s311Nodes.results.appendChild(empty);
+        return;
+      }
+
+      s311Nodes.resultCount.textContent = rows.length + " result" + (rows.length === 1 ? "" : "s");
+      s311Nodes.statusText.textContent = "Rules applied from S-311-P-829 identifying-number table";
+      const maxShown = 300;
+      for (const row of rows.slice(0, maxShown)) {
+        const card = document.createElement("article");
+        card.className = "result-card";
+        card.innerHTML =
+          "<div class=\"pn\">" + row.pn + "</div>" +
+          "<div class=\"meta\">" +
+          "<span>Size: " + row.size + "</span>" +
+          "<span>Dielectric: " + row.dielectric + "</span>" +
+          "<span>Cap: " + row.capCode + " (" + row.capPf + " pF)</span>" +
+          "<span>Tol: " + row.tolerance + "</span>" +
+          "<span>Volt: " + row.voltage + "</span>" +
+          "<span>Term: " + row.termination + "</span>" +
+          "<span>Pack: " + row.packaging + "</span>" +
+          "</div>";
+        s311Nodes.results.appendChild(card);
+      }
+      if (rows.length > maxShown) {
+        const more = document.createElement("div");
+        more.className = "result-card";
+        more.innerHTML = "<div class=\"pn\">Showing first " + maxShown + " of " + rows.length + " matches.</div>";
+        s311Nodes.results.appendChild(more);
+      }
+    }
+
+    function normalizeT54xCapCode(raw) {
+      const cleaned = String(raw || "").trim().replace(/[^0-9]/g, "").slice(0, 3);
+      return cleaned;
+    }
+
+    function decodeT54xCapCode(capCode) {
+      if (!/^\d{3}$/.test(capCode)) return null;
+      const sig = Number(capCode.slice(0, 2));
+      const zeros = Number(capCode.slice(2, 3));
+      const pf = sig * Math.pow(10, zeros);
+      const uf = pf / 1e6;
+      return { pf, uf };
+    }
+
+    function buildT54xPn() {
+      const capCode = normalizeT54xCapCode(t54xState.capCode);
+      const capOk = /^\d{3}$/.test(capCode);
+      const packSegment = t54xState.packaging || "";
+      const pn = "T" +
+        (t54xState.series || "?") +
+        (t54xState.caseSize || "?") +
+        (capOk ? capCode : "???") +
+        (t54xState.tolerance || "?") +
+        (t54xState.voltage || "???") +
+        (t54xState.failure || "?") +
+        (t54xState.termination || "?") +
+        (t54xState.surge || "??") +
+        (t54xState.esr || "??") +
+        packSegment;
+      return { pn, capCode, capOk };
+    }
+
+    function t54xRowMatchesState(row, state) {
+      if (state.series && row.series !== state.series) return false;
+      if (state.caseSize && row.caseSize !== state.caseSize) return false;
+      if (state.voltage && row.voltage !== state.voltage) return false;
+      if (state.capCode && row.capCode !== state.capCode) return false;
+      if (state.esr && row.esr !== state.esr) return false;
+      return true;
+    }
+
+    function findMatchingT54xRows(state) {
+      return t54xCatalogRows.filter((row) => t54xRowMatchesState(row, state));
+    }
+
+    function t54xCountWith(key, keyValue) {
+      const test = { ...t54xState, [key]: keyValue };
+      return findMatchingT54xRows(test).length;
+    }
+
+    function t54xCapFilterOptions() {
+      const baseState = { ...t54xState, capCode: null };
+      const rows = findMatchingT54xRows(baseState);
+      const caps = Array.from(new Set(rows.map((r) => r.capCode))).sort((a, b) => Number(a) - Number(b));
+      return caps.map((c) => {
+        const d = decodeT54xCapCode(c);
+        return { key: c, label: c + " (" + (d ? d.uf : "?") + " uF)" };
+      });
+    }
+
+    function renderT54x() {
+      renderT54xAvailableTable();
+      renderT54xFilterGroup(t54xNodes.series, t54xOptions.series, t54xState.series, (k) => t54xCountWith("series", k), (k) => {
+        t54xState.series = (t54xState.series === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.caseSize, t54xOptions.caseSize, t54xState.caseSize, (k) => t54xCountWith("caseSize", k), (k) => {
+        t54xState.caseSize = (t54xState.caseSize === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.tolerance, t54xOptions.tolerance, t54xState.tolerance, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.tolerance = (t54xState.tolerance === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.voltage, t54xOptions.voltage, t54xState.voltage, (k) => t54xCountWith("voltage", k), (k) => {
+        t54xState.voltage = (t54xState.voltage === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.failure, t54xOptions.failure, t54xState.failure, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.failure = (t54xState.failure === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.termination, t54xOptions.termination, t54xState.termination, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.termination = (t54xState.termination === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.surge, t54xOptions.surge, t54xState.surge, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.surge = (t54xState.surge === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.esr, t54xOptions.esr, t54xState.esr, (k) => t54xCountWith("esr", k), (k) => {
+        t54xState.esr = (t54xState.esr === k) ? null : k;
+        renderT54x();
+      });
+      renderT54xFilterGroup(t54xNodes.packaging, t54xOptions.packaging, t54xState.packaging, () => findMatchingT54xRows(t54xState).length, (k) => {
+        t54xState.packaging = (t54xState.packaging === k) ? null : k;
+        renderT54x();
+      });
+
+      const built = buildT54xPn();
+      const decoded = decodeT54xCapCode(built.capCode);
+      const capPills = t54xCapFilterOptions();
+      renderT54xFilterGroup(t54xNodes.capFilter, capPills, t54xState.capCode, (k) => t54xCountWith("capCode", k), (k) => {
+        t54xState.capCode = (t54xState.capCode === k) ? null : k;
+        t54xNodes.capInput.value = t54xState.capCode || "";
+        renderT54x();
+      });
+      t54xNodes.capInput.classList.remove("valid", "invalid");
+      if (built.capOk) {
+        t54xNodes.capInput.classList.add("valid");
+        t54xNodes.capHint.classList.remove("bad");
+        t54xNodes.capHint.classList.add("ok");
+        t54xNodes.capHint.textContent = "Cap code " + built.capCode + " = " + decoded.pf + " pF (" + decoded.uf + " uF).";
+      } else {
+        t54xNodes.capInput.classList.add("invalid");
+        t54xNodes.capHint.classList.remove("ok");
+        t54xNodes.capHint.classList.add("bad");
+        t54xNodes.capHint.textContent = "Cap code must be exactly 3 digits, or click an available value pill.";
+      }
+
+      const previewPn = "T" +
+        (t54xState.series || "?") +
+        (t54xState.caseSize || "?") +
+        (built.capOk ? built.capCode : "???") +
+        (t54xState.tolerance || "?") +
+        (t54xState.voltage || "???") +
+        (t54xState.failure || "?") +
+        (t54xState.termination || "?") +
+        (t54xState.surge || "??") +
+        (t54xState.esr || "??") +
+        (t54xState.packaging === null ? "-" : (t54xState.packaging || ""));
+      t54xNodes.pnText.textContent = previewPn;
+
+      const matchedRows = findMatchingT54xRows(t54xState);
+      t54xNodes.results.innerHTML = "";
+      if (!built.capOk || !matchedRows.length) {
+        t54xNodes.resultCount.textContent = "0 results";
+        t54xNodes.statusText.textContent = !built.capOk ? "Invalid capacitance code" : "No datasheet row match";
+        const empty = document.createElement("div");
+        empty.className = "result-card";
+        empty.innerHTML = "<div class=\"pn\">" +
+          (!built.capOk
+            ? "Enter a valid 3-digit capacitance code."
+            : "No matching series/case/voltage/capacitance/ESR row from Table 1 for current filters.") +
+          "</div>";
+        t54xNodes.results.appendChild(empty);
+        return;
+      }
+
+      t54xNodes.resultCount.textContent = matchedRows.length + " result" + (matchedRows.length === 1 ? "" : "s");
+      t54xNodes.statusText.textContent = "Datasheet-filtered value availability";
+      for (const row of matchedRows.slice(0, 160)) {
+        const rowDecoded = decodeT54xCapCode(row.capCode);
+        const pn = "T" +
+          row.series +
+          row.caseSize +
+          row.capCode +
+          (t54xState.tolerance || "?") +
+          row.voltage +
+          (t54xState.failure || "?") +
+          (t54xState.termination || "?") +
+          (t54xState.surge || "??") +
+          row.esr +
+          (t54xState.packaging || "");
+        const card = document.createElement("article");
+        card.className = "result-card";
+        card.innerHTML =
+          "<div class=\"pn\">" + pn + "</div>" +
+          "<div class=\"meta\">" +
+          "<span>Series: " + row.series + "</span>" +
+          "<span>Case: " + row.caseSize + "</span>" +
+          "<span>Cap: " + row.capCode + " (" + (rowDecoded ? rowDecoded.uf : "?") + " uF)</span>" +
+          "<span>Volt: " + row.voltage + "</span>" +
+          "<span>Tol: " + (t54xState.tolerance || "?") + "</span>" +
+          "<span>Failure: " + (t54xState.failure || "?") + "</span>" +
+          "<span>Term: " + (t54xState.termination || "?") + "</span>" +
+          "<span>Surge: " + (t54xState.surge || "??") + "</span>" +
+          "<span>ESR: " + row.esr + "</span>" +
+          "<span>Pack: " + (t54xState.packaging || "Blank") + "</span>" +
+          "</div>";
+        t54xNodes.results.appendChild(card);
+      }
+    }
+
+    function findMatchingT502Rows() {
+      const cap = Number(String(t502State.capacitanceUf || "").trim());
+      if (!isFinite(cap) || cap <= 0) return [];
+      return t502Rows.filter((r) =>
+        r.case === t502State.caseSize &&
+        r.v === t502State.voltage &&
+        Math.abs(r.cap - cap) < 1e-9
+      );
+    }
+
+    function applyT502Substitutions(pattern) {
+      return pattern
+        .replace("(1)", t502State.code1 || "_")
+        .replace("(2)", t502State.code2 || "_");
+    }
+
+    function validateT502Codes() {
+      const code1Ok = t502State.code1 === "K" || t502State.code1 === "M";
+      // Surge option mapping:
+      // 61 = No additional surge current testing
+      // 62 = 10 cycles at 25C +/-5C after Weibull
+      // 63 = 10 cycles at -55C +/-5C and +85C +/-5C after Weibull
+      const code2Ok = t502State.code2 === "61" || t502State.code2 === "62" || t502State.code2 === "63";
+
+      t502Nodes.code1Hint.classList.remove("ok", "bad");
+      t502Nodes.code2Hint.classList.remove("ok", "bad");
+
+      if (code1Ok) {
+        t502Nodes.code1Hint.classList.add("ok");
+      } else {
+        t502Nodes.code1Hint.classList.add("bad");
+      }
+
+      if (code2Ok) {
+        t502Nodes.code2Hint.classList.add("ok");
+      } else {
+        t502Nodes.code2Hint.classList.add("bad");
+      }
+
+      return code1Ok && code2Ok;
+    }
+
+    function renderT502() {
+      renderT502AvailableTable();
+      const codesValid = validateT502Codes();
+      renderT502FilterGroup(t502Nodes.caseSize, t502Options.caseSize, t502State.caseSize, (k) => { t502State.caseSize = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.capFilter, t502CapOptions, String(t502State.capacitanceUf), (k) => { t502State.capacitanceUf = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.voltage, t502Options.voltage, t502State.voltage, (k) => { t502State.voltage = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.code1Filter, t502Options.code1, t502State.code1, (k) => { t502State.code1 = k; renderT502(); });
+      renderT502FilterGroup(t502Nodes.code2Filter, t502Options.code2, t502State.code2, (k) => { t502State.code2 = k; renderT502(); });
+      const matches = findMatchingT502Rows();
+      if (matches.length > 0) {
+        const codes = Array.from(new Set(matches.map((m) => {
+          const mm = m.pattern.match(/T502[A-Z](\d{3})/);
+          return mm ? mm[1] : null;
+        }).filter(Boolean)));
+        t502Nodes.capHint.textContent = "Matched table row(s): " + matches.length + " (" + codes.join(", ") + ").";
+        t502Nodes.capHint.classList.remove("bad");
+        t502Nodes.capHint.classList.add("ok");
+      } else {
+        t502Nodes.capHint.textContent = "No exact table row for selected Case/Voltage/Capacitance.";
+        t502Nodes.capHint.classList.remove("ok");
+        t502Nodes.capHint.classList.add("bad");
+      }
+
+      const pn = (matches.length && codesValid) ? applyT502Substitutions(matches[0].pattern) : "T502-?-???-?-??-??";
+      t502Nodes.pnText.textContent = pn;
+      t502Nodes.results.innerHTML = "";
+
+      if (!matches.length || !codesValid) {
+        t502Nodes.resultCount.textContent = "0 results";
+        t502Nodes.statusText.textContent = !codesValid ? "Substitution code invalid" : "No table match";
+        const empty = document.createElement("div");
+        empty.className = "result-card";
+        empty.innerHTML = "<div class=\"pn\">" +
+          (!codesValid
+            ? "Enter valid substitutions: (1)=K or M, and (2)=61/62/63."
+            : "No encoded row for this Case + Voltage + Capacitance combination.") +
+          "</div>";
+        t502Nodes.results.appendChild(empty);
+        return;
+      }
+
+      t502Nodes.resultCount.textContent = matches.length + " result" + (matches.length === 1 ? "" : "s");
+      t502Nodes.statusText.textContent = "Table-driven T502 mapping";
+      const caseInfo = t502Options.caseSize.find((x) => x.key === t502State.caseSize);
+
+      for (const row of matches) {
+        const filledPn = applyT502Substitutions(row.pattern);
+        const card = document.createElement("article");
+        card.className = "result-card";
+        card.innerHTML =
+          "<div class=\"pn\">" + filledPn + "</div>" +
+          "<div class=\"meta\">" +
+          "<span>Pattern: " + row.pattern + "</span>" +
+          "<span>Case: " + (caseInfo ? caseInfo.label : row.case) + "</span>" +
+          "<span>Cap: " + row.cap + " uF</span>" +
+          "<span>Volt: " + row.v + " V</span>" +
+          "<span>DCL: " + row.dcl + "</span>" +
+          "<span>DF: " + row.df + "</span>" +
+          "<span>ESR: " + row.esr + "</span>" +
+          "<span>Ripple: " + row.ripple + "</span>" +
+          "<span>Surge: " + row.surge + "</span>" +
+          "</div>";
+        t502Nodes.results.appendChild(card);
+      }
+    }
+
+    function showSplashStep(step) {
+      nodes.splashStep1.classList.toggle("active", step === 1);
+      nodes.splashStep2.classList.toggle("active", step === 2);
+      nodes.splashStep3.classList.toggle("active", step === 3);
+    }
+
+    function updateSplashSummary() {
+      const typeText = splashState.componentType === "resistor" ? "Resistor" : "Capacitor";
+      const viewText = splashViewLabels[splashState.targetView] || "component radar";
+      nodes.splashSummary.textContent = typeText + " selected. Launching " + viewText + ".";
+    }
+
+    function openRadarFromSplash() {
+      nodes.splashFlow.classList.add("hidden");
+      nodes.workspace.classList.remove("hidden");
+      setComponentView(splashState.targetView || "m55342");
+    }
+
+    function buildPartRequestEmailBody() {
+      return [
+        "New part request submission",
+        "",
+        "Name: " + nodes.reqName.value.trim(),
+        "Email: " + nodes.reqEmail.value.trim(),
+        "Organization: " + nodes.reqOrg.value.trim(),
+        "Component Family: " + nodes.reqFamily.value.trim(),
+        "Requested Part Number/Pattern: " + nodes.reqPart.value.trim(),
+        "",
+        "Specs / Notes:",
+        nodes.reqDetails.value.trim()
+      ].join("\n");
+    }
+
+    function setComponentView(viewKey) {
+      const isM55342 = viewKey === "m55342";
+      const isT502 = viewKey === "t502";
+      const isT54x = viewKey === "t54x";
+      const isS311 = viewKey === "s311";
+      nodes.m55342View.classList.toggle("hidden", !isM55342);
+      nodes.t502View.classList.toggle("hidden", !isT502);
+      nodes.t54xView.classList.toggle("hidden", !isT54x);
+      nodes.s311View.classList.toggle("hidden", !isS311);
+      for (const b of nodes.componentButtons) {
+        b.classList.toggle("active", b.dataset.component === viewKey);
+      }
+    }
+
+    function renderAll() {
+      const mantissa = updateInputFormatting();
+      const mil = milValueCheck(mantissa, filters.letter);
+      nodes.milHint.textContent = mil.message;
+      nodes.milHint.classList.remove("ok", "bad");
+      if (mil.ok === true) nodes.milHint.classList.add("ok");
+      if (mil.ok === false) nodes.milHint.classList.add("bad");
+      renderFilterGroup("model", nodes.model, modelOptions);
+      renderFilterGroup("tcr", nodes.tcr, tcrOptions);
+      renderFilterGroup("size", nodes.size, sizeOptions);
+      renderFilterGroup("termination", nodes.termination, terminationOptions);
+      renderFilterGroup("letter", nodes.letter, letterOptions);
+      renderFilterGroup("failure", nodes.failure, failureRateOptions);
+      renderFilterGroup("packaging", nodes.packaging, packagingOptions);
+      renderFilterGroup("thinFilm", nodes.thinFilm, thinFilmOptions);
+      updatePnBar();
+      renderResults();
+    }
+
+    nodes.clearBtn.addEventListener("click", () => {
+      filters.model = null;
+      filters.tcr = null;
+      filters.size = null;
+      filters.termination = null;
+      filters.letter = null;
+      filters.failure = null;
+      filters.packaging = null;
+      filters.thinFilm = null;
+      renderAll();
+    });
+
+    for (const b of nodes.componentButtons) {
+      b.addEventListener("click", () => setComponentView(b.dataset.component));
+    }
+
+    for (const b of nodes.splashTypeChoices) {
+      b.addEventListener("click", () => {
+        splashState.componentType = b.dataset.choiceType;
+        if (splashState.componentType === "resistor") {
+          splashState.targetView = "m55342";
+          updateSplashSummary();
+          showSplashStep(3);
+        } else {
+          showSplashStep(2);
+        }
+      });
+    }
+
+    for (const b of nodes.splashFamilyChoices) {
+      b.addEventListener("click", () => {
+        splashState.targetView = b.dataset.choiceFamily || "t502";
+        updateSplashSummary();
+        showSplashStep(3);
+      });
+    }
+
+    nodes.splashBackToStep1.addEventListener("click", () => showSplashStep(1));
+    nodes.splashRestart.addEventListener("click", () => {
+      splashState.componentType = null;
+      splashState.targetView = "m55342";
+      nodes.splashSummary.textContent = "";
+      showSplashStep(1);
+    });
+    nodes.splashLaunch.addEventListener("click", openRadarFromSplash);
+
+    nodes.partRequestForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!nodes.partRequestForm.reportValidity()) {
+        nodes.requestStatus.textContent = "Complete all required fields before sending.";
+        return;
+      }
+
+      const subject = encodeURIComponent("Part Request: " + nodes.reqPart.value.trim());
+      const body = encodeURIComponent(buildPartRequestEmailBody());
+      const mailto = "mailto:" + REQUEST_TARGET_EMAIL + "?subject=" + subject + "&body=" + body;
+      nodes.requestStatus.textContent = "Opening your email client to send request to " + REQUEST_TARGET_EMAIL + ".";
+      window.location.href = mailto;
+    });
+
+    nodes.resInput.addEventListener("input", renderAll);
+    t502Nodes.availToggleBtn.addEventListener("click", () => {
+      setT502AvailExpanded(!t502State.availExpanded);
+    });
+    t502Nodes.clearBtn.addEventListener("click", () => {
+      t502State.caseSize = "D";
+      t502State.capacitanceUf = "22";
+      t502State.voltage = "16";
+      t502State.code1 = "K";
+      t502State.code2 = "61";
+      renderT502();
+    });
+    t54xNodes.availToggleBtn.addEventListener("click", () => {
+      setT54xAvailExpanded(!t54xState.availExpanded);
+    });
+    t54xNodes.capInput.addEventListener("input", () => {
+      t54xState.capCode = normalizeT54xCapCode(t54xNodes.capInput.value);
+      t54xNodes.capInput.value = t54xState.capCode;
+      renderT54x();
+    });
+    t54xNodes.clearBtn.addEventListener("click", () => {
+      t54xState.series = null;
+      t54xState.caseSize = null;
+      t54xState.capCode = "";
+      t54xState.tolerance = null;
+      t54xState.voltage = null;
+      t54xState.failure = null;
+      t54xState.termination = null;
+      t54xState.surge = null;
+      t54xState.esr = null;
+      t54xState.packaging = null;
+      t54xNodes.capInput.value = t54xState.capCode;
+      renderT54x();
+    });
+    s311Nodes.capInput.addEventListener("input", () => {
+      s311State.capCode = String(s311Nodes.capInput.value || "").trim().toUpperCase();
+      s311Nodes.capInput.value = s311State.capCode;
+      renderS311();
+    });
+    s311Nodes.prefX7rBtn.addEventListener("click", () => {
+      setS311PrefDielectric("X");
+      renderS311();
+    });
+    s311Nodes.prefNpoBtn.addEventListener("click", () => {
+      setS311PrefDielectric("N");
+      renderS311();
+    });
+    s311Nodes.prefToggleBtn.addEventListener("click", () => {
+      setS311PrefExpanded(!s311State.prefExpanded);
+    });
+    s311Nodes.clearBtn.addEventListener("click", () => {
+      s311State.ultrasonic = null;
+      s311State.size = null;
+      s311State.dielectric = null;
+      s311State.capCode = "";
+      s311State.tolerance = null;
+      s311State.voltage = null;
+      s311State.termination = null;
+      s311State.packaging = null;
+      s311Nodes.capInput.value = s311State.capCode;
+      renderS311();
+    });
+
+    renderAll();
+    setT502AvailExpanded(false);
+    renderT502();
+    setT54xAvailExpanded(false);
+    renderT54x();
+    setS311PrefDielectric("X");
+    renderS311();
+    setS311PrefExpanded(false);
+    setComponentView("m55342");
+    showSplashStep(1);
+    nodes.requestStatus.textContent = "Submits through your default email client to " + REQUEST_TARGET_EMAIL + ".";
+  </script>
+</body>
+</html>
