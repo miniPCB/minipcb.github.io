@@ -71,7 +71,7 @@
 
     .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+      grid-template-columns: 1fr;
       gap: 12px;
       align-items: start;
     }
@@ -242,12 +242,6 @@
       font-size: 1.02rem;
     }
 
-    .feedback-intro {
-      margin: 0 0 12px;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
     .form-row {
       margin-bottom: 9px;
     }
@@ -299,12 +293,9 @@
 
     .feedback-status.ok { color: var(--ok); }
     .feedback-status.bad { color: var(--bad); }
+    .hidden { display: none; }
 
     @media (max-width: 900px) {
-      .layout {
-        grid-template-columns: 1fr;
-      }
-
       .action-btn {
         width: 100%;
       }
@@ -320,7 +311,7 @@
     </header>
 
     <div class="layout">
-      <section class="card" aria-live="polite">
+      <section id="wizardCard" class="card" aria-live="polite">
         <div class="progress-row">
           <div id="progressText" class="progress-text">Step 1 of 3</div>
           <button id="restartBtn" type="button" class="action-btn">Start Over</button>
@@ -328,12 +319,12 @@
         <div id="wizardHost"></div>
         <div class="wizard-actions">
           <button id="backBtn" type="button" class="action-btn" disabled>Back</button>
+          <button id="openFeedbackBtn" type="button" class="action-btn">Send Feedback</button>
         </div>
       </section>
 
-      <aside class="card">
+      <section id="feedbackCard" class="card hidden">
         <h2 class="feedback-title">Send Feedback</h2>
-        <p class="feedback-intro">This form stays available at every step so you can report gaps or ask for specific board help.</p>
         <form id="feedbackForm" novalidate>
           <div class="form-row">
             <label for="fbName">Name</label>
@@ -344,10 +335,6 @@
             <input id="fbEmail" name="email" type="email" required />
           </div>
           <div class="form-row">
-            <label for="fbOrganization">Organization (Optional)</label>
-            <input id="fbOrganization" name="organization" type="text" />
-          </div>
-          <div class="form-row">
             <label for="fbFocus">What are you trying to build?</label>
             <input id="fbFocus" name="focus" type="text" required />
           </div>
@@ -356,9 +343,12 @@
             <textarea id="fbDetails" name="details" required></textarea>
           </div>
           <button id="sendFeedbackBtn" type="submit" class="send-btn">Send Feedback</button>
-          <p id="feedbackStatus" class="feedback-status">Feedback is sent to the miniPCB librarian.</p>
+          <p id="feedbackStatus" class="feedback-status" aria-live="polite"></p>
+          <div class="wizard-actions">
+            <button id="closeFeedbackBtn" type="button" class="action-btn">Back</button>
+          </div>
         </form>
-      </aside>
+      </section>
     </div>
   </main>
 
@@ -485,6 +475,7 @@
 
     const state = {
       stepIndex: 0,
+      feedbackOpen: false,
       answers: {
         topic: null,
         level: null,
@@ -493,19 +484,28 @@
     };
 
     const nodes = {
+      wizardCard: document.getElementById("wizardCard"),
+      feedbackCard: document.getElementById("feedbackCard"),
       progressText: document.getElementById("progressText"),
       wizardHost: document.getElementById("wizardHost"),
       backBtn: document.getElementById("backBtn"),
       restartBtn: document.getElementById("restartBtn"),
+      openFeedbackBtn: document.getElementById("openFeedbackBtn"),
+      closeFeedbackBtn: document.getElementById("closeFeedbackBtn"),
       feedbackForm: document.getElementById("feedbackForm"),
       feedbackStatus: document.getElementById("feedbackStatus"),
       fbName: document.getElementById("fbName"),
       fbEmail: document.getElementById("fbEmail"),
-      fbOrganization: document.getElementById("fbOrganization"),
       fbFocus: document.getElementById("fbFocus"),
       fbDetails: document.getElementById("fbDetails"),
       sendFeedbackBtn: document.getElementById("sendFeedbackBtn")
     };
+
+    function setFeedbackOpen(isOpen) {
+      state.feedbackOpen = Boolean(isOpen);
+      nodes.wizardCard.classList.toggle("hidden", state.feedbackOpen);
+      nodes.feedbackCard.classList.toggle("hidden", !state.feedbackOpen);
+    }
 
     function escapeHtml(value) {
       return String(value)
@@ -650,6 +650,8 @@
       state.answers.style = null;
       render();
     });
+    nodes.openFeedbackBtn.addEventListener("click", () => setFeedbackOpen(true));
+    nodes.closeFeedbackBtn.addEventListener("click", () => setFeedbackOpen(false));
 
     nodes.feedbackForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -663,7 +665,7 @@
       const payload = {
         name: nodes.fbName.value.trim(),
         email: nodes.fbEmail.value.trim(),
-        organization: nodes.fbOrganization.value.trim(),
+        organization: "",
         family: "Board Finder Feedback",
         partNumber: nodes.fbFocus.value.trim(),
         details: nodes.fbDetails.value.trim() + "\n\nBoard Finder selections:\n" + selectionSummaryText()
@@ -703,6 +705,7 @@
       }
     });
 
+    setFeedbackOpen(false);
     render();
   </script>
 </body>
