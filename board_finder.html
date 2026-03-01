@@ -237,6 +237,31 @@
       font-size: 0.88rem;
     }
 
+    .collection-link {
+      border-color: rgba(99, 201, 255, 0.7);
+      background: rgba(99, 201, 255, 0.12);
+    }
+
+    .board-link {
+      border-color: rgba(255, 207, 122, 0.72);
+      background: rgba(255, 207, 122, 0.1);
+      font-family: "Consolas", "Courier New", monospace;
+      letter-spacing: 0.01em;
+    }
+
+    .section-title {
+      margin: 12px 0 8px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .text-search-input {
+      min-height: 130px;
+      font-size: 0.95rem;
+    }
+
     .feedback-title {
       margin: 0 0 6px;
       font-size: 1.02rem;
@@ -306,7 +331,7 @@
   <main>
     <header>
       <h1>miniPCB Board Finder</h1>
-      <p class="subtitle">Answer a few questions and get a focused list of miniPCB recommendations.</p>
+      <p class="subtitle">Use textual search or click-through options to get focused miniPCB recommendations.</p>
       <a class="back-link" href="main_navigation.html">Back to Main Navigation</a>
     </header>
 
@@ -473,8 +498,119 @@
       }
     ];
 
+    const BOARD_RECOMMENDATIONS = [
+      {
+        title: "04B-005 Common Emitter Amplifier",
+        url: "04B/04B-005.html",
+        summary: "BJT gain stage for biasing and small-signal amplifier labs.",
+        tags: { topic: ["amplifiers"], level: ["beginner", "intermediate"], style: ["guided", "hands-on", "analysis"] },
+        keywords: ["04b-005", "common emitter", "amplifier", "bjt", "transistor", "gain"]
+      },
+      {
+        title: "04A-005 Inverting Amplifier",
+        url: "04A/04A-005.html",
+        summary: "Classic op-amp inversion behavior with predictable gain settings.",
+        tags: { topic: ["amplifiers"], level: ["beginner", "intermediate"], style: ["guided", "hands-on"] },
+        keywords: ["04a-005", "inverting amplifier", "op-amp", "op amp", "gain"]
+      },
+      {
+        title: "05B-06 Single Feedback Low Pass",
+        url: "05/05B-06.html",
+        summary: "Single-feedback low-pass filter for cutoff exploration.",
+        tags: { topic: ["filters"], level: ["beginner", "intermediate"], style: ["guided", "analysis"] },
+        keywords: ["05b-06", "single feedback", "low pass", "filter", "frequency response"]
+      },
+      {
+        title: "05B-05 Active Notch Filter",
+        url: "05/05B-05.html",
+        summary: "Notch behavior board for rejection and bandwidth comparison.",
+        tags: { topic: ["filters"], level: ["intermediate", "advanced"], style: ["analysis", "hands-on"] },
+        keywords: ["05b-05", "notch filter", "active filter", "band stop", "frequency rejection"]
+      },
+      {
+        title: "06B-05 555 Timer Oscillator",
+        url: "06/06B-05.html",
+        summary: "Classic 555 timing circuit for duty-cycle and frequency experiments.",
+        tags: { topic: ["digital"], level: ["beginner", "intermediate"], style: ["guided", "hands-on"] },
+        keywords: ["06b-05", "555", "timer", "oscillator", "pulse", "duty cycle"]
+      },
+      {
+        title: "08H-04 Window Comparator",
+        url: "08H/08H-04.html",
+        summary: "Comparator window detection board for threshold studies.",
+        tags: { topic: ["digital", "interfaces"], level: ["intermediate", "advanced"], style: ["analysis", "system"] },
+        keywords: ["08h-04", "window comparator", "comparator", "threshold", "hysteresis"]
+      },
+      {
+        title: "09A-13 Shunt Regulator",
+        url: "09A/09A-13.html",
+        summary: "Entry linear regulation board to study line/load regulation.",
+        tags: { topic: ["power"], level: ["beginner", "intermediate"], style: ["guided", "hands-on"] },
+        keywords: ["09a-13", "shunt regulator", "linear regulator", "voltage regulation"]
+      },
+      {
+        title: "09H-10 Buck Converter (LM2574)",
+        url: "09H/09H-10.html",
+        summary: "Switching step-down converter board for efficiency and ripple labs.",
+        tags: { topic: ["power"], level: ["intermediate", "advanced"], style: ["analysis", "system"] },
+        keywords: ["09h-10", "buck converter", "switching regulator", "step-down", "lm2574"]
+      },
+      {
+        title: "10A-20 D Flip-Flop",
+        url: "10/10A-20.html",
+        summary: "Sequential logic board for latch timing and state behavior.",
+        tags: { topic: ["digital"], level: ["beginner", "intermediate"], style: ["guided", "system"] },
+        keywords: ["10a-20", "d flip-flop", "flip flop", "sequential logic", "clock"]
+      },
+      {
+        title: "00A-011 miniPCB Dock, BNC",
+        url: "00A/00A-011.html",
+        summary: "Bench-friendly dock board for instrument-cable interfacing.",
+        tags: { topic: ["interfaces"], level: ["beginner", "intermediate", "advanced"], style: ["hands-on", "system"] },
+        keywords: ["00a-011", "dock", "bnc", "interface", "measurement", "bench"]
+      },
+      {
+        title: "00A-002 Probe Board, 4P",
+        url: "00A/00A-002.html",
+        summary: "Simple probe access board for quick measurement workflows.",
+        tags: { topic: ["interfaces"], level: ["beginner", "intermediate"], style: ["hands-on", "analysis"] },
+        keywords: ["00a-002", "probe board", "test points", "measurement", "debug"]
+      },
+      {
+        title: "00A-32 Protoboard, Vscored, 9 Pieces",
+        url: "00A/00A-32.html",
+        summary: "General prototyping board for rapid concept iteration.",
+        tags: { topic: ["interfaces", "digital", "amplifiers", "filters", "power"], level: ["beginner", "intermediate"], style: ["guided", "hands-on", "system"] },
+        keywords: ["00a-32", "protoboard", "prototype", "vscored", "rapid build"]
+      }
+    ];
+
+    const TEXT_HINTS = {
+      topic: {
+        amplifiers: ["amplifier", "gain", "op-amp", "op amp", "bjt", "transistor", "instrumentation"],
+        filters: ["filter", "low pass", "high pass", "band pass", "notch", "frequency response"],
+        power: ["power", "regulator", "buck", "boost", "charge pump", "converter", "voltage"],
+        digital: ["digital", "logic", "flip-flop", "flip flop", "nand", "nor", "pulse", "timer", "schmitt"],
+        interfaces: ["interface", "probe", "dock", "testpoint", "measurement", "bench", "prototyping", "prototype"]
+      },
+      level: {
+        beginner: ["beginner", "intro", "basic", "first semester", "foundation", "simple"],
+        intermediate: ["intermediate", "second semester", "applied", "mixed"],
+        advanced: ["advanced", "deep", "optimization", "high performance", "research"]
+      },
+      style: {
+        guided: ["guided", "step by step", "worksheet", "lab manual"],
+        "hands-on": ["hands-on", "hands on", "build", "measure", "bench test", "probe"],
+        analysis: ["analysis", "analyze", "compare", "tradeoff", "characterize"],
+        system: ["system", "integration", "interface", "module", "end-to-end", "end to end"]
+      }
+    };
+
     const state = {
+      process: "select",
       stepIndex: 0,
+      textQuery: "",
+      textSubmitted: false,
       feedbackOpen: false,
       answers: {
         topic: null,
@@ -530,6 +666,42 @@
       return "Topic: " + topic + " | Level: " + level + " | Style: " + style;
     }
 
+    function currentContextSummary() {
+      const lines = [];
+      if (state.process === "buttons") {
+        lines.push("Search process: Buttons");
+        lines.push(selectionSummaryText());
+      } else if (state.process === "text") {
+        lines.push("Search process: Textual");
+        if (state.textQuery.trim()) lines.push("Query: " + state.textQuery.trim());
+      }
+      return lines.join("\n");
+    }
+
+    function normalizeText(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function inferProfileFromText(query) {
+      const q = normalizeText(query);
+      const profile = {
+        topics: new Set(),
+        levels: new Set(),
+        styles: new Set()
+      };
+
+      for (const [key, list] of Object.entries(TEXT_HINTS.topic)) {
+        if (list.some((word) => q.includes(word))) profile.topics.add(key);
+      }
+      for (const [key, list] of Object.entries(TEXT_HINTS.level)) {
+        if (list.some((word) => q.includes(word))) profile.levels.add(key);
+      }
+      for (const [key, list] of Object.entries(TEXT_HINTS.style)) {
+        if (list.some((word) => q.includes(word))) profile.styles.add(key);
+      }
+      return profile;
+    }
+
     function stepCount() {
       return QUESTIONS.length;
     }
@@ -563,91 +735,274 @@
       }
     }
 
-    function scoreRecommendation(item) {
+    function scoreByTags(item) {
       let score = 0;
       const reasons = [];
 
       if (state.answers.topic && item.tags.topic.includes(state.answers.topic)) {
         score += 5;
-        reasons.push("topic match");
+        reasons.push("topic: " + labelFor("topic", state.answers.topic));
       }
       if (state.answers.level && item.tags.level.includes(state.answers.level)) {
         score += 3;
-        reasons.push("level match");
+        reasons.push("level: " + labelFor("level", state.answers.level));
       }
       if (state.answers.style && item.tags.style.includes(state.answers.style)) {
         score += 2;
-        reasons.push("lab style match");
+        reasons.push("style: " + labelFor("style", state.answers.style));
       }
 
       return { score, reasons };
     }
 
-    function rankRecommendations() {
-      const scored = RECOMMENDATIONS.map((item) => {
-        const scoreMeta = scoreRecommendation(item);
-        return {
-          item,
-          score: scoreMeta.score,
-          reasons: scoreMeta.reasons
-        };
+    function scoreByText(item, query, profile) {
+      const q = normalizeText(query);
+      let score = 0;
+      const reasonSet = new Set();
+      const matchedKeywords = [];
+
+      if (Array.isArray(item.keywords)) {
+        for (const keyword of item.keywords) {
+          if (q.includes(String(keyword).toLowerCase())) {
+            score += 2;
+            matchedKeywords.push(keyword);
+          }
+        }
+      }
+
+      if (matchedKeywords.length) {
+        reasonSet.add("keywords: " + matchedKeywords.slice(0, 3).join(", "));
+      }
+
+      if (q && q.includes(item.title.toLowerCase())) {
+        score += 4;
+        reasonSet.add("title match");
+      }
+
+      const partMatch = q.match(/\b\d{2}[a-z]-\d{2,3}\b/i);
+      if (partMatch) {
+        const part = partMatch[0].toLowerCase();
+        if (item.url.toLowerCase().includes(part) || item.title.toLowerCase().includes(part)) {
+          score += 8;
+          reasonSet.add("part number match");
+        }
+      }
+
+      for (const topic of profile.topics) {
+        if (item.tags.topic.includes(topic)) {
+          score += 4;
+          reasonSet.add("topic intent");
+        }
+      }
+      for (const level of profile.levels) {
+        if (item.tags.level.includes(level)) {
+          score += 2;
+          reasonSet.add("level intent");
+        }
+      }
+      for (const style of profile.styles) {
+        if (item.tags.style.includes(style)) {
+          score += 1;
+          reasonSet.add("lab style intent");
+        }
+      }
+
+      return { score, reasons: Array.from(reasonSet) };
+    }
+
+    function rankByTags(items, limit) {
+      const ranked = items.map((item) => {
+        const meta = scoreByTags(item);
+        return { item, score: meta.score, reasons: meta.reasons };
       });
 
-      scored.sort((a, b) => {
+      ranked.sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
         return a.item.title.localeCompare(b.item.title);
       });
 
-      const top = scored.slice(0, 6);
-      return top;
+      const scoredOnly = ranked.filter((row) => row.score > 0);
+      return (scoredOnly.length ? scoredOnly : ranked).slice(0, limit);
     }
 
-    function renderResultsStep() {
-      const picks = rankRecommendations();
-      const resultsHtml = picks.map((row) => {
+    function rankByText(items, query, limit) {
+      const profile = inferProfileFromText(query);
+      const ranked = items.map((item) => {
+        const meta = scoreByText(item, query, profile);
+        return { item, score: meta.score, reasons: meta.reasons };
+      });
+
+      ranked.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.item.title.localeCompare(b.item.title);
+      });
+
+      const scoredOnly = ranked.filter((row) => row.score > 0);
+      return (scoredOnly.length ? scoredOnly : ranked).slice(0, limit);
+    }
+
+    function renderProcessSelector() {
+      nodes.wizardHost.innerHTML =
+        "<h2 class=\"question-title\">Choose Search Process</h2>" +
+        "<p class=\"question-subtitle\">Start with a textual design description or click through guided options.</p>" +
+        "<div class=\"option-list\">" +
+          "<button type=\"button\" class=\"option-btn\" data-process=\"text\">" +
+            "<span class=\"option-label\">Textual Search</span>" +
+            "<span class=\"option-help\">Describe what you want to design, then get matched collection and board pages.</span>" +
+          "</button>" +
+          "<button type=\"button\" class=\"option-btn\" data-process=\"buttons\">" +
+            "<span class=\"option-label\">Button Search</span>" +
+            "<span class=\"option-help\">Click through predefined options for topic, level, and lab style.</span>" +
+          "</button>" +
+        "</div>";
+
+      for (const button of nodes.wizardHost.querySelectorAll("[data-process]")) {
+        button.addEventListener("click", () => {
+          const mode = button.getAttribute("data-process");
+          if (mode === "text") {
+            state.process = "text";
+            state.textSubmitted = false;
+          } else {
+            state.process = "buttons";
+            state.stepIndex = 0;
+          }
+          render();
+        });
+      }
+    }
+
+    function renderTextPromptStep() {
+      nodes.wizardHost.innerHTML =
+        "<h2 class=\"question-title\">Textual Search</h2>" +
+        "<p class=\"question-subtitle\">Explain what you want to design. You can include goals, constraints, and part numbers.</p>" +
+        "<div class=\"form-row\">" +
+          "<label for=\"textSearchInput\">Design Goal</label>" +
+          "<textarea id=\"textSearchInput\" class=\"text-search-input\" placeholder=\"Example: I need a beginner-friendly lab for op-amp filtering and frequency response.\"></textarea>" +
+        "</div>" +
+        "<button id=\"runTextSearchBtn\" type=\"button\" class=\"action-btn\">Find Recommendations</button>" +
+        "<p id=\"textSearchStatus\" class=\"feedback-status\" aria-live=\"polite\"></p>";
+
+      const textArea = document.getElementById("textSearchInput");
+      const runBtn = document.getElementById("runTextSearchBtn");
+      const status = document.getElementById("textSearchStatus");
+      textArea.value = state.textQuery;
+
+      textArea.addEventListener("input", () => {
+        state.textQuery = textArea.value;
+      });
+
+      runBtn.addEventListener("click", () => {
+        if (!state.textQuery.trim()) {
+          status.textContent = "Enter a design description before searching.";
+          status.className = "feedback-status bad";
+          return;
+        }
+        state.textSubmitted = true;
+        render();
+      });
+    }
+
+    function renderResultRows(rows, linkClass, linkLabel) {
+      if (!rows.length) {
+        return "<article class=\"result-item\"><p class=\"result-copy\">No matches found.</p></article>";
+      }
+
+      return rows.map((row) => {
         const reasonText = row.reasons.length ? row.reasons.join(" | ") : "general fit";
         return "<article class=\"result-item\">" +
           "<h3 class=\"result-name\">" + escapeHtml(row.item.title) + "</h3>" +
           "<p class=\"result-copy\">" + escapeHtml(row.item.summary) + "</p>" +
           "<p class=\"result-match\">Match: " + escapeHtml(reasonText) + "</p>" +
-          "<a class=\"result-link\" href=\"" + escapeHtml(row.item.url) + "\">Open Collection</a>" +
+          "<a class=\"result-link " + escapeHtml(linkClass) + "\" href=\"" + escapeHtml(row.item.url) + "\">" + escapeHtml(linkLabel) + "</a>" +
           "</article>";
       }).join("");
+    }
+
+    function renderResultsStep(mode) {
+      const isText = mode === "text";
+      const summary = isText ? "Query: " + state.textQuery.trim() : selectionSummaryText();
+      const collectionRows = isText
+        ? rankByText(RECOMMENDATIONS, state.textQuery, 5)
+        : rankByTags(RECOMMENDATIONS, 5);
+      const boardRows = isText
+        ? rankByText(BOARD_RECOMMENDATIONS, state.textQuery, 6)
+        : rankByTags(BOARD_RECOMMENDATIONS, 6);
+      const title = isText ? "Recommendations from Textual Search" : "Recommendations from Button Search";
 
       nodes.wizardHost.innerHTML =
-        "<h2 class=\"question-title\">Recommended miniPCB Collections</h2>" +
-        "<p class=\"summary-line\">" + escapeHtml(selectionSummaryText()) + "</p>" +
-        "<div class=\"result-list\">" + resultsHtml + "</div>";
+        "<h2 class=\"question-title\">" + escapeHtml(title) + "</h2>" +
+        "<p class=\"summary-line\">" + escapeHtml(summary) + "</p>" +
+        "<p class=\"section-title\">Collection Pages</p>" +
+        "<div class=\"result-list\">" + renderResultRows(collectionRows, "collection-link", "Open Collection Page") + "</div>" +
+        "<p class=\"section-title\">Board Pages</p>" +
+        "<div class=\"result-list\">" + renderResultRows(boardRows, "board-link", "Open Board Page") + "</div>";
     }
 
     function render() {
-      if (state.stepIndex < stepCount()) {
-        const stepNumber = state.stepIndex + 1;
-        nodes.progressText.textContent = "Step " + stepNumber + " of " + stepCount();
-        renderQuestionStep(QUESTIONS[state.stepIndex]);
-      } else {
-        nodes.progressText.textContent = "Recommendations Ready";
-        renderResultsStep();
+      if (state.process === "select") {
+        nodes.progressText.textContent = "Choose Search Process";
+        nodes.backBtn.disabled = true;
+        renderProcessSelector();
+        return;
       }
 
-      nodes.backBtn.disabled = state.stepIndex === 0;
+      nodes.backBtn.disabled = false;
+
+      if (state.process === "buttons") {
+        if (state.stepIndex < stepCount()) {
+          const stepNumber = state.stepIndex + 1;
+          nodes.progressText.textContent = "Buttons: Step " + stepNumber + " of " + stepCount();
+          renderQuestionStep(QUESTIONS[state.stepIndex]);
+        } else {
+          nodes.progressText.textContent = "Buttons: Recommendations Ready";
+          renderResultsStep("buttons");
+        }
+        return;
+      }
+
+      if (!state.textSubmitted) {
+        nodes.progressText.textContent = "Textual Search";
+        renderTextPromptStep();
+      } else {
+        nodes.progressText.textContent = "Textual: Recommendations Ready";
+        renderResultsStep("text");
+      }
     }
 
     nodes.backBtn.addEventListener("click", () => {
-      if (state.stepIndex === 0) return;
-      if (state.stepIndex > stepCount() - 1) {
-        state.stepIndex = stepCount() - 1;
-      } else {
-        state.stepIndex -= 1;
+      if (state.process === "select") return;
+
+      if (state.process === "buttons") {
+        if (state.stepIndex === 0) {
+          state.process = "select";
+        } else if (state.stepIndex > stepCount() - 1) {
+          state.stepIndex = stepCount() - 1;
+        } else {
+          state.stepIndex -= 1;
+        }
+      } else if (state.process === "text") {
+        if (state.textSubmitted) {
+          state.textSubmitted = false;
+        } else {
+          state.process = "select";
+        }
       }
+
       render();
     });
 
-    nodes.restartBtn.addEventListener("click", () => {
+    function resetFinder() {
+      state.process = "select";
       state.stepIndex = 0;
+      state.textQuery = "";
+      state.textSubmitted = false;
       state.answers.topic = null;
       state.answers.level = null;
       state.answers.style = null;
+    }
+
+    nodes.restartBtn.addEventListener("click", () => {
+      resetFinder();
       render();
     });
     nodes.openFeedbackBtn.addEventListener("click", () => setFeedbackOpen(true));
@@ -668,8 +1023,12 @@
         organization: "",
         family: "Board Finder Feedback",
         partNumber: nodes.fbFocus.value.trim(),
-        details: nodes.fbDetails.value.trim() + "\n\nBoard Finder selections:\n" + selectionSummaryText()
+        details: nodes.fbDetails.value.trim()
       };
+      const contextSummary = currentContextSummary();
+      if (contextSummary) {
+        payload.details += "\n\nBoard Finder Context:\n" + contextSummary;
+      }
 
       nodes.sendFeedbackBtn.disabled = true;
       nodes.feedbackStatus.textContent = "Sending feedback...";
