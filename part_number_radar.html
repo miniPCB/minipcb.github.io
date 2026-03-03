@@ -926,7 +926,14 @@
         <p class="splash-kicker">Step 3 of 3</p>
         <h2 class="splash-title">Pick the browser family</h2>
         <p id="splashFamilyHint" class="splash-subtitle">Choose the part family you want to browse.</p>
-        <!-- Add new family buttons here. Keep data-choice-family in sync with PART_FAMILY_CONFIG keys. -->
+        <!--
+          NEW FAMILY MENU INSERTION POINT
+          1) Add a button here with:
+             - data-choice-family="<familyKey>"
+             - data-family-component="resistor|capacitor"
+          2) Keep <familyKey> identical to PART_FAMILY_CONFIG + decoder keys.
+          3) Keep the visible label aligned with the family's formal series name.
+        -->
         <div class="splash-grid">
           <button type="button" class="splash-choice" data-choice-family="m55342" data-family-component="resistor">
             <strong>M55342 / D55342</strong>
@@ -1416,19 +1423,34 @@
       targetView: "m55342"
     };
     /*
-      FAMILY ONBOARDING CHECKLIST (AI + human maintainers)
-      1) Add the new family HTML section with id "<key>View".
-      2) Add the splash choice button with data-choice-family="<key>" and
-         data-family-component="resistor|capacitor" in Step 3.
-      3) Register the family below in PART_FAMILY_CONFIG:
-         - label: used in splash confirmation text
-         - componentType: drives Step 3 filtering after Step 2 component selection
-         - viewNodeKey: DOM node key in `nodes`
-         - onLaunch: family-specific behavior on splash launch
-      4) Add state/options/render logic for the new family and call its initial render near boot.
-      5) Add clear/reset handler for that family.
-      Keeping family registration in one map avoids hardcoded branch logic spread across functions.
+      ==============================
+      PART FAMILY MAINTAINER GUIDE
+      ==============================
+      Search markers for fastest navigation:
+      - "NEW FAMILY MENU INSERTION POINT" (Step 3 splash buttons)
+      - "PART FAMILY CONFIG REGISTRY" (routing + launch registration)
+      - "FAMILY DATA BLOCK LAYOUT" (state/options/rows/nodes placement)
+      - "DECODER REGISTRY EXTENSION POINT" (PN + BOM decipher support)
+      - "NEW FAMILY BOOTSTRAP HOOKS" (initial renders + listeners)
+
+      Browser flow wiring checklist for a new family key "<key>":
+      1) Add HTML workspace section: <section id="<key>View" class="component-view hidden">...</section>.
+      2) Add Step 3 menu button with:
+         data-choice-family="<key>" and data-family-component="resistor|capacitor".
+      3) Add nodes.<key>View = document.getElementById("<key>View").
+      4) Register <key> in PART_FAMILY_CONFIG with:
+         - label
+         - componentType
+         - viewNodeKey (must match nodes key, e.g. "<key>View")
+         - onLaunch (optional view-specific startup behavior)
+      5) Add the family data block (state/options/rows/nodes + render/generate functions).
+      6) Add clear/reset event handlers for the family controls.
+      7) Call render<Family>() once in bootstrap so first launch is populated.
+      8) (Optional but recommended) add decode<Family>Pn + DECODER_REGISTRY entry so
+         PN Decipher and BOM Decipher can auto-detect and decode the new family.
     */
+    // PART FAMILY CONFIG REGISTRY:
+    // This is the browser routing source of truth (splash family key -> view + launch behavior).
     const PART_FAMILY_CONFIG = {
       m55342: {
         label: "M55342 / D55342 resistor radar",
@@ -1489,6 +1511,8 @@
       splashBackToStep2: document.getElementById("splashBackToStep2"),
       // Legacy/manual family bar support: this can be empty if bar is hidden from UI.
       componentButtons: Array.from(document.querySelectorAll(".component-btn[data-component]")),
+      // NEW FAMILY VIEW NODE INSERTION:
+      // Add "<key>View: document.getElementById('<key>View')" here.
       m55342View: document.getElementById("m55342View"),
       t502View: document.getElementById("t502View"),
       t54xView: document.getElementById("t54xView"),
@@ -1568,6 +1592,16 @@
       "part_number",
       "component pn"
     ];
+
+    /*
+      FAMILY DATA BLOCK LAYOUT (copy this pattern when adding a family)
+      A) const <key>State = { ...default selections... }
+      B) const <key>Options = { ...code dictionaries... }
+      C) const <key>Rows OR rule tables (if table-driven family)
+      D) const <key>Nodes = { ...DOM bindings for that view... }
+      E) generate/find helpers + render<Family>() + clear handler
+      Keep these blocks contiguous so maintenance stays localized.
+    */
 
     // Initial T502 workspace state and code dictionaries.
     // This is intentionally a first-pass model for iterative refinement.
@@ -3473,6 +3507,14 @@
       return { ok: errors.length === 0, family: "s311", normalizedPn: normalized, fields, errors };
     }
 
+    // DECODER REGISTRY EXTENSION POINT:
+    // Add a new entry when a family should participate in:
+    // - PN Decipher auto-detect/decode
+    // - BOM Decipher row auto family detection
+    // The key here must match:
+    // - PART_FAMILY_CONFIG key
+    // - splash data-choice-family key
+    // - decode function return `family` value
     const DECODER_REGISTRY = {
       m55342: {
         label: "M55342 / D55342",
@@ -3927,6 +3969,8 @@
     }
 
     function setSplashFamilyChoices(componentType) {
+      // Step 2 -> Step 3 browser funnel:
+      // menu buttons are filtered by each button's data-family-component value.
       const type = componentType === "resistor" || componentType === "capacitor" ? componentType : "";
       let visibleCount = 0;
       for (const b of nodes.splashFamilyChoices) {
@@ -4161,6 +4205,8 @@
 
     nodes.bomDecipherClearBtn.addEventListener("click", clearBomDecipher);
 
+    // NEW FAMILY LISTENER INSERTION:
+    // Register family-specific input/change/clear events here and call render<Family>().
     nodes.resInput.addEventListener("input", renderAll);
     t502Nodes.availToggleBtn.addEventListener("click", () => {
       setT502AvailExpanded(!t502State.availExpanded);
@@ -4224,6 +4270,10 @@
       renderS311();
     });
 
+    // NEW FAMILY BOOTSTRAP HOOKS:
+    // 1) Add render<Family>() call here so view data is ready before first navigation.
+    // 2) Add initial collapsed/expanded UI state setters here if the family uses them.
+    // 3) Add any startup defaults required by onLaunch behavior.
     renderAll();
     setT502AvailExpanded(false);
     renderT502();
