@@ -904,21 +904,16 @@
 
       <div id="splashStep2" class="splash-step">
         <p class="splash-kicker">Step 2 of 3</p>
-        <h2 class="splash-title">Pick the browser family</h2>
-        <p class="splash-subtitle">Choose the part family you want to browse.</p>
-        <!-- Add new family buttons here. Keep data-choice-family in sync with PART_FAMILY_CONFIG keys. -->
+        <h2 class="splash-title">Pick component type</h2>
+        <p class="splash-subtitle">Choose which component class you want to browse.</p>
         <div class="splash-grid">
-          <button type="button" class="splash-choice" data-choice-family="t502">
-            <strong>T502</strong>
-            <span>Molded tantalum, table-driven matching rows.</span>
+          <button type="button" class="splash-choice" data-choice-component="resistor">
+            <strong>Resistor</strong>
+            <span>Browse resistor part families and generate valid part numbers.</span>
           </button>
-          <button type="button" class="splash-choice" data-choice-family="t54x">
-            <strong>T540 / T541</strong>
-            <span>Polymer COTS family with expanded code positions.</span>
-          </button>
-          <button type="button" class="splash-choice" data-choice-family="s311">
-            <strong>S-311-P-829</strong>
-            <span>GSFC mapping with preferred-size guide table.</span>
+          <button type="button" class="splash-choice" data-choice-component="capacitor">
+            <strong>Capacitor</strong>
+            <span>Browse capacitor part families and generate valid part numbers.</span>
           </button>
         </div>
         <div class="splash-actions">
@@ -929,12 +924,30 @@
 
       <div id="splashStep3" class="splash-step">
         <p class="splash-kicker">Step 3 of 3</p>
-        <h2 class="splash-title">Ready to launch the radar</h2>
-        <p id="splashSummary" class="splash-subtitle"></p>
+        <h2 class="splash-title">Pick the browser family</h2>
+        <p id="splashFamilyHint" class="splash-subtitle">Choose the part family you want to browse.</p>
+        <!-- Add new family buttons here. Keep data-choice-family in sync with PART_FAMILY_CONFIG keys. -->
+        <div class="splash-grid">
+          <button type="button" class="splash-choice" data-choice-family="m55342" data-family-component="resistor">
+            <strong>M55342 / D55342</strong>
+            <span>MIL-style resistor family with value, tolerance, and slash-code filtering.</span>
+          </button>
+          <button type="button" class="splash-choice" data-choice-family="t502" data-family-component="capacitor">
+            <strong>T502</strong>
+            <span>Molded tantalum, table-driven matching rows.</span>
+          </button>
+          <button type="button" class="splash-choice" data-choice-family="t54x" data-family-component="capacitor">
+            <strong>T540 / T541</strong>
+            <span>Polymer COTS family with expanded code positions.</span>
+          </button>
+          <button type="button" class="splash-choice" data-choice-family="s311" data-family-component="capacitor">
+            <strong>S-311-P-829</strong>
+            <span>GSFC mapping with preferred-size guide table.</span>
+          </button>
+        </div>
         <div class="splash-actions">
-          <button id="splashRestart" type="button" class="btn">Start Over</button>
+          <button id="splashBackToStep2" type="button" class="btn">Back</button>
           <button type="button" class="btn" data-open-request="true">Request New Part / Series</button>
-          <button id="splashLaunch" type="button" class="btn-accent">Open Radar View</button>
         </div>
       </div>
 
@@ -1399,14 +1412,17 @@
     };
     const splashState = {
       entryMode: null,
+      componentType: "",
       targetView: "m55342"
     };
     /*
       FAMILY ONBOARDING CHECKLIST (AI + human maintainers)
       1) Add the new family HTML section with id "<key>View".
-      2) Add the splash choice button with data-choice-family="<key>".
+      2) Add the splash choice button with data-choice-family="<key>" and
+         data-family-component="resistor|capacitor" in Step 3.
       3) Register the family below in PART_FAMILY_CONFIG:
          - label: used in splash confirmation text
+         - componentType: drives Step 3 filtering after Step 2 component selection
          - viewNodeKey: DOM node key in `nodes`
          - onLaunch: family-specific behavior on splash launch
       4) Add state/options/render logic for the new family and call its initial render near boot.
@@ -1416,21 +1432,25 @@
     const PART_FAMILY_CONFIG = {
       m55342: {
         label: "M55342 / D55342 resistor radar",
+        componentType: "resistor",
         viewNodeKey: "m55342View",
         onLaunch: () => setS311PrefExpanded(false)
       },
       t502: {
         label: "T502 capacitor radar",
+        componentType: "capacitor",
         viewNodeKey: "t502View",
         onLaunch: () => setS311PrefExpanded(false)
       },
       t54x: {
         label: "T540 / T541 capacitor radar",
+        componentType: "capacitor",
         viewNodeKey: "t54xView",
         onLaunch: () => setS311PrefExpanded(false)
       },
       s311: {
         label: "S-311-P-829 capacitor radar",
+        componentType: "capacitor",
         viewNodeKey: "s311View",
         onLaunch: () => {
           setS311PrefDielectric("X");
@@ -1461,12 +1481,12 @@
       splashRequestPanel: document.getElementById("splashRequestPanel"),
       splashRequestOpenButtons: Array.from(document.querySelectorAll("[data-open-request]")),
       splashRequestClose: document.getElementById("splashRequestClose"),
-      splashSummary: document.getElementById("splashSummary"),
       splashEntryChoices: Array.from(document.querySelectorAll("[data-choice-entry]")),
+      splashComponentChoices: Array.from(document.querySelectorAll("[data-choice-component]")),
       splashFamilyChoices: Array.from(document.querySelectorAll("[data-choice-family]")),
+      splashFamilyHint: document.getElementById("splashFamilyHint"),
       splashBackToStep1: document.getElementById("splashBackToStep1"),
-      splashRestart: document.getElementById("splashRestart"),
-      splashLaunch: document.getElementById("splashLaunch"),
+      splashBackToStep2: document.getElementById("splashBackToStep2"),
       // Legacy/manual family bar support: this can be empty if bar is hidden from UI.
       componentButtons: Array.from(document.querySelectorAll(".component-btn[data-component]")),
       m55342View: document.getElementById("m55342View"),
@@ -3906,21 +3926,28 @@
       }
     }
 
-    function updateSplashSummary() {
-      if (splashState.entryMode === "pn_browser") {
-        const viewText = getFamilyConfig(splashState.targetView).label;
-        nodes.splashSummary.textContent = "PN Browser selected. Launching " + viewText + ".";
+    function setSplashFamilyChoices(componentType) {
+      const type = componentType === "resistor" || componentType === "capacitor" ? componentType : "";
+      let visibleCount = 0;
+      for (const b of nodes.splashFamilyChoices) {
+        const familyType = b.dataset.familyComponent || "";
+        const show = type ? familyType === type : true;
+        b.classList.toggle("hidden", !show);
+        b.disabled = !show;
+        if (show) visibleCount += 1;
+      }
+
+      if (!nodes.splashFamilyHint) return;
+      if (!type) {
+        nodes.splashFamilyHint.textContent = "Choose the part family you want to browse.";
         return;
       }
-      if (splashState.entryMode === "pn_decipher") {
-        nodes.splashSummary.textContent = "PN Decipher selected. Launching single-PN decoder workspace.";
+      if (!visibleCount) {
+        nodes.splashFamilyHint.textContent = "No families are configured yet for " + type + ".";
         return;
       }
-      if (splashState.entryMode === "bom_decipher") {
-        nodes.splashSummary.textContent = "BOM Decipher selected. Launching BOM table + attributes workspace.";
-        return;
-      }
-      nodes.splashSummary.textContent = "";
+      const typeLabel = type === "resistor" ? "resistor" : "capacitor";
+      nodes.splashFamilyHint.textContent = "Choose a " + typeLabel + " family.";
     }
 
     function openRadarFromSplash() {
@@ -3999,38 +4026,50 @@
         const modeKey = b.dataset.choiceEntry;
         if (modeKey === "pn_browser") {
           splashState.entryMode = "pn_browser";
+          splashState.componentType = "";
           splashState.targetView = "m55342";
+          setSplashFamilyChoices("");
           showSplashStep(2);
           return;
         }
         if (!Object.prototype.hasOwnProperty.call(STEERING_CONFIG, modeKey)) return;
         splashState.entryMode = modeKey;
-        updateSplashSummary();
+        splashState.componentType = "";
         openRadarFromSplash();
+      });
+    }
+
+    for (const b of nodes.splashComponentChoices) {
+      b.addEventListener("click", () => {
+        splashState.entryMode = "pn_browser";
+        splashState.componentType = b.dataset.choiceComponent || "";
+        setSplashFamilyChoices(splashState.componentType);
+        showSplashStep(3);
       });
     }
 
     for (const b of nodes.splashFamilyChoices) {
       b.addEventListener("click", () => {
+        if (b.disabled) return;
         splashState.entryMode = "pn_browser";
         const familyKey = b.dataset.choiceFamily || "t502";
+        const familyConfig = PART_FAMILY_CONFIG[familyKey];
+        if (splashState.componentType && familyConfig && familyConfig.componentType !== splashState.componentType) {
+          return;
+        }
         splashState.targetView = Object.prototype.hasOwnProperty.call(PART_FAMILY_CONFIG, familyKey)
           ? familyKey
           : "m55342";
-        updateSplashSummary();
-        showSplashStep(3);
+        openRadarFromSplash();
       });
     }
 
-    nodes.splashBackToStep1.addEventListener("click", () => showSplashStep(1));
-    nodes.splashRestart.addEventListener("click", () => {
-      splashState.entryMode = null;
-      splashState.targetView = "m55342";
-      nodes.splashSummary.textContent = "";
-      setSplashRequestOpen(false);
+    nodes.splashBackToStep1.addEventListener("click", () => {
+      splashState.componentType = "";
+      setSplashFamilyChoices("");
       showSplashStep(1);
     });
-    nodes.splashLaunch.addEventListener("click", openRadarFromSplash);
+    nodes.splashBackToStep2.addEventListener("click", () => showSplashStep(2));
     for (const b of nodes.splashRequestOpenButtons) {
       b.addEventListener("click", () => setSplashRequestOpen(true));
     }
