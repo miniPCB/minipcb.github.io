@@ -1092,6 +1092,9 @@
       { key: "11", footprint: "0402", powerMw: 50, opV: 30, label: "/11 (0402, 50 mW, 30 V op)" },
       { key: "12", footprint: "0603", powerMw: 100, opV: 50, label: "/12 (0603, 100 mW, 50 V op)" }
     ];
+    // Datasheet correction rule:
+    // all, and only, D55342 parts use /07 (1206 footprint).
+    const D55342_SIZE_CODE = "07";
     // Termination code map (kept explicit even though only one option is active).
     const terminationOptions = [{ key: "B", label: "B" }];
     // Value-code letter map:
@@ -1925,6 +1928,11 @@
     }
 
     function isValidRow(r) {
+      // Enforce model/size coupling:
+      // D55342 => /07 only, and /07 => D55342 only.
+      if (r.model === "D55342" && r.size !== D55342_SIZE_CODE) return false;
+      if (r.model === "M55342" && r.size === D55342_SIZE_CODE) return false;
+
       if (r.thinFilm === "V") {
         const t = Number(r.letterTol.replace("%", ""));
         if (!(r.tcr === "K" || r.tcr === "L" || r.tcr === "M")) return false;
