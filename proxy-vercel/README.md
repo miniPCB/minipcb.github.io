@@ -10,6 +10,13 @@
    - `RESEND_API_KEY` (required for part requests)
    - `REQUEST_TO_EMAIL` (required for part requests)
    - `REQUEST_FROM_EMAIL` (required for part requests; must be a verified sender)
+   - `DIGIKEY_CLIENT_ID` (required for DigiKey availability)
+   - `DIGIKEY_CLIENT_SECRET` (required for DigiKey availability)
+   - `DIGIKEY_SITE` (optional; default `US`)
+   - `DIGIKEY_LANGUAGE` (optional; default `en`)
+   - `DIGIKEY_CURRENCY` (optional; default `USD`)
+   - `MOUSER_API_KEY` (required for Mouser availability)
+   - `AVAILABILITY_CACHE_TTL_MS` (optional; default `300000`)
 4) Deploy.
 
 ## Endpoints
@@ -21,6 +28,7 @@
 - `POST /api/chat`
 - `POST /api/create`
 - `POST /api/part-request`
+- `POST /api/part-availability`
 
 ## Frontend Setup
 

@@ -857,6 +857,81 @@
       background: rgba(18, 30, 41, 0.7);
     }
 
+    .availability-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .availability-map {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .availability-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 7px 8px;
+      background: #101823;
+      color: var(--muted);
+      display: grid;
+      gap: 4px;
+    }
+
+    .availability-card .source {
+      color: var(--text);
+      font-weight: 700;
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .availability-card .stock {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .availability-card .meta {
+      margin-top: 0;
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.35;
+      display: block;
+    }
+
+    .availability-card .link {
+      color: #cfe9ff;
+      text-decoration: underline;
+      font-size: 0.75rem;
+      width: fit-content;
+    }
+
+    .availability-card.tone-high {
+      border-color: rgba(110, 231, 172, 0.7);
+      background: rgba(32, 74, 58, 0.45);
+    }
+
+    .availability-card.tone-low {
+      border-color: rgba(255, 186, 82, 0.75);
+      background: rgba(77, 56, 30, 0.5);
+    }
+
+    .availability-card.tone-none {
+      border-color: rgba(255, 142, 142, 0.7);
+      background: rgba(77, 35, 35, 0.48);
+    }
+
+    .availability-card.tone-unknown {
+      border-color: #4a6376;
+      background: rgba(23, 35, 47, 0.78);
+    }
+
     @keyframes stepIn {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
@@ -871,6 +946,7 @@
       .bom-main { grid-template-columns: 1fr; }
       .bom-toolbar { grid-template-columns: 1fr; }
       .bom-table { min-width: 640px; }
+      .availability-map { grid-template-columns: 1fr; }
       .splash-grid { grid-template-columns: 1fr; }
       .request-grid { grid-template-columns: 1fr; }
     }
@@ -1314,8 +1390,14 @@
             <div id="bomFieldsWrap" style="margin-top:10px;"></div>
             <ul id="bomErrors" class="error-list"></ul>
             <div class="availability-box">
-              <strong style="color:var(--text);">Availability (Future):</strong>
-              Integration hook reserved for supplier/API lookups after PN attributes are validated.
+              <div class="availability-head">
+                <strong style="color:var(--text);">Distributor Availability</strong>
+                <button id="bomAvailabilityRefreshBtn" class="btn" type="button">Refresh Availability</button>
+              </div>
+              <div id="bomAvailabilityStatus" class="hint" style="margin-top:6px;">
+                Select a BOM row to load DigiKey and Mouser availability.
+              </div>
+              <div id="bomAvailabilityMap" class="availability-map"></div>
             </div>
           </div>
         </section>
@@ -1410,6 +1492,7 @@
     ];
 
     const PART_REQUEST_API_URL = "https://minipcb-github-io.vercel.app/api/part-request";
+    const PART_AVAILABILITY_API_URL = "https://minipcb-github-io.vercel.app/api/part-availability";
     const PART_REQUEST_PROXY_KEY = "";
     const BOM_MAX_ROWS = 5000;
     const STEERING_CONFIG = {
@@ -1562,6 +1645,9 @@
       bomFamilyOverride: document.getElementById("bomFamilyOverride"),
       bomFieldsWrap: document.getElementById("bomFieldsWrap"),
       bomErrors: document.getElementById("bomErrors"),
+      bomAvailabilityStatus: document.getElementById("bomAvailabilityStatus"),
+      bomAvailabilityMap: document.getElementById("bomAvailabilityMap"),
+      bomAvailabilityRefreshBtn: document.getElementById("bomAvailabilityRefreshBtn"),
       bomDecipherPreview: document.getElementById("bomDecipherPreview"),
       bomDecipherClearBtn: document.getElementById("bomDecipherClearBtn")
     };
@@ -1579,7 +1665,9 @@
       selectedRow: -1,
       rowDecodes: new Map(),
       familyOverrides: {},
-      rowNodes: []
+      rowNodes: [],
+      availabilityCache: new Map(),
+      availabilityInFlight: new Map()
     };
 
     const PN_COLUMN_ALIASES = [
@@ -3752,6 +3840,176 @@
       return bomDecipherState.rowDecodes.get(key);
     }
 
+    function normalizeAvailabilityPn(pn) {
+      return String(pn || "").trim().toUpperCase();
+    }
+
+    function setBomAvailabilityStatus(message, tone) {
+      nodes.bomAvailabilityStatus.textContent = message;
+      nodes.bomAvailabilityStatus.classList.remove("ok", "bad");
+      if (tone === "ok") nodes.bomAvailabilityStatus.classList.add("ok");
+      if (tone === "bad") nodes.bomAvailabilityStatus.classList.add("bad");
+    }
+
+    function availabilityToneForEntry(entry) {
+      if (!entry || entry.status !== "ok") {
+        if (entry && entry.status === "error") return "none";
+        return "unknown";
+      }
+      const qty = typeof entry.quantity === "number" ? entry.quantity : null;
+      if (qty == null) return "unknown";
+      if (qty <= 0) return "none";
+      if (qty < 1000) return "low";
+      return "high";
+    }
+
+    function formatAvailabilityQuantity(entry) {
+      if (!entry) return "No data";
+      if (entry.status === "skipped") return "Not configured";
+      if (entry.status === "not_found") return "Part not found";
+      if (entry.status === "error") return "Lookup failed";
+      if (typeof entry.quantity === "number") return entry.quantity.toLocaleString() + " in stock";
+      if (entry.availabilityText) return String(entry.availabilityText);
+      return "Availability unknown";
+    }
+
+    function makeAvailabilityCard(label, entry) {
+      const card = document.createElement("article");
+      card.className = "availability-card tone-" + availabilityToneForEntry(entry);
+
+      const source = document.createElement("div");
+      source.className = "source";
+      source.textContent = label;
+      card.appendChild(source);
+
+      const stock = document.createElement("div");
+      stock.className = "stock";
+      stock.textContent = formatAvailabilityQuantity(entry);
+      card.appendChild(stock);
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      if (entry && entry.error) meta.textContent = String(entry.error);
+      else if (entry && entry.availabilityText && typeof entry.quantity === "number") meta.textContent = String(entry.availabilityText);
+      else meta.textContent = entry && entry.status === "ok" ? "Live distributor lookup." : "No additional details.";
+      card.appendChild(meta);
+
+      if (entry && entry.productUrl) {
+        const link = document.createElement("a");
+        link.className = "link";
+        link.href = entry.productUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Open product page";
+        card.appendChild(link);
+      }
+
+      return card;
+    }
+
+    function renderBomAvailabilityResult(result) {
+      nodes.bomAvailabilityMap.innerHTML = "";
+      nodes.bomAvailabilityMap.appendChild(makeAvailabilityCard("DigiKey", result && result.digikey));
+      nodes.bomAvailabilityMap.appendChild(makeAvailabilityCard("Mouser", result && result.mouser));
+    }
+
+    async function requestBomAvailabilityForPn(partNumber, forceRefresh) {
+      const key = normalizeAvailabilityPn(partNumber);
+      if (!key) return;
+
+      if (!forceRefresh && bomDecipherState.availabilityCache.has(key)) {
+        renderBomAvailabilityResult(bomDecipherState.availabilityCache.get(key));
+        setBomAvailabilityStatus("Availability loaded from cache.", "ok");
+        return;
+      }
+
+      if (!forceRefresh && bomDecipherState.availabilityInFlight.has(key)) {
+        await bomDecipherState.availabilityInFlight.get(key);
+        return;
+      }
+
+      const task = (async () => {
+        const headers = {
+          "Content-Type": "application/json"
+        };
+        if (PART_REQUEST_PROXY_KEY) headers["X-Proxy-Key"] = PART_REQUEST_PROXY_KEY;
+
+        const response = await fetch(PART_AVAILABILITY_API_URL, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ partNumber: key })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) {
+          const msg = payload && payload.error ? payload.error : "Availability lookup failed.";
+          throw new Error(msg);
+        }
+
+        const result = {
+          partNumber: key,
+          timestamp: payload.timestamp || new Date().toISOString(),
+          digikey: payload.digikey || { status: "error", error: "No DigiKey response." },
+          mouser: payload.mouser || { status: "error", error: "No Mouser response." }
+        };
+        bomDecipherState.availabilityCache.set(key, result);
+
+        const selectedPn = normalizeAvailabilityPn(getBomRowPn(bomDecipherState.selectedRow));
+        if (selectedPn === key) {
+          renderBomAvailabilityResult(result);
+          setBomAvailabilityStatus("Availability updated from DigiKey and Mouser.", "ok");
+        }
+      })()
+        .catch((err) => {
+          const message = String(err && err.message ? err.message : err);
+          const result = {
+            partNumber: key,
+            timestamp: new Date().toISOString(),
+            digikey: { status: "error", error: message },
+            mouser: { status: "error", error: message }
+          };
+          bomDecipherState.availabilityCache.set(key, result);
+
+          const selectedPn = normalizeAvailabilityPn(getBomRowPn(bomDecipherState.selectedRow));
+          if (selectedPn === key) {
+            renderBomAvailabilityResult(result);
+            setBomAvailabilityStatus("Unable to load distributor availability.", "bad");
+          }
+        })
+        .finally(() => {
+          bomDecipherState.availabilityInFlight.delete(key);
+        });
+
+      bomDecipherState.availabilityInFlight.set(key, task);
+      await task;
+    }
+
+    function updateBomAvailabilityForSelectedRow(forceRefresh) {
+      const rowIndex = bomDecipherState.selectedRow;
+      if (rowIndex < 0 || rowIndex >= bomDecipherState.rows.length) {
+        nodes.bomAvailabilityMap.innerHTML = "";
+        setBomAvailabilityStatus("Select a BOM row to load DigiKey and Mouser availability.", "");
+        return;
+      }
+
+      const pn = getBomRowPn(rowIndex);
+      const key = normalizeAvailabilityPn(pn);
+      if (!key) {
+        nodes.bomAvailabilityMap.innerHTML = "";
+        setBomAvailabilityStatus("Selected row has an empty PN cell.", "bad");
+        return;
+      }
+
+      if (!forceRefresh && bomDecipherState.availabilityCache.has(key)) {
+        renderBomAvailabilityResult(bomDecipherState.availabilityCache.get(key));
+        setBomAvailabilityStatus("Availability loaded from cache.", "ok");
+        return;
+      }
+
+      nodes.bomAvailabilityMap.innerHTML = "";
+      setBomAvailabilityStatus("Loading distributor availability for " + key + "...", "");
+      void requestBomAvailabilityForPn(key, !!forceRefresh);
+    }
+
     function renderBomPnColumnOptions() {
       nodes.bomPnColumnSelect.innerHTML = "";
       bomDecipherState.headers.forEach((header, idx) => {
@@ -3838,6 +4096,8 @@
         nodes.bomFieldsWrap.innerHTML = "";
         nodes.bomErrors.innerHTML = "";
         nodes.bomFamilyOverride.innerHTML = "";
+        nodes.bomAvailabilityMap.innerHTML = "";
+        setBomAvailabilityStatus("Select a BOM row to load DigiKey and Mouser availability.", "");
         return;
       }
 
@@ -3851,6 +4111,7 @@
 
       nodes.bomSelectedRowInfo.textContent = "Row " + (rowIndex + 1) + " / " + bomDecipherState.rows.length;
       nodes.bomSelectedPn.textContent = pn || "(empty PN cell)";
+      updateBomAvailabilityForSelectedRow(false);
 
       if (!overrideFamily) {
         if (rowDecode.status !== "identified") {
@@ -3880,12 +4141,16 @@
       bomDecipherState.rowDecodes = new Map();
       bomDecipherState.familyOverrides = {};
       bomDecipherState.rowNodes = [];
+      bomDecipherState.availabilityCache = new Map();
+      bomDecipherState.availabilityInFlight = new Map();
 
       nodes.bomFileInput.value = "";
       nodes.bomPnColumnSelect.innerHTML = "";
       nodes.bomStatusHint.textContent = "No BOM loaded.";
       nodes.bomTable.innerHTML = "";
       nodes.bomDecipherPreview.textContent = "Upload CSV/TSV BOM to decode PN attributes.";
+      nodes.bomAvailabilityMap.innerHTML = "";
+      setBomAvailabilityStatus("Select a BOM row to load DigiKey and Mouser availability.", "");
       renderBomSelectedRowAttributes();
     }
 
@@ -3916,6 +4181,8 @@
       bomDecipherState.rowDecodes = new Map();
       bomDecipherState.familyOverrides = {};
       bomDecipherState.rowNodes = [];
+      bomDecipherState.availabilityCache = new Map();
+      bomDecipherState.availabilityInFlight = new Map();
 
       renderBomPnColumnOptions();
       renderBomTable();
@@ -4201,6 +4468,10 @@
         bomDecipherState.familyOverrides[rowIndex] = value;
       }
       renderBomSelectedRowAttributes();
+    });
+
+    nodes.bomAvailabilityRefreshBtn.addEventListener("click", () => {
+      updateBomAvailabilityForSelectedRow(true);
     });
 
     nodes.bomDecipherClearBtn.addEventListener("click", clearBomDecipher);
