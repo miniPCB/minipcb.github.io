@@ -1213,7 +1213,7 @@
         <div id="pnDecipherPreview" class="pn-text">Paste a part number to decode attributes.</div>
         <div class="pn-actions">
           <button id="pnDecipherClearBtn" class="btn pn-clear-btn" type="button">Clear</button>
-          <div class="pn-help">Manual family decode by PN format rules.</div>
+          <div class="pn-help">Family auto-detected by PN format rules.</div>
         </div>
       </section>
 
@@ -1222,18 +1222,9 @@
           <h2>PN Input</h2>
           <div class="panel-body">
             <div class="group">
-              <p class="group-title">Family</p>
-              <select id="pnDecipherFamily" class="form-control">
-                <option value="m55342">M55342 / D55342</option>
-                <option value="t502">T502</option>
-                <option value="t54x">T540 / T541</option>
-                <option value="s311">S-311-P-829</option>
-              </select>
-            </div>
-            <div class="group">
               <p class="group-title">Part Number</p>
               <textarea id="pnDecipherInput" class="decipher-input" placeholder="Paste PN here"></textarea>
-              <div class="hint">Separators like spaces or hyphens are normalized automatically before decode.</div>
+              <div class="hint">Family is auto-detected. If detection is unclear, decode is withheld and flagged.</div>
             </div>
             <div class="decipher-actions">
               <button id="pnDecipherRunBtn" class="btn-accent" type="button">Decipher PN</button>
@@ -1248,6 +1239,7 @@
             <strong id="pnDecipherValidity">No result</strong>
           </div>
           <div class="panel-body">
+            <p class="detail-line">Detected Family: <strong id="pnDecipherDetectedFamily">-</strong></p>
             <p class="detail-line">Normalized PN: <strong id="pnDecipherNormalized">-</strong></p>
             <div id="pnDecipherFieldsWrap" style="margin-top:10px;"></div>
             <ul id="pnDecipherErrors" class="error-list"></ul>
@@ -1505,7 +1497,6 @@
       reqEmail: document.getElementById("reqEmail"),
       reqPart: document.getElementById("reqPart"),
       reqDetails: document.getElementById("reqDetails"),
-      pnDecipherFamily: document.getElementById("pnDecipherFamily"),
       pnDecipherInput: document.getElementById("pnDecipherInput"),
       pnDecipherRunBtn: document.getElementById("pnDecipherRunBtn"),
       pnDecipherClearBtn: document.getElementById("pnDecipherClearBtn"),
@@ -1513,6 +1504,7 @@
       pnDecipherPreview: document.getElementById("pnDecipherPreview"),
       pnDecipherStatus: document.getElementById("pnDecipherStatus"),
       pnDecipherValidity: document.getElementById("pnDecipherValidity"),
+      pnDecipherDetectedFamily: document.getElementById("pnDecipherDetectedFamily"),
       pnDecipherNormalized: document.getElementById("pnDecipherNormalized"),
       pnDecipherFieldsWrap: document.getElementById("pnDecipherFieldsWrap"),
       pnDecipherErrors: document.getElementById("pnDecipherErrors"),
@@ -1531,7 +1523,7 @@
     };
 
     const pnDecipherState = {
-      family: "m55342",
+      family: "",
       inputPn: "",
       result: null
     };
@@ -3485,30 +3477,45 @@
     };
 
     function runPnDecipher() {
-      pnDecipherState.family = nodes.pnDecipherFamily.value;
       pnDecipherState.inputPn = nodes.pnDecipherInput.value;
-      const decoder = DECODER_REGISTRY[pnDecipherState.family];
-      const result = decoder.decode(pnDecipherState.inputPn);
-      pnDecipherState.result = result;
+      const detect = detectFamilyForPn(pnDecipherState.inputPn);
 
-      nodes.pnDecipherPreview.textContent = result.normalizedPn || "Paste a part number to decode attributes.";
-      nodes.pnDecipherStatus.textContent = result.ok ? "Decode successful" : "Decode has issues";
-      nodes.pnDecipherValidity.textContent = result.ok ? "Valid" : "Invalid";
-      nodes.pnDecipherNormalized.textContent = result.normalizedPn || "-";
-      renderDecodeFieldsTable(nodes.pnDecipherFieldsWrap, result.fields);
-      renderErrorList(nodes.pnDecipherErrors, result.errors);
+      const normalized = detect.normalizedPn;
+      nodes.pnDecipherPreview.textContent = normalized || "Paste a part number to decode attributes.";
+      nodes.pnDecipherNormalized.textContent = normalized || "-";
+
+      if (detect.status !== "identified") {
+        pnDecipherState.family = "";
+        pnDecipherState.result = null;
+        nodes.pnDecipherDetectedFamily.textContent = detect.status === "ambiguous" ? "Ambiguous" : "Unidentified";
+        nodes.pnDecipherStatus.textContent = detect.status === "ambiguous"
+          ? "Family detection ambiguous"
+          : "Family not identified";
+        nodes.pnDecipherValidity.textContent = "No decode";
+        nodes.pnDecipherFieldsWrap.innerHTML = "";
+        renderErrorList(nodes.pnDecipherErrors, detect.messages);
+        return;
+      }
+
+      pnDecipherState.family = detect.familyKey;
+      pnDecipherState.result = detect.familyResults[detect.familyKey];
+      nodes.pnDecipherDetectedFamily.textContent = DECODER_REGISTRY[detect.familyKey].label;
+      nodes.pnDecipherStatus.textContent = pnDecipherState.result.ok ? "Decode successful" : "Decode has issues";
+      nodes.pnDecipherValidity.textContent = pnDecipherState.result.ok ? "Valid" : "Invalid";
+      renderDecodeFieldsTable(nodes.pnDecipherFieldsWrap, pnDecipherState.result.fields);
+      renderErrorList(nodes.pnDecipherErrors, pnDecipherState.result.errors);
     }
 
     function resetPnDecipherView() {
-      nodes.pnDecipherFamily.value = "m55342";
       nodes.pnDecipherInput.value = "";
       nodes.pnDecipherPreview.textContent = "Paste a part number to decode attributes.";
       nodes.pnDecipherStatus.textContent = "Waiting for input";
       nodes.pnDecipherValidity.textContent = "No result";
+      nodes.pnDecipherDetectedFamily.textContent = "-";
       nodes.pnDecipherNormalized.textContent = "-";
       nodes.pnDecipherFieldsWrap.innerHTML = "";
       nodes.pnDecipherErrors.innerHTML = "";
-      pnDecipherState.family = "m55342";
+      pnDecipherState.family = "";
       pnDecipherState.inputPn = "";
       pnDecipherState.result = null;
     }
@@ -3589,19 +3596,83 @@
       return bestIdx;
     }
 
-    function bestFamilyForPn(pn) {
-      const familyResults = {};
-      const ranking = [];
-      for (const familyKey of Object.keys(DECODER_REGISTRY)) {
-        const result = DECODER_REGISTRY[familyKey].decode(pn);
-        familyResults[familyKey] = result;
+    function buildFamilyDiagnostics(familyResults) {
+      const diag = [];
+      for (const familyKey of Object.keys(familyResults)) {
+        const result = familyResults[familyKey];
         const validFieldCount = result.fields.filter((f) => f.valid).length;
-        const score = (result.ok ? 1000 : 0) + validFieldCount * 10 - result.errors.length * 5;
-        ranking.push({ familyKey, score });
+        diag.push({
+          familyKey,
+          ok: result.ok,
+          validFieldCount,
+          errorCount: result.errors.length
+        });
       }
-      ranking.sort((a, b) => b.score - a.score);
-      const best = ranking[0] || { familyKey: "m55342" };
-      return { detectedFamily: best.familyKey, familyResults };
+      diag.sort((a, b) => {
+        if (a.ok !== b.ok) return a.ok ? -1 : 1;
+        if (a.validFieldCount !== b.validFieldCount) return b.validFieldCount - a.validFieldCount;
+        return a.errorCount - b.errorCount;
+      });
+      return diag;
+    }
+
+    function detectFamilyForPn(pn) {
+      const normalizedPn = normalizePnInput(pn);
+      const familyResults = {};
+      for (const familyKey of Object.keys(DECODER_REGISTRY)) {
+        familyResults[familyKey] = DECODER_REGISTRY[familyKey].decode(normalizedPn);
+      }
+
+      const diagnostics = buildFamilyDiagnostics(familyResults);
+      const successFamilies = diagnostics.filter((x) => x.ok).map((x) => x.familyKey);
+
+      if (!normalizedPn) {
+        return {
+          status: "unknown",
+          familyKey: "",
+          normalizedPn,
+          familyResults,
+          messages: ["Part number input is empty."]
+        };
+      }
+
+      if (successFamilies.length === 1) {
+        return {
+          status: "identified",
+          familyKey: successFamilies[0],
+          normalizedPn,
+          familyResults,
+          messages: []
+        };
+      }
+
+      if (successFamilies.length > 1) {
+        return {
+          status: "ambiguous",
+          familyKey: "",
+          normalizedPn,
+          familyResults,
+          messages: [
+            "Multiple family formats matched this PN: " + successFamilies.map((k) => DECODER_REGISTRY[k].label).join(", ") + ".",
+            "No decode shown to avoid using ambiguous attributes."
+          ]
+        };
+      }
+
+      const diagText = diagnostics
+        .map((x) => DECODER_REGISTRY[x.familyKey].label + ": " + x.validFieldCount + " valid field(s), " + x.errorCount + " issue(s)")
+        .join(" | ");
+      return {
+        status: "unknown",
+        familyKey: "",
+        normalizedPn,
+        familyResults,
+        messages: [
+          "Family could not be identified confidently.",
+          "No decode shown to avoid erroneous attributes.",
+          "Diagnostic summary: " + diagText
+        ]
+      };
     }
 
     function getBomRowPn(rowIndex) {
@@ -3614,7 +3685,7 @@
       const key = rowIndex + "|" + bomDecipherState.pnColumn;
       if (!bomDecipherState.rowDecodes.has(key)) {
         const pn = getBomRowPn(rowIndex);
-        bomDecipherState.rowDecodes.set(key, bestFamilyForPn(pn));
+        bomDecipherState.rowDecodes.set(key, detectFamilyForPn(pn));
       }
       return bomDecipherState.rowDecodes.get(key);
     }
@@ -3678,11 +3749,11 @@
       nodes.bomTable.appendChild(tbody);
     }
 
-    function renderBomFamilyOverrideSelect(rowIndex, detectedFamily) {
+    function renderBomFamilyOverrideSelect(rowIndex, autoLabel) {
       nodes.bomFamilyOverride.innerHTML = "";
       const autoOpt = document.createElement("option");
       autoOpt.value = "auto";
-      autoOpt.textContent = "Auto (" + DECODER_REGISTRY[detectedFamily].label + ")";
+      autoOpt.textContent = "Auto (" + autoLabel + ")";
       nodes.bomFamilyOverride.appendChild(autoOpt);
 
       for (const key of Object.keys(DECODER_REGISTRY)) {
@@ -3710,16 +3781,31 @@
 
       const rowDecode = getBomRowDecode(rowIndex);
       const overrideFamily = bomDecipherState.familyOverrides[rowIndex] || "";
-      const activeFamily = overrideFamily || rowDecode.detectedFamily;
-      const activeResult = rowDecode.familyResults[activeFamily];
       const pn = getBomRowPn(rowIndex);
+      const autoFamilyLabel = rowDecode.status === "identified"
+        ? DECODER_REGISTRY[rowDecode.familyKey].label
+        : (rowDecode.status === "ambiguous" ? "Ambiguous" : "Unidentified");
+      renderBomFamilyOverrideSelect(rowIndex, autoFamilyLabel);
 
       nodes.bomSelectedRowInfo.textContent = "Row " + (rowIndex + 1) + " / " + bomDecipherState.rows.length;
       nodes.bomSelectedPn.textContent = pn || "(empty PN cell)";
+
+      if (!overrideFamily) {
+        if (rowDecode.status !== "identified") {
+          nodes.bomDecodeStatus.textContent = rowDecode.status === "ambiguous"
+            ? "Family detection ambiguous"
+            : "Family not identified";
+          nodes.bomFieldsWrap.innerHTML = "";
+          renderErrorList(nodes.bomErrors, rowDecode.messages);
+          return;
+        }
+      }
+
+      const activeFamily = overrideFamily || rowDecode.familyKey;
+      const activeResult = rowDecode.familyResults[activeFamily];
       nodes.bomDecodeStatus.textContent = activeResult.ok
         ? "Decoded as " + DECODER_REGISTRY[activeFamily].label
         : "Decode issues in " + DECODER_REGISTRY[activeFamily].label;
-      renderBomFamilyOverrideSelect(rowIndex, rowDecode.detectedFamily);
       renderDecodeFieldsTable(nodes.bomFieldsWrap, activeResult.fields);
       renderErrorList(nodes.bomErrors, activeResult.errors);
     }
@@ -3999,9 +4085,6 @@
       nodes.pnDecipherPreview.textContent = "Paste a part number to decode attributes.";
     });
     nodes.pnDecipherClearBtn.addEventListener("click", resetPnDecipherView);
-    nodes.pnDecipherFamily.addEventListener("change", () => {
-      if (String(nodes.pnDecipherInput.value || "").trim()) runPnDecipher();
-    });
 
     nodes.bomFileInput.addEventListener("change", async () => {
       const file = nodes.bomFileInput.files && nodes.bomFileInput.files[0];
