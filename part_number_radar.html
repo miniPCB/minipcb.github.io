@@ -2325,6 +2325,7 @@
     // Trace refs:
     // - MIL part-number/value examples in MIL-PRF-55342 slash-sheet tables (NASA NPSL mirror)
     // - Vishay E/H M/D55342 global PN table (eh.pdf): letter/tolerance/multiplier definition
+    const M55342_MIL_SERIES_ERROR = "Value code is out of MIL series for its tolerance letter.";
     const MIL_SERIES_E96 = new Set([
       100,102,105,107,110,113,115,118,121,124,127,130,133,137,140,143,147,150,154,158,162,165,169,174,
       178,182,187,191,196,200,205,210,215,221,226,232,237,243,249,255,261,267,274,280,287,294,301,309,
@@ -3401,7 +3402,7 @@
             valueDecoded = nominal + " Ohms (" + letterOpt.tol + ")" + (mil.ok ? "" : " [MIL check failed]");
             valueValid = mil.ok === true;
             if (!valueValid) {
-              errors.push("Value code is out of MIL series for its tolerance letter.");
+              errors.push(M55342_MIL_SERIES_ERROR);
             }
             fields.push(makeDecodeField("value_letter", "Value Letter", letterOpt.key, letterOpt.label, true));
           }
@@ -3768,6 +3769,15 @@
       return diag;
     }
 
+    function isSoftFamilyMatch(result) {
+      if (!result || typeof result !== "object") return false;
+      if (result.ok) return true;
+      if (result.family !== "m55342") return false;
+      if (!Array.isArray(result.errors)) return false;
+      if (result.errors.length !== 1) return false;
+      return result.errors[0] === M55342_MIL_SERIES_ERROR;
+    }
+
     function detectFamilyForPn(pn) {
       const normalizedPn = normalizePnInput(pn);
       const familyResults = {};
@@ -3776,7 +3786,9 @@
       }
 
       const diagnostics = buildFamilyDiagnostics(familyResults);
-      const successFamilies = diagnostics.filter((x) => x.ok).map((x) => x.familyKey);
+      const successFamilies = diagnostics
+        .filter((x) => isSoftFamilyMatch(familyResults[x.familyKey]))
+        .map((x) => x.familyKey);
 
       if (!normalizedPn) {
         return {
