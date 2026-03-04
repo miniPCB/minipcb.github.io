@@ -2466,6 +2466,7 @@
     // - MIL part-number/value examples in MIL-PRF-55342 slash-sheet tables (NASA NPSL mirror)
     // - Vishay E/H M/D55342 global PN table (eh.pdf): letter/tolerance/multiplier definition
     const M55342_MIL_SERIES_ERROR = "Value code is out of MIL series for its tolerance letter.";
+    const M55342_SIZE_RANGE_ERROR = "Value is outside allowed resistance range for selected slash size.";
     const MIL_SERIES_E96 = new Set([
       100,102,105,107,110,113,115,118,121,124,127,130,133,137,140,143,147,150,154,158,162,165,169,174,
       178,182,187,191,196,200,205,210,215,221,226,232,237,243,249,255,261,267,274,280,287,294,301,309,
@@ -2496,6 +2497,36 @@
         dotIndex,
         raw: formatMantissaPillValue(digits, dotIndex)
       })));
+
+    // Allowed resistance ranges by slash size (ohms), derived from style decade tables.
+    const M55342_SIZE_RESISTANCE_RANGE_OHMS = {
+      "01": { min: 5.6, max: 1e6 },
+      "02": { min: 5.6, max: 1e6 },
+      "03": { min: 5.6, max: 1e6 },
+      "04": { min: 5.6, max: 4.7e6 },
+      "05": { min: 5.6, max: 15e6 },
+      "06": { min: 5.6, max: 1e6 },
+      "07": { min: 5.6, max: 5.62e6 },
+      "08": { min: 5.6, max: 15e6 },
+      "09": { min: 5.6, max: 15e6 },
+      "10": { min: 5.49, max: 5.62e6 },
+      "11": { min: 5.6, max: 1e6 },
+      "12": { min: 5.6, max: 1e6 },
+      "13": { min: 5.6, max: 1e6 }
+    };
+
+    function isM55342ValueInSizeRange(sizeKey, valueOhms) {
+      const range = M55342_SIZE_RESISTANCE_RANGE_OHMS[sizeKey];
+      if (!range) return true;
+      if (typeof valueOhms !== "number" || !isFinite(valueOhms)) return false;
+      return valueOhms >= range.min && valueOhms <= range.max;
+    }
+
+    function isM55342ValueInAnySizeRange(valueOhms) {
+      if (typeof valueOhms !== "number" || !isFinite(valueOhms)) return false;
+      return Object.keys(M55342_SIZE_RESISTANCE_RANGE_OHMS)
+        .some((sizeKey) => isM55342ValueInSizeRange(sizeKey, valueOhms));
+    }
 
     function selectedMilSeriesInfo(letterKey) {
       const li = letterInfo(letterKey);
@@ -2556,13 +2587,18 @@
       return sizeOptions.find((x) => x.key === key) || null;
     }
 
-    function buildValueCode(mantissa, letterKey) {
+    function buildValueCode(mantissa, letterKey, sizeKey) {
       const li = letterInfo(letterKey);
       if (!li || !mantissa) return null;
       const mil = milValueCheck(mantissa, letterKey);
       if (mil.ok !== true) return null;
       const code = mantissa.digits.slice(0, mantissa.dotIndex) + li.key + mantissa.digits.slice(mantissa.dotIndex);
       const nominal = mantissa.value * li.mult;
+      if (sizeKey) {
+        if (!isM55342ValueInSizeRange(sizeKey, nominal)) return null;
+      } else if (!isM55342ValueInAnySizeRange(nominal)) {
+        return null;
+      }
       const errorPct = 0;
       return { code, nominal, errorPct, tol: li.tol };
     }
@@ -2572,6 +2608,7 @@
       // D55342 => /07 only, and /07 => D55342 only.
       if (r.model === "D55342" && r.size !== D55342_SIZE_CODE) return false;
       if (r.model === "M55342" && r.size === D55342_SIZE_CODE) return false;
+      if (!isM55342ValueInSizeRange(r.size, r.valueNominal)) return false;
 
       if (r.thinFilm === "V") {
         const t = Number(r.letterTol.replace("%", ""));
@@ -2608,7 +2645,7 @@
           for (const s of ss) {
             for (const term of terms) {
               for (const l of ls) {
-                const vc = buildValueCode(mantissa, l.key);
+                const vc = buildValueCode(mantissa, l.key, s.key);
                 if (!vc) continue;
                 for (const fr of frs) {
                   for (const p of pkgs) {
@@ -2667,7 +2704,7 @@
 
     function updatePnBar() {
       const mantissa = parseMantissa(nodes.resInput.value);
-      const vc = (filters.letter && mantissa) ? buildValueCode(mantissa, filters.letter) : null;
+      const vc = (filters.letter && mantissa) ? buildValueCode(mantissa, filters.letter, filters.size || null) : null;
       const valueSegment = vc
         ? vc.code
         : (mantissa ? mantissa.raw.replace(".", "_") : "____");
@@ -3724,6 +3761,7 @@
       const letterIndexes = valueChars.map((c, i) => (/^[A-Z]$/.test(c) ? i : -1)).filter((i) => i >= 0);
       let valueDecoded = null;
       let valueValid = false;
+      let valueNominal = null;
       if (letterIndexes.length !== 1) {
         errors.push("Value code must contain exactly one tolerance letter.");
       } else {
@@ -3744,6 +3782,7 @@
             errors.push("Could not parse mantissa from value code.");
           } else {
             const nominal = mantissa.value * letterOpt.mult;
+            valueNominal = nominal;
             const mil = milValueCheck(mantissa, letterOpt.key);
             valueDecoded = nominal + " Ohms (" + letterOpt.tol + ")" + (mil.ok ? "" : " [MIL check failed]");
             valueValid = mil.ok === true;
@@ -3760,6 +3799,11 @@
       }
       if (model === "M55342" && size === D55342_SIZE_CODE) {
         errors.push("Size code /" + D55342_SIZE_CODE + " (1206) is reserved for D55342.");
+      }
+      if (sizeOpt && valueNominal != null && !isM55342ValueInSizeRange(size, valueNominal)) {
+        errors.push(M55342_SIZE_RANGE_ERROR);
+        valueValid = false;
+        if (valueDecoded) valueDecoded += " [Size range failed]";
       }
 
       fields.unshift(
@@ -4190,8 +4234,9 @@
       if (result.ok) return true;
       if (result.family !== "m55342") return false;
       if (!Array.isArray(result.errors)) return false;
-      if (result.errors.length !== 1) return false;
-      return result.errors[0] === M55342_MIL_SERIES_ERROR;
+      if (result.errors.length < 1) return false;
+      const softErrors = new Set([M55342_MIL_SERIES_ERROR, M55342_SIZE_RANGE_ERROR]);
+      return result.errors.every((err) => softErrors.has(err));
     }
 
     function detectFamilyForPn(pn) {
