@@ -3343,14 +3343,16 @@
       const fields = [];
       const hasThinFilm = normalized.endsWith("V") || normalized.endsWith("M");
       const core = hasThinFilm ? normalized.slice(0, -1) : normalized;
+      // Compact legacy style can omit the 2-character packaging suffix.
+      const coreHasPackaging = core.length >= 17;
 
       if (!(normalized.startsWith("M55342") || normalized.startsWith("D55342"))) {
         errors.push("PN must start with M55342 or D55342.");
       }
-      if (!(normalized.length === 17 || normalized.length === 18)) {
-        errors.push("Expected 17 or 18 characters after normalization.");
+      if (!(core.length === 15 || core.length === 17)) {
+        errors.push("Expected 15 or 17 core characters (packaging optional) after normalization.");
       }
-      if (core.length < 17) {
+      if (core.length < 15) {
         return { ok: false, family: "m55342", normalizedPn: normalized, fields, errors };
       }
 
@@ -3360,7 +3362,7 @@
       const term = core.slice(9, 10);
       const valueCode = core.slice(10, 14);
       const failure = core.slice(14, 15);
-      const packaging = core.slice(15, 17);
+      const packaging = coreHasPackaging ? core.slice(15, 17) : "";
       const thinFilm = hasThinFilm ? normalized.slice(-1) : "";
 
       const modelOpt = optionByKey(modelOptions, model);
@@ -3420,7 +3422,7 @@
         makeDecodeField("termination", "Termination", term, termOpt ? termOpt.label : "Unknown termination", !!termOpt),
         makeDecodeField("value_code", "Value Code", valueCode, valueDecoded || "Unable to decode", valueValid),
         makeDecodeField("failure", "Failure Rate", failure, failureOpt ? failureOpt.label : "Unknown failure rate", !!failureOpt),
-        makeDecodeField("packaging", "Packaging", packaging, packagingOpt ? packagingOpt.label : "Unknown packaging", !!packagingOpt),
+        makeDecodeField("packaging", "Packaging", packaging || "(unspecified)", packaging === "" ? "(unspecified)" : (packagingOpt ? packagingOpt.label : "Unknown packaging"), packaging === "" || !!packagingOpt),
         makeDecodeField("thin_film", "Thin Film", thinFilm || "(none)", thinFilm === "" ? "(none)" : (thinFilmOpt ? thinFilmOpt.label : "Unknown thin-film code"), thinFilm === "" || !!thinFilmOpt)
       );
 
