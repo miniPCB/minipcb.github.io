@@ -932,6 +932,23 @@
       background: rgba(23, 35, 47, 0.78);
     }
 
+    .res-pill-cloud {
+      max-height: 220px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .res-pill-cloud .filter-pill {
+      font-family: var(--mono);
+      min-height: 28px;
+      padding: 4px 9px;
+    }
+
+    .res-pill-cloud .filter-pill.non-preferred {
+      border-color: rgba(255, 186, 82, 0.55);
+      background: rgba(255, 186, 82, 0.14);
+    }
+
     @keyframes stepIn {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
@@ -1098,8 +1115,9 @@
           <div class="group"><p class="group-title">Termination</p><div id="termFilter" class="pill-cloud"></div></div>
           <div class="group">
             <p class="group-title">Resistance Input (Ohms)</p>
-            <input id="resInput" class="text-input" type="text" value="49.9" />
-            <div id="resHint" class="hint">Required format: three digits + decimal point. Allowed: <span style="font-family:var(--mono)">.560</span>, <span style="font-family:var(--mono)">5.60</span>, <span style="font-family:var(--mono)">56.0</span>, <span style="font-family:var(--mono)">560.</span></div>
+            <div id="resPillFilter" class="pill-cloud res-pill-cloud"></div>
+            <input id="resInput" class="text-input hidden" type="text" value="49.9" aria-hidden="true" tabindex="-1" />
+            <div id="resHint" class="hint">Select a resistance mantissa pill. Non-preferred values for the selected tolerance are highlighted.</div>
             <div id="milHint" class="hint">MIL value check: waiting for tolerance letter selection.</div>
           </div>
           <div class="group"><p class="group-title">Tolerance / Multiplier Letter Code</p><div id="letterFilter" class="pill-cloud"></div></div>
@@ -1611,6 +1629,7 @@
       packaging: document.getElementById("pkgFilter"),
       thinFilm: document.getElementById("tfFilter"),
       resInput: document.getElementById("resInput"),
+      resPillFilter: document.getElementById("resPillFilter"),
       resHint: document.getElementById("resHint"),
       milHint: document.getElementById("milHint"),
       results: document.getElementById("results"),
@@ -2289,6 +2308,13 @@
       return String(v);
     }
 
+    function formatMantissaPillValue(digits, dotIndex) {
+      const s = String(digits).padStart(3, "0");
+      if (dotIndex <= 0) return "." + s;
+      if (dotIndex >= 3) return s + ".";
+      return s.slice(0, dotIndex) + "." + s.slice(dotIndex);
+    }
+
     function parseMantissa(input) {
       const s = String(input || "").trim();
       const m = s.match(/^(\.[0-9]{3}|[0-9]\.[0-9]{2}|[0-9]{2}\.[0-9]|[0-9]{3}\.)$/);
@@ -2304,14 +2330,15 @@
     }
 
     function updateInputFormatting() {
-      const parsed = parseMantissa(nodes.resInput.value);
+      let parsed = parseMantissa(nodes.resInput.value);
       nodes.resInput.classList.remove("valid", "invalid");
       if (parsed) {
         nodes.resInput.classList.add("valid");
-        nodes.resHint.textContent = "Valid format. Unselected letter preview: " + parsed.raw.replace(".", "_");
       } else {
-        nodes.resInput.classList.add("invalid");
-        nodes.resHint.textContent = "Invalid format. Use three digits with decimal point (.560, 5.60, 56.0, or 560.).";
+        const fallback = "49.9";
+        nodes.resInput.value = fallback;
+        parsed = parseMantissa(fallback);
+        nodes.resInput.classList.add("valid");
       }
       return parsed;
     }
@@ -2341,6 +2368,59 @@
       if (t <= 1) return MIL_SERIES_E96;
       if (t <= 5) return MIL_SERIES_E24;
       return MIL_SERIES_E12;
+    }
+
+    const MIL_SERIES_ALL = new Set([
+      ...Array.from(MIL_SERIES_E96),
+      ...Array.from(MIL_SERIES_E24),
+      ...Array.from(MIL_SERIES_E12)
+    ]);
+
+    const RESISTANCE_PILL_VALUES = Array.from(MIL_SERIES_ALL)
+      .sort((a, b) => a - b)
+      .flatMap((digits) => [0, 1, 2, 3].map((dotIndex) => ({
+        digits,
+        dotIndex,
+        raw: formatMantissaPillValue(digits, dotIndex)
+      })));
+
+    function selectedMilSeriesInfo(letterKey) {
+      const li = letterInfo(letterKey);
+      if (!li) return { label: "All", set: null, tol: "" };
+      const set = selectMilSeriesByTolerance(li.tol);
+      if (set === MIL_SERIES_E96) return { label: "E96", set, tol: li.tol };
+      if (set === MIL_SERIES_E24) return { label: "E24", set, tol: li.tol };
+      if (set === MIL_SERIES_E12) return { label: "E12", set, tol: li.tol };
+      return { label: "All", set: null, tol: li.tol };
+    }
+
+    function renderResistancePills(mantissa) {
+      const activeRaw = mantissa ? mantissa.raw : "";
+      const seriesInfo = selectedMilSeriesInfo(filters.letter);
+      const preferredSet = seriesInfo.set;
+      nodes.resPillFilter.innerHTML = "";
+
+      for (const opt of RESISTANCE_PILL_VALUES) {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "filter-pill";
+        pill.textContent = opt.raw;
+        if (opt.raw === activeRaw) pill.classList.add("active");
+        if (preferredSet && !preferredSet.has(opt.digits)) {
+          pill.classList.add("non-preferred");
+        }
+        pill.addEventListener("click", () => {
+          nodes.resInput.value = opt.raw;
+          renderAll();
+        });
+        nodes.resPillFilter.appendChild(pill);
+      }
+
+      if (filters.letter && preferredSet) {
+        nodes.resHint.textContent = "Selected: " + activeRaw + ". Preferred for " + seriesInfo.tol + ": " + seriesInfo.label + ".";
+      } else {
+        nodes.resHint.textContent = "Selected: " + activeRaw + ". Select a tolerance letter to highlight preferred values.";
+      }
     }
 
     function milValueCheck(mantissa, letterKey) {
@@ -4313,6 +4393,7 @@
 
     function renderAll() {
       const mantissa = updateInputFormatting();
+      renderResistancePills(mantissa);
       const mil = milValueCheck(mantissa, filters.letter);
       nodes.milHint.textContent = mil.message;
       nodes.milHint.classList.remove("ok", "bad");
