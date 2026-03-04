@@ -1347,8 +1347,8 @@
             <div class="group"><p class="group-title">Package</p><div id="sgihlpPackageFilter" class="pill-cloud"></div></div>
             <div class="group">
               <p class="group-title">Inductance Code (uH)</p>
-              <input id="sgihlpInductanceInput" class="text-input" type="text" value="4R7" maxlength="3" />
-              <div id="sgihlpInductanceHint" class="hint">Use 3-char inductance code (examples: R22, 4R7, 100).</div>
+              <div id="sgihlpInductanceFilter" class="pill-cloud"></div>
+              <div id="sgihlpInductanceHint" class="hint">Pick a code pill (examples: R22, 4R7, 101).</div>
             </div>
             <div class="group"><p class="group-title">Tolerance</p><div id="sgihlpToleranceFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Screening</p><div id="sgihlpScreeningFilter" class="pill-cloud"></div></div>
@@ -2160,10 +2160,16 @@
       "97OZ": { min: 0.47, max: 100 }
     };
 
+    const sgihlpInductanceCodeCatalog = [
+      "R22", "R33", "R47", "R68", "R82",
+      "1R0", "1R5", "2R2", "3R3", "4R7", "6R8", "8R2",
+      "100", "150", "220", "330", "470", "680", "101", "102"
+    ];
+
     const sgihlpNodes = {
       size: document.getElementById("sgihlpSizeFilter"),
       packageCode: document.getElementById("sgihlpPackageFilter"),
-      inductanceInput: document.getElementById("sgihlpInductanceInput"),
+      inductanceFilter: document.getElementById("sgihlpInductanceFilter"),
       inductanceHint: document.getElementById("sgihlpInductanceHint"),
       tolerance: document.getElementById("sgihlpToleranceFilter"),
       screening: document.getElementById("sgihlpScreeningFilter"),
@@ -3195,6 +3201,21 @@
       return String(Math.round(valueUh * 1000) / 1000);
     }
 
+    function getSgihlpInductanceOptions(sizeKey) {
+      const range = sgihlpSizeRangesUh[sizeKey] || null;
+      const out = [];
+      for (const code of sgihlpInductanceCodeCatalog) {
+        const parsed = parseSgihlpInductanceCode(code);
+        if (!parsed.ok) continue;
+        if (range && (parsed.valueUh < range.min || parsed.valueUh > range.max)) continue;
+        out.push({
+          key: code,
+          label: code + " (" + formatUh(parsed.valueUh) + " uH)"
+        });
+      }
+      return out;
+    }
+
     function buildSgihlpPn() {
       const parsed = parseSgihlpInductanceCode(sgihlpState.inductanceCode);
       const inductanceSegment = parsed.ok ? parsed.code : "???";
@@ -3225,14 +3246,31 @@
         sgihlpState.screening = k;
         renderSGIHLP();
       });
+      const inductanceOptions = getSgihlpInductanceOptions(sgihlpState.size);
+      const hasSelectedInductance = inductanceOptions.some((opt) => opt.key === sgihlpState.inductanceCode);
+      if (!hasSelectedInductance && sgihlpState.inductanceCode) {
+        sgihlpState.inductanceCode = inductanceOptions.length ? inductanceOptions[0].key : "";
+      }
+      renderT502FilterGroup(sgihlpNodes.inductanceFilter, inductanceOptions, sgihlpState.inductanceCode, (k) => {
+        sgihlpState.inductanceCode = k;
+        renderSGIHLP();
+      });
 
       const built = buildSgihlpPn();
       sgihlpNodes.pnText.textContent = built.pn;
-      sgihlpNodes.inductanceInput.value = normalizeSgihlpInductanceCode(sgihlpState.inductanceCode);
       sgihlpNodes.results.innerHTML = "";
 
+      if (!sgihlpState.inductanceCode) {
+        sgihlpNodes.inductanceHint.textContent = "Select an inductance code to form a full PN.";
+        sgihlpNodes.inductanceHint.classList.remove("ok");
+        sgihlpNodes.inductanceHint.classList.add("bad");
+        sgihlpNodes.statusText.textContent = "Missing inductance code";
+        sgihlpNodes.resultCount.textContent = "0 results";
+        return;
+      }
+
       if (!built.parsed.ok) {
-        sgihlpNodes.inductanceHint.textContent = "Invalid inductance code. Use 3-char code like R22, 4R7, or 100.";
+        sgihlpNodes.inductanceHint.textContent = "Invalid inductance code.";
         sgihlpNodes.inductanceHint.classList.remove("ok");
         sgihlpNodes.inductanceHint.classList.add("bad");
         sgihlpNodes.statusText.textContent = "Invalid inductance code";
@@ -4935,18 +4973,12 @@
       s311Nodes.capInput.value = s311State.capCode;
       renderS311();
     });
-    sgihlpNodes.inductanceInput.addEventListener("input", () => {
-      sgihlpState.inductanceCode = normalizeSgihlpInductanceCode(sgihlpNodes.inductanceInput.value);
-      sgihlpNodes.inductanceInput.value = sgihlpState.inductanceCode;
-      renderSGIHLP();
-    });
     sgihlpNodes.clearBtn.addEventListener("click", () => {
       sgihlpState.size = null;
       sgihlpState.packageCode = null;
       sgihlpState.inductanceCode = "";
       sgihlpState.tolerance = null;
       sgihlpState.screening = null;
-      sgihlpNodes.inductanceInput.value = sgihlpState.inductanceCode;
       renderSGIHLP();
     });
 
