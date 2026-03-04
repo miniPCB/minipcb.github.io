@@ -1008,6 +1008,10 @@
             <strong>Capacitor</strong>
             <span>Browse capacitor part families and generate valid part numbers.</span>
           </button>
+          <button type="button" class="splash-choice" data-choice-component="inductor">
+            <strong>Inductor</strong>
+            <span>Browse inductor part families and generate valid part numbers.</span>
+          </button>
         </div>
         <div class="splash-actions">
           <button id="splashBackToStep1" type="button" class="btn">Back</button>
@@ -1023,7 +1027,7 @@
           NEW FAMILY MENU INSERTION POINT
           1) Add a button here with:
              - data-choice-family="<familyKey>"
-             - data-family-component="resistor|capacitor"
+             - data-family-component="resistor|capacitor|inductor"
           2) Keep <familyKey> identical to PART_FAMILY_CONFIG + decoder keys.
           3) Keep the visible label aligned with the family's formal series name.
         -->
@@ -1043,6 +1047,10 @@
           <button type="button" class="splash-choice" data-choice-family="s311" data-family-component="capacitor">
             <strong>S-311-P-829</strong>
             <span>GSFC mapping with preferred-size guide table.</span>
+          </button>
+          <button type="button" class="splash-choice" data-choice-family="sgihlp" data-family-component="inductor">
+            <strong>SGIHLP</strong>
+            <span>Space-grade shielded power inductors (MIL-STD-981 screening options).</span>
           </button>
         </div>
         <div class="splash-actions">
@@ -1321,6 +1329,42 @@
       </section>
     </section>
 
+    <section id="sgihlpView" class="component-view hidden">
+      <section class="pn-bar">
+        <div class="pn-label">Selected PN</div>
+        <div id="sgihlpPnBarText" class="pn-text">SGIHLP60HEB4R7M81S</div>
+        <div class="pn-actions">
+          <button id="sgihlpClearBtn" class="btn pn-clear-btn" type="button">Clear Filters</button>
+          <div class="pn-help">Format: SGIHLP + Size + Package + L Code + Tol + Family + Screening</div>
+        </div>
+      </section>
+
+      <section class="main">
+        <aside class="panel">
+          <h2>SGIHLP Filters</h2>
+          <div class="panel-body">
+            <div class="group"><p class="group-title">Size</p><div id="sgihlpSizeFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Package</p><div id="sgihlpPackageFilter" class="pill-cloud"></div></div>
+            <div class="group">
+              <p class="group-title">Inductance Code (uH)</p>
+              <input id="sgihlpInductanceInput" class="text-input" type="text" value="4R7" maxlength="3" />
+              <div id="sgihlpInductanceHint" class="hint">Use 3-char inductance code (examples: R22, 4R7, 100).</div>
+            </div>
+            <div class="group"><p class="group-title">Tolerance</p><div id="sgihlpToleranceFilter" class="pill-cloud"></div></div>
+            <div class="group"><p class="group-title">Screening</p><div id="sgihlpScreeningFilter" class="pill-cloud"></div></div>
+          </div>
+        </aside>
+        <section class="panel">
+          <h2>SGIHLP Results</h2>
+          <div class="summary-line">
+            <span id="sgihlpStatusText">Code-builder mode</span>
+            <strong id="sgihlpResultCount">1 result</strong>
+          </div>
+          <div id="sgihlpResults" class="results"></div>
+        </section>
+      </section>
+    </section>
+
     <section id="pnDecipherView" class="component-view hidden">
       <section class="pn-bar">
         <div class="pn-label">PN Decipher</div>
@@ -1537,7 +1581,7 @@
       Browser flow wiring checklist for a new family key "<key>":
       1) Add HTML workspace section: <section id="<key>View" class="component-view hidden">...</section>.
       2) Add Step 3 menu button with:
-         data-choice-family="<key>" and data-family-component="resistor|capacitor".
+         data-choice-family="<key>" and data-family-component="resistor|capacitor|inductor".
       3) Add nodes.<key>View = document.getElementById("<key>View").
       4) Register <key> in PART_FAMILY_CONFIG with:
          - label
@@ -1580,6 +1624,12 @@
           renderS311();
           setS311PrefExpanded(true);
         }
+      },
+      sgihlp: {
+        label: "SGIHLP inductor radar",
+        componentType: "inductor",
+        viewNodeKey: "sgihlpView",
+        onLaunch: () => setS311PrefExpanded(false)
       }
     };
 
@@ -1618,6 +1668,7 @@
       t502View: document.getElementById("t502View"),
       t54xView: document.getElementById("t54xView"),
       s311View: document.getElementById("s311View"),
+      sgihlpView: document.getElementById("sgihlpView"),
       pnDecipherView: document.getElementById("pnDecipherView"),
       bomDecipherView: document.getElementById("bomDecipherView"),
       model: document.getElementById("modelFilter"),
@@ -2065,6 +2116,62 @@
       statusText: document.getElementById("s311StatusText"),
       resultCount: document.getElementById("s311ResultCount"),
       results: document.getElementById("s311Results")
+    };
+
+    const sgihlpState = {
+      size: "60HE",
+      packageCode: "B",
+      inductanceCode: "4R7",
+      tolerance: "M",
+      screening: "1S"
+    };
+
+    const sgihlpOptions = {
+      size: [
+        { key: "24DC", label: "24DC (0.22 to 15 uH)" },
+        { key: "48FA", label: "48FA (0.47 to 68 uH)" },
+        { key: "60HE", label: "60HE (0.22 to 22 uH)" },
+        { key: "73HF", label: "73HF (0.47 to 47 uH)" },
+        { key: "97OZ", label: "97OZ (0.47 to 100 uH)" }
+      ],
+      packageCode: [
+        { key: "B", label: "B (SnPb terminations)" },
+        { key: "T", label: "T (matte tin terminations)" }
+      ],
+      tolerance: [
+        { key: "M", label: "M (+/-20%)" },
+        { key: "N", label: "N (+/-30%)" }
+      ],
+      screening: [
+        { key: "1P", label: "1P (screening package P)" },
+        { key: "1L", label: "1L (screening package L)" },
+        { key: "1E3", label: "1E3 (AEC-Q200 + 3x reflow)" },
+        { key: "1E2", label: "1E2 (AEC-Q200 + 2x reflow)" },
+        { key: "1B", label: "1B (screening package B)" },
+        { key: "1S", label: "1S (screening package S)" }
+      ]
+    };
+
+    const sgihlpSizeRangesUh = {
+      "24DC": { min: 0.22, max: 15 },
+      "48FA": { min: 0.47, max: 68 },
+      "60HE": { min: 0.22, max: 22 },
+      "73HF": { min: 0.47, max: 47 },
+      "97OZ": { min: 0.47, max: 100 }
+    };
+
+    const sgihlpNodes = {
+      size: document.getElementById("sgihlpSizeFilter"),
+      packageCode: document.getElementById("sgihlpPackageFilter"),
+      inductanceInput: document.getElementById("sgihlpInductanceInput"),
+      inductanceHint: document.getElementById("sgihlpInductanceHint"),
+      tolerance: document.getElementById("sgihlpToleranceFilter"),
+      screening: document.getElementById("sgihlpScreeningFilter"),
+      clearBtn: document.getElementById("sgihlpClearBtn"),
+      pnText: document.getElementById("sgihlpPnBarText"),
+      statusText: document.getElementById("sgihlpStatusText"),
+      resultCount: document.getElementById("sgihlpResultCount"),
+      results: document.getElementById("sgihlpResults")
     };
 
     function setS311PrefExpanded(expanded) {
@@ -3060,6 +3167,127 @@
       }
     }
 
+    function normalizeSgihlpInductanceCode(raw) {
+      return String(raw || "")
+        .toUpperCase()
+        .replace(/[^0-9R]/g, "")
+        .slice(0, 3);
+    }
+
+    function parseSgihlpInductanceCode(code) {
+      const normalized = normalizeSgihlpInductanceCode(code);
+      if (/^\dR\d$/.test(normalized)) {
+        return { ok: true, code: normalized, valueUh: Number(normalized.replace("R", ".")) };
+      }
+      if (/^R\d{2}$/.test(normalized)) {
+        return { ok: true, code: normalized, valueUh: Number("0." + normalized.slice(1)) };
+      }
+      if (/^\d{3}$/.test(normalized)) {
+        const sig = Number(normalized.slice(0, 2));
+        const exp = Number(normalized.slice(2, 3));
+        return { ok: true, code: normalized, valueUh: sig * Math.pow(10, exp - 1) };
+      }
+      return { ok: false, code: normalized, valueUh: null };
+    }
+
+    function formatUh(valueUh) {
+      if (typeof valueUh !== "number" || !isFinite(valueUh)) return "?";
+      return String(Math.round(valueUh * 1000) / 1000);
+    }
+
+    function buildSgihlpPn() {
+      const parsed = parseSgihlpInductanceCode(sgihlpState.inductanceCode);
+      const inductanceSegment = parsed.ok ? parsed.code : "???";
+      const pn = "SGIHLP" +
+        (sgihlpState.size || "????") +
+        (sgihlpState.packageCode || "?") +
+        inductanceSegment +
+        (sgihlpState.tolerance || "?") +
+        "8" +
+        (sgihlpState.screening || "??");
+      return { pn, parsed };
+    }
+
+    function renderSGIHLP() {
+      renderT502FilterGroup(sgihlpNodes.size, sgihlpOptions.size, sgihlpState.size, (k) => {
+        sgihlpState.size = k;
+        renderSGIHLP();
+      });
+      renderT502FilterGroup(sgihlpNodes.packageCode, sgihlpOptions.packageCode, sgihlpState.packageCode, (k) => {
+        sgihlpState.packageCode = k;
+        renderSGIHLP();
+      });
+      renderT502FilterGroup(sgihlpNodes.tolerance, sgihlpOptions.tolerance, sgihlpState.tolerance, (k) => {
+        sgihlpState.tolerance = k;
+        renderSGIHLP();
+      });
+      renderT502FilterGroup(sgihlpNodes.screening, sgihlpOptions.screening, sgihlpState.screening, (k) => {
+        sgihlpState.screening = k;
+        renderSGIHLP();
+      });
+
+      const built = buildSgihlpPn();
+      sgihlpNodes.pnText.textContent = built.pn;
+      sgihlpNodes.inductanceInput.value = normalizeSgihlpInductanceCode(sgihlpState.inductanceCode);
+      sgihlpNodes.results.innerHTML = "";
+
+      if (!built.parsed.ok) {
+        sgihlpNodes.inductanceHint.textContent = "Invalid inductance code. Use 3-char code like R22, 4R7, or 100.";
+        sgihlpNodes.inductanceHint.classList.remove("ok");
+        sgihlpNodes.inductanceHint.classList.add("bad");
+        sgihlpNodes.statusText.textContent = "Invalid inductance code";
+        sgihlpNodes.resultCount.textContent = "0 results";
+        return;
+      }
+
+      if (!sgihlpState.size || !sgihlpState.packageCode || !sgihlpState.tolerance || !sgihlpState.screening) {
+        sgihlpNodes.inductanceHint.textContent = "Select size, package, tolerance, and screening to form a full PN.";
+        sgihlpNodes.inductanceHint.classList.remove("ok");
+        sgihlpNodes.inductanceHint.classList.add("bad");
+        sgihlpNodes.statusText.textContent = "Missing required code selections";
+        sgihlpNodes.resultCount.textContent = "0 results";
+        return;
+      }
+
+      const range = sgihlpSizeRangesUh[sgihlpState.size];
+      const inRange = !range || (built.parsed.valueUh >= range.min && built.parsed.valueUh <= range.max);
+      if (range) {
+        sgihlpNodes.inductanceHint.textContent = "Parsed " + formatUh(built.parsed.valueUh) + " uH. Typical " + sgihlpState.size + " range: " + range.min + " to " + range.max + " uH.";
+      } else {
+        sgihlpNodes.inductanceHint.textContent = "Parsed " + formatUh(built.parsed.valueUh) + " uH.";
+      }
+      sgihlpNodes.inductanceHint.classList.toggle("ok", inRange);
+      sgihlpNodes.inductanceHint.classList.toggle("bad", !inRange);
+
+      if (!inRange) {
+        sgihlpNodes.statusText.textContent = "Inductance outside typical range for selected size";
+        sgihlpNodes.resultCount.textContent = "0 results";
+        return;
+      }
+
+      const sizeLabel = (optionByKey(sgihlpOptions.size, sgihlpState.size) || { label: sgihlpState.size }).label;
+      const packageLabel = (optionByKey(sgihlpOptions.packageCode, sgihlpState.packageCode) || { label: sgihlpState.packageCode }).label;
+      const tolLabel = (optionByKey(sgihlpOptions.tolerance, sgihlpState.tolerance) || { label: sgihlpState.tolerance }).label;
+      const screeningLabel = (optionByKey(sgihlpOptions.screening, sgihlpState.screening) || { label: sgihlpState.screening }).label;
+
+      sgihlpNodes.statusText.textContent = "SGIHLP code-builder mode";
+      sgihlpNodes.resultCount.textContent = "1 result";
+
+      const card = document.createElement("article");
+      card.className = "result-card";
+      card.innerHTML =
+        "<div class=\"pn\">" + built.pn + "</div>" +
+        "<div class=\"meta\">" +
+        "<span>Size: " + sizeLabel + "</span>" +
+        "<span>Inductance: " + formatUh(built.parsed.valueUh) + " uH (" + built.parsed.code + ")</span>" +
+        "<span>Package: " + packageLabel + "</span>" +
+        "<span>Tolerance: " + tolLabel + "</span>" +
+        "<span>Family: 8</span>" +
+        "<span>Screening: " + screeningLabel + "</span>" +
+        "</div>";
+      sgihlpNodes.results.appendChild(card);
+    }
+
     function normalizeT54xCapCode(raw) {
       const cleaned = String(raw || "").trim().replace(/[^0-9]/g, "").slice(0, 3);
       return cleaned;
@@ -3678,6 +3906,71 @@
       return { ok: errors.length === 0, family: "s311", normalizedPn: normalized, fields, errors };
     }
 
+    function decodeSgihlpPn(inputPn) {
+      const normalized = normalizePnInput(inputPn);
+      const errors = [];
+      const fields = [];
+
+      if (!normalized.startsWith("SGIHLP")) {
+        errors.push("PN must start with SGIHLP.");
+      }
+
+      const tail = normalized.slice(6);
+      const screeningKeys = sgihlpOptions.screening.map((x) => x.key).sort((a, b) => b.length - a.length);
+      const screening = screeningKeys.find((k) => tail.endsWith(k)) || "";
+      const core = screening ? tail.slice(0, -screening.length) : tail;
+
+      if (!screening) {
+        errors.push("Unknown screening suffix.");
+      }
+      if (core.length !== 10) {
+        errors.push("Expected SGIHLP core length of 10 before screening suffix.");
+      }
+      if (core.length < 10) {
+        return { ok: false, family: "sgihlp", normalizedPn: normalized, fields, errors };
+      }
+
+      const size = core.slice(0, 4);
+      const packageCode = core.slice(4, 5);
+      const inductanceCode = core.slice(5, 8);
+      const tolerance = core.slice(8, 9);
+      const family = core.slice(9, 10);
+
+      const sizeOpt = optionByKey(sgihlpOptions.size, size);
+      const packageOpt = optionByKey(sgihlpOptions.packageCode, packageCode);
+      const toleranceOpt = optionByKey(sgihlpOptions.tolerance, tolerance);
+      const screeningOpt = optionByKey(sgihlpOptions.screening, screening);
+      const inductance = parseSgihlpInductanceCode(inductanceCode);
+
+      if (!sizeOpt) errors.push("Unknown SGIHLP size code.");
+      if (!packageOpt) errors.push("Unknown SGIHLP package code.");
+      if (!inductance.ok) errors.push("Invalid SGIHLP inductance code.");
+      if (!toleranceOpt) errors.push("Unknown SGIHLP tolerance code.");
+      if (family !== "8") errors.push("SGIHLP family code must be 8.");
+      if (!screeningOpt) errors.push("Unknown SGIHLP screening code.");
+
+      const range = sgihlpSizeRangesUh[size];
+      let inRange = true;
+      if (inductance.ok && range) {
+        inRange = inductance.valueUh >= range.min && inductance.valueUh <= range.max;
+        if (!inRange) {
+          errors.push("Inductance is outside typical range for selected size.");
+        }
+      }
+
+      fields.push(
+        makeDecodeField("series", "Series", "SGIHLP", "SGIHLP", true),
+        makeDecodeField("size", "Size", size, sizeOpt ? sizeOpt.label : "Unknown size", !!sizeOpt),
+        makeDecodeField("package", "Package", packageCode, packageOpt ? packageOpt.label : "Unknown package", !!packageOpt),
+        makeDecodeField("inductance", "Inductance", inductanceCode, inductance.ok ? (formatUh(inductance.valueUh) + " uH") : "Invalid inductance code", inductance.ok && inRange),
+        makeDecodeField("tolerance", "Tolerance", tolerance, toleranceOpt ? toleranceOpt.label : "Unknown tolerance", !!toleranceOpt),
+        makeDecodeField("family", "Family", family, family === "8" ? "8" : "Unknown family code", family === "8"),
+        makeDecodeField("screening", "Screening", screening || "(none)", screeningOpt ? screeningOpt.label : "Unknown screening", !!screeningOpt)
+      );
+
+      return { ok: errors.length === 0, family: "sgihlp", normalizedPn: normalized, fields, errors };
+    }
+
     // DECODER REGISTRY EXTENSION POINT:
     // Add a new entry when a family should participate in:
     // - PN Decipher auto-detect/decode
@@ -3706,6 +3999,11 @@
         label: "S-311-P-829",
         normalize: normalizePnInput,
         decode: decodeS311Pn
+      },
+      sgihlp: {
+        label: "SGIHLP",
+        normalize: normalizePnInput,
+        decode: decodeSgihlpPn
       }
     };
 
@@ -4332,7 +4630,9 @@
     function setSplashFamilyChoices(componentType) {
       // Step 2 -> Step 3 browser funnel:
       // menu buttons are filtered by each button's data-family-component value.
-      const type = componentType === "resistor" || componentType === "capacitor" ? componentType : "";
+      const type = componentType === "resistor" || componentType === "capacitor" || componentType === "inductor"
+        ? componentType
+        : "";
       let visibleCount = 0;
       for (const b of nodes.splashFamilyChoices) {
         const familyType = b.dataset.familyComponent || "";
@@ -4351,7 +4651,7 @@
         nodes.splashFamilyHint.textContent = "No families are configured yet for " + type + ".";
         return;
       }
-      const typeLabel = type === "resistor" ? "resistor" : "capacitor";
+      const typeLabel = type === "resistor" ? "resistor" : (type === "capacitor" ? "capacitor" : "inductor");
       nodes.splashFamilyHint.textContent = "Choose a " + typeLabel + " family.";
     }
 
@@ -4635,6 +4935,20 @@
       s311Nodes.capInput.value = s311State.capCode;
       renderS311();
     });
+    sgihlpNodes.inductanceInput.addEventListener("input", () => {
+      sgihlpState.inductanceCode = normalizeSgihlpInductanceCode(sgihlpNodes.inductanceInput.value);
+      sgihlpNodes.inductanceInput.value = sgihlpState.inductanceCode;
+      renderSGIHLP();
+    });
+    sgihlpNodes.clearBtn.addEventListener("click", () => {
+      sgihlpState.size = null;
+      sgihlpState.packageCode = null;
+      sgihlpState.inductanceCode = "";
+      sgihlpState.tolerance = null;
+      sgihlpState.screening = null;
+      sgihlpNodes.inductanceInput.value = sgihlpState.inductanceCode;
+      renderSGIHLP();
+    });
 
     // NEW FAMILY BOOTSTRAP HOOKS:
     // 1) Add render<Family>() call here so view data is ready before first navigation.
@@ -4648,6 +4962,7 @@
     setS311PrefDielectric("X");
     renderS311();
     setS311PrefExpanded(false);
+    renderSGIHLP();
     resetPnDecipherView();
     clearBomDecipher();
     setComponentView("m55342");
