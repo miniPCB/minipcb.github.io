@@ -139,6 +139,14 @@
       padding: 0 9px;
       font-size: 0.75rem;
       white-space: nowrap;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .pn-clear-btn.dirty {
+      border-color: rgba(110, 224, 150, 0.95);
+      background: linear-gradient(120deg, rgba(84, 196, 125, 0.42), rgba(64, 158, 101, 0.36));
+      color: #effff4;
+      box-shadow: inset 0 0 0 1px rgba(123, 230, 168, 0.36);
     }
 
     .main {
@@ -1070,7 +1078,7 @@
       <section id="splashRequestPanel" class="request-panel" style="margin-top:12px;">
         <div class="request-head">
           <h2 class="request-title">Part Request Form</h2>
-          <span id="requestStatus" class="request-status">Submit sends directly to MiniPCB through the API endpoint.</span>
+          <span id="requestStatus" class="request-status">Submit sends directly to the librarian.</span>
         </div>
         <form id="partRequestForm">
           <div class="request-grid">
@@ -1633,7 +1641,7 @@
       }
     };
 
-    const filters = {
+    const DEFAULT_M55342_FILTERS = {
       model: "M55342",
       tcr: "K",
       size: "06",
@@ -1643,6 +1651,8 @@
       packaging: "WS",
       thinFilm: null
     };
+    const DEFAULT_M55342_RES_INPUT = "49.9";
+    const filters = { ...DEFAULT_M55342_FILTERS };
 
     const nodes = {
       workspace: document.getElementById("workspace"),
@@ -1763,14 +1773,14 @@
 
     // Initial T502 workspace state and code dictionaries.
     // This is intentionally a first-pass model for iterative refinement.
-    const t502State = {
+    const DEFAULT_T502_FILTERS = {
       caseSize: "D",
       capacitanceUf: "22",
       voltage: "16",
       code1: "K",
-      code2: "61",
-      availExpanded: false
+      code2: "61"
     };
+    const t502State = { ...DEFAULT_T502_FILTERS, availExpanded: false };
 
     const t502Options = {
       // T502 case mapping (from provided table rows).
@@ -1835,7 +1845,7 @@
 
     // T540/T541 state tracks each MIL/COTS position in the assembled PN.
     // We keep this explicit for easy human review against the datasheet table.
-    const t54xState = {
+    const DEFAULT_T54X_FILTERS = {
       series: "540",
       caseSize: "D",
       capCode: "106",
@@ -1845,9 +1855,9 @@
       termination: "H",
       surge: "65",
       esr: "10",
-      packaging: "",
-      availExpanded: false
+      packaging: ""
     };
+    const t54xState = { ...DEFAULT_T54X_FILTERS, availExpanded: false };
 
     const t54xOptions = {
       series: [
@@ -1916,8 +1926,7 @@
       availWrap: document.getElementById("t54xAvailWrap")
     };
 
-    const s311State = {
-      gsfc: "G311P829",
+    const DEFAULT_S311_FILTERS = {
       ultrasonic: "A",
       size: "A",
       dielectric: "N",
@@ -1925,7 +1934,11 @@
       tolerance: "F",
       voltage: "1",
       termination: "P",
-      packaging: "1",
+      packaging: "1"
+    };
+    const s311State = {
+      gsfc: "G311P829",
+      ...DEFAULT_S311_FILTERS,
       prefExpanded: false,
       prefTableDielectric: "X"
     };
@@ -2118,13 +2131,14 @@
       results: document.getElementById("s311Results")
     };
 
-    const sgihlpState = {
+    const DEFAULT_SGIHLP_FILTERS = {
       size: "60HE",
       packageCode: "B",
       inductanceCode: "4R7",
       tolerance: "M",
       screening: "1S"
     };
+    const sgihlpState = { ...DEFAULT_SGIHLP_FILTERS };
 
     const sgihlpOptions = {
       size: [
@@ -2448,7 +2462,7 @@
       if (parsed) {
         nodes.resInput.classList.add("valid");
       } else {
-        const fallback = "49.9";
+        const fallback = DEFAULT_M55342_RES_INPUT;
         nodes.resInput.value = fallback;
         parsed = parseMantissa(fallback);
         nodes.resInput.classList.add("valid");
@@ -2700,6 +2714,42 @@
         });
         host.appendChild(pill);
       }
+    }
+
+    function hasFilterDifferences(stateObj, defaultObj) {
+      for (const key of Object.keys(defaultObj)) {
+        if (stateObj[key] !== defaultObj[key]) return true;
+      }
+      return false;
+    }
+
+    function setClearButtonDirty(node, isDirty) {
+      if (!node) return;
+      node.classList.toggle("dirty", !!isDirty);
+    }
+
+    function updateM55342ClearButtonState(currentMantissa) {
+      const mantissa = currentMantissa || parseMantissa(nodes.resInput.value);
+      const resistanceRaw = mantissa ? mantissa.raw : String(nodes.resInput.value || "").trim();
+      const filtersChanged = hasFilterDifferences(filters, DEFAULT_M55342_FILTERS);
+      const resistanceChanged = resistanceRaw !== DEFAULT_M55342_RES_INPUT;
+      setClearButtonDirty(nodes.clearBtn, filtersChanged || resistanceChanged);
+    }
+
+    function updateT502ClearButtonState() {
+      setClearButtonDirty(t502Nodes.clearBtn, hasFilterDifferences(t502State, DEFAULT_T502_FILTERS));
+    }
+
+    function updateT54xClearButtonState() {
+      setClearButtonDirty(t54xNodes.clearBtn, hasFilterDifferences(t54xState, DEFAULT_T54X_FILTERS));
+    }
+
+    function updateS311ClearButtonState() {
+      setClearButtonDirty(s311Nodes.clearBtn, hasFilterDifferences(s311State, DEFAULT_S311_FILTERS));
+    }
+
+    function updateSGIHLPButtonState() {
+      setClearButtonDirty(sgihlpNodes.clearBtn, hasFilterDifferences(sgihlpState, DEFAULT_SGIHLP_FILTERS));
     }
 
     function updatePnBar() {
@@ -3104,6 +3154,7 @@
     }
 
     function renderS311() {
+      updateS311ClearButtonState();
       const cap = parseS311CapCode(s311State.capCode);
       const tableEntry = getS311TableEntry(s311State.size, s311State.voltage, s311State.dielectric);
       s311Nodes.capInput.classList.remove("valid", "invalid");
@@ -3267,6 +3318,7 @@
     }
 
     function renderSGIHLP() {
+      updateSGIHLPButtonState();
       renderT502FilterGroup(sgihlpNodes.size, sgihlpOptions.size, sgihlpState.size, (k) => {
         sgihlpState.size = k;
         renderSGIHLP();
@@ -3425,6 +3477,7 @@
 
     function renderT54x() {
       renderT54xAvailableTable();
+      updateT54xClearButtonState();
       renderT54xFilterGroup(t54xNodes.series, t54xOptions.series, t54xState.series, (k) => t54xCountWith("series", k), (k) => {
         t54xState.series = (t54xState.series === k) ? null : k;
         renderT54x();
@@ -3591,6 +3644,7 @@
 
     function renderT502() {
       renderT502AvailableTable();
+      updateT502ClearButtonState();
       const codesValid = validateT502Codes();
       renderT502FilterGroup(t502Nodes.caseSize, t502Options.caseSize, t502State.caseSize, (k) => { t502State.caseSize = k; renderT502(); });
       renderT502FilterGroup(t502Nodes.capFilter, t502CapOptions, String(t502State.capacitanceUf), (k) => { t502State.capacitanceUf = k; renderT502(); });
@@ -4683,7 +4737,7 @@
       nodes.requestFlow.classList.toggle("hidden", !isOpen);
       if (isOpen) {
         nodes.partRequestForm.reset();
-        nodes.requestStatus.textContent = "Submit sends directly to MiniPCB through the API endpoint.";
+        nodes.requestStatus.textContent = "Submit sends directly to the librarian.";
       }
     }
 
@@ -4776,6 +4830,7 @@
 
     function renderAll() {
       const mantissa = updateInputFormatting();
+      updateM55342ClearButtonState(mantissa);
       renderResistancePills(mantissa);
       const mil = milValueCheck(mantissa, filters.letter);
       nodes.milHint.textContent = mil.message;
@@ -5045,7 +5100,7 @@
     setComponentView("m55342");
     showSplashStep(1);
     setSplashRequestOpen(false);
-    nodes.requestStatus.textContent = "Submit sends directly to MiniPCB through the API endpoint.";
+    nodes.requestStatus.textContent = "Submit sends directly to the librarian.";
   </script>
 </body>
 </html>
