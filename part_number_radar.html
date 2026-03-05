@@ -195,6 +195,13 @@
       gap: 8px;
     }
 
+    #s311CapFilter {
+      max-height: 240px;
+      overflow-y: auto;
+      align-content: flex-start;
+      padding-right: 4px;
+    }
+
     .filter-pill {
       border: 1px solid var(--border);
       border-radius: 999px;
@@ -1466,7 +1473,7 @@
             <div class="group"><p class="group-title">Size Code</p><div id="s311SizeFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Dielectric Type</p><div id="s311DielectricFilter" class="pill-cloud"></div></div>
             <div class="group">
-              <p class="group-title">Capacitance Code (pF)</p>
+              <p class="group-title">Capacitance Code</p>
               <input id="s311CapInput" class="text-input" type="text" value="100" maxlength="3" />
               <div id="s311CapHint" class="hint">Use a 3-character code: 3 digits for >=10 pF (e.g. 100=10 pF), or R-format for <10 pF (e.g. 1R0, R75, 0R5). Pills provide datasheet-valid quick picks with value labels.</div>
               <div id="s311CapFilter" class="pill-cloud" style="margin-top:8px;"></div>
@@ -3194,7 +3201,6 @@
     };
 
     const s311CapQuickRCodes = ["0R5", "R75", "1R0", "1R5", "2R2", "3R3", "4R7", "6R8", "8R2"];
-    const S311_CAP_PILL_LIMIT = 42;
 
     const DEFAULT_SGIHLP_FILTERS = {
       size: "60HE",
@@ -5216,6 +5222,69 @@
       return String(n) + " pF";
     }
 
+    function countS311RowsForCap(localState, capCode) {
+      const cap = parseS311CapCode(capCode);
+      if (!cap.ok) return 0;
+
+      const ultras = localState.ultrasonic === null
+        ? s311Options.ultrasonic
+        : s311Options.ultrasonic.filter((x) => x.key === localState.ultrasonic);
+      const sizes = localState.size === null
+        ? s311Options.size
+        : s311Options.size.filter((x) => x.key === localState.size);
+      const dielectrics = localState.dielectric === null
+        ? s311Options.dielectric
+        : s311Options.dielectric.filter((x) => x.key === localState.dielectric);
+      const tolerances = localState.tolerance === null
+        ? s311Options.tolerance
+        : s311Options.tolerance.filter((x) => x.key === localState.tolerance);
+      const voltages = localState.voltage === null
+        ? s311Options.voltage
+        : s311Options.voltage.filter((x) => x.key === localState.voltage);
+      const terms = localState.termination === null
+        ? s311Options.termination
+        : s311Options.termination.filter((x) => x.key === localState.termination);
+      const packs = localState.packaging === null
+        ? s311Options.packaging
+        : s311Options.packaging.filter((x) => x.key === localState.packaging);
+
+      if (!ultras.length || !sizes.length || !dielectrics.length || !tolerances.length || !voltages.length || !terms.length || !packs.length) return 0;
+
+      const under10 = cap.pf < 10;
+      const tolSet = new Set(tolerances.map((x) => x.key));
+      const multiplier = ultras.length * terms.length * packs.length;
+      let count = 0;
+
+      for (const sizeOpt of sizes) {
+        for (const dielOpt of dielectrics) {
+          for (const voltOpt of voltages) {
+            const tableEntry = getS311TableEntry(sizeOpt.key, voltOpt.key, dielOpt.key);
+            if (!tableEntry || cap.pf > tableEntry.maxPf) continue;
+
+            let allowedTol;
+            if (under10) {
+              if (dielOpt.key !== "N") continue;
+              allowedTol = ["A", "B", "C", "D"];
+            } else if (dielOpt.key === "N") {
+              allowedTol = ["F", "G", "J", "K", "L"];
+            } else if (dielOpt.key === "X") {
+              allowedTol = ["K", "L"];
+            } else {
+              continue;
+            }
+
+            let tolMatches = 0;
+            for (const tolKey of allowedTol) {
+              if (tolSet.has(tolKey)) tolMatches += 1;
+            }
+            if (!tolMatches) continue;
+            count += tolMatches * multiplier;
+          }
+        }
+      }
+      return count;
+    }
+
     function getS311CapPillOptions(localState, selectedCodeRaw) {
       const selectedCode = String(selectedCodeRaw || "").trim().toUpperCase();
       const selectedParsed = parseS311CapCode(selectedCode);
@@ -5256,28 +5325,24 @@
         .sort((a, b) => a.pf - b.pf);
 
       const options = [];
-      const selectedCodeKey = selectedParsed.ok ? selectedParsed.code : null;
       for (const candidate of candidates) {
         const keepAsQuickR = quickRCodeSet.has(candidate.code);
         const keepSelected = selectedParsed.ok && candidate.code === selectedParsed.code;
         if (under10OnlyTolerance && !keepAsQuickR && !keepSelected) continue;
-        const count = generateS311Rows({ ...localState, capCode: candidate.code }).length;
+        const count = countS311RowsForCap(localState, candidate.code);
         if (!count && !keepAsQuickR && !keepSelected) continue;
         options.push({
           key: candidate.code,
           label: candidate.code + " (" + formatPfForPrefTable(candidate.pf) + ")",
           count
         });
-        if (options.length >= S311_CAP_PILL_LIMIT) {
-          if (!selectedCodeKey || options.some((x) => x.key === selectedCodeKey)) break;
-        }
       }
 
       if (!options.length && selectedParsed.ok) {
         options.push({
           key: selectedParsed.code,
           label: selectedParsed.code + " (" + formatPfForPrefTable(selectedParsed.pf) + ")",
-          count: generateS311Rows({ ...localState, capCode: selectedParsed.code }).length
+          count: countS311RowsForCap(localState, selectedParsed.code)
         });
       }
 
@@ -5285,12 +5350,9 @@
         const selectedOption = {
           key: selectedParsed.code,
           label: selectedParsed.code + " (" + formatPfForPrefTable(selectedParsed.pf) + ")",
-          count: generateS311Rows({ ...localState, capCode: selectedParsed.code }).length
+          count: countS311RowsForCap(localState, selectedParsed.code)
         };
         options.unshift(selectedOption);
-        if (options.length > S311_CAP_PILL_LIMIT) {
-          options.pop();
-        }
       }
       return options;
     }
