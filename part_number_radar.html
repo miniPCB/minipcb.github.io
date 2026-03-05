@@ -1467,8 +1467,8 @@
             <div class="group"><p class="group-title">Dielectric Type</p><div id="s311DielectricFilter" class="pill-cloud"></div></div>
             <div class="group">
               <p class="group-title">Capacitance Code (pF)</p>
-              <input id="s311CapInput" class="text-input" type="text" value="100" />
-              <div id="s311CapHint" class="hint">Use 3 digits for >=10 pF (e.g. 100=10 pF), or R-format for <10 pF (e.g. 1R0, R75, 0R5). Pills provide quick picks with value labels.</div>
+              <input id="s311CapInput" class="text-input" type="text" value="100" maxlength="3" />
+              <div id="s311CapHint" class="hint">Use a 3-character code: 3 digits for >=10 pF (e.g. 100=10 pF), or R-format for <10 pF (e.g. 1R0, R75, 0R5). Pills provide datasheet-valid quick picks with value labels.</div>
               <div id="s311CapFilter" class="pill-cloud" style="margin-top:8px;"></div>
             </div>
             <div class="group"><p class="group-title">Tolerance</p><div id="s311TolFilter" class="pill-cloud"></div></div>
@@ -3193,7 +3193,7 @@
       results: document.getElementById("s311Results")
     };
 
-    const s311CapQuickRCodes = ["0R5", "0R75", "1R0", "1R5", "2R2", "3R3", "4R7", "6R8", "8R2"];
+    const s311CapQuickRCodes = ["0R5", "R75", "1R0", "1R5", "2R2", "3R3", "4R7", "6R8", "8R2"];
     const S311_CAP_PILL_LIMIT = 42;
 
     const DEFAULT_SGIHLP_FILTERS = {
@@ -5087,18 +5087,27 @@
 
     function parseS311CapCode(raw) {
       const code = String(raw || "").trim().toUpperCase();
+      if (!code) {
+        return { ok: false, code: "", message: "Capacitance code is required." };
+      }
+      if (code.length !== 3) {
+        return { ok: false, code, message: "Use a 3-character capacitance code (for example 100, 1R0, R75)." };
+      }
       if (/^\d{3}$/.test(code)) {
         const sig = Number(code.slice(0, 2));
         const zeros = Number(code.slice(2, 3));
+        if (!isFinite(sig) || sig < 10 || sig > 99) {
+          return { ok: false, code, message: "For 3-digit codes, the first two digits must be 10 to 99." };
+        }
         const pf = sig * Math.pow(10, zeros);
         return { ok: true, mode: "num", code, pf };
       }
-      if (/^(?:\d?R\d{1,2}|R\d{1,2})$/.test(code)) {
-        const pf = Number(code.replace("R", "."));
+      if (/^(?:\dR\d|R\d{2})$/.test(code)) {
+        const pf = Number(code.startsWith("R") ? ("0." + code.slice(1)) : code.replace("R", "."));
         if (!isFinite(pf) || pf <= 0 || pf >= 10) return { ok: false, code, message: "R-format is only for values <10 pF." };
         return { ok: true, mode: "r", code, pf };
       }
-      return { ok: false, code, message: "Use 3 digits (>=10 pF) or R-format (<10 pF)." };
+      return { ok: false, code, message: "Use 3 digits (>=10 pF) or 3-character R-format (<10 pF)." };
     }
 
     function isValidS311Row(row) {
@@ -5213,9 +5222,12 @@
       const candidatesByCode = new Map();
       const quickRCodeSet = new Set();
       const dielectricKeys = localState.dielectric ? [localState.dielectric] : ["N", "X"];
+      const allowUnder10ByTolerance = localState.tolerance === null || ["A", "B", "C", "D"].includes(localState.tolerance);
+      const allowUnder10ByDielectric = localState.dielectric === null || localState.dielectric === "N";
+      const under10OnlyTolerance = ["A", "B", "C", "D"].includes(localState.tolerance || "");
 
       for (const dielectricKey of dielectricKeys) {
-        const recommendedRows = getS311RecommendedRowsForDielectric(dielectricKey);
+        const recommendedRows = getS311DatasheetCapRowsForDielectric(dielectricKey);
         for (const row of recommendedRows) {
           const parsed = parseS311CapCode(row.code);
           if (!parsed.ok) continue;
@@ -5225,7 +5237,7 @@
         }
       }
 
-      if (localState.dielectric !== "X") {
+      if (allowUnder10ByTolerance && allowUnder10ByDielectric) {
         for (const code of s311CapQuickRCodes) {
           const parsed = parseS311CapCode(code);
           if (!parsed.ok) continue;
@@ -5244,16 +5256,21 @@
         .sort((a, b) => a.pf - b.pf);
 
       const options = [];
+      const selectedCodeKey = selectedParsed.ok ? selectedParsed.code : null;
       for (const candidate of candidates) {
-        const count = generateS311Rows({ ...localState, capCode: candidate.code }).length;
         const keepAsQuickR = quickRCodeSet.has(candidate.code);
         const keepSelected = selectedParsed.ok && candidate.code === selectedParsed.code;
+        if (under10OnlyTolerance && !keepAsQuickR && !keepSelected) continue;
+        const count = generateS311Rows({ ...localState, capCode: candidate.code }).length;
         if (!count && !keepAsQuickR && !keepSelected) continue;
         options.push({
           key: candidate.code,
           label: candidate.code + " (" + formatPfForPrefTable(candidate.pf) + ")",
           count
         });
+        if (options.length >= S311_CAP_PILL_LIMIT) {
+          if (!selectedCodeKey || options.some((x) => x.key === selectedCodeKey)) break;
+        }
       }
 
       if (!options.length && selectedParsed.ok) {
@@ -5265,22 +5282,46 @@
       }
 
       if (selectedParsed.ok && !options.some((x) => x.key === selectedParsed.code)) {
-        options.unshift({
+        const selectedOption = {
           key: selectedParsed.code,
           label: selectedParsed.code + " (" + formatPfForPrefTable(selectedParsed.pf) + ")",
           count: generateS311Rows({ ...localState, capCode: selectedParsed.code }).length
-        });
-      }
-
-      if (options.length > S311_CAP_PILL_LIMIT) {
-        const keepSelected = selectedParsed.ok ? options.find((x) => x.key === selectedParsed.code) : null;
-        let limited = options.slice(0, S311_CAP_PILL_LIMIT);
-        if (keepSelected && !limited.some((x) => x.key === keepSelected.key)) {
-          limited = [keepSelected].concat(limited.slice(0, Math.max(0, S311_CAP_PILL_LIMIT - 1)));
+        };
+        options.unshift(selectedOption);
+        if (options.length > S311_CAP_PILL_LIMIT) {
+          options.pop();
         }
-        return limited;
       }
       return options;
+    }
+
+    function getS311DatasheetCapRowsForDielectric(dielectricKey) {
+      // S-311-P-829 uses a 3-character code field:
+      // two significant digits (10..99) plus multiplier digit.
+      // Generate the datasheet-valid code domain and clip to Table I max values.
+      const tableRows = s311Table1Max.filter((x) => x.dielectric === dielectricKey);
+      if (!tableRows.length) return [];
+      const maxPf = tableRows.reduce((acc, row) => Math.max(acc, row.maxPf), 0);
+      const rows = [];
+      for (let exp = 0; exp <= 6; exp += 1) {
+        const scale = Math.pow(10, exp);
+        if (10 * scale > maxPf) break;
+        for (let sig = 10; sig <= 99; sig += 1) {
+          const pf = sig * scale;
+          if (pf > maxPf) break;
+          let fitsTable = false;
+          for (const row of tableRows) {
+            if (pf <= row.maxPf) {
+              fitsTable = true;
+              break;
+            }
+          }
+          if (!fitsTable) continue;
+          const code = String(sig).padStart(2, "0") + String(exp);
+          rows.push({ code, value: formatPfForPrefTable(pf), preferred: [] });
+        }
+      }
+      return rows;
     }
 
     function getS311RecommendedRowsForDielectric(dielectricKey) {
@@ -6829,6 +6870,23 @@
       if (!voltOpt) errors.push("Unknown voltage code.");
       if (!termOpt) errors.push("Unknown termination code.");
       if (!packOpt) errors.push("Unknown packaging code.");
+      if (sizeOpt && dielOpt && capParsed.ok && tolOpt && voltOpt && termOpt && packOpt && ultraOpt) {
+        const row = {
+          gsfc: "G311P829",
+          ultrasonic: ultra,
+          size,
+          dielectric,
+          capCode,
+          capPf: capParsed.pf,
+          tolerance: tol,
+          voltage: volt,
+          termination: term,
+          packaging: pack
+        };
+        if (!isValidS311Row(row)) {
+          errors.push("Capacitance/size/dielectric/voltage/tolerance combination is not allowed by S-311-P-829 Table I rules.");
+        }
+      }
 
       return { ok: errors.length === 0, family: "s311", normalizedPn: normalized, fields, errors };
     }
@@ -8254,7 +8312,11 @@
       renderM32535();
     });
     s311Nodes.capInput.addEventListener("input", () => {
-      s311State.capCode = String(s311Nodes.capInput.value || "").trim().toUpperCase();
+      s311State.capCode = String(s311Nodes.capInput.value || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^0-9R]/g, "")
+        .slice(0, 3);
       s311Nodes.capInput.value = s311State.capCode;
       renderS311();
     });
