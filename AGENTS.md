@@ -12,8 +12,9 @@ Instructions for Codex or other agents working in this repo.
 - Read relevant files before editing.
 - Use the least invasive change that solves the task.
 - Mention any assumptions.
-- For any code/content change, append a log record to `engineering_log.jsonl` and add a short summary row to `engineering_log.md`.
-- Treat `engineering_log.jsonl` as append-only history; never rewrite old records (add a new correction/supersede record instead).
+- For any code/content change, append a log record to `agents_log.jsonl` and add a short summary row to `agents_log.md`.
+- Every new log record must include per-file edit statements: file name plus 1+ concise statements of what was changed in that file.
+- Treat `agents_log.jsonl` as append-only history; never rewrite old records (add a new correction/supersede record instead).
 
 ## Tools
 - Prefer `rg` for search.
