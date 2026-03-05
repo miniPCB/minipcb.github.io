@@ -1484,14 +1484,14 @@
             <div class="group"><p class="group-title">Packaging / Marking</p><div id="s311PackFilter" class="pill-cloud"></div></div>
             <div id="s311PrefGroup" class="group pref-group">
               <div class="group-title-row">
-                <p class="group-title">S311-P838 Preferred Sizes (X7R, AVX Size Codes)</p>
+                <p class="group-title">S311-P838 Preferred Sizes</p>
                 <div class="pref-controls">
                   <button id="s311PrefX7rBtn" class="pref-diel-btn active" type="button">X7R</button>
                   <button id="s311PrefNpoBtn" class="pref-diel-btn" type="button">NP0</button>
                   <button id="s311PrefToggleBtn" class="pref-toggle-btn" type="button">Expand</button>
                 </div>
               </div>
-              <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table). Non-preferred NASA case sizes are shown unshaded. Click an available cell to apply cap/size/voltage.</div>
+              <div id="s311PrefHint" class="hint">Preferred sizes are shaded (from AVX S311-P838 table). Click a highlighted cell to apply cap/size/voltage.</div>
               <div id="s311PrefTableWrap" style="overflow:auto; margin-top:6px;"></div>
             </div>
           </div>
@@ -5455,9 +5455,13 @@
         html += "<tr><td class=\"code-col\">" + row.code + "</td><td class=\"val-col\">" + row.value + "</td>";
         for (const s of nasaSizeDefs) {
           for (const vc of nasaVoltCodes) {
+            const cellKey = row.code + "|" + s.key + "|" + vc;
             const tableEntry = getS311TableEntry(s.key, vc, dielectricKey);
-            const available = !!(tableEntry && capParsed.ok && capParsed.pf <= tableEntry.maxPf);
-            const preferred = preferredCols.has(row.code + "|" + s.key + "|" + vc);
+            const p838Listed = preferredCols.has(cellKey);
+            const available = dielectricKey === "X"
+              ? p838Listed
+              : !!(tableEntry && capParsed.ok && capParsed.pf <= tableEntry.maxPf);
+            const preferred = dielectricKey === "X" ? p838Listed : preferredCols.has(cellKey);
             const sel = selectedCapCode === row.code && selectedSize === s.key && selectedVoltageCode === vc;
             const classes = "pref-cell" +
               (available ? " available" : " unavailable") +
