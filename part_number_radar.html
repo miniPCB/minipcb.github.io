@@ -1468,7 +1468,8 @@
             <div class="group">
               <p class="group-title">Capacitance Code (pF)</p>
               <input id="s311CapInput" class="text-input" type="text" value="100" />
-              <div id="s311CapHint" class="hint">Use 3 digits for >=10 pF (e.g. 100=10 pF), or R-format for <10 pF (e.g. 1R0, R75, 0R5).</div>
+              <div id="s311CapHint" class="hint">Use 3 digits for >=10 pF (e.g. 100=10 pF), or R-format for <10 pF (e.g. 1R0, R75, 0R5). Pills provide quick picks with value labels.</div>
+              <div id="s311CapFilter" class="pill-cloud" style="margin-top:8px;"></div>
             </div>
             <div class="group"><p class="group-title">Tolerance</p><div id="s311TolFilter" class="pill-cloud"></div></div>
             <div class="group"><p class="group-title">Voltage (Vdc)</p><div id="s311VoltFilter" class="pill-cloud"></div></div>
@@ -3173,6 +3174,7 @@
       dielectric: document.getElementById("s311DielectricFilter"),
       capInput: document.getElementById("s311CapInput"),
       capHint: document.getElementById("s311CapHint"),
+      capFilter: document.getElementById("s311CapFilter"),
       prefGroup: document.getElementById("s311PrefGroup"),
       prefX7rBtn: document.getElementById("s311PrefX7rBtn"),
       prefNpoBtn: document.getElementById("s311PrefNpoBtn"),
@@ -3190,6 +3192,9 @@
       resultCount: document.getElementById("s311ResultCount"),
       results: document.getElementById("s311Results")
     };
+
+    const s311CapQuickRCodes = ["0R5", "0R75", "1R0", "1R5", "2R2", "3R3", "4R7", "6R8", "8R2"];
+    const S311_CAP_PILL_LIMIT = 42;
 
     const DEFAULT_SGIHLP_FILTERS = {
       size: "60HE",
@@ -5202,6 +5207,82 @@
       return String(n) + " pF";
     }
 
+    function getS311CapPillOptions(localState, selectedCodeRaw) {
+      const selectedCode = String(selectedCodeRaw || "").trim().toUpperCase();
+      const selectedParsed = parseS311CapCode(selectedCode);
+      const candidatesByCode = new Map();
+      const quickRCodeSet = new Set();
+      const dielectricKeys = localState.dielectric ? [localState.dielectric] : ["N", "X"];
+
+      for (const dielectricKey of dielectricKeys) {
+        const recommendedRows = getS311RecommendedRowsForDielectric(dielectricKey);
+        for (const row of recommendedRows) {
+          const parsed = parseS311CapCode(row.code);
+          if (!parsed.ok) continue;
+          if (!candidatesByCode.has(parsed.code)) {
+            candidatesByCode.set(parsed.code, parsed);
+          }
+        }
+      }
+
+      if (localState.dielectric !== "X") {
+        for (const code of s311CapQuickRCodes) {
+          const parsed = parseS311CapCode(code);
+          if (!parsed.ok) continue;
+          quickRCodeSet.add(parsed.code);
+          if (!candidatesByCode.has(parsed.code)) {
+            candidatesByCode.set(parsed.code, parsed);
+          }
+        }
+      }
+
+      if (selectedParsed.ok && !candidatesByCode.has(selectedParsed.code)) {
+        candidatesByCode.set(selectedParsed.code, selectedParsed);
+      }
+
+      const candidates = Array.from(candidatesByCode.values())
+        .sort((a, b) => a.pf - b.pf);
+
+      const options = [];
+      for (const candidate of candidates) {
+        const count = generateS311Rows({ ...localState, capCode: candidate.code }).length;
+        const keepAsQuickR = quickRCodeSet.has(candidate.code);
+        const keepSelected = selectedParsed.ok && candidate.code === selectedParsed.code;
+        if (!count && !keepAsQuickR && !keepSelected) continue;
+        options.push({
+          key: candidate.code,
+          label: candidate.code + " (" + formatPfForPrefTable(candidate.pf) + ")",
+          count
+        });
+      }
+
+      if (!options.length && selectedParsed.ok) {
+        options.push({
+          key: selectedParsed.code,
+          label: selectedParsed.code + " (" + formatPfForPrefTable(selectedParsed.pf) + ")",
+          count: generateS311Rows({ ...localState, capCode: selectedParsed.code }).length
+        });
+      }
+
+      if (selectedParsed.ok && !options.some((x) => x.key === selectedParsed.code)) {
+        options.unshift({
+          key: selectedParsed.code,
+          label: selectedParsed.code + " (" + formatPfForPrefTable(selectedParsed.pf) + ")",
+          count: generateS311Rows({ ...localState, capCode: selectedParsed.code }).length
+        });
+      }
+
+      if (options.length > S311_CAP_PILL_LIMIT) {
+        const keepSelected = selectedParsed.ok ? options.find((x) => x.key === selectedParsed.code) : null;
+        let limited = options.slice(0, S311_CAP_PILL_LIMIT);
+        if (keepSelected && !limited.some((x) => x.key === keepSelected.key)) {
+          limited = [keepSelected].concat(limited.slice(0, Math.max(0, S311_CAP_PILL_LIMIT - 1)));
+        }
+        return limited;
+      }
+      return options;
+    }
+
     function getS311RecommendedRowsForDielectric(dielectricKey) {
       if (dielectricKey === "X") return s311P838PrefRows;
 
@@ -5332,6 +5413,14 @@
         s311Nodes.capHint.classList.add("bad");
         s311Nodes.capHint.textContent = cap.message;
       }
+      const selectedCapCode = cap.ok ? cap.code : String(s311State.capCode || "").trim().toUpperCase();
+      const capPillOptions = getS311CapPillOptions(s311State, selectedCapCode);
+      const capPillCountByKey = new Map(capPillOptions.map((x) => [x.key, x.count]));
+      renderS311FilterGroup(s311Nodes.capFilter, capPillOptions, selectedCapCode, (k) => capPillCountByKey.get(k) || 0, (k) => {
+        s311State.capCode = (selectedCapCode === k) ? null : k;
+        s311Nodes.capInput.value = s311State.capCode || "";
+        renderS311();
+      });
       const selectedPrefCode = cap.ok ? s311PfToCode3(cap.pf) : null;
       const selectedPrefVoltageCode = ["6", "1", "2", "3"].includes(s311State.voltage || "") ? s311State.voltage : null;
       renderS311PreferredTable(selectedPrefCode, s311State.size, selectedPrefVoltageCode, s311State.prefTableDielectric);
