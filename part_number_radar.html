@@ -2823,7 +2823,21 @@
     }
 
     function updateDiodeFamilyClearButtonState() {
-      const defaults = diodeFamilyDefaults(diodeFamilyState.seriesKey);
+      const cleared = areFiltersUnselected([
+        diodeFamilyState.seriesKey,
+        diodeFamilyState.deviceCode,
+        diodeFamilyState.quality,
+        diodeFamilyState.tolerance,
+        diodeFamilyState.packageCode,
+        diodeFamilyState.bond,
+        diodeFamilyState.rohs
+      ]);
+      if (cleared) {
+        setClearButtonDirty(nodes.diodeFamilyClearBtn, false);
+        return;
+      }
+      const defaultSeriesKey = diodeFamilyState.seriesKey || "diode_4099_4135_4614_4627";
+      const defaults = diodeFamilyDefaults(defaultSeriesKey);
       const changed = diodeFamilyState.seriesKey !== defaults.seriesKey ||
         diodeFamilyState.deviceCode !== defaults.deviceCode ||
         diodeFamilyState.quality !== defaults.quality ||
@@ -2842,15 +2856,13 @@
     function renderDiodeFamily() {
       const series = getDiodeSeries(diodeFamilyState.seriesKey);
       const hasCurrentDevice = series.deviceOptions.some((opt) => opt.key === diodeFamilyState.deviceCode);
-      if (!hasCurrentDevice) {
-        diodeFamilyState.deviceCode = series.defaults.deviceCode;
+      if (diodeFamilyState.deviceCode && !hasCurrentDevice) {
+        diodeFamilyState.deviceCode = null;
       }
-      const qualityOptions = getDiodeQualityOptions(series, diodeFamilyState.deviceCode);
-      if (!qualityOptions.some((opt) => opt.key === diodeFamilyState.quality)) {
-        const defaultQuality = qualityOptions.some((opt) => opt.key === series.defaults.quality)
-          ? series.defaults.quality
-          : (qualityOptions.length ? qualityOptions[0].key : "");
-        diodeFamilyState.quality = defaultQuality;
+      const qualityOptions = getDiodeQualityOptions(series, diodeFamilyState.deviceCode || series.defaults.deviceCode);
+      const hasQualitySelection = !isFilterUnselected(diodeFamilyState.quality);
+      if (hasQualitySelection && !qualityOptions.some((opt) => opt.key === diodeFamilyState.quality)) {
+        diodeFamilyState.quality = null;
       }
 
       updateDiodeFamilyClearButtonState();
@@ -3204,15 +3216,17 @@
     }
 
     function updateInputFormatting() {
-      let parsed = parseMantissa(nodes.resInput.value);
+      const raw = String(nodes.resInput.value || "").trim();
+      let parsed = parseMantissa(raw);
       nodes.resInput.classList.remove("valid", "invalid");
+      if (!raw) {
+        nodes.resInput.value = "";
+        return null;
+      }
       if (parsed) {
         nodes.resInput.classList.add("valid");
       } else {
-        const fallback = DEFAULT_M55342_RES_INPUT;
-        nodes.resInput.value = fallback;
-        parsed = parseMantissa(fallback);
-        nodes.resInput.classList.add("valid");
+        nodes.resInput.classList.add("invalid");
       }
       return parsed;
     }
@@ -3303,6 +3317,7 @@
       const activeRaw = mantissa ? mantissa.raw : "";
       const seriesInfo = selectedMilSeriesInfo(filters.letter);
       const preferredSet = seriesInfo.set;
+      const selectedText = activeRaw || "(none)";
       nodes.resPillFilter.innerHTML = "";
 
       for (const opt of RESISTANCE_PILL_VALUES) {
@@ -3322,14 +3337,14 @@
       }
 
       if (filters.letter && preferredSet) {
-        nodes.resHint.textContent = "Selected: " + activeRaw + ". Preferred for " + seriesInfo.tol + ": " + seriesInfo.label + ".";
+        nodes.resHint.textContent = "Selected: " + selectedText + ". Preferred for " + seriesInfo.tol + ": " + seriesInfo.label + ".";
       } else {
-        nodes.resHint.textContent = "Selected: " + activeRaw + ". Select a tolerance letter to highlight preferred values.";
+        nodes.resHint.textContent = "Selected: " + selectedText + ". Select a tolerance letter to highlight preferred values.";
       }
     }
 
     function milValueCheck(mantissa, letterKey) {
-      if (!mantissa) return { ok: false, message: "MIL check: invalid resistance input format." };
+      if (!mantissa) return { ok: null, message: "MIL check: select a resistance value and tolerance letter to validate value membership." };
       if (!letterKey) return { ok: null, message: "MIL check: select a tolerance letter to validate value membership." };
       const li = letterInfo(letterKey);
       if (!li) return { ok: false, message: "MIL check: unknown tolerance letter." };
@@ -3470,6 +3485,14 @@
       return false;
     }
 
+    function isFilterUnselected(value) {
+      return value === null || typeof value === "undefined";
+    }
+
+    function areFiltersUnselected(values) {
+      return values.every((value) => isFilterUnselected(value));
+    }
+
     function setClearButtonDirty(node, isDirty) {
       if (!node) return;
       node.classList.toggle("dirty", !!isDirty);
@@ -3478,25 +3501,79 @@
     function updateM55342ClearButtonState(currentMantissa) {
       const mantissa = currentMantissa || parseMantissa(nodes.resInput.value);
       const resistanceRaw = mantissa ? mantissa.raw : String(nodes.resInput.value || "").trim();
+      const filtersCleared = areFiltersUnselected([
+        filters.model,
+        filters.tcr,
+        filters.size,
+        filters.termination,
+        filters.letter,
+        filters.failure,
+        filters.packaging,
+        filters.thinFilm
+      ]);
+      if (filtersCleared && resistanceRaw === "") {
+        setClearButtonDirty(nodes.clearBtn, false);
+        return;
+      }
       const filtersChanged = hasFilterDifferences(filters, DEFAULT_M55342_FILTERS);
       const resistanceChanged = resistanceRaw !== DEFAULT_M55342_RES_INPUT;
       setClearButtonDirty(nodes.clearBtn, filtersChanged || resistanceChanged);
     }
 
     function updateT502ClearButtonState() {
-      setClearButtonDirty(t502Nodes.clearBtn, hasFilterDifferences(t502State, DEFAULT_T502_FILTERS));
+      const cleared = areFiltersUnselected([
+        t502State.caseSize,
+        t502State.capacitanceUf,
+        t502State.voltage,
+        t502State.code1,
+        t502State.code2
+      ]);
+      const changed = hasFilterDifferences(t502State, DEFAULT_T502_FILTERS);
+      setClearButtonDirty(t502Nodes.clearBtn, !cleared && changed);
     }
 
     function updateT54xClearButtonState() {
-      setClearButtonDirty(t54xNodes.clearBtn, hasFilterDifferences(t54xState, DEFAULT_T54X_FILTERS));
+      const cleared = areFiltersUnselected([
+        t54xState.series,
+        t54xState.caseSize,
+        t54xState.capCode,
+        t54xState.tolerance,
+        t54xState.voltage,
+        t54xState.failure,
+        t54xState.termination,
+        t54xState.surge,
+        t54xState.esr,
+        t54xState.packaging
+      ]);
+      const changed = hasFilterDifferences(t54xState, DEFAULT_T54X_FILTERS);
+      setClearButtonDirty(t54xNodes.clearBtn, !cleared && changed);
     }
 
     function updateS311ClearButtonState() {
-      setClearButtonDirty(s311Nodes.clearBtn, hasFilterDifferences(s311State, DEFAULT_S311_FILTERS));
+      const cleared = areFiltersUnselected([
+        s311State.ultrasonic,
+        s311State.size,
+        s311State.dielectric,
+        s311State.capCode,
+        s311State.tolerance,
+        s311State.voltage,
+        s311State.termination,
+        s311State.packaging
+      ]);
+      const changed = hasFilterDifferences(s311State, DEFAULT_S311_FILTERS);
+      setClearButtonDirty(s311Nodes.clearBtn, !cleared && changed);
     }
 
     function updateSGIHLPButtonState() {
-      setClearButtonDirty(sgihlpNodes.clearBtn, hasFilterDifferences(sgihlpState, DEFAULT_SGIHLP_FILTERS));
+      const cleared = areFiltersUnselected([
+        sgihlpState.size,
+        sgihlpState.packageCode,
+        sgihlpState.inductanceCode,
+        sgihlpState.tolerance,
+        sgihlpState.screening
+      ]);
+      const changed = hasFilterDifferences(sgihlpState, DEFAULT_SGIHLP_FILTERS);
+      setClearButtonDirty(sgihlpNodes.clearBtn, !cleared && changed);
     }
 
     function updatePnBar() {
@@ -5824,6 +5901,7 @@
       filters.failure = null;
       filters.packaging = null;
       filters.thinFilm = null;
+      nodes.resInput.value = "";
       renderAll();
     });
 
@@ -6000,7 +6078,7 @@
     t54xNodes.clearBtn.addEventListener("click", () => {
       t54xState.series = null;
       t54xState.caseSize = null;
-      t54xState.capCode = "";
+      t54xState.capCode = null;
       t54xState.tolerance = null;
       t54xState.voltage = null;
       t54xState.failure = null;
@@ -6008,7 +6086,7 @@
       t54xState.surge = null;
       t54xState.esr = null;
       t54xState.packaging = null;
-      t54xNodes.capInput.value = t54xState.capCode;
+      t54xNodes.capInput.value = t54xState.capCode || "";
       renderT54x();
     });
     s311Nodes.capInput.addEventListener("input", () => {
@@ -6031,24 +6109,30 @@
       s311State.ultrasonic = null;
       s311State.size = null;
       s311State.dielectric = null;
-      s311State.capCode = "";
+      s311State.capCode = null;
       s311State.tolerance = null;
       s311State.voltage = null;
       s311State.termination = null;
       s311State.packaging = null;
-      s311Nodes.capInput.value = s311State.capCode;
+      s311Nodes.capInput.value = s311State.capCode || "";
       renderS311();
     });
     sgihlpNodes.clearBtn.addEventListener("click", () => {
       sgihlpState.size = null;
       sgihlpState.packageCode = null;
-      sgihlpState.inductanceCode = "";
+      sgihlpState.inductanceCode = null;
       sgihlpState.tolerance = null;
       sgihlpState.screening = null;
       renderSGIHLP();
     });
     nodes.diodeFamilyClearBtn.addEventListener("click", () => {
-      applyDiodeFamilyDefaults(diodeFamilyState.seriesKey);
+      diodeFamilyState.seriesKey = null;
+      diodeFamilyState.deviceCode = null;
+      diodeFamilyState.quality = null;
+      diodeFamilyState.tolerance = null;
+      diodeFamilyState.packageCode = null;
+      diodeFamilyState.bond = null;
+      diodeFamilyState.rohs = null;
       renderDiodeFamily();
     });
 
