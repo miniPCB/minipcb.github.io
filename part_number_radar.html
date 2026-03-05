@@ -2442,26 +2442,69 @@
 
     const m32535AllowedByCharacteristic = {
       E1: {
-        voltage: ["V", "W", "X", "Y", "Z", "A", "B", "C"],
         tolerance: ["B", "C", "D", "F", "G", "J", "K"],
-        allowRCode: true
+        allowRCode: true,
+        capPfRange: { min: 1, max: 180000 } // KEM C1095 range: 1 pF to 180 nF
       },
       BP: {
-        voltage: ["V", "W", "X", "Y", "Z", "A", "B", "C"],
         tolerance: ["B", "C", "D", "F", "G", "J", "K"],
-        allowRCode: true
+        allowRCode: true,
+        capPfRange: { min: 1, max: 180000 } // KEM C1095 range: 1 pF to 180 nF
       },
       E2: {
-        voltage: ["V", "W", "X", "Y", "Z", "A"],
         tolerance: ["J", "K", "M"],
-        allowRCode: false
+        allowRCode: false,
+        capPfRange: { min: 39, max: 10000000 } // KEM C1096 range: 39 pF to 10 uF
       }
     };
+
+    const m32535VoltagesByCharacteristicSlash = {
+      // KEM C1095 Table 1A/1B/1C waterfall headers
+      E1: {
+        "02": ["V", "W", "X", "Y", "Z", "A", "B"], // 0402: up to 100 V (no C)
+        "03": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "04": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "05": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "06": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "07": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "08": ["V", "W", "X", "Y", "Z", "A", "B", "C"]
+      },
+      BP: {
+        "02": ["V", "W", "X", "Y", "Z", "A", "B"], // 0402: up to 100 V (no C)
+        "03": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "04": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "05": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "06": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "07": ["V", "W", "X", "Y", "Z", "A", "B", "C"],
+        "08": ["V", "W", "X", "Y", "Z", "A", "B", "C"]
+      },
+      // KEM C1096 Table 1A/1B/1C waterfall headers
+      E2: {
+        "02": ["V", "W", "X", "Y", "Z", "A"],
+        "03": ["V", "W", "X", "Y", "Z", "A"],
+        "04": ["V", "W", "X", "Y", "Z", "A", "B"],
+        "05": ["V", "W", "X", "Y", "Z", "A", "B"],
+        "06": ["V", "W", "X", "Y", "Z", "A", "B"],
+        "07": ["V", "W", "X", "Y", "Z", "A", "B"],
+        "08": ["V", "W", "X", "Y", "Z", "A"] // 2220: no 100 V in C1096 table
+      }
+    };
+
+    const m32535TerminationRules = [
+      // KEM C1095 footnotes
+      { slash: "02", blocked: ["D", "R", "V"], message: "Slash 02 does not allow D/R/V terminations." },
+      { slash: "03", blocked: ["D"], message: "Slash 03 does not allow D termination." },
+
+      // KEM C1096 footnotes
+      { characteristic: "E2", slash: "07", blocked: ["D", "G", "Z"], message: "E2 with slash 07 does not allow D/G/Z terminations." },
+      { characteristic: "E2", voltage: "B", blocked: ["D", "G", "Z"], message: "E2 at 100 V (code B) does not allow D/G/Z terminations." },
+      { characteristic: "E2", slash: "08", voltage: "A", blocked: ["D", "G", "Z"], message: "E2 slash 08 at 50 V (code A) does not allow D/G/Z terminations." }
+    ];
 
     const m32535CapPresetByCharacteristic = {
       E1: ["1R0", "2R2", "4R7", "100", "101", "102", "103", "104"],
       BP: ["1R0", "2R2", "4R7", "100", "101", "102", "103", "104"],
-      E2: ["101", "102", "103", "104", "105", "106"]
+      E2: ["390", "471", "102", "103", "104", "105", "106"]
     };
 
     const m32535Nodes = {
@@ -4646,6 +4689,25 @@
       return m32535AllowedByCharacteristic[characteristic] || null;
     }
 
+    function getM32535AllowedVoltages(characteristic, slash) {
+      if (!characteristic) {
+        return m32535Options.voltage.map((x) => x.key);
+      }
+      const bySlash = m32535VoltagesByCharacteristicSlash[characteristic];
+      if (!bySlash) return [];
+
+      if (slash && bySlash[slash]) {
+        return bySlash[slash].slice();
+      }
+
+      // Union across slash sheets when slash is not selected.
+      const set = new Set();
+      for (const slashKey of Object.keys(bySlash)) {
+        for (const voltageKey of bySlash[slashKey]) set.add(voltageKey);
+      }
+      return m32535Options.voltage.map((x) => x.key).filter((k) => set.has(k));
+    }
+
     function formatM32535Pf(pf) {
       if (!(typeof pf === "number") || !isFinite(pf) || pf <= 0) return "?";
       if (pf >= 1e6) return (pf / 1e6).toFixed(3).replace(/\.?0+$/, "") + " uF";
@@ -4666,31 +4728,61 @@
           return { ok: false, code, pf: null, display: "", message: "R-format capacitance codes are only valid for E1/BP in this model." };
         }
         const pf = Number(code.replace("R", "."));
+        const capRange = rule && rule.capPfRange ? rule.capPfRange : null;
+        if (capRange && (pf < capRange.min || pf > capRange.max)) {
+          return {
+            ok: false,
+            code,
+            pf,
+            display: formatM32535Pf(pf),
+            message: "Capacitance is outside the " + characteristic + " family range (" + formatM32535Pf(capRange.min) + " to " + formatM32535Pf(capRange.max) + ")."
+          };
+        }
         return { ok: true, code, pf, display: formatM32535Pf(pf), message: "" };
       }
       if (/^\d{3}$/.test(code)) {
         const sig = Number(code.slice(0, 2));
         const exp = Number(code.slice(2, 3));
+        if (!isFinite(sig) || sig < 10 || sig > 99) {
+          return { ok: false, code, pf: null, display: "", message: "Use a valid 3-digit EIA capacitance code (first two digits 10 to 99)." };
+        }
         const pf = sig * Math.pow(10, exp);
+        const capRange = rule && rule.capPfRange ? rule.capPfRange : null;
+        if (capRange && (pf < capRange.min || pf > capRange.max)) {
+          return {
+            ok: false,
+            code,
+            pf,
+            display: formatM32535Pf(pf),
+            message: "Capacitance is outside the " + characteristic + " family range (" + formatM32535Pf(capRange.min) + " to " + formatM32535Pf(capRange.max) + ")."
+          };
+        }
         return { ok: true, code, pf, display: formatM32535Pf(pf), message: "" };
       }
       return { ok: false, code, pf: null, display: "", message: "Use R-format (for example 2R2) or 3-digit EIA code (for example 103)." };
     }
 
-    function isM32535TerminationAllowed(slash, characteristic, termination) {
-      if (!slash || !termination) return true;
-      if (slash === "02" && (termination === "D" || termination === "R" || termination === "V")) return false;
-      if (slash === "03" && termination === "D") return false;
-      if (characteristic === "E2" && slash === "07" && (termination === "D" || termination === "G" || termination === "Z")) return false;
-      return true;
+    function findM32535TerminationRule(slash, characteristic, voltage, termination) {
+      if (!termination) return null;
+      for (const rule of m32535TerminationRules) {
+        if (rule.slash && !slash) continue;
+        if (rule.characteristic && !characteristic) continue;
+        if (rule.voltage && !voltage) continue;
+        if (rule.slash && rule.slash !== slash) continue;
+        if (rule.characteristic && rule.characteristic !== characteristic) continue;
+        if (rule.voltage && rule.voltage !== voltage) continue;
+        if (rule.blocked.includes(termination)) return rule;
+      }
+      return null;
     }
 
-    function getM32535TerminationRestriction(slash, characteristic, termination) {
-      if (!slash || !termination) return "";
-      if (slash === "02" && (termination === "D" || termination === "R" || termination === "V")) return "Slash 02 does not allow D/R/V terminations.";
-      if (slash === "03" && termination === "D") return "Slash 03 does not allow D termination.";
-      if (characteristic === "E2" && slash === "07" && (termination === "D" || termination === "G" || termination === "Z")) return "E2 with slash 07 does not allow D/G/Z terminations.";
-      return "";
+    function isM32535TerminationAllowed(slash, characteristic, voltage, termination) {
+      return !findM32535TerminationRule(slash, characteristic, voltage, termination);
+    }
+
+    function getM32535TerminationRestriction(slash, characteristic, voltage, termination) {
+      const match = findM32535TerminationRule(slash, characteristic, voltage, termination);
+      return match ? match.message : "";
     }
 
     function renderM32535OptionGroup(host, options, selectedKey, isAllowedFn, onSelect) {
@@ -4749,7 +4841,7 @@
       updateM32535ClearButtonState();
 
       const characteristicRule = getM32535CharacteristicRule(m32535State.characteristic);
-      const allowedVoltages = characteristicRule ? characteristicRule.voltage : [];
+      const allowedVoltages = getM32535AllowedVoltages(m32535State.characteristic, m32535State.slash);
       const allowedTolerances = characteristicRule ? characteristicRule.tolerance : [];
 
       if (m32535State.voltage && allowedVoltages.length && !allowedVoltages.includes(m32535State.voltage)) {
@@ -4758,7 +4850,7 @@
       if (m32535State.tolerance && allowedTolerances.length && !allowedTolerances.includes(m32535State.tolerance)) {
         m32535State.tolerance = null;
       }
-      if (m32535State.termination && !isM32535TerminationAllowed(m32535State.slash, m32535State.characteristic, m32535State.termination)) {
+      if (m32535State.termination && !isM32535TerminationAllowed(m32535State.slash, m32535State.characteristic, m32535State.voltage, m32535State.termination)) {
         m32535State.termination = null;
       }
 
@@ -4774,7 +4866,7 @@
         m32535Nodes.voltage,
         m32535Options.voltage,
         m32535State.voltage,
-        (k) => !characteristicRule || allowedVoltages.includes(k),
+        (k) => allowedVoltages.includes(k),
         (k) => {
           m32535State.voltage = (m32535State.voltage === k) ? null : k;
           renderM32535();
@@ -4794,7 +4886,7 @@
         m32535Nodes.termination,
         m32535Options.termination,
         m32535State.termination,
-        (k) => isM32535TerminationAllowed(m32535State.slash, m32535State.characteristic, k),
+        (k) => isM32535TerminationAllowed(m32535State.slash, m32535State.characteristic, m32535State.voltage, k),
         (k) => {
           m32535State.termination = (m32535State.termination === k) ? null : k;
           renderM32535();
@@ -4842,8 +4934,8 @@
       if (!m32535State.level) missing.push("product level");
       if (!m32535State.electrode) missing.push("electrode");
 
-      const terminationRestriction = getM32535TerminationRestriction(m32535State.slash, m32535State.characteristic, m32535State.termination);
-      if (terminationRestriction) missing.push("valid termination for selected slash/characteristic");
+      const terminationRestriction = getM32535TerminationRestriction(m32535State.slash, m32535State.characteristic, m32535State.voltage, m32535State.termination);
+      if (terminationRestriction) missing.push("valid termination for selected slash/characteristic/voltage");
 
       if (missing.length) {
         m32535Nodes.statusText.textContent = "Incomplete or invalid selection";
@@ -5351,6 +5443,7 @@
       const slashOpt = optionByKey(m32535Options.slash, slash);
       const characteristicOpt = optionByKey(m32535Options.characteristic, characteristic);
       const rule = getM32535CharacteristicRule(characteristic);
+      const allowedVoltages = getM32535AllowedVoltages(characteristic, slash);
       const voltageOpt = optionByKey(m32535Options.voltage, voltage);
       const capParsed = parseM32535CapCode(capCode, characteristic);
       const toleranceOpt = optionByKey(m32535Options.tolerance, tolerance);
@@ -5358,10 +5451,10 @@
       const levelOpt = optionByKey(m32535Options.level, level);
       const electrodeOpt = optionByKey(m32535Options.electrode, electrode);
 
-      const voltageValid = !!(rule && rule.voltage.includes(voltage));
+      const voltageValid = !!allowedVoltages.includes(voltage);
       const toleranceValid = !!(rule && rule.tolerance.includes(tolerance));
-      const terminationValid = !!terminationOpt && isM32535TerminationAllowed(slash, characteristic, termination);
-      const terminationRestriction = getM32535TerminationRestriction(slash, characteristic, termination);
+      const terminationValid = !!terminationOpt && isM32535TerminationAllowed(slash, characteristic, voltage, termination);
+      const terminationRestriction = getM32535TerminationRestriction(slash, characteristic, voltage, termination);
       const electrodeValid = electrode === "B";
 
       fields.push(
@@ -5385,12 +5478,12 @@
       if (!slashOpt) errors.push("Unknown M32535 slash-sheet code.");
       if (!characteristicOpt) errors.push("Unknown M32535 characteristic code.");
       if (!voltageOpt) errors.push("Unknown M32535 voltage code.");
-      if (!voltageValid) errors.push("Voltage code is not allowed for selected characteristic.");
+      if (!voltageValid) errors.push("Voltage code is not allowed for selected characteristic/slash-sheet.");
       if (!capParsed.ok) errors.push("Invalid M32535 capacitance code.");
       if (!toleranceOpt) errors.push("Unknown M32535 tolerance code.");
       if (!toleranceValid) errors.push("Tolerance code is not allowed for selected characteristic.");
       if (!terminationOpt) errors.push("Unknown M32535 termination code.");
-      if (!terminationValid) errors.push(terminationRestriction || "Termination code is not allowed for selected slash/characteristic.");
+      if (!terminationValid) errors.push(terminationRestriction || "Termination code is not allowed for selected slash/characteristic/voltage.");
       if (!levelOpt) errors.push("Unknown M32535 product-level code.");
       if (!electrodeValid) errors.push("Electrode code must be B in this model.");
 
