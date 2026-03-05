@@ -1790,7 +1790,7 @@
             title: "1N4099UR-1 ... 1N4135UR-1 / 1N4614UR-1 ... 1N4627UR-1",
             organization: "Microchip (Microsemi)",
             url: "https://ww1.microchip.com/downloads/aemDocuments/documents/HRDS/ProductDocuments/DataSheets/00006237A.pdf",
-            notes: "Primary source for device-number range and JAN/JANTX/JANTXV/JANS suffix nomenclature."
+            notes: "Primary source for device-number range; each device code maps to a unique VZ nominal value at IZT=250 uA, plus JAN/JANTX/JANTXV/JANS suffix nomenclature."
           })
         ]),
         reliabilityReports: Object.freeze([])
@@ -1804,7 +1804,7 @@
             title: "1N6675-1, 1N6676-1, 1N6677-1",
             organization: "Microchip (Microsemi)",
             url: "https://ww1.microchip.com/downloads/aemDocuments/documents/HRDS/ProductDocuments/DataSheets/1N6675-1-1N6677-1%2BPLUS%2BDSB0.5A20%2B-A40.pdf",
-            notes: "Axial package nomenclature and screening levels."
+            notes: "Axial package nomenclature; series split where device code sets VRWM type (20 V / 30 V / 40 V max)."
           }),
           Object.freeze({
             id: "diode_microchip_1n6675ur_1n6677ur",
@@ -1812,7 +1812,7 @@
             title: "1N6675UR-1, 1N6676UR-1, 1N6677UR-1",
             organization: "Microchip (Microsemi)",
             url: "https://ww1.microchip.com/downloads/aemDocuments/documents/HRDS/ProductDocuments/DataSheets/1N6675UR-1-1N6677UR-1%2BPLUS%2BCDLL0.5A20-CDLL0.5A40.pdf",
-            notes: "UR package nomenclature and screening levels."
+            notes: "UR package naming and screening-level nomenclature for the same 20/30/40 V VRWM device split."
           })
         ]),
         reliabilityReports: Object.freeze([])
@@ -1826,7 +1826,7 @@
             title: "1N6638US, 1N6642US, 1N6643US",
             organization: "Microchip (Microsemi)",
             url: "https://ww1.microchip.com/downloads/aemDocuments/documents/HRDS/ProductDocuments/DataSheets/1N6638US%2C%2B1N6642US%2C%2B1N6643US.pdf",
-            notes: "Primary source for U/US package-suffix nomenclature in this family."
+            notes: "Primary source for U/US package nomenclature and the device-specific VBR minimum / VRWM maximum split across 1N6638, 1N6642, 1N6643."
           })
         ]),
         reliabilityReports: Object.freeze([])
@@ -2518,12 +2518,21 @@
     // 1) datasheet family / part-series range
     // 2) device type number within that family (sets electrical target per datasheet tables)
     // 3) suffix controls (quality/tolerance/package/bond/compliance)
-    const diodeQualityOptions = [
-      { key: "JAN", label: "JAN (baseline military screen level)" },
-      { key: "JANTX", label: "JANTX (TX screening level)" },
-      { key: "JANTXV", label: "JANTXV (TXV enhanced screening level)" },
-      { key: "JANS", label: "JANS (S-level / highest screening tier in this naming set)" }
-    ];
+    const diodeQualityOptionCatalog = Object.freeze({
+      "": { key: "", label: "(none) (commercial/no JAN quality prefix)" },
+      JAN: { key: "JAN", label: "JAN (baseline military screen level)" },
+      JANTX: { key: "JANTX", label: "JANTX (TX screening level)" },
+      JANTXV: { key: "JANTXV", label: "JANTXV (TXV enhanced screening level)" },
+      JANS: { key: "JANS", label: "JANS (S-level / highest screening tier in this naming set)" }
+    });
+
+    const diodeQualityKeysStandard = ["JAN", "JANTX", "JANTXV", "JANS"];
+
+    function makeDiodeQualityOptions(keys) {
+      return keys
+        .map((key) => diodeQualityOptionCatalog[key])
+        .filter(Boolean);
+    }
 
     const diodeRoHSOptions = [
       { key: "", label: "(none) (standard military flow suffix set)" },
@@ -2543,21 +2552,100 @@
       return out;
     }
 
-    function makeDiodeDeviceOptions(codes, detail) {
-      return codes.map((code) => ({ key: code, label: code + " (" + detail + ")" }));
+    function formatDiodeVolts(value) {
+      if (typeof value !== "number" || !isFinite(value)) return "";
+      if (Math.abs(value - Math.round(value)) < 1e-9) return String(Math.round(value));
+      return String(value);
+    }
+
+    // Microchip doc 00006237A, Electrical Characteristics table (IZT = 250 uA).
+    // This map is used so each device pill states the exact parameter that makes it unique.
+    const diodeVzNominalByDevice = Object.freeze({
+      "1N4099": 6.8, "1N4100": 7.5, "1N4101": 8.2, "1N4102": 8.7, "1N4103": 9.1, "1N4104": 10,
+      "1N4105": 11, "1N4106": 12, "1N4107": 13, "1N4108": 14, "1N4109": 15, "1N4110": 16,
+      "1N4111": 17, "1N4112": 18, "1N4113": 19, "1N4114": 20, "1N4115": 22, "1N4116": 24,
+      "1N4117": 25, "1N4118": 27, "1N4119": 28, "1N4120": 30, "1N4121": 33, "1N4122": 36,
+      "1N4123": 39, "1N4124": 43, "1N4125": 47, "1N4126": 51, "1N4127": 56, "1N4128": 60,
+      "1N4129": 62, "1N4130": 68, "1N4131": 75, "1N4132": 82, "1N4133": 87, "1N4134": 91,
+      "1N4135": 100, "1N4614": 1.8, "1N4615": 2.0, "1N4616": 2.2, "1N4617": 2.4, "1N4618": 2.7,
+      "1N4619": 3.0, "1N4620": 3.3, "1N4621": 3.6, "1N4622": 3.9, "1N4623": 4.3, "1N4624": 4.7,
+      "1N4625": 5.1, "1N4626": 5.6, "1N4627": 6.2
+    });
+
+    // Microchip doc 05017, electrical table for 1N6638US/1N6642US/1N6643US.
+    const diode6638ElectricalByDevice = Object.freeze({
+      "1N6638": Object.freeze({ vbrMin: 150, vrwmMax: 125, vfMax: 1.1, vfAt: "200 mA" }),
+      "1N6642": Object.freeze({ vbrMin: 100, vrwmMax: 75, vfMax: 1.2, vfAt: "100 mA" }),
+      "1N6643": Object.freeze({ vbrMin: 75, vrwmMax: 50, vfMax: 1.2, vfAt: "100 mA" })
+    });
+
+    // Microchip 1N6675/1N6676/1N6677 family docs (axial + UR).
+    const diode6675ElectricalByDevice = Object.freeze({
+      "1N6675": Object.freeze({ vrwmMax: 20 }),
+      "1N6676": Object.freeze({ vrwmMax: 30 }),
+      "1N6677": Object.freeze({ vrwmMax: 40 })
+    });
+
+    function makeVzDeviceOptions(codes) {
+      return codes.map((code) => {
+        const vzNom = diodeVzNominalByDevice[code];
+        const detail = typeof vzNom === "number"
+          ? "unique selector: VZ nom " + formatDiodeVolts(vzNom) + " V @ IZT=250 uA"
+          : "unique selector: VZ nom per datasheet table";
+        return { key: code, label: code + " (" + detail + ")" };
+      });
+    }
+
+    function make6638DeviceOptions(codes) {
+      return codes.map((code) => {
+        const info = diode6638ElectricalByDevice[code];
+        const detail = info
+          ? "unique selector: VBR min " + formatDiodeVolts(info.vbrMin) + " V; VRWM max " +
+            formatDiodeVolts(info.vrwmMax) + " V; VF max " + formatDiodeVolts(info.vfMax) + " V @ " + info.vfAt
+          : "unique selector: electrical target per datasheet table";
+        return { key: code, label: code + " (" + detail + ")" };
+      });
+    }
+
+    function make6675DeviceOptions(codes) {
+      return codes.map((code) => {
+        const info = diode6675ElectricalByDevice[code];
+        const detail = info
+          ? "unique selector: VRWM max " + formatDiodeVolts(info.vrwmMax) + " V; family VF max 0.50 V @ 200 mA"
+          : "unique selector: electrical target per datasheet table";
+        return { key: code, label: code + " (" + detail + ")" };
+      });
+    }
+
+    function getDiodeSeriesQualityKeyUnion(series) {
+      const keys = new Set(series.qualityOptionKeysDefault || diodeQualityKeysStandard);
+      if (series.qualityOptionKeysByDevice) {
+        for (const deviceKey of Object.keys(series.qualityOptionKeysByDevice)) {
+          const deviceKeys = series.qualityOptionKeysByDevice[deviceKey] || [];
+          for (const k of deviceKeys) keys.add(k);
+        }
+      }
+      return Array.from(keys);
+    }
+
+    function getDiodeQualityOptions(series, deviceCode) {
+      const scopedKeys = (series.qualityOptionKeysByDevice && series.qualityOptionKeysByDevice[deviceCode])
+        || series.qualityOptionKeysDefault
+        || diodeQualityKeysStandard;
+      return makeDiodeQualityOptions(scopedKeys);
     }
 
     const diodeSeriesCatalog = {
       diode_4099_4135_4614_4627: {
         label: "1N4099-1N4135 / 1N4614-1N4627",
         type: "Zener diode family (Microchip 00006237A)",
-        summary: "Device number selects zener target within the 1N4099...1N4135 and 1N4614...1N4627 ranges.",
+        summary: "Device number is the primary selector: each code maps to a unique nominal zener voltage (VZ nom at IZT=250 uA).",
         notes: "Suffix model supports JAN/JANTX/JANTXV/JANS + optional C/D tolerance + optional UR + optional -1 + optional e3.",
         deviceOptions: [
-          ...makeDiodeDeviceOptions(buildDiodeDeviceRange(4099, 4135), "00006237A group A; electrical target by device table"),
-          ...makeDiodeDeviceOptions(buildDiodeDeviceRange(4614, 4627), "00006237A group B; electrical target by device table")
+          ...makeVzDeviceOptions(buildDiodeDeviceRange(4099, 4135)),
+          ...makeVzDeviceOptions(buildDiodeDeviceRange(4614, 4627))
         ],
-        deviceHint: "Select a device type number; that code maps to the voltage/electrical target in the datasheet table.",
+        deviceHint: "Select a device code by its VZ nom target (from the datasheet electrical table).",
         toleranceOptions: [
           { key: "", label: "(none) (datasheet default tolerance bin, often +/-20%)" },
           { key: "C", label: "C (+/-2% tolerance suffix)" },
@@ -2569,6 +2657,7 @@
         ],
         requirePackage: false,
         allowBond: true,
+        qualityOptionKeysDefault: diodeQualityKeysStandard,
         defaults: {
           deviceCode: "1N4104",
           quality: "JANS",
@@ -2581,10 +2670,10 @@
       diode_6638_6643: {
         label: "1N6638 / 1N6642 / 1N6643",
         type: "Zener diode family (Microchip 05017)",
-        summary: "Device number selects the electrical type in the 1N6638/1N6642/1N6643 family.",
+        summary: "Device number is the primary selector for VBR min / VRWM max type within this family.",
         notes: "Suffix model supports JAN/JANTX/JANTXV/JANS + required U/US package + optional e3.",
-        deviceOptions: makeDiodeDeviceOptions(["1N6638", "1N6642", "1N6643"], "05017 family type; electrical target by device table"),
-        deviceHint: "Select one of the listed family type numbers; package suffix U/US is required in this series model.",
+        deviceOptions: make6638DeviceOptions(["1N6638", "1N6642", "1N6643"]),
+        deviceHint: "Select by electrical type: each code has its own VBR min / VRWM max limits in the datasheet table.",
         toleranceOptions: [{ key: "", label: "(none) (no C/D tolerance suffix defined in this family model)" }],
         packageOptions: [
           { key: "US", label: "US (primary US package suffix)" },
@@ -2592,6 +2681,7 @@
         ],
         requirePackage: true,
         allowBond: false,
+        qualityOptionKeysDefault: diodeQualityKeysStandard,
         defaults: {
           deviceCode: "1N6642",
           quality: "JANS",
@@ -2604,10 +2694,10 @@
       diode_6675_6677: {
         label: "1N6675-1N6677",
         type: "Reference diode family (Microchip 1N6675...1N6677)",
-        summary: "Device number selects the reference-diode type across 1N6675, 1N6676, and 1N6677.",
-        notes: "Suffix model supports JAN/JANTX/JANTXV/JANS + optional UR + optional -1 + optional e3.",
-        deviceOptions: makeDiodeDeviceOptions(buildDiodeDeviceRange(6675, 6677), "1N6675...1N6677 family type; reference target by table"),
-        deviceHint: "Choose a 1N6675/1N6676/1N6677 type number, then apply package and suffix options.",
+        summary: "Device number is the primary selector for VRWM type (20 V / 30 V / 40 V max) in this family.",
+        notes: "1N6675/1N6676 are modeled with no JAN quality prefix; 1N6677 supports JAN/JANTX/JANTXV/JANS. Package UR, bond -1, and e3 remain optional by naming model.",
+        deviceOptions: make6675DeviceOptions(buildDiodeDeviceRange(6675, 6677)),
+        deviceHint: "Choose the device code by VRWM target first, then apply the allowed suffixes for that specific device.",
         toleranceOptions: [{ key: "", label: "(none) (no C/D tolerance suffix defined in this family model)" }],
         packageOptions: [
           { key: "", label: "(none) (axial package form)" },
@@ -2615,6 +2705,12 @@
         ],
         requirePackage: false,
         allowBond: true,
+        qualityOptionKeysDefault: diodeQualityKeysStandard,
+        qualityOptionKeysByDevice: {
+          "1N6675": [""],
+          "1N6676": [""],
+          "1N6677": diodeQualityKeysStandard
+        },
         defaults: {
           deviceCode: "1N6677",
           quality: "JANS",
@@ -2674,7 +2770,7 @@
     }
 
     function buildDiodeFamilyPn() {
-      const quality = diodeFamilyState.quality || "JAN";
+      const quality = diodeFamilyState.quality || "";
       const deviceCode = diodeFamilyState.deviceCode || "1N????";
       const tolerance = diodeFamilyState.tolerance || "";
       const packageCode = diodeFamilyState.packageCode || "";
@@ -2714,6 +2810,13 @@
       if (!hasCurrentDevice) {
         diodeFamilyState.deviceCode = series.defaults.deviceCode;
       }
+      const qualityOptions = getDiodeQualityOptions(series, diodeFamilyState.deviceCode);
+      if (!qualityOptions.some((opt) => opt.key === diodeFamilyState.quality)) {
+        const defaultQuality = qualityOptions.some((opt) => opt.key === series.defaults.quality)
+          ? series.defaults.quality
+          : (qualityOptions.length ? qualityOptions[0].key : "");
+        diodeFamilyState.quality = defaultQuality;
+      }
 
       updateDiodeFamilyClearButtonState();
 
@@ -2731,7 +2834,7 @@
         diodeFamilyState.deviceCode = k;
         renderDiodeFamily();
       });
-      renderT502FilterGroup(nodes.diodeFamilyQualityFilter, diodeQualityOptions, diodeFamilyState.quality, (k) => {
+      renderT502FilterGroup(nodes.diodeFamilyQualityFilter, qualityOptions, diodeFamilyState.quality, (k) => {
         diodeFamilyState.quality = k;
         renderDiodeFamily();
       });
@@ -2781,7 +2884,7 @@
       nodes.diodeFamilyStatusText.textContent = "Datasheet-family code-builder mode";
       nodes.diodeFamilyResultCount.textContent = "1 result";
 
-      const qualityOpt = optionByKey(diodeQualityOptions, diodeFamilyState.quality);
+      const qualityOpt = optionByKey(qualityOptions, diodeFamilyState.quality);
       const tolOpt = optionByKey(series.toleranceOptions, diodeFamilyState.tolerance);
       const packageOpt = optionByKey(series.packageOptions, diodeFamilyState.packageCode);
       const rohsOpt = optionByKey(diodeRoHSOptions, diodeFamilyState.rohs);
@@ -4735,13 +4838,14 @@
 
       let tail = normalized;
 
-      const qualityKeys = diodeQualityOptions.map((x) => x.key).sort((a, b) => b.length - a.length);
-      const quality = qualityKeys.find((k) => tail.startsWith(k)) || "";
-      const qualityOpt = optionByKey(diodeQualityOptions, quality);
-      if (!quality) {
-        errors.push("Missing quality prefix. Expected JAN, JANTX, JANTXV, or JANS.");
-      } else {
-        tail = tail.slice(quality.length);
+      const qualityKeyUnion = getDiodeSeriesQualityKeyUnion(series)
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length);
+      let quality = "";
+      const qualityMatch = qualityKeyUnion.find((k) => tail.startsWith(k)) || "";
+      if (qualityMatch) {
+        quality = qualityMatch;
+        tail = tail.slice(qualityMatch.length);
       }
 
       let base = "";
@@ -4755,6 +4859,24 @@
         if (guessedBase) tail = tail.slice(guessedBase.length);
         base = guessedBase || "(missing)";
         errors.push("Device type is not in selected datasheet family.");
+      }
+      const deviceOpt = optionByKey(series.deviceOptions, deviceCode);
+
+      const qualityOptions = getDiodeQualityOptions(series, deviceCode || series.defaults.deviceCode);
+      const qualityOpt = optionByKey(qualityOptions, quality);
+      const allowedQualityKeys = qualityOptions.map((x) => x.key);
+      const qualityAllowsBlank = allowedQualityKeys.includes("");
+      const requiredQualityKeys = allowedQualityKeys.filter(Boolean);
+      const allowedQualityText = allowedQualityKeys.length
+        ? allowedQualityKeys.map((k) => (k || "(none)")).join(", ")
+        : "(none)";
+      let qualityValid = true;
+      if (!quality && !qualityAllowsBlank) {
+        qualityValid = false;
+        errors.push("Missing quality prefix. Expected one of: " + requiredQualityKeys.join(", ") + ".");
+      } else if (quality && !qualityOpt) {
+        qualityValid = false;
+        errors.push("Quality prefix " + quality + " is not allowed for selected device. Allowed: " + allowedQualityText + ".");
       }
 
       const toleranceKeys = (series.toleranceOptions || [])
@@ -4828,8 +4950,24 @@
 
       fields.push(
         makeDecodeField("family", "Datasheet Family", series.label, series.label, true),
-        makeDecodeField("quality", "Quality Prefix", quality || "(missing)", qualityOpt ? qualityOpt.label : "Unknown quality prefix", !!qualityOpt),
-        makeDecodeField("device", "Device Type", base, deviceCodes.includes(base) ? base : "Device not listed in this family", deviceCodes.includes(base)),
+        makeDecodeField(
+          "quality",
+          "Quality Prefix",
+          quality || "(none)",
+          qualityOpt
+            ? qualityOpt.label
+            : (quality
+              ? ((diodeQualityOptionCatalog[quality] ? diodeQualityOptionCatalog[quality].label : "Unknown quality prefix") + " (not allowed for selected device)")
+              : (qualityAllowsBlank ? (diodeQualityOptionCatalog[""] ? diodeQualityOptionCatalog[""].label : "(none)") : "Missing required quality prefix")),
+          qualityValid
+        ),
+        makeDecodeField(
+          "device",
+          "Device Type",
+          base,
+          deviceOpt ? deviceOpt.label : "Device not listed in this family",
+          !!deviceOpt
+        ),
         makeDecodeField(
           "tolerance",
           "Tolerance Suffix",
