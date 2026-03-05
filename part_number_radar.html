@@ -2519,20 +2519,20 @@
     // 2) device type number within that family (sets electrical target per datasheet tables)
     // 3) suffix controls (quality/tolerance/package/bond/compliance)
     const diodeQualityOptions = [
-      { key: "JAN", label: "JAN" },
-      { key: "JANTX", label: "JANTX" },
-      { key: "JANTXV", label: "JANTXV" },
-      { key: "JANS", label: "JANS" }
+      { key: "JAN", label: "JAN (baseline military screen level)" },
+      { key: "JANTX", label: "JANTX (TX screening level)" },
+      { key: "JANTXV", label: "JANTXV (TXV enhanced screening level)" },
+      { key: "JANS", label: "JANS (S-level / highest screening tier in this naming set)" }
     ];
 
     const diodeRoHSOptions = [
-      { key: "", label: "(none)" },
-      { key: "E3", label: "e3 (commercial / RoHS)" }
+      { key: "", label: "(none) (standard military flow suffix set)" },
+      { key: "E3", label: "e3 (RoHS / lead-free commercial suffix option)" }
     ];
 
     const diodeBondOptions = [
-      { key: "", label: "(none)" },
-      { key: "1", label: "-1 metallurgical bond" }
+      { key: "", label: "(none) (standard bond option for this series)" },
+      { key: "1", label: "-1 (metallurgical bond suffix option)" }
     ];
 
     function buildDiodeDeviceRange(start, end) {
@@ -2543,6 +2543,10 @@
       return out;
     }
 
+    function makeDiodeDeviceOptions(codes, detail) {
+      return codes.map((code) => ({ key: code, label: code + " (" + detail + ")" }));
+    }
+
     const diodeSeriesCatalog = {
       diode_4099_4135_4614_4627: {
         label: "1N4099-1N4135 / 1N4614-1N4627",
@@ -2550,18 +2554,18 @@
         summary: "Device number selects zener target within the 1N4099...1N4135 and 1N4614...1N4627 ranges.",
         notes: "Suffix model supports JAN/JANTX/JANTXV/JANS + optional C/D tolerance + optional UR + optional -1 + optional e3.",
         deviceOptions: [
-          ...buildDiodeDeviceRange(4099, 4135),
-          ...buildDiodeDeviceRange(4614, 4627)
-        ].map((code) => ({ key: code, label: code })),
-        deviceHint: "Select a 1N device number to target its datasheet-defined zener value.",
+          ...makeDiodeDeviceOptions(buildDiodeDeviceRange(4099, 4135), "00006237A group A; electrical target by device table"),
+          ...makeDiodeDeviceOptions(buildDiodeDeviceRange(4614, 4627), "00006237A group B; electrical target by device table")
+        ],
+        deviceHint: "Select a device type number; that code maps to the voltage/electrical target in the datasheet table.",
         toleranceOptions: [
-          { key: "", label: "(none) +/-20%" },
-          { key: "C", label: "C (+/-2%)" },
-          { key: "D", label: "D (+/-1%)" }
+          { key: "", label: "(none) (datasheet default tolerance bin, often +/-20%)" },
+          { key: "C", label: "C (+/-2% tolerance suffix)" },
+          { key: "D", label: "D (+/-1% tolerance suffix)" }
         ],
         packageOptions: [
-          { key: "", label: "(none / axial style)" },
-          { key: "UR", label: "UR" }
+          { key: "", label: "(none) (axial / default package style)" },
+          { key: "UR", label: "UR (surface-mount UR package suffix)" }
         ],
         requirePackage: false,
         allowBond: true,
@@ -2579,12 +2583,12 @@
         type: "Zener diode family (Microchip 05017)",
         summary: "Device number selects the electrical type in the 1N6638/1N6642/1N6643 family.",
         notes: "Suffix model supports JAN/JANTX/JANTXV/JANS + required U/US package + optional e3.",
-        deviceOptions: ["1N6638", "1N6642", "1N6643"].map((code) => ({ key: code, label: code })),
-        deviceHint: "Select one of the datasheet-listed US/U family type numbers.",
-        toleranceOptions: [{ key: "", label: "No tolerance suffix" }],
+        deviceOptions: makeDiodeDeviceOptions(["1N6638", "1N6642", "1N6643"], "05017 family type; electrical target by device table"),
+        deviceHint: "Select one of the listed family type numbers; package suffix U/US is required in this series model.",
+        toleranceOptions: [{ key: "", label: "(none) (no C/D tolerance suffix defined in this family model)" }],
         packageOptions: [
-          { key: "US", label: "US" },
-          { key: "U", label: "U (structurally equivalent package style)" }
+          { key: "US", label: "US (primary US package suffix)" },
+          { key: "U", label: "U (alternate package suffix; structurally equivalent style)" }
         ],
         requirePackage: true,
         allowBond: false,
@@ -2602,12 +2606,12 @@
         type: "Reference diode family (Microchip 1N6675...1N6677)",
         summary: "Device number selects the reference-diode type across 1N6675, 1N6676, and 1N6677.",
         notes: "Suffix model supports JAN/JANTX/JANTXV/JANS + optional UR + optional -1 + optional e3.",
-        deviceOptions: buildDiodeDeviceRange(6675, 6677).map((code) => ({ key: code, label: code })),
-        deviceHint: "Choose the reference type number, then apply package/screening suffixes.",
-        toleranceOptions: [{ key: "", label: "No tolerance suffix" }],
+        deviceOptions: makeDiodeDeviceOptions(buildDiodeDeviceRange(6675, 6677), "1N6675...1N6677 family type; reference target by table"),
+        deviceHint: "Choose a 1N6675/1N6676/1N6677 type number, then apply package and suffix options.",
+        toleranceOptions: [{ key: "", label: "(none) (no C/D tolerance suffix defined in this family model)" }],
         packageOptions: [
-          { key: "", label: "(none / axial)" },
-          { key: "UR", label: "UR" }
+          { key: "", label: "(none) (axial package form)" },
+          { key: "UR", label: "UR (surface-mount UR package suffix)" }
         ],
         requirePackage: false,
         allowBond: true,
@@ -2622,10 +2626,11 @@
       }
     };
 
-    const diodeSeriesOptions = Object.keys(diodeSeriesCatalog).map((key) => ({
-      key,
-      label: diodeSeriesCatalog[key].label
-    }));
+    const diodeSeriesOptions = [
+      { key: "diode_4099_4135_4614_4627", label: "1N4099-1N4135 / 1N4614-1N4627 (Microchip Doc 00006237A)" },
+      { key: "diode_6638_6643", label: "1N6638 / 1N6642 / 1N6643 (Microchip Doc 05017)" },
+      { key: "diode_6675_6677", label: "1N6675-1N6677 (Microchip axial + UR datasheets)" }
+    ];
 
     const diodeFamilyState = {
       seriesKey: "diode_4099_4135_4614_4627",

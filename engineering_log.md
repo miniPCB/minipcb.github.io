@@ -35,4 +35,4 @@ Human-readable summary + machine-readable source of truth in `engineering_log.js
 | 20260304-184500-codex-diode-initial-implementation | 2026-03-04T18:45:00-06:00 | codex | feature | Implemented initial diode builder/decoder structure before series-level redesign. | `part_number_radar.html` | esprima syntax parse | inferred |
 | 20260304-190814-codex-diode-series-hierarchy | 2026-03-04T19:08:14-06:00 | codex | refactor | Refactored diode model to datasheet-series hierarchy (series -> device type -> suffixes), replaced single-PN family model. | `part_number_radar.html` | esprima syntax parse | confirmed |
 | 20260304-191305-codex-engineering-log-bootstrap | 2026-03-04T19:13:05-06:00 | codex | process | Bootstrapped engineering log system and bot update rules. | `engineering_log.md`, `engineering_log.jsonl`, `AGENTS.md` | manual review | confirmed |
-
+| 20260304-192210-codex-diode-pill-detail-labels | 2026-03-04T19:22:10-06:00 | codex | docs | Expanded diode pill labels so every selectable option includes explicit meaning/context. | `part_number_radar.html`, `engineering_log.md`, `engineering_log.jsonl` | esprima syntax parse | confirmed |
