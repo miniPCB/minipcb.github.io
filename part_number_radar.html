@@ -554,6 +554,55 @@
       display: none !important;
     }
 
+    .tool-path-nav {
+      position: sticky;
+      top: 0;
+      z-index: 1200;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13, 24, 33, 0.96);
+      backdrop-filter: blur(4px);
+    }
+
+    .tool-path-link {
+      color: #9fd8ff;
+      text-decoration: none;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 2px 9px;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .tool-path-link:hover {
+      text-decoration: none;
+      background: rgba(40, 66, 89, 0.6);
+      border-color: #3e5f78;
+    }
+
+    .tool-path-link.active {
+      background: rgba(62, 148, 196, 0.28);
+      border-color: #5dbfe9;
+      color: #def5ff;
+      font-weight: 700;
+    }
+
+    .tool-path-sep {
+      color: #6e879c;
+      font-size: 0.78rem;
+    }
+
+    .tool-path-current {
+      margin-left: auto;
+      color: #b3c9d9;
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
     .splash-flow {
       min-height: 100vh;
       display: grid;
@@ -990,10 +1039,23 @@
       .availability-map { grid-template-columns: 1fr; }
       .splash-grid { grid-template-columns: 1fr; }
       .request-grid { grid-template-columns: 1fr; }
+      .tool-path-current { width: 100%; margin-left: 0; }
     }
   </style>
 </head>
 <body>
+  <nav id="toolPathNav" class="tool-path-nav" aria-label="Tool navigation path">
+    <a href="#" class="tool-path-link active" data-path-target="start">Start</a>
+    <span class="tool-path-sep" aria-hidden="true">/</span>
+    <a href="#" class="tool-path-link" data-path-target="component">Component</a>
+    <span class="tool-path-sep" aria-hidden="true">/</span>
+    <a href="#" class="tool-path-link" data-path-target="family">Family</a>
+    <span class="tool-path-sep" aria-hidden="true">/</span>
+    <a href="#" class="tool-path-link" data-path-target="request">Request</a>
+    <span class="tool-path-sep" aria-hidden="true">/</span>
+    <a href="#" class="tool-path-link" data-path-target="workspace">Workspace</a>
+    <span id="toolPathCurrent" class="tool-path-current">Current: Splash Start</span>
+  </nav>
   <div id="splashFlow" class="splash-flow">
     <section class="splash-card">
       <div id="splashStep1" class="splash-step active">
@@ -2310,6 +2372,9 @@
     const filters = { ...DEFAULT_M55342_FILTERS };
 
     const nodes = {
+      toolPathNav: document.getElementById("toolPathNav"),
+      toolPathCurrent: document.getElementById("toolPathCurrent"),
+      toolPathLinks: Array.from(document.querySelectorAll("[data-path-target]")),
       workspace: document.getElementById("workspace"),
       splashFlow: document.getElementById("splashFlow"),
       requestFlow: document.getElementById("requestFlow"),
@@ -7989,10 +8054,91 @@
       nodes.bomDecipherPreview.textContent = "BOM rows: " + paddedRows.length + " | PN column: " + rawHeaders[Math.max(0, bomDecipherState.pnColumn)];
     }
 
+    function formatPathComponentLabel(type) {
+      if (!type) return "Component";
+      return type.charAt(0).toUpperCase() + type.slice(1);
+    }
+
+    function getWorkspacePathLabel() {
+      const entryMode = splashState.entryMode || "pn_browser";
+      if (entryMode === "pn_decipher") return "PN Decipher";
+      if (entryMode === "bom_decipher") return "BOM Decipher";
+      const key = Object.prototype.hasOwnProperty.call(PART_FAMILY_CONFIG, splashState.targetView)
+        ? splashState.targetView
+        : "m55342";
+      return PART_FAMILY_CONFIG[key].label;
+    }
+
+    function updateToolPathNav() {
+      let activeTarget = "start";
+      let currentText = "Current: Splash Start";
+
+      if (!nodes.requestFlow.classList.contains("hidden")) {
+        activeTarget = "request";
+        currentText = "Current: Request Form";
+      } else if (!nodes.workspace.classList.contains("hidden")) {
+        activeTarget = "workspace";
+        currentText = "Current: " + getWorkspacePathLabel();
+      } else if (nodes.splashStep3.classList.contains("active")) {
+        activeTarget = "family";
+        currentText = "Current: Family Selection";
+      } else if (nodes.splashStep2.classList.contains("active")) {
+        activeTarget = "component";
+        currentText = "Current: " + formatPathComponentLabel(splashState.componentType);
+      }
+
+      for (const link of nodes.toolPathLinks) {
+        const isActive = link.dataset.pathTarget === activeTarget;
+        link.classList.toggle("active", isActive);
+        if (isActive) {
+          link.setAttribute("aria-current", "page");
+        } else {
+          link.removeAttribute("aria-current");
+        }
+      }
+      if (nodes.toolPathCurrent) nodes.toolPathCurrent.textContent = currentText;
+    }
+
+    function jumpToToolPathTarget(targetKey) {
+      if (targetKey === "start") {
+        splashState.entryMode = "pn_browser";
+        splashState.componentType = "";
+        setSplashFamilyChoices("");
+        nodes.workspace.classList.add("hidden");
+        setSplashRequestOpen(false);
+        showSplashStep(1);
+        return;
+      }
+      if (targetKey === "component") {
+        splashState.entryMode = "pn_browser";
+        nodes.workspace.classList.add("hidden");
+        setSplashRequestOpen(false);
+        showSplashStep(2);
+        return;
+      }
+      if (targetKey === "family") {
+        splashState.entryMode = "pn_browser";
+        nodes.workspace.classList.add("hidden");
+        setSplashRequestOpen(false);
+        setSplashFamilyChoices(splashState.componentType || "");
+        showSplashStep(3);
+        return;
+      }
+      if (targetKey === "request") {
+        nodes.workspace.classList.add("hidden");
+        setSplashRequestOpen(true);
+        return;
+      }
+      if (targetKey === "workspace") {
+        openRadarFromSplash();
+      }
+    }
+
     function showSplashStep(step) {
       nodes.splashStep1.classList.toggle("active", step === 1);
       nodes.splashStep2.classList.toggle("active", step === 2);
       nodes.splashStep3.classList.toggle("active", step === 3);
+      updateToolPathNav();
     }
 
     function setSplashRequestOpen(isOpen) {
@@ -8002,6 +8148,7 @@
         nodes.partRequestForm.reset();
         nodes.requestStatus.textContent = "Submit sends directly to the librarian.";
       }
+      updateToolPathNav();
     }
 
     function getFamilyConfig(viewKey) {
@@ -8071,11 +8218,13 @@
       if (entryMode === "pn_decipher") {
         setWorkspaceView("pnDecipherView");
         resetPnDecipherView();
+        updateToolPathNav();
         return;
       }
       if (entryMode === "bom_decipher") {
         setWorkspaceView("bomDecipherView");
         clearBomDecipher();
+        updateToolPathNav();
         return;
       }
 
@@ -8084,17 +8233,20 @@
         : "m55342";
       setComponentView(targetView);
       runFamilyLaunch(targetView);
+      updateToolPathNav();
     }
 
     function setComponentView(viewKey) {
       const activeFamilyKey = Object.prototype.hasOwnProperty.call(PART_FAMILY_CONFIG, viewKey)
         ? viewKey
         : "m55342";
+      splashState.targetView = activeFamilyKey;
       setWorkspaceView(PART_FAMILY_CONFIG[activeFamilyKey].viewNodeKey);
 
       for (const b of nodes.componentButtons) {
         b.classList.toggle("active", b.dataset.component === activeFamilyKey);
       }
+      updateToolPathNav();
     }
 
     function renderAll() {
@@ -8188,6 +8340,14 @@
       b.addEventListener("click", () => setSplashRequestOpen(true));
     }
     nodes.splashRequestClose.addEventListener("click", () => setSplashRequestOpen(false));
+    if (nodes.toolPathNav) {
+      nodes.toolPathNav.addEventListener("click", (event) => {
+        const link = event.target.closest("[data-path-target]");
+        if (!link) return;
+        event.preventDefault();
+        jumpToToolPathTarget(link.dataset.pathTarget || "start");
+      });
+    }
 
     nodes.partRequestForm.addEventListener("submit", async (event) => {
       event.preventDefault();
