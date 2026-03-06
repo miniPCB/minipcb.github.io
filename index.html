@@ -19,6 +19,25 @@
 <meta content="miniPCB, Circuit Boards, Electronics Education, PCB for Education, Mini Circuit Boards, Electronics Learning, Educational PCB, Electronics Training, Circuit Board Education, miniPCB Logo, Printed Circuit Board Education, Miniature PCB, Learning Electronics, PCB Training, DIY Electronics Education, Electronics Study Material, Circuit Board Training, Miniature Circuit Board Training, miniPCB for Education, Educational Electronics Kit." name="keywords"/>
 </head>
 <body>
+<div aria-labelledby="introSplashTitle" aria-modal="true" class="intro-splash hidden" id="introSplash" role="dialog">
+<div class="intro-splash-card">
+<p class="intro-eyebrow">miniPCB</p>
+<h1 id="introSplashTitle">Modular Electronics Circuit Library</h1>
+<p>
+    miniPCB is a collection of standardized PCBs designed to demonstrate fundamental analog and digital circuit topologies.
+   </p>
+<p>
+    Browse the catalog to explore circuits by function and board number.
+   </p>
+<label class="intro-remember" for="introDontShow">
+<input id="introDontShow" type="checkbox"/>
+    Do not show this intro again on this device.
+   </label>
+<div class="intro-actions">
+<button class="intro-enter-btn" id="introEnterBtn" type="button">Enter miniPCB</button>
+</div>
+</div>
+</div>
 <nav>
 <div class="nav-container">
 <ul class="nav-links">
@@ -32,6 +51,7 @@
 <li><a href="engineering_analyzer.html">Engineering Analyzer</a></li>
 <li><a href="part_number_radar.html">Part Number Radar</a></li>
 <li><a href="board_finder.html">Board Finder</a></li>
+<li><button class="intro-toggle-btn" id="showIntroBtn" type="button">Show Intro</button></li>
 </ul>
 </div>
 </nav>
@@ -192,6 +212,67 @@
   renderList(boardContainer, boardLinks, "No board links found.");
 })();
 
+</script>
+
+<script>
+  (function initIntroSplash() {
+    const splash = document.getElementById("introSplash");
+    const enterBtn = document.getElementById("introEnterBtn");
+    const dontShow = document.getElementById("introDontShow");
+    const showBtn = document.getElementById("showIntroBtn");
+    const STORAGE_KEY = "minipcb_intro_dismissed_v1";
+
+    if (!splash || !enterBtn) return;
+
+    function readHiddenPreference() {
+      try {
+        return localStorage.getItem(STORAGE_KEY) === "1";
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function writeHiddenPreference(isHidden) {
+      try {
+        if (isHidden) {
+          localStorage.setItem(STORAGE_KEY, "1");
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      } catch (err) {
+        // Ignore storage errors and keep current-session behavior.
+      }
+    }
+
+    function openSplash() {
+      splash.classList.remove("hidden");
+      document.body.classList.add("intro-open");
+    }
+
+    function closeSplash() {
+      splash.classList.add("hidden");
+      document.body.classList.remove("intro-open");
+    }
+
+    if (readHiddenPreference()) {
+      closeSplash();
+    } else {
+      openSplash();
+    }
+
+    enterBtn.addEventListener("click", function () {
+      writeHiddenPreference(Boolean(dontShow && dontShow.checked));
+      closeSplash();
+    });
+
+    if (showBtn) {
+      showBtn.addEventListener("click", function () {
+        if (dontShow) dontShow.checked = false;
+        writeHiddenPreference(false);
+        openSplash();
+      });
+    }
+  })();
 </script>
 
 <script>
