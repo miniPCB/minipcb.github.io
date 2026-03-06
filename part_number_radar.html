@@ -591,16 +591,6 @@
       font-weight: 700;
     }
 
-    .tool-path-link.disabled {
-      color: #6e879c;
-      border-color: transparent;
-      background: transparent;
-      cursor: default;
-      pointer-events: none;
-      text-decoration: none;
-      opacity: 0.92;
-    }
-
     .tool-path-sep {
       color: #6e879c;
       font-size: 0.78rem;
@@ -1055,16 +1045,8 @@
 </head>
 <body>
   <nav id="toolPathNav" class="tool-path-nav" aria-label="Tool navigation path">
-    <a href="#" class="tool-path-link active" data-path-target="start">Start</a>
-    <span class="tool-path-sep" aria-hidden="true">/</span>
-    <a href="#" class="tool-path-link" data-path-target="component">Component</a>
-    <span class="tool-path-sep" aria-hidden="true">/</span>
-    <a href="#" class="tool-path-link" data-path-target="family">Family</a>
-    <span class="tool-path-sep" aria-hidden="true">/</span>
-    <a href="#" class="tool-path-link" data-path-target="request">Request</a>
-    <span class="tool-path-sep" aria-hidden="true">/</span>
-    <a href="#" class="tool-path-link" data-path-target="workspace">Workspace</a>
-    <span id="toolPathCurrent" class="tool-path-current">Current: Splash Start</span>
+    <span class="tool-path-link active" aria-current="page">Start</span>
+    <span class="tool-path-current">Current: Choose Mode</span>
   </nav>
   <div id="splashFlow" class="splash-flow">
     <section class="splash-card">
@@ -2383,8 +2365,6 @@
 
     const nodes = {
       toolPathNav: document.getElementById("toolPathNav"),
-      toolPathCurrent: document.getElementById("toolPathCurrent"),
-      toolPathLinks: Array.from(document.querySelectorAll("[data-path-target]")),
       workspace: document.getElementById("workspace"),
       splashFlow: document.getElementById("splashFlow"),
       requestFlow: document.getElementById("requestFlow"),
@@ -8069,55 +8049,105 @@
       return type.charAt(0).toUpperCase() + type.slice(1);
     }
 
-    function getWorkspacePathLabel() {
-      const entryMode = splashState.entryMode || "pn_browser";
+    function getEntryModeLabel(entryMode) {
       if (entryMode === "pn_decipher") return "PN Decipher";
       if (entryMode === "bom_decipher") return "BOM Decipher";
+      return "PN Browser";
+    }
+
+    function getWorkspacePathLabel() {
+      const entryMode = splashState.entryMode || "pn_browser";
+      if (entryMode === "pn_decipher" || entryMode === "bom_decipher") {
+        return getEntryModeLabel(entryMode);
+      }
       const key = Object.prototype.hasOwnProperty.call(PART_FAMILY_CONFIG, splashState.targetView)
         ? splashState.targetView
         : "m55342";
       return PART_FAMILY_CONFIG[key].label;
     }
 
-    function updateToolPathNav() {
-      let activeTarget = "start";
-      let currentText = "Current: Splash Start";
-      const pathRank = { start: 0, component: 1, family: 2, request: 3, workspace: 4 };
+    function buildToolPathTrail() {
+      const trail = [{ label: "Start", target: "start" }];
+      const entryMode = splashState.entryMode || "pn_browser";
+      const modeLabel = getEntryModeLabel(entryMode);
 
       if (!nodes.requestFlow.classList.contains("hidden")) {
-        activeTarget = "request";
-        currentText = "Current: Request Form";
-      } else if (!nodes.workspace.classList.contains("hidden")) {
-        activeTarget = "workspace";
-        currentText = "Current: " + getWorkspacePathLabel();
-      } else if (nodes.splashStep3.classList.contains("active")) {
-        activeTarget = "family";
-        currentText = "Current: Family Selection";
-      } else if (nodes.splashStep2.classList.contains("active")) {
-        activeTarget = "component";
-        currentText = "Current: " + formatPathComponentLabel(splashState.componentType);
+        trail.push({ label: "Request New Part" });
+        return { trail, currentText: "Current: Request New Part" };
       }
 
-      for (const link of nodes.toolPathLinks) {
-        const targetKey = link.dataset.pathTarget || "start";
-        const isActive = targetKey === activeTarget;
-        const isAhead = (pathRank[targetKey] || 0) > (pathRank[activeTarget] || 0);
-        link.classList.toggle("active", isActive);
-        link.classList.toggle("disabled", isAhead);
-        if (isActive) {
-          link.setAttribute("aria-current", "page");
-        } else {
-          link.removeAttribute("aria-current");
+      if (!nodes.workspace.classList.contains("hidden")) {
+        if (entryMode === "pn_decipher" || entryMode === "bom_decipher") {
+          trail.push({ label: modeLabel });
+          return { trail, currentText: "Current: " + modeLabel };
         }
-        if (isAhead) {
-          link.setAttribute("aria-disabled", "true");
-          link.setAttribute("tabindex", "-1");
+        const family = getFamilyConfig(splashState.targetView);
+        const componentType = splashState.componentType || (family && family.componentType ? family.componentType : "");
+        const componentLabel = formatPathComponentLabel(componentType);
+        const familyLabel = getWorkspacePathLabel();
+        trail.push({ label: modeLabel, target: "component" });
+        trail.push({ label: componentLabel, target: "family" });
+        trail.push({ label: familyLabel });
+        return { trail, currentText: "Current: " + modeLabel + " - " + familyLabel };
+      }
+
+      if (nodes.splashStep3.classList.contains("active")) {
+        const componentLabel = formatPathComponentLabel(splashState.componentType);
+        trail.push({ label: modeLabel, target: "component" });
+        trail.push({ label: componentLabel + " Families" });
+        return { trail, currentText: "Current: " + modeLabel + " - Pick Family" };
+      }
+
+      if (nodes.splashStep2.classList.contains("active")) {
+        trail.push({ label: modeLabel });
+        return { trail, currentText: "Current: " + modeLabel + " - Pick Component Type" };
+      }
+
+      trail[0] = { label: "Start" };
+      return { trail, currentText: "Current: Choose Mode" };
+    }
+
+    function renderToolPathNav(trail, currentText) {
+      if (!nodes.toolPathNav) return;
+      nodes.toolPathNav.innerHTML = "";
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < trail.length; i += 1) {
+        const crumb = trail[i];
+        const isLast = i === trail.length - 1;
+        let crumbNode;
+        if (!isLast && crumb.target) {
+          const link = document.createElement("a");
+          link.href = "#";
+          link.className = "tool-path-link";
+          link.dataset.pathTarget = crumb.target;
+          link.textContent = crumb.label;
+          crumbNode = link;
         } else {
-          link.removeAttribute("aria-disabled");
-          link.removeAttribute("tabindex");
+          const span = document.createElement("span");
+          span.className = "tool-path-link" + (isLast ? " active" : "");
+          if (isLast) span.setAttribute("aria-current", "page");
+          span.textContent = crumb.label;
+          crumbNode = span;
+        }
+        fragment.appendChild(crumbNode);
+        if (!isLast) {
+          const sep = document.createElement("span");
+          sep.className = "tool-path-sep";
+          sep.setAttribute("aria-hidden", "true");
+          sep.textContent = "/";
+          fragment.appendChild(sep);
         }
       }
-      if (nodes.toolPathCurrent) nodes.toolPathCurrent.textContent = currentText;
+      const currentNode = document.createElement("span");
+      currentNode.className = "tool-path-current";
+      currentNode.textContent = currentText;
+      fragment.appendChild(currentNode);
+      nodes.toolPathNav.appendChild(fragment);
+    }
+
+    function updateToolPathNav() {
+      const pathState = buildToolPathTrail();
+      renderToolPathNav(pathState.trail, pathState.currentText);
     }
 
     function jumpToToolPathTarget(targetKey) {
@@ -8365,7 +8395,6 @@
       nodes.toolPathNav.addEventListener("click", (event) => {
         const link = event.target.closest("[data-path-target]");
         if (!link) return;
-        if (link.classList.contains("disabled") || link.getAttribute("aria-disabled") === "true") return;
         event.preventDefault();
         jumpToToolPathTarget(link.dataset.pathTarget || "start");
       });
