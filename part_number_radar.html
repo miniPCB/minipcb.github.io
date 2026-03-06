@@ -591,6 +591,16 @@
       font-weight: 700;
     }
 
+    .tool-path-link.disabled {
+      color: #6e879c;
+      border-color: transparent;
+      background: transparent;
+      cursor: default;
+      pointer-events: none;
+      text-decoration: none;
+      opacity: 0.92;
+    }
+
     .tool-path-sep {
       color: #6e879c;
       font-size: 0.78rem;
@@ -8072,6 +8082,7 @@
     function updateToolPathNav() {
       let activeTarget = "start";
       let currentText = "Current: Splash Start";
+      const pathRank = { start: 0, component: 1, family: 2, request: 3, workspace: 4 };
 
       if (!nodes.requestFlow.classList.contains("hidden")) {
         activeTarget = "request";
@@ -8088,12 +8099,22 @@
       }
 
       for (const link of nodes.toolPathLinks) {
-        const isActive = link.dataset.pathTarget === activeTarget;
+        const targetKey = link.dataset.pathTarget || "start";
+        const isActive = targetKey === activeTarget;
+        const isAhead = (pathRank[targetKey] || 0) > (pathRank[activeTarget] || 0);
         link.classList.toggle("active", isActive);
+        link.classList.toggle("disabled", isAhead);
         if (isActive) {
           link.setAttribute("aria-current", "page");
         } else {
           link.removeAttribute("aria-current");
+        }
+        if (isAhead) {
+          link.setAttribute("aria-disabled", "true");
+          link.setAttribute("tabindex", "-1");
+        } else {
+          link.removeAttribute("aria-disabled");
+          link.removeAttribute("tabindex");
         }
       }
       if (nodes.toolPathCurrent) nodes.toolPathCurrent.textContent = currentText;
@@ -8344,6 +8365,7 @@
       nodes.toolPathNav.addEventListener("click", (event) => {
         const link = event.target.closest("[data-path-target]");
         if (!link) return;
+        if (link.classList.contains("disabled") || link.getAttribute("aria-disabled") === "true") return;
         event.preventDefault();
         jumpToToolPathTarget(link.dataset.pathTarget || "start");
       });
