@@ -62,6 +62,8 @@
     <section>
       <h3>Category Links</h3>
       <ul id="catalog-links" class="catalog-link-list"></ul>
+      <h3>Board Links</h3>
+      <ul id="board-links" class="catalog-link-list"></ul>
     </section>
   </section>
       <!-- SEARCH -->
@@ -123,81 +125,70 @@
 <script src="site_index.js"></script>
 
 <script>
-  // Render catalog grouping links from site_index.js
+  // Render category and board link lists from site_index.js
 (function renderCatalogLinks(){
-  const container = document.getElementById('catalog-links');
-  if (!container) return;
-
-  const orderedCatalogUrls = [
-    "04B/04B.html",
-    "04A/04A.html",
-    "04C/04C.html",
-    "08D/08D.html",
-    "08H/08H.html",
-    "06/06.html",
-    "collections/555-timer-circuits.html",
-    "05/05.html",
-    "collections/power-charge-pumps.html",
-    "09A/09A.html",
-    "09H/09H.html",
-    "09D/09D.html",
-    "10/10.html",
-    "collections/probe-boards.html",
-    "collections/interface-boards.html",
-    "collections/prototyping-boards.html",
-    "11/11A-001.html"
-  ];
-
-  const fallbackLabels = {
-    "04B/04B.html": "Transistor Amplifiers",
-    "04A/04A.html": "Opamp Amplifiers",
-    "04C/04C.html": "Application Specific Amplifiers",
-    "08D/08D.html": "Phototransistor Amplifiers",
-    "08H/08H.html": "Comparators",
-    "06/06.html": "Oscillators",
-    "collections/555-timer-circuits.html": "555 Timer Circuits",
-    "05/05.html": "Filters, Active and Passive RC Filters",
-    "collections/power-charge-pumps.html": "Power, Charge Pumps",
-    "09A/09A.html": "Power, Linear Voltage Regulators",
-    "09H/09H.html": "Power, Switching Regulators",
-    "09D/09D.html": "Power, Line and Offline Power Supplies",
-    "10/10.html": "Digital Fundamentals",
-    "collections/probe-boards.html": "Probe Boards",
-    "collections/interface-boards.html": "Interface Boards",
-    "collections/prototyping-boards.html": "Prototyping Boards",
-    "11/11A-001.html": "VIVA UTSA Board"
-  };
+  const categoryContainer = document.getElementById("catalog-links");
+  const boardContainer = document.getElementById("board-links");
+  if (!categoryContainer || !boardContainer) return;
 
   const data = Array.isArray(window.siteIndex) ? window.siteIndex : [];
-  const normalizeUrl = (url) => String(url || "").replace(/^\.\//, "").trim();
-  const byUrl = new Map(data.map(item => [normalizeUrl(item.url), item]));
 
+  const normalizeUrl = (url) => String(url || "").replace(/^\.\//, "").trim();
   const cleanupTitle = (title) => String(title || "")
     .replace(/\s*\|\s*miniPCB.*$/i, "")
-    .replace(/^All\s+/i, "")
-    .replace(/^[A-Z0-9-]+\s*\|\s*/i, "")
     .trim();
 
-  const fallbackFromUrl = (url) => {
-    const slug = url.split("/").pop().replace(".html", "");
-    return slug.replace(/[-_]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const items = data
+    .map(item => ({
+      url: normalizeUrl(item.url),
+      label: cleanupTitle(item.title)
+    }))
+    .filter(item => item.url && item.label);
+
+  const seen = new Set();
+  const uniqueItems = [];
+  for (const item of items) {
+    if (seen.has(item.url)) continue;
+    seen.add(item.url);
+    uniqueItems.push(item);
+  }
+
+  const isDraft = (url) => url.startsWith("draft/");
+  const isCollection = (url) => /^collections\/.+\.html$/i.test(url);
+  const isSeriesLanding = (url) => /^([0-9]{2}[A-Z]?)\/\1\.html$/i.test(url);
+  const isBoardDetail = (url) => /^([0-9]{2}[A-Z]?)\/([0-9]{2}[A-Z]?-[0-9A-Z-]+)\.html$/i.test(url);
+
+  const categoryLinks = uniqueItems
+    .filter(item => !isDraft(item.url) && (isCollection(item.url) || isSeriesLanding(item.url)))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+
+  const boardLinks = uniqueItems
+    .filter(item => !isDraft(item.url) && isBoardDetail(item.url))
+    .sort((a, b) => a.url.localeCompare(b.url, undefined, { numeric: true }));
+
+  const renderList = (container, list, emptyMessage) => {
+    container.innerHTML = "";
+    if (list.length === 0) {
+      const li = document.createElement("li");
+      li.textContent = emptyMessage;
+      container.appendChild(li);
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    list.forEach(item => {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = item.url;
+      a.textContent = item.label;
+      li.appendChild(a);
+      frag.appendChild(li);
+    });
+    container.appendChild(frag);
   };
 
-  const frag = document.createDocumentFragment();
-  orderedCatalogUrls.forEach(url => {
-    const entry = byUrl.get(normalizeUrl(url));
-    const label = cleanupTitle(entry?.title) || fallbackLabels[url] || fallbackFromUrl(url);
-
-    const li = document.createElement("li");
-    const a = document.createElement("a");
-    a.href = url;
-    a.textContent = label;
-    li.appendChild(a);
-    frag.appendChild(li);
-  });
-
-  container.innerHTML = '';
-  container.appendChild(frag);
+  renderList(categoryContainer, categoryLinks, "No category links found.");
+  renderList(boardContainer, boardLinks, "No board links found.");
 })();
 
 </script>
