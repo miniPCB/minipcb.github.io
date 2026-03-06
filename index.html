@@ -22,18 +22,74 @@
 <div aria-labelledby="introSplashTitle" aria-modal="true" class="intro-splash hidden" id="introSplash" role="dialog">
 <div class="intro-splash-card">
 <p class="intro-eyebrow">miniPCB</p>
-<h1 id="introSplashTitle">Modular Electronics Circuit Library</h1>
+<h1 id="introSplashTitle">Engineering Workspace Guide</h1>
+<div class="intro-layout">
+<aside aria-label="Splash pages" class="intro-nav">
+<button aria-selected="true" class="intro-nav-btn active" data-intro-page="overview" type="button">Overview</button>
+<button aria-selected="false" class="intro-nav-btn" data-intro-page="site-pages" type="button">Site Pages</button>
+<button aria-selected="false" class="intro-nav-btn" data-intro-page="artifact-flow" type="button">Artifact Flow</button>
+</aside>
+<section class="intro-pages">
+<article class="intro-page active" data-intro-panel="overview">
+<h2>How miniPCB Functions Internally</h2>
 <p>
-    miniPCB is a collection of standardized PCBs designed to demonstrate fundamental analog and digital circuit topologies.
-   </p>
+      miniPCB is structured like an internal engineering tool, not only a public catalog. The site organizes circuit designs, project artifacts, and validation content into a consistent system you can browse, search, and operate.
+     </p>
 <p>
-    Browse the catalog to explore circuits by function and board number.
-   </p>
+      Each board is treated as a reusable engineering unit with a standardized part number, repeatable page structure, linked schematic/layout visuals, and supporting data files. This supports faster iteration and easier cross-referencing between design, simulation, documentation, and publishing outputs.
+     </p>
+<ul>
+<li>Design library: standard board families and part numbers.</li>
+<li>Tool surfaces: finder/analyzer/radar pages for engineering workflows.</li>
+<li>Artifact chain: CAD, extracted data, simulations, documentation, and release pages.</li>
+</ul>
+</article>
+<article class="intro-page" data-intro-panel="site-pages">
+<h2>Pages and How To Use Them</h2>
+<p>
+      The homepage provides the catalog and search index. Tool pages extend this into engineering workflows.
+     </p>
+<ul>
+<li><strong>Home (<code>index.html</code>):</strong> Browse category links and individual board links generated from site index data.</li>
+<li><strong>Catalog Reader (<code>minipcb_2026.html</code>):</strong> Read through the broader catalog content in a single workspace view.</li>
+<li><strong>Catalog Browser (<code>catalog_browser.html</code>):</strong> Jump through catalog entries quickly when you already know what family/series you need.</li>
+<li><strong>Part Number Radar (<code>part_number_radar.html</code>):</strong> Build and decode manufacturer-style part numbers using guided selectors.</li>
+<li><strong>Board Finder (<code>board_finder.html</code>):</strong> Identify boards and submit part requests/availability checks.</li>
+<li><strong>Engineering Analyzer (<code>engineering_analyzer.html</code>):</strong> Review engineering context and analysis outputs associated with boards.</li>
+<li><strong>Test Base 2026 (<code>test_base_2026.html</code>):</strong> Operate deeper internal tooling tied to AI/proxy-assisted workflows.</li>
+</ul>
+<p>
+      Typical flow: start at Home to identify a board, open its detail page for schematic/layout, then use Radar/Finder/Analyzer/Test Base depending on whether your task is decoding, sourcing, reviewing, or creating.
+     </p>
+</article>
+<article class="intro-page" data-intro-panel="artifact-flow">
+<h2>Engineering Artifact Pipeline</h2>
+<p>
+      miniPCB uses a document chain from source design through public release. Each artifact type captures a different layer of engineering intent.
+     </p>
+<ul>
+<li><strong>EAGLE CAD files (<code>cad/</code>):</strong> Source design files/archives for schematic and PCB layout authoring, the primary design authority.</li>
+<li><strong>ULP exporter output (to <code>json/</code>):</strong> Structured extraction of design data into machine-readable JSON for automation, analysis, and page tooling.</li>
+<li><strong>JSON artifacts (<code>json/</code> + schema):</strong> Netlist/analysis/setup data used by scripts and tooling to validate and transform design information.</li>
+<li><strong>Markdown docs (<code>md/</code>):</strong> Human-readable technical notes and board-focused references generated/maintained alongside structured data.</li>
+<li><strong>LTspice files (<code>ltspice/</code>):</strong> Simulation schematics (<code>.asc</code>) that support behavior verification and educational demonstration.</li>
+<li><strong>PDF datasheets (<code>datasheets/</code>):</strong> Vendor reference documents that define device constraints, ratings, and ordering details used by tooling.</li>
+<li><strong>Board webpages (<code>XX/</code> HTML pages):</strong> Published board-specific detail pages combining title, purpose, schematic/layout images, and downloads.</li>
+<li><strong>Instructables posts:</strong> External tutorial/distribution layer that packages selected boards/workflows for broader community learning.</li>
+</ul>
+<p>
+      In combination, these artifacts let miniPCB act as a traceable engineering system: source design, extracted data, simulation, documentation, and publishable educational content remain linked.
+     </p>
+</article>
+</section>
+</div>
 <label class="intro-remember" for="introDontShow">
 <input id="introDontShow" type="checkbox"/>
     Do not show this intro again on this device.
    </label>
 <div class="intro-actions">
+<button class="intro-secondary-btn" id="introPrevBtn" type="button">Previous</button>
+<button class="intro-secondary-btn" id="introNextBtn" type="button">Next</button>
 <button class="intro-enter-btn" id="introEnterBtn" type="button">Enter miniPCB</button>
 </div>
 </div>
@@ -219,6 +275,11 @@
     const enterBtn = document.getElementById("introEnterBtn");
     const dontShow = document.getElementById("introDontShow");
     const showBtn = document.getElementById("showIntroBtn");
+    const prevBtn = document.getElementById("introPrevBtn");
+    const nextBtn = document.getElementById("introNextBtn");
+    const navButtons = Array.from(document.querySelectorAll("[data-intro-page]"));
+    const panels = Array.from(document.querySelectorAll("[data-intro-panel]"));
+    const pageOrder = ["overview", "site-pages", "artifact-flow"];
     const STORAGE_KEY = "minipcb_intro_dismissed_v1";
 
     if (!splash || !enterBtn) return;
@@ -253,10 +314,52 @@
       document.body.classList.remove("intro-open");
     }
 
+    function setIntroPage(pageId) {
+      const resolved = pageOrder.includes(pageId) ? pageId : pageOrder[0];
+      navButtons.forEach((btn) => {
+        const active = btn.getAttribute("data-intro-page") === resolved;
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        const active = panel.getAttribute("data-intro-panel") === resolved;
+        panel.classList.toggle("active", active);
+      });
+      const index = pageOrder.indexOf(resolved);
+      if (prevBtn) prevBtn.disabled = index <= 0;
+      if (nextBtn) nextBtn.disabled = index >= pageOrder.length - 1;
+    }
+
     if (readHiddenPreference()) {
       closeSplash();
     } else {
       openSplash();
+    }
+    setIntroPage("overview");
+
+    navButtons.forEach((btn) => {
+      btn.addEventListener("click", function () {
+        const target = btn.getAttribute("data-intro-page");
+        setIntroPage(target);
+      });
+    });
+
+    if (prevBtn) {
+      prevBtn.addEventListener("click", function () {
+        const active = navButtons.find((btn) => btn.classList.contains("active"));
+        const currentId = active ? active.getAttribute("data-intro-page") : pageOrder[0];
+        const currentIndex = Math.max(0, pageOrder.indexOf(currentId));
+        setIntroPage(pageOrder[Math.max(0, currentIndex - 1)]);
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener("click", function () {
+        const active = navButtons.find((btn) => btn.classList.contains("active"));
+        const currentId = active ? active.getAttribute("data-intro-page") : pageOrder[0];
+        const currentIndex = Math.max(0, pageOrder.indexOf(currentId));
+        setIntroPage(pageOrder[Math.min(pageOrder.length - 1, currentIndex + 1)]);
+      });
     }
 
     enterBtn.addEventListener("click", function () {
@@ -268,6 +371,7 @@
       showBtn.addEventListener("click", function () {
         if (dontShow) dontShow.checked = false;
         writeHiddenPreference(false);
+        setIntroPage("overview");
         openSplash();
       });
     }
