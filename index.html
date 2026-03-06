@@ -60,25 +60,7 @@
  <!-- CATALOG -->
   <section id="catalog" class="tab-content" aria-labelledby="catalog-tab">
     <section>
-      <div class="grid">
-        <a href="04B/04B.html">Transistor Amplifiers</a>
-        <a href="04A/04A.html">Opamp Amplifiers</a>
-        <a href="04C/04C.html">Application Specific Amplifiers</a>
-        <a href="08D/08D.html">Phototransistor Amplifiers</a>
-        <a href="08H/08H.html">Comparators</a>
-        <a href="06/06.html">Oscillators</a>
-        <a href="collections/555-timer-circuits.html">555 Timer Circuits</a>
-        <a href="05/05.html">Filters, Active and Passive RC Filters</a>
-        <a href="collections/power-charge-pumps.html">Power, Charge Pumps</a>
-        <a href="09A/09A.html">Power, Linear Voltage Regulators</a>
-        <a href="09H/09H.html">Power, Switching Regulators</a>
-        <a href="09D/09D.html">Power, Line and Offline Power Supplies</a>
-        <a href="10/10.html">Digital Fundamentals</a>
-        <a href="collections/probe-boards.html">Probe Boards</a>
-        <a href="collections/interface-boards.html">Interface Boards</a>
-        <a href="collections/prototyping-boards.html">Prototyping Boards</a>
-        <a href="11/11A-001.html">VIVA UTSA Board</a>
-      </div>
+      <div id="catalog-links" class="catalog-link-grid" role="list"></div>
     </section>
   </section>
       <!-- SEARCH -->
@@ -137,31 +119,81 @@
 <!-- Your generated datasets -->
 <script src="schematics-data.js"></script>
 <script src="keywords.js"></script>
+<script src="site_index.js"></script>
 
 <script>
-  // Render the List from window.SCHEMATICS
-(function renderList(){
-  const data = (window.SCHEMATICS || []).slice();
-  const container = document.getElementById('schematic-list');
+  // Render catalog grouping links from site_index.js
+(function renderCatalogLinks(){
+  const container = document.getElementById('catalog-links');
   if (!container) return;
 
-  data.sort((a,b) => (a.title||a.t).localeCompare(b.title||b.t, undefined, {numeric:true}));
+  const orderedCatalogUrls = [
+    "04B/04B.html",
+    "04A/04A.html",
+    "04C/04C.html",
+    "08D/08D.html",
+    "08H/08H.html",
+    "06/06.html",
+    "collections/555-timer-circuits.html",
+    "05/05.html",
+    "collections/power-charge-pumps.html",
+    "09A/09A.html",
+    "09H/09H.html",
+    "09D/09D.html",
+    "10/10.html",
+    "collections/probe-boards.html",
+    "collections/interface-boards.html",
+    "collections/prototyping-boards.html",
+    "11/11A-001.html"
+  ];
+
+  const fallbackLabels = {
+    "04B/04B.html": "Transistor Amplifiers",
+    "04A/04A.html": "Opamp Amplifiers",
+    "04C/04C.html": "Application Specific Amplifiers",
+    "08D/08D.html": "Phototransistor Amplifiers",
+    "08H/08H.html": "Comparators",
+    "06/06.html": "Oscillators",
+    "collections/555-timer-circuits.html": "555 Timer Circuits",
+    "05/05.html": "Filters, Active and Passive RC Filters",
+    "collections/power-charge-pumps.html": "Power, Charge Pumps",
+    "09A/09A.html": "Power, Linear Voltage Regulators",
+    "09H/09H.html": "Power, Switching Regulators",
+    "09D/09D.html": "Power, Line and Offline Power Supplies",
+    "10/10.html": "Digital Fundamentals",
+    "collections/probe-boards.html": "Probe Boards",
+    "collections/interface-boards.html": "Interface Boards",
+    "collections/prototyping-boards.html": "Prototyping Boards",
+    "11/11A-001.html": "VIVA UTSA Board"
+  };
+
+  const data =
+    (typeof siteIndex !== "undefined" && Array.isArray(siteIndex))
+      ? siteIndex
+      : (Array.isArray(window.siteIndex) ? window.siteIndex : []);
+  const normalizeUrl = (url) => String(url || "").replace(/^\.\//, "").trim();
+  const byUrl = new Map(data.map(item => [normalizeUrl(item.url), item]));
+
+  const cleanupTitle = (title) => String(title || "")
+    .replace(/\s*\|\s*miniPCB.*$/i, "")
+    .replace(/^All\s+/i, "")
+    .replace(/^[A-Z0-9-]+\s*\|\s*/i, "")
+    .trim();
+
+  const fallbackFromUrl = (url) => {
+    const slug = url.split("/").pop().replace(".html", "");
+    return slug.replace(/[-_]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  };
 
   const frag = document.createDocumentFragment();
-  data.forEach(item => {
-    const title = item.title ?? item.t;
-    const href  = item.href  ?? item.p;
+  orderedCatalogUrls.forEach(url => {
+    const entry = byUrl.get(normalizeUrl(url));
+    const label = cleanupTitle(entry?.title) || fallbackLabels[url] || fallbackFromUrl(url);
 
-    const a = document.createElement('a');
-    a.href = href;
-    a.setAttribute('role','listitem');
-    a.title = title;
-
-    const pill = document.createElement('span');
-    pill.className = 'pill';
-    pill.textContent = title;
-
-    a.appendChild(pill);
+    const a = document.createElement("a");
+    a.href = url;
+    a.setAttribute("role", "listitem");
+    a.textContent = label;
     frag.appendChild(a);
   });
 
