@@ -1510,3 +1510,7 @@ const siteIndex = [
     "keywords": ""
   }
 ];
+
+if (typeof window !== "undefined") {
+  window.siteIndex = siteIndex;
+}
