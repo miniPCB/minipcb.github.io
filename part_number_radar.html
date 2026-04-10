@@ -6518,21 +6518,21 @@
       return pn;
     }
 
-    function getIrHirelMosfetWarnings() {
+    function getIrHirelMosfetWarningsForState(state) {
       const warnings = [];
-      const pkg = irHirelMosfetState.packageDesignator;
-      const technology = irHirelMosfetState.technology;
-      const screening = irHirelMosfetState.screening;
-      const voltageCode = irHirelMosfetState.voltageCode;
-      const voltageAdder = irHirelMosfetState.voltageAdder;
+      const pkg = state.packageDesignator;
+      const technology = state.technology;
+      const screening = state.screening;
+      const voltageCode = state.voltageCode;
+      const voltageAdder = state.voltageAdder;
 
-      if (irHirelMosfetState.packageVariation === "C" && !isIrHirelTo257Package(pkg)) {
+      if (state.packageVariation === "C" && !isIrHirelTo257Package(pkg)) {
         warnings.push("Package variation `C` applies only to TO-257AA package families.");
       }
-      if (irHirelMosfetState.pinout && !isIrHirelTo257Package(pkg)) {
+      if (state.pinout && !isIrHirelTo257Package(pkg)) {
         warnings.push("Pin-output codes are documented only for TO-257AA package families.");
       }
-      if (irHirelMosfetState.processVariation === "SE" && !technologyAllowsIrHirelProcessVariation(technology)) {
+      if (state.processVariation === "SE" && !technologyAllowsIrHirelProcessVariation(technology)) {
         warnings.push("Process variation `SE` is documented only for R4 and R5 technologies.");
       }
       if (screening && isIrHirelDieLevelScreening(screening) && !(pkg === "C" || pkg === "W")) {
@@ -6541,10 +6541,10 @@
       if (screening && isIrHirelPackagedLevelScreening(screening) && (pkg === "C" || pkg === "W")) {
         warnings.push("Packaged-level screening codes (`SCX`/`SCV`/`SCS`) should be paired with packaged devices, not chip/wafer designators.");
       }
-      if (irHirelMosfetState.leadOption && !irHirelPackageSupportsLeadOption(pkg)) {
+      if (state.leadOption && !irHirelPackageSupportsLeadOption(pkg)) {
         warnings.push("Lead options apply only to TO-25x and SMD package families.");
       }
-      if (irHirelMosfetState.totalDose === "" && !(irHirelMosfetState.channel === "9" && technology === "")) {
+      if (state.totalDose === "" && !(state.channel === "9" && technology === "")) {
         warnings.push("Blank total-dose code is documented as the 100 krad(Si) P-channel R4 case only.");
       }
       if (voltageCode === "0" && voltageAdder === "0") {
@@ -6557,6 +6557,10 @@
         warnings.push("Voltage adder `4` is documented for `2x4 = 250 V` and `0x4 = 60 V` examples.");
       }
       return warnings;
+    }
+
+    function getIrHirelMosfetWarnings() {
+      return getIrHirelMosfetWarningsForState(irHirelMosfetState);
     }
 
     function renderIrHirelMosfet() {
@@ -7496,6 +7500,57 @@
       return { id, label, raw, decoded, valid };
     }
 
+    function getDecodeOptionKeys(options, includeBlank) {
+      const keys = options.map((x) => x.key);
+      if (includeBlank && !keys.includes("")) keys.push("");
+      return Array.from(new Set(keys)).sort((a, b) => {
+        if (a === "") return 1;
+        if (b === "") return -1;
+        if (b.length !== a.length) return b.length - a.length;
+        return a.localeCompare(b);
+      });
+    }
+
+    function matchDecodeSegments(input, segmentDefs) {
+      const suffixLengths = new Array(segmentDefs.length + 1);
+      suffixLengths[segmentDefs.length] = { min: 0, max: 0 };
+
+      for (let i = segmentDefs.length - 1; i >= 0; i -= 1) {
+        const lengths = segmentDefs[i].codes.map((code) => code.length);
+        suffixLengths[i] = {
+          min: Math.min(...lengths) + suffixLengths[i + 1].min,
+          max: Math.max(...lengths) + suffixLengths[i + 1].max
+        };
+      }
+
+      function walk(segmentIndex, offset, matched) {
+        if (segmentIndex === segmentDefs.length) {
+          return offset === input.length ? matched.slice() : null;
+        }
+
+        const remaining = input.length - offset;
+        if (remaining < suffixLengths[segmentIndex].min || remaining > suffixLengths[segmentIndex].max) {
+          return null;
+        }
+
+        for (const code of segmentDefs[segmentIndex].codes) {
+          if (code && !input.startsWith(code, offset)) continue;
+          const nextOffset = offset + code.length;
+          const nextRemaining = input.length - nextOffset;
+          if (nextRemaining < suffixLengths[segmentIndex + 1].min || nextRemaining > suffixLengths[segmentIndex + 1].max) {
+            continue;
+          }
+          matched[segmentIndex] = code;
+          const result = walk(segmentIndex + 1, nextOffset, matched);
+          if (result) return result;
+        }
+
+        return null;
+      }
+
+      return walk(0, 0, new Array(segmentDefs.length));
+    }
+
     function renderDecodeFieldsTable(host, fields) {
       host.innerHTML = "";
       if (!fields.length) return;
@@ -8115,6 +8170,165 @@
       return { ok: errors.length === 0, family: "sgtpl", normalizedPn: normalized, fields, errors };
     }
 
+    function decodeIrHirelMosfetPn(inputPn) {
+      const normalized = normalizePnInput(inputPn);
+      const errors = [];
+      const fields = [];
+
+      if (!normalized.startsWith("IR")) {
+        errors.push("PN must start with IR.");
+        return { ok: false, family: "irhirel_mosfet", normalizedPn: normalized, fields, errors, familyMatchOk: false };
+      }
+
+      const tail = normalized.slice(2);
+      const segmentDefs = [
+        { id: "transistorType", codes: getDecodeOptionKeys(irHirelMosfetOptions.transistorType, false) },
+        { id: "packageDesignator", codes: getDecodeOptionKeys(irHirelMosfetOptions.packageDesignator, false) },
+        { id: "technology", codes: getDecodeOptionKeys(irHirelMosfetOptions.technology, false) },
+        { id: "channel", codes: getDecodeOptionKeys(irHirelMosfetOptions.channel, false) },
+        { id: "totalDose", codes: getDecodeOptionKeys(irHirelMosfetOptions.totalDose, false) },
+        { id: "voltageCode", codes: getDecodeOptionKeys(irHirelMosfetOptions.voltageCode, false) },
+        { id: "dieSize", codes: getDecodeOptionKeys(irHirelMosfetOptions.dieSize, false) },
+        { id: "voltageAdder", codes: getDecodeOptionKeys(irHirelMosfetOptions.voltageAdder, false) },
+        { id: "packageVariation", codes: getDecodeOptionKeys(irHirelMosfetOptions.packageVariation, false) },
+        { id: "processVariation", codes: getDecodeOptionKeys(irHirelMosfetOptions.processVariation, false) },
+        { id: "pinout", codes: getDecodeOptionKeys(irHirelMosfetOptions.pinout, false) },
+        { id: "screening", codes: getDecodeOptionKeys(irHirelMosfetOptions.screening, false) },
+        { id: "leadOption", codes: getDecodeOptionKeys(irHirelMosfetOptions.leadOption, true) }
+      ];
+      const matched = matchDecodeSegments(tail, segmentDefs);
+
+      if (!matched) {
+        errors.push("PN does not match the page 18 IR HiRel MOSFET nomenclature sequence.");
+        return { ok: false, family: "irhirel_mosfet", normalizedPn: normalized, fields, errors, familyMatchOk: false };
+      }
+
+      const state = {
+        transistorType: matched[0],
+        packageDesignator: matched[1],
+        technology: matched[2],
+        channel: matched[3],
+        totalDose: matched[4],
+        voltageCode: matched[5],
+        dieSize: matched[6],
+        voltageAdder: matched[7],
+        packageVariation: matched[8],
+        processVariation: matched[9],
+        pinout: matched[10],
+        screening: matched[11],
+        leadOption: matched[12]
+      };
+
+      const packageCode = state.packageDesignator;
+      const totalDoseValid = state.totalDose !== "" || (state.channel === "9" && state.technology === "");
+      const voltageAdderValid = !(
+        (state.voltageCode === "0" && state.voltageAdder === "0") ||
+        (state.voltageAdder === "3" && state.voltageCode !== "1") ||
+        (state.voltageAdder === "4" && !(state.voltageCode === "0" || state.voltageCode === "2"))
+      );
+      const packageVariationValid = state.packageVariation === "" || isIrHirelTo257Package(packageCode);
+      const processVariationValid = state.processVariation === "" || technologyAllowsIrHirelProcessVariation(state.technology);
+      const pinoutValid = state.pinout === "" || isIrHirelTo257Package(packageCode);
+      let screeningValid = true;
+      if (state.screening && isIrHirelDieLevelScreening(state.screening)) {
+        screeningValid = packageCode === "C" || packageCode === "W";
+      } else if (state.screening && isIrHirelPackagedLevelScreening(state.screening)) {
+        screeningValid = packageCode !== "C" && packageCode !== "W";
+      }
+      const leadOptionValid = state.leadOption === "" || irHirelPackageSupportsLeadOption(packageCode);
+
+      fields.push(
+        makeDecodeField("prefix", "Prefix", "IR", "Infineon / IR HiRel rad-hard MOSFET prefix", true),
+        makeDecodeField("transistor_type", "Transistor Type", state.transistorType || "(blank)", optionByKey(irHirelMosfetOptions.transistorType, state.transistorType)?.label || "Unknown transistor type", !!optionByKey(irHirelMosfetOptions.transistorType, state.transistorType)),
+        makeDecodeField("package_designator", "Package Designator", state.packageDesignator || "(blank)", optionByKey(irHirelMosfetOptions.packageDesignator, state.packageDesignator)?.label || "Unknown package designator", !!optionByKey(irHirelMosfetOptions.packageDesignator, state.packageDesignator)),
+        makeDecodeField("technology", "Technology", state.technology || "(blank)", optionByKey(irHirelMosfetOptions.technology, state.technology)?.label || "Unknown technology code", !!optionByKey(irHirelMosfetOptions.technology, state.technology)),
+        makeDecodeField("channel", "Channel", state.channel || "(blank)", optionByKey(irHirelMosfetOptions.channel, state.channel)?.label || "Unknown channel code", !!optionByKey(irHirelMosfetOptions.channel, state.channel)),
+        makeDecodeField("total_dose", "Total Dose Hardness", state.totalDose || "(blank)", optionByKey(irHirelMosfetOptions.totalDose, state.totalDose)?.label || "Unknown total-dose code", !!optionByKey(irHirelMosfetOptions.totalDose, state.totalDose) && totalDoseValid),
+        makeDecodeField("voltage_code", "Voltage Code", state.voltageCode, optionByKey(irHirelMosfetOptions.voltageCode, state.voltageCode)?.label || "Unknown voltage code", !!optionByKey(irHirelMosfetOptions.voltageCode, state.voltageCode)),
+        makeDecodeField("die_size", "Die Size", state.dieSize, optionByKey(irHirelMosfetOptions.dieSize, state.dieSize)?.label || "Unknown die-size code", !!optionByKey(irHirelMosfetOptions.dieSize, state.dieSize)),
+        makeDecodeField("voltage_adder", "Voltage Adder", state.voltageAdder, optionByKey(irHirelMosfetOptions.voltageAdder, state.voltageAdder)?.label || "Unknown voltage-adder code", !!optionByKey(irHirelMosfetOptions.voltageAdder, state.voltageAdder) && voltageAdderValid),
+        makeDecodeField("package_variation", "Package Variation", state.packageVariation || "(blank)", optionByKey(irHirelMosfetOptions.packageVariation, state.packageVariation)?.label || "Unknown package-variation code", !!optionByKey(irHirelMosfetOptions.packageVariation, state.packageVariation) && packageVariationValid),
+        makeDecodeField("process_variation", "Process Variation", state.processVariation || "(blank)", optionByKey(irHirelMosfetOptions.processVariation, state.processVariation)?.label || "Unknown process-variation code", !!optionByKey(irHirelMosfetOptions.processVariation, state.processVariation) && processVariationValid),
+        makeDecodeField("pinout", "Pin Output", state.pinout || "(blank)", optionByKey(irHirelMosfetOptions.pinout, state.pinout)?.label || "Unknown pin-output code", !!optionByKey(irHirelMosfetOptions.pinout, state.pinout) && pinoutValid),
+        makeDecodeField("screening", "Screening", state.screening || "(blank)", optionByKey(irHirelMosfetOptions.screening, state.screening)?.label || "Unknown screening code", !!optionByKey(irHirelMosfetOptions.screening, state.screening) && screeningValid),
+        makeDecodeField("lead_option", "Lead Option", state.leadOption || "(blank)", state.leadOption === "" ? "(blank) (no lead-option suffix present)" : (optionByKey(irHirelMosfetOptions.leadOption, state.leadOption)?.label || "Unknown lead-option code"), state.leadOption === "" || (!!optionByKey(irHirelMosfetOptions.leadOption, state.leadOption) && leadOptionValid))
+      );
+
+      const warnings = getIrHirelMosfetWarningsForState(state);
+      errors.push(...warnings);
+
+      return {
+        ok: errors.length === 0,
+        family: "irhirel_mosfet",
+        normalizedPn: normalized,
+        fields,
+        errors,
+        familyMatchOk: true
+      };
+    }
+
+    function decodeInfineonPowerMosPn(inputPn) {
+      const normalized = normalizePnInput(inputPn);
+      const errors = [];
+      const fields = [];
+      const match = normalized.match(/^BUY(\d{2})([A-Z]{2})(\d{2})([A-Z])(\d{2})(ES|P|SAM)$/);
+
+      if (!match) {
+        errors.push("Expected format: BUY + voltage class(2) + technology(2) + current rating(2) + package(1) + type variant(2) + quality(ES|P|SAM).");
+        return { ok: false, family: "infineon_powermos", normalizedPn: normalized, fields, errors, familyMatchOk: false };
+      }
+
+      const state = {
+        voltageClass: match[1],
+        technology: match[2],
+        currentRating: match[3],
+        packageDesignator: match[4],
+        typeVariant: match[5],
+        qualityLevel: match[6]
+      };
+
+      const voltageOpt = optionByKey(infineonPowerMosOptions.voltageClass, state.voltageClass);
+      const currentOpt = optionByKey(infineonPowerMosOptions.currentRating, state.currentRating);
+      const packageOpt = optionByKey(infineonPowerMosOptions.packageDesignator, state.packageDesignator);
+      const variantOpt = optionByKey(infineonPowerMosOptions.typeVariant, state.typeVariant);
+      const qualityOpt = optionByKey(infineonPowerMosOptions.qualityLevel, state.qualityLevel);
+      const technologyValid = state.technology === "CS";
+      const matchingRows = findMatchingInfineonPowerMosRows(state);
+      const packagedRow = matchingRows.length === 1 ? matchingRows[0] : null;
+
+      fields.push(
+        makeDecodeField("prefix", "Prefix", "BUY", "Infineon PowerMOS transistor prefix", true),
+        makeDecodeField("voltage_class", "Voltage Class", state.voltageClass, voltageOpt ? voltageOpt.label : "Unknown voltage-class code", !!voltageOpt),
+        makeDecodeField("technology", "Technology", state.technology, technologyValid ? "CS (1st generation N-channel)" : "Unknown technology code", technologyValid),
+        makeDecodeField("current_rating", "Current Rating", state.currentRating, currentOpt ? currentOpt.label : "Unknown current-rating code", !!currentOpt),
+        makeDecodeField("package_designator", "Package Designator", state.packageDesignator, packageOpt ? packageOpt.label : "Unknown package-designator code", !!packageOpt),
+        makeDecodeField("type_variant", "Type Variant", state.typeVariant, variantOpt ? variantOpt.label : "Unknown type-variant code", !!variantOpt),
+        makeDecodeField("quality_level", "Quality Level", state.qualityLevel, qualityOpt ? qualityOpt.label : "Unknown quality-level code", !!qualityOpt),
+        makeDecodeField("packaged_row", "Page 20 Packaged BUY Row", packagedRow ? packagedRow.pn : normalized, packagedRow ? "Listed in packaged BUY selector-table rows" : "Not listed in the page 20 packaged BUY table", !!packagedRow)
+      );
+
+      if (!voltageOpt) errors.push("Unknown PowerMOS voltage-class code.");
+      if (!technologyValid) errors.push("Technology code must be CS for this PowerMOS nomenclature.");
+      if (!currentOpt) errors.push("Unknown PowerMOS current-rating code.");
+      if (!packageOpt) errors.push("Unknown PowerMOS package-designator code.");
+      if (!variantOpt) errors.push("Unknown PowerMOS type-variant code.");
+      if (!qualityOpt) errors.push("Unknown PowerMOS quality-level code.");
+      if (matchingRows.length === 0) {
+        errors.push("Combination is not listed in the page 20 packaged BUY table.");
+      } else if (matchingRows.length > 1) {
+        errors.push("Combination matched multiple packaged BUY rows unexpectedly.");
+      }
+
+      return {
+        ok: errors.length === 0,
+        family: "infineon_powermos",
+        normalizedPn: normalized,
+        fields,
+        errors,
+        familyMatchOk: true
+      };
+    }
+
     function decodeDiodeSeriesPn(inputPn, seriesKey) {
       const normalized = normalizePnInput(inputPn);
       const errors = [];
@@ -8363,6 +8577,16 @@
         normalize: normalizePnInput,
         decode: decodeSgtplPn
       },
+      irhirel_mosfet: {
+        label: "IR HiRel MOSFET",
+        normalize: normalizePnInput,
+        decode: decodeIrHirelMosfetPn
+      },
+      infineon_powermos: {
+        label: "Infineon PowerMOS Transistors",
+        normalize: normalizePnInput,
+        decode: decodeInfineonPowerMosPn
+      },
       diode_4099_4135_4614_4627: {
         label: "1N4099-1N4135 / 1N4614-1N4627",
         normalize: normalizePnInput,
@@ -8523,6 +8747,7 @@
     function isSoftFamilyMatch(result) {
       if (!result || typeof result !== "object") return false;
       if (result.ok) return true;
+      if (result.familyMatchOk === true) return true;
       if (result.family !== "m55342") return false;
       if (!Array.isArray(result.errors)) return false;
       if (result.errors.length < 1) return false;
