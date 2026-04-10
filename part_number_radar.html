@@ -603,6 +603,82 @@
       white-space: nowrap;
     }
 
+    .tool-path-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 6px;
+    }
+
+    .tool-path-leave {
+      border: 1px solid rgba(255, 186, 82, 0.5);
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 0.78rem;
+      color: #ffe6bc;
+      background: rgba(255, 186, 82, 0.14);
+      cursor: pointer;
+      line-height: 1.4;
+    }
+
+    .tool-path-leave:hover {
+      background: rgba(255, 186, 82, 0.22);
+      border-color: rgba(255, 186, 82, 0.75);
+    }
+
+    .leave-tool-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(6, 12, 18, 0.38);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .leave-tool-dialog {
+      width: min(420px, 100%);
+      border: 1px solid rgba(84, 210, 255, 0.22);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(18, 31, 42, 0.96), rgba(10, 20, 29, 0.98));
+      box-shadow: 0 18px 48px rgba(1, 10, 17, 0.52);
+      padding: 18px;
+    }
+
+    .leave-tool-title {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0.02em;
+    }
+
+    .leave-tool-copy {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .leave-tool-actions {
+      margin-top: 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-accent {
+      border: 1px solid rgba(84, 210, 255, 0.55);
+      background: linear-gradient(120deg, rgba(84, 210, 255, 0.32), rgba(84, 210, 255, 0.16));
+      color: #effaff;
+      border-radius: 8px;
+      min-height: 34px;
+      padding: 0 12px;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+
     .splash-flow {
       min-height: 100vh;
       display: grid;
@@ -1048,6 +1124,16 @@
     <span class="tool-path-link active" aria-current="page">Start</span>
     <span class="tool-path-current">Current: Choose Mode</span>
   </nav>
+  <div id="leaveToolOverlay" class="leave-tool-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="leaveToolTitle" aria-describedby="leaveToolCopy">
+    <section class="leave-tool-dialog">
+      <h2 id="leaveToolTitle" class="leave-tool-title">Do you want to leave the tool?</h2>
+      <p id="leaveToolCopy" class="leave-tool-copy">Stay in the current tool to keep your place, or leave and return to the radar start flow.</p>
+      <div class="leave-tool-actions">
+        <button id="leaveToolStayBtn" type="button" class="btn">Stay In Tool</button>
+        <button id="leaveToolConfirmBtn" type="button" class="btn-accent">Leave</button>
+      </div>
+    </section>
+  </div>
   <div id="splashFlow" class="splash-flow">
     <section class="splash-card">
       <div id="splashStep1" class="splash-step active">
@@ -2114,6 +2200,9 @@
       componentType: "",
       targetView: "m55342"
     };
+    const leaveToolState = {
+      pendingTarget: ""
+    };
 
     /*
       PART FAMILY REFERENCE DB (machine-readable source catalog)
@@ -2574,6 +2663,9 @@
 
     const nodes = {
       toolPathNav: document.getElementById("toolPathNav"),
+      leaveToolOverlay: document.getElementById("leaveToolOverlay"),
+      leaveToolStayBtn: document.getElementById("leaveToolStayBtn"),
+      leaveToolConfirmBtn: document.getElementById("leaveToolConfirmBtn"),
       workspace: document.getElementById("workspace"),
       splashFlow: document.getElementById("splashFlow"),
       requestFlow: document.getElementById("requestFlow"),
@@ -9614,12 +9706,39 @@
       currentNode.className = "tool-path-current";
       currentNode.textContent = currentText;
       fragment.appendChild(currentNode);
+      if (!nodes.workspace.classList.contains("hidden")) {
+        const actions = document.createElement("div");
+        actions.className = "tool-path-actions";
+        const leaveBtn = document.createElement("button");
+        leaveBtn.type = "button";
+        leaveBtn.className = "tool-path-leave";
+        leaveBtn.dataset.leaveTool = "start";
+        leaveBtn.textContent = "Leave";
+        actions.appendChild(leaveBtn);
+        fragment.appendChild(actions);
+      }
       nodes.toolPathNav.appendChild(fragment);
     }
 
     function updateToolPathNav() {
       const pathState = buildToolPathTrail();
       renderToolPathNav(pathState.trail, pathState.currentText);
+    }
+
+    function openLeaveToolDialog(targetKey) {
+      leaveToolState.pendingTarget = targetKey || "start";
+      nodes.leaveToolOverlay.classList.remove("hidden");
+      nodes.leaveToolStayBtn.focus();
+    }
+
+    function closeLeaveToolDialog() {
+      leaveToolState.pendingTarget = "";
+      nodes.leaveToolOverlay.classList.add("hidden");
+    }
+
+    function shouldConfirmToolExit(targetKey) {
+      if (nodes.workspace.classList.contains("hidden")) return false;
+      return targetKey === "start" || targetKey === "component" || targetKey === "family" || targetKey === "request";
     }
 
     function jumpToToolPathTarget(targetKey) {
@@ -9865,12 +9984,40 @@
     nodes.splashRequestClose.addEventListener("click", () => setSplashRequestOpen(false));
     if (nodes.toolPathNav) {
       nodes.toolPathNav.addEventListener("click", (event) => {
+        const leaveBtn = event.target.closest("[data-leave-tool]");
+        if (leaveBtn) {
+          event.preventDefault();
+          openLeaveToolDialog(leaveBtn.dataset.leaveTool || "start");
+          return;
+        }
         const link = event.target.closest("[data-path-target]");
         if (!link) return;
         event.preventDefault();
-        jumpToToolPathTarget(link.dataset.pathTarget || "start");
+        const targetKey = link.dataset.pathTarget || "start";
+        if (shouldConfirmToolExit(targetKey)) {
+          openLeaveToolDialog(targetKey);
+          return;
+        }
+        jumpToToolPathTarget(targetKey);
       });
     }
+    nodes.leaveToolStayBtn.addEventListener("click", () => closeLeaveToolDialog());
+    nodes.leaveToolConfirmBtn.addEventListener("click", () => {
+      const targetKey = leaveToolState.pendingTarget || "start";
+      closeLeaveToolDialog();
+      jumpToToolPathTarget(targetKey);
+    });
+    nodes.leaveToolOverlay.addEventListener("click", (event) => {
+      if (event.target === nodes.leaveToolOverlay) {
+        closeLeaveToolDialog();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !nodes.leaveToolOverlay.classList.contains("hidden")) {
+        event.preventDefault();
+        closeLeaveToolDialog();
+      }
+    });
 
     nodes.partRequestForm.addEventListener("submit", async (event) => {
       event.preventDefault();
