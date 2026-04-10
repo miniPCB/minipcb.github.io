@@ -6649,21 +6649,31 @@
       return value;
     }
 
+    function buildIrHirelPreviewConsensusSegment(rows, key, unknownWidth, allowExplicitBlank) {
+      if (!rows.length) {
+        return allowExplicitBlank ? "" : "_".repeat(unknownWidth || 1);
+      }
+      const inferred = buildConsensusSegment(rows.map((row) => row.codeState && row.codeState[key]), allowExplicitBlank ? 0 : unknownWidth);
+      if (inferred) return inferred;
+      return allowExplicitBlank ? "" : "_".repeat(unknownWidth || 1);
+    }
+
     function buildIrHirelMosfetPreviewFromState(state) {
+      const previewRows = findClosestIrHirelSelectorRowsForPreview(state);
       return "IR" +
-        buildIrHirelPreviewSegment(state.transistorType, 1, false) +
-        buildIrHirelPreviewSegment(state.packageDesignator, 1, true) +
-        buildIrHirelPreviewSegment(state.technology, 1, true) +
-        buildIrHirelPreviewSegment(state.channel, 1, true) +
-        buildIrHirelPreviewSegment(state.totalDose, 1, true) +
-        buildIrHirelPreviewSegment(state.voltageCode, 1, false) +
-        buildIrHirelPreviewSegment(state.dieSize, 1, false) +
-        buildIrHirelPreviewSegment(state.voltageAdder, 1, false) +
-        buildIrHirelPreviewSegment(state.packageVariation, 1, true) +
-        buildIrHirelPreviewSegment(state.processVariation, 1, true) +
-        buildIrHirelPreviewSegment(state.pinout, 1, true) +
-        buildIrHirelPreviewSegment(state.screening, 1, true) +
-        buildIrHirelPreviewSegment(state.leadOption, 1, true);
+        (state.transistorType != null ? buildIrHirelPreviewSegment(state.transistorType, 1, false) : buildIrHirelPreviewConsensusSegment(previewRows, "transistorType", 1, false)) +
+        (state.packageDesignator != null ? buildIrHirelPreviewSegment(state.packageDesignator, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "packageDesignator", 1, true)) +
+        (state.technology != null ? buildIrHirelPreviewSegment(state.technology, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "technology", 1, true)) +
+        (state.channel != null ? buildIrHirelPreviewSegment(state.channel, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "channel", 1, true)) +
+        (state.totalDose != null ? buildIrHirelPreviewSegment(state.totalDose, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "totalDose", 1, true)) +
+        (state.voltageCode != null ? buildIrHirelPreviewSegment(state.voltageCode, 1, false) : buildIrHirelPreviewConsensusSegment(previewRows, "voltageCode", 1, false)) +
+        (state.dieSize != null ? buildIrHirelPreviewSegment(state.dieSize, 1, false) : buildIrHirelPreviewConsensusSegment(previewRows, "dieSize", 1, false)) +
+        (state.voltageAdder != null ? buildIrHirelPreviewSegment(state.voltageAdder, 1, false) : buildIrHirelPreviewConsensusSegment(previewRows, "voltageAdder", 1, false)) +
+        (state.packageVariation != null ? buildIrHirelPreviewSegment(state.packageVariation, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "packageVariation", 1, true)) +
+        (state.processVariation != null ? buildIrHirelPreviewSegment(state.processVariation, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "processVariation", 1, true)) +
+        (state.pinout != null ? buildIrHirelPreviewSegment(state.pinout, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "pinout", 1, true)) +
+        (state.screening != null ? buildIrHirelPreviewSegment(state.screening, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "screening", 1, true)) +
+        (state.leadOption != null ? buildIrHirelPreviewSegment(state.leadOption, 1, true) : buildIrHirelPreviewConsensusSegment(previewRows, "leadOption", 1, true));
     }
 
     function buildIrHirelMosfetConsensusPreview(rows) {
@@ -6695,6 +6705,36 @@
 
     function findMatchingIrHirelSelectorRows(state) {
       return irHirelSelectorRowsDetailed.filter((row) => irHirelSelectorRowMatchesState(row, state));
+    }
+
+    function findClosestIrHirelSelectorRowsForPreview(state) {
+      const relaxOrder = [
+        "leadOption",
+        "screening",
+        "pinout",
+        "processVariation",
+        "packageVariation",
+        "packageDesignator",
+        "totalDose",
+        "channel",
+        "technology",
+        "voltageAdder",
+        "dieSize",
+        "voltageCode",
+        "transistorType"
+      ];
+      const test = { ...state };
+      let rows = findMatchingIrHirelSelectorRows(test);
+      if (rows.length) return rows;
+
+      for (const key of relaxOrder) {
+        if (test[key] == null) continue;
+        test[key] = null;
+        rows = findMatchingIrHirelSelectorRows(test);
+        if (rows.length) return rows;
+      }
+
+      return [];
     }
 
     function irHirelCountWith(key, keyValue) {
