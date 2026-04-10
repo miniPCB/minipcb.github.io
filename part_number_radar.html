@@ -6633,7 +6633,7 @@
 
     function buildConsensusSegment(values, minWidth) {
       const list = values.map((value) => String(value == null ? "" : value));
-      const width = Math.max(minWidth || 1, 1, ...list.map((value) => value.length));
+      const width = Math.max(minWidth || 0, 0, ...list.map((value) => value.length));
       let out = "";
       for (let i = 0; i < width; i += 1) {
         const chars = list.map((value) => (i < value.length ? value[i] : "_"));
@@ -6643,38 +6643,44 @@
       return out;
     }
 
+    function buildIrHirelPreviewSegment(value, unknownWidth, allowExplicitBlank) {
+      if (value == null) return "_".repeat(unknownWidth || 1);
+      if (value === "" && allowExplicitBlank) return "";
+      return value;
+    }
+
     function buildIrHirelMosfetPreviewFromState(state) {
       return "IR" +
-        (state.transistorType == null ? "_" : state.transistorType) +
-        (state.packageDesignator == null ? "_" : state.packageDesignator) +
-        (state.technology == null ? "_" : state.technology) +
-        (state.channel == null ? "_" : state.channel) +
-        (state.totalDose == null ? "_" : state.totalDose) +
-        (state.voltageCode == null ? "_" : state.voltageCode) +
-        (state.dieSize == null ? "_" : state.dieSize) +
-        (state.voltageAdder == null ? "_" : state.voltageAdder) +
-        (state.packageVariation == null ? "_" : state.packageVariation || "_") +
-        (state.processVariation == null ? "_" : state.processVariation || "_") +
-        (state.pinout == null ? "_" : state.pinout || "_") +
-        (state.screening == null ? "_" : state.screening || "_") +
-        (state.leadOption == null ? "_" : state.leadOption || "_");
+        buildIrHirelPreviewSegment(state.transistorType, 1, false) +
+        buildIrHirelPreviewSegment(state.packageDesignator, 1, true) +
+        buildIrHirelPreviewSegment(state.technology, 1, true) +
+        buildIrHirelPreviewSegment(state.channel, 1, true) +
+        buildIrHirelPreviewSegment(state.totalDose, 1, true) +
+        buildIrHirelPreviewSegment(state.voltageCode, 1, false) +
+        buildIrHirelPreviewSegment(state.dieSize, 1, false) +
+        buildIrHirelPreviewSegment(state.voltageAdder, 1, false) +
+        buildIrHirelPreviewSegment(state.packageVariation, 1, true) +
+        buildIrHirelPreviewSegment(state.processVariation, 1, true) +
+        buildIrHirelPreviewSegment(state.pinout, 1, true) +
+        buildIrHirelPreviewSegment(state.screening, 1, true) +
+        buildIrHirelPreviewSegment(state.leadOption, 1, true);
     }
 
     function buildIrHirelMosfetConsensusPreview(rows) {
       return "IR" +
         buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.transistorType), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.packageDesignator), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.technology), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.channel), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.totalDose), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.packageDesignator), 0) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.technology), 0) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.channel), 0) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.totalDose), 0) +
         buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.voltageCode), 1) +
         buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.dieSize), 1) +
         buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.voltageAdder), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.packageVariation), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.processVariation), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.pinout), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.screening), 1) +
-        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.leadOption), 1);
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.packageVariation), 0) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.processVariation), 0) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.pinout), 0) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.screening), 0) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.leadOption), 0);
     }
 
     function irHirelSelectorRowMatchesState(row, state) {
