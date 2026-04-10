@@ -6608,6 +6608,52 @@
       return buildIrHirelMosfetPnFromState(irHirelMosfetState);
     }
 
+    function buildConsensusSegment(values, minWidth) {
+      const list = values.map((value) => String(value == null ? "" : value));
+      const width = Math.max(minWidth || 1, 1, ...list.map((value) => value.length));
+      let out = "";
+      for (let i = 0; i < width; i += 1) {
+        const chars = list.map((value) => (i < value.length ? value[i] : "_"));
+        const first = chars[0];
+        out += chars.every((ch) => ch === first) ? first : "_";
+      }
+      return out;
+    }
+
+    function buildIrHirelMosfetPreviewFromState(state) {
+      return "IR" +
+        (state.transistorType == null ? "_" : state.transistorType) +
+        (state.packageDesignator == null ? "_" : state.packageDesignator) +
+        (state.technology == null ? "_" : state.technology) +
+        (state.channel == null ? "_" : state.channel) +
+        (state.totalDose == null ? "_" : state.totalDose) +
+        (state.voltageCode == null ? "_" : state.voltageCode) +
+        (state.dieSize == null ? "_" : state.dieSize) +
+        (state.voltageAdder == null ? "_" : state.voltageAdder) +
+        (state.packageVariation == null ? "_" : state.packageVariation || "_") +
+        (state.processVariation == null ? "_" : state.processVariation || "_") +
+        (state.pinout == null ? "_" : state.pinout || "_") +
+        (state.screening == null ? "_" : state.screening || "_") +
+        (state.leadOption == null ? "_" : state.leadOption || "_");
+    }
+
+    function buildIrHirelMosfetConsensusPreview(rows) {
+      return "IR" +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.transistorType), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.packageDesignator), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.technology), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.channel), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.totalDose), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.voltageCode), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.dieSize), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.voltageAdder), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.packageVariation), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.processVariation), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.pinout), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.screening), 1) +
+        buildConsensusSegment(rows.map((row) => row.codeState && row.codeState.leadOption), 1);
+    }
+
     function irHirelSelectorRowMatchesState(row, state) {
       if (!row || !row.codeState) return false;
       for (const key of Object.keys(state)) {
@@ -6762,7 +6808,7 @@
       irHirelMosfetNodes.results.innerHTML = "";
       irHirelMosfetNodes.pnText.textContent = rows.length === 1
         ? rows[0].pn
-        : (rows.length > 1 ? "Multiple listed matches" : "No selector-guide match");
+        : (rows.length > 1 ? buildIrHirelMosfetConsensusPreview(rows) : buildIrHirelMosfetPreviewFromState(irHirelMosfetState));
 
       if (!rows.length) {
         irHirelMosfetNodes.statusText.textContent = "No matching selector-guide IR HiRel rows";
@@ -6857,6 +6903,19 @@
         ")";
     }
 
+    function buildInfineonPowerMosConsensusPreview(rows) {
+      return "BUY" +
+        buildConsensusSegment(rows.map((row) => row.voltageClass), 2) +
+        buildConsensusSegment(rows.map((row) => row.technology), 2) +
+        buildConsensusSegment(rows.map((row) => row.currentRating), 2) +
+        buildConsensusSegment(rows.map((row) => row.packageDesignator), 1) +
+        "-" +
+        buildConsensusSegment(rows.map((row) => row.typeVariant), 2) +
+        "(" +
+        buildConsensusSegment(rows.map((row) => row.qualityLevel), 2) +
+        ")";
+    }
+
     function renderInfineonPowerMos() {
       updateInfineonPowerMosButtonState();
 
@@ -6913,7 +6972,9 @@
 
       const previewPn = buildInfineonPowerMosPreview();
       const rows = findMatchingInfineonPowerMosRows(infineonPowerMosState);
-      infineonPowerMosNodes.pnText.textContent = rows.length === 1 ? rows[0].pn : previewPn;
+      infineonPowerMosNodes.pnText.textContent = rows.length === 1
+        ? rows[0].pn
+        : (rows.length > 1 ? buildInfineonPowerMosConsensusPreview(rows) : previewPn);
       infineonPowerMosNodes.results.innerHTML = "";
 
       if (!rows.length) {
