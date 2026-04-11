@@ -14,13 +14,13 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>
-   Contact - miniPCB™
+   Contact - miniPCB&trade;
   </title>
 <link href="styles.css" rel="stylesheet"/>
 <link href="/favicon.png" rel="icon" type="image/png"/>
 <meta content="miniPCB, Contact miniPCB, PCB Manufacturer, PCB Design, Custom PCB, PCB Services, PCB Production, PCB Supplier, PCB Contact, Electronics Manufacturing, Circuit Board Design, PCB Assembly, PCB Fabrication, High-quality PCB, Contact Electronics Manufacturer, PCB Inquiry, PCB Technology, PCB Support, Industrial PCB, PCB Solutions" name="keywords"/>
 </head>
-<body>
+<body class="contact-page">
 <nav>
 <div class="nav-container">
 <ul class="nav-links">
@@ -32,28 +32,174 @@
 </ul>
 </div>
 </nav>
-<main class="container">
+<main class="contact-shell">
+<section class="contact-hero">
 <h1>
-    Contact
+    Contact Us
    </h1>
 <p>
-    Have a question about miniPCBs™, interested in requesting free sample boards, or want to collaborate on a custom design?
+    Questions about miniPCB, sample-board requests, education use, or custom design work can all go through this form.
    </p>
+</section>
+<section aria-labelledby="contactFormTitle" class="contact-card">
+<aside class="contact-aside">
+<h2 id="contactFormTitle">
+      Send a message
+     </h2>
 <p>
-    Please feel free to email me directly:
-   </p>
-<p style="font-size: 1.25em;">
-    📧
-    <a href="mailto:nolan@minipcb.com">
-     nolan@minipcb.com
-    </a>
-</p>
-<p>
-    I do my best to respond within 1-2 business days. Whether you're an instructor looking for lab tools, or just curious about the project, I’d love to hear from you.
-   </p>
-<p>
-    Thank you for your interest in miniPCB™!
-   </p>
+      Messages from this page are sent through the site contact form and routed to Nolan.
+     </p>
+<ul class="contact-points">
+<li>
+       Ask about existing boards or collections.
+      </li>
+<li>
+       Request sample boards for education use.
+      </li>
+<li>
+       Start a conversation about a custom design.
+      </li>
+</ul>
+<p class="contact-note">
+      If the form is unavailable, you can still email <a href="mailto:nolan@minipcb.com">nolan@minipcb.com</a>.
+     </p>
+</aside>
+<form class="contact-form" id="contactForm" novalidate="">
+<div class="contact-grid two-up">
+<div class="contact-field">
+<label for="contactName">
+        Name
+       </label>
+<input autocomplete="name" id="contactName" maxlength="120" name="name" required="" type="text"/>
+</div>
+<div class="contact-field">
+<label for="contactEmail">
+        Email
+       </label>
+<input autocomplete="email" id="contactEmail" maxlength="180" name="email" required="" type="email"/>
+</div>
+</div>
+<div class="contact-grid two-up">
+<div class="contact-field">
+<label for="contactOrganization">
+        Organization
+       </label>
+<input autocomplete="organization" id="contactOrganization" maxlength="160" name="organization" type="text"/>
+</div>
+<div class="contact-field">
+<label for="contactSubject">
+        Subject
+       </label>
+<input id="contactSubject" maxlength="180" name="subject" type="text"/>
+</div>
+</div>
+<div aria-hidden="true" class="contact-field contact-honeypot">
+<label for="contactWebsite">
+        Leave this field empty
+       </label>
+<input autocomplete="off" id="contactWebsite" name="website" tabindex="-1" type="text"/>
+</div>
+<div class="contact-field">
+<label for="contactMessage">
+        Message
+       </label>
+<textarea id="contactMessage" maxlength="4000" name="message" required=""></textarea>
+</div>
+<div class="contact-submit">
+<button class="contact-btn" id="contactSubmitBtn" type="submit">
+        Send message
+       </button>
+<div aria-live="polite" class="contact-status" id="contactStatus" role="status"></div>
+</div>
+<noscript class="contact-note">
+      This form requires JavaScript. If needed, email <a href="mailto:nolan@minipcb.com">nolan@minipcb.com</a>.
+     </noscript>
+</form>
+</section>
 </main>
+<footer>
+   &copy; 2026 miniPCB. All rights reserved.
+  </footer>
+<script>
+   (function initContactForm() {
+    const form = document.getElementById("contactForm");
+    const submitBtn = document.getElementById("contactSubmitBtn");
+    const statusEl = document.getElementById("contactStatus");
+    if (!form || !submitBtn || !statusEl) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const apiBaseOverride = String(params.get("apiBase") || "").trim();
+    let storedApiBase = "";
+    try {
+      storedApiBase = String(localStorage.getItem("tb26_api_base") || "").trim();
+    } catch (error) {
+      storedApiBase = "";
+    }
+    const apiBase = (apiBaseOverride || storedApiBase || "https://minipcb-github-io.vercel.app/api").replace(/\/+$/, "");
+
+    function setStatus(message, state) {
+      statusEl.textContent = message;
+      statusEl.className = "contact-status" + (state ? ` is-${state}` : "");
+    }
+
+    function getPayload() {
+      const formData = new FormData(form);
+      return {
+        name: String(formData.get("name") || "").trim(),
+        email: String(formData.get("email") || "").trim(),
+        organization: String(formData.get("organization") || "").trim(),
+        subject: String(formData.get("subject") || "").trim(),
+        website: String(formData.get("website") || "").trim(),
+        message: String(formData.get("message") || "").trim()
+      };
+    }
+
+    function validate(payload) {
+      if (!payload.name) return "Name is required.";
+      if (!payload.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) return "A valid email is required.";
+      if (!payload.message) return "Message is required.";
+      if (payload.message.length < 10) return "Please add a little more detail to the message.";
+      return "";
+    }
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const payload = getPayload();
+      const validationError = validate(payload);
+      if (validationError) {
+        setStatus(validationError, "error");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      setStatus("Sending message...", "busy");
+
+      try {
+        const response = await fetch(`${apiBase}/contact`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json().catch(function () {
+          return {};
+        });
+
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "Failed to send message.");
+        }
+
+        form.reset();
+        setStatus("Message sent. Nolan should receive it shortly.", "success");
+      } catch (error) {
+        setStatus(String(error && error.message ? error.message : error), "error");
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  })();
+  </script>
 </body>
 </html>
