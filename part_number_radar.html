@@ -1104,7 +1104,7 @@
   <div id="leaveToolOverlay" class="leave-tool-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="leaveToolTitle" aria-describedby="leaveToolCopy">
     <section class="leave-tool-dialog">
       <h2 id="leaveToolTitle" class="leave-tool-title">Do you want to leave the tool?</h2>
-      <p id="leaveToolCopy" class="leave-tool-copy">Stay in the current tool to keep your place, or leave and return to the radar start flow.</p>
+      <p id="leaveToolCopy" class="leave-tool-copy">Stay in the current tool to keep your place, or leave and continue back.</p>
       <div class="leave-tool-actions">
         <button id="leaveToolStayBtn" type="button" class="btn">Stay In Tool</button>
         <button id="leaveToolConfirmBtn" type="button" class="btn-accent">Leave</button>
@@ -9703,6 +9703,28 @@
       nodes.leaveToolOverlay.classList.add("hidden");
     }
 
+    function stayInCurrentTool() {
+      const targetKey = leaveToolState.pendingTarget || "";
+      closeLeaveToolDialog();
+      if (targetKey === "history-back") {
+        rearmBackButtonLeaveGuard();
+      }
+    }
+
+    function confirmLeaveTool() {
+      const targetKey = leaveToolState.pendingTarget || "start";
+      closeLeaveToolDialog();
+      if (targetKey === "history-back") {
+        if (window.history && typeof window.history.back === "function") {
+          history.back();
+          return;
+        }
+        jumpToToolPathTarget("start");
+        return;
+      }
+      jumpToToolPathTarget(targetKey);
+    }
+
     function installBackButtonLeaveGuard() {
       if (!window.history || typeof window.history.pushState !== "function" || typeof window.history.replaceState !== "function") {
         return;
@@ -9972,24 +9994,19 @@
     window.addEventListener("popstate", (event) => {
       const state = event.state;
       if (!state || state[BACK_GUARD_STATE_KEY] !== "base") return;
-      openLeaveToolDialog("start");
-      rearmBackButtonLeaveGuard();
+      openLeaveToolDialog("history-back");
     });
-    nodes.leaveToolStayBtn.addEventListener("click", () => closeLeaveToolDialog());
-    nodes.leaveToolConfirmBtn.addEventListener("click", () => {
-      const targetKey = leaveToolState.pendingTarget || "start";
-      closeLeaveToolDialog();
-      jumpToToolPathTarget(targetKey);
-    });
+    nodes.leaveToolStayBtn.addEventListener("click", () => stayInCurrentTool());
+    nodes.leaveToolConfirmBtn.addEventListener("click", () => confirmLeaveTool());
     nodes.leaveToolOverlay.addEventListener("click", (event) => {
       if (event.target === nodes.leaveToolOverlay) {
-        closeLeaveToolDialog();
+        stayInCurrentTool();
       }
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !nodes.leaveToolOverlay.classList.contains("hidden")) {
         event.preventDefault();
-        closeLeaveToolDialog();
+        stayInCurrentTool();
       }
     });
 
