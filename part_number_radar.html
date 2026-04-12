@@ -603,29 +603,6 @@
       white-space: nowrap;
     }
 
-    .tool-path-actions {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-left: 6px;
-    }
-
-    .tool-path-leave {
-      border: 1px solid rgba(255, 186, 82, 0.5);
-      border-radius: 999px;
-      padding: 3px 10px;
-      font-size: 0.78rem;
-      color: #ffe6bc;
-      background: rgba(255, 186, 82, 0.14);
-      cursor: pointer;
-      line-height: 1.4;
-    }
-
-    .tool-path-leave:hover {
-      background: rgba(255, 186, 82, 0.22);
-      border-color: rgba(255, 186, 82, 0.75);
-    }
-
     .leave-tool-overlay {
       position: fixed;
       inset: 0;
@@ -2190,6 +2167,7 @@
     const PART_AVAILABILITY_API_URL = "https://minipcb-github-io.vercel.app/api/part-availability";
     const PART_REQUEST_PROXY_KEY = "";
     const BOM_MAX_ROWS = 5000;
+    const BACK_GUARD_STATE_KEY = "__pnRadarBackGuard";
     const STEERING_CONFIG = {
       pn_decipher: { label: "PN Decipher", workspaceViewKey: "pnDecipherView" },
       bom_decipher: { label: "BOM Decipher", workspaceViewKey: "bomDecipherView" },
@@ -9706,17 +9684,6 @@
       currentNode.className = "tool-path-current";
       currentNode.textContent = currentText;
       fragment.appendChild(currentNode);
-      if (!nodes.workspace.classList.contains("hidden")) {
-        const actions = document.createElement("div");
-        actions.className = "tool-path-actions";
-        const leaveBtn = document.createElement("button");
-        leaveBtn.type = "button";
-        leaveBtn.className = "tool-path-leave";
-        leaveBtn.dataset.leaveTool = "start";
-        leaveBtn.textContent = "Leave";
-        actions.appendChild(leaveBtn);
-        fragment.appendChild(actions);
-      }
       nodes.toolPathNav.appendChild(fragment);
     }
 
@@ -9736,9 +9703,21 @@
       nodes.leaveToolOverlay.classList.add("hidden");
     }
 
-    function shouldConfirmToolExit(targetKey) {
-      if (nodes.workspace.classList.contains("hidden")) return false;
-      return targetKey === "start" || targetKey === "component" || targetKey === "family" || targetKey === "request";
+    function installBackButtonLeaveGuard() {
+      if (!window.history || typeof window.history.pushState !== "function" || typeof window.history.replaceState !== "function") {
+        return;
+      }
+      const baseState = history.state && typeof history.state === "object" && !Array.isArray(history.state)
+        ? { ...history.state }
+        : {};
+      baseState[BACK_GUARD_STATE_KEY] = "base";
+      history.replaceState(baseState, document.title, window.location.href);
+      history.pushState({ [BACK_GUARD_STATE_KEY]: "sentinel" }, document.title, window.location.href);
+    }
+
+    function rearmBackButtonLeaveGuard() {
+      if (!window.history || typeof window.history.pushState !== "function") return;
+      history.pushState({ [BACK_GUARD_STATE_KEY]: "sentinel" }, document.title, window.location.href);
     }
 
     function jumpToToolPathTarget(targetKey) {
@@ -9984,23 +9963,18 @@
     nodes.splashRequestClose.addEventListener("click", () => setSplashRequestOpen(false));
     if (nodes.toolPathNav) {
       nodes.toolPathNav.addEventListener("click", (event) => {
-        const leaveBtn = event.target.closest("[data-leave-tool]");
-        if (leaveBtn) {
-          event.preventDefault();
-          openLeaveToolDialog(leaveBtn.dataset.leaveTool || "start");
-          return;
-        }
         const link = event.target.closest("[data-path-target]");
         if (!link) return;
         event.preventDefault();
-        const targetKey = link.dataset.pathTarget || "start";
-        if (shouldConfirmToolExit(targetKey)) {
-          openLeaveToolDialog(targetKey);
-          return;
-        }
-        jumpToToolPathTarget(targetKey);
+        jumpToToolPathTarget(link.dataset.pathTarget || "start");
       });
     }
+    window.addEventListener("popstate", (event) => {
+      const state = event.state;
+      if (!state || state[BACK_GUARD_STATE_KEY] !== "base") return;
+      openLeaveToolDialog("start");
+      rearmBackButtonLeaveGuard();
+    });
     nodes.leaveToolStayBtn.addEventListener("click", () => closeLeaveToolDialog());
     nodes.leaveToolConfirmBtn.addEventListener("click", () => {
       const targetKey = leaveToolState.pendingTarget || "start";
@@ -10314,6 +10288,7 @@
     showSplashStep(1);
     setSplashRequestOpen(false);
     nodes.requestStatus.textContent = "Submit sends directly to the librarian.";
+    installBackButtonLeaveGuard();
 
     // Optional programmatic exports for tooling that scrapes this page at runtime.
     window.PART_FAMILY_REFERENCE_DB = PART_FAMILY_REFERENCE_DB;
