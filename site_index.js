@@ -10,9 +10,19 @@ const siteIndex = [
     "keywords": "miniPCB, Free Samples, PCB Assistance, PCB Help, Electronic Components, PCB Support, PCB Inquiry, Technical Assistance, PCB Solutions, DIY Electronics, Circuit Board Help, miniPCB Guide, PCB Troubleshooting, miniPCB Support, miniPCB Assistance, PCB Help Desk, Electronic Support, miniPCB Query, PCB Questions, PCB Support Services."
   },
   {
+    "title": "miniPCB Board Finder",
+    "url": "board_finder.html",
+    "keywords": ""
+  },
+  {
     "title": "Engineering Build Log - miniPCB\u2122",
     "url": "buildlog.html",
     "keywords": "miniPCB, Engineering Build Log, PCB Design, Hardware Engineering, Electronic Components, Change Management, Circuit Board, Change Log, Engineering Updates, PCB Updates, Product Engineering, PCB Engineering, Change Control, Engineering Control, Design Modifications, PCB Modifications, Engineering Change Notice, Miniature PCB, Electronics Engineering, PCB Change Log"
+  },
+  {
+    "title": "miniPCB Catalog Browser",
+    "url": "catalog_browser.html",
+    "keywords": ""
   },
   {
     "title": "Engineering Change Log - miniPCB\u2122",
@@ -55,8 +65,28 @@ const siteIndex = [
     "keywords": "miniPCB, Circuit Boards, Electronics Education, PCB for Education, Mini Circuit Boards, Electronics Learning, Educational PCB, Electronics Training, Circuit Board Education, miniPCB Logo, Printed Circuit Board Education, Miniature PCB, Learning Electronics, PCB Training, DIY Electronics Education, Electronics Study Material, Circuit Board Training, Miniature Circuit Board Training, miniPCB for Education, Educational Electronics Kit."
   },
   {
+    "title": "Main Navigation",
+    "url": "main_navigation.html",
+    "keywords": ""
+  },
+  {
     "title": "Catalog Reader",
     "url": "minipcb_2026.html",
+    "keywords": ""
+  },
+  {
+    "title": "Component Part Number Radar",
+    "url": "part_number_browser.html",
+    "keywords": ""
+  },
+  {
+    "title": "Component Part Number Generator",
+    "url": "part_number_catalogs.html",
+    "keywords": ""
+  },
+  {
+    "title": "Component Part Number Radar",
+    "url": "part_number_radar.html",
     "keywords": ""
   },
   {
@@ -67,6 +97,11 @@ const siteIndex = [
   {
     "title": "Test Base 2026 \u2014 Document Management (Skeleton)",
     "url": "test_base_2026.html",
+    "keywords": ""
+  },
+  {
+    "title": "Tools - miniPCB",
+    "url": "tools.html",
     "keywords": ""
   },
   {
@@ -698,6 +733,16 @@ const siteIndex = [
     "title": "13A-001 | Cascade Noise Amplifier",
     "url": "13/13A-001.html",
     "keywords": "13A-001, Cascade Noise Amplifier, Details, Schematic, Board Layout, Coming Soon, Expanded schematic, Top view, miniPCB, Adjustable differentiator design, Basic differentiator, Differentiator circuit, Electronics, PCB Design, Electronic Components, Circuit Board, Adjustable Circuit, Electronic Schematics, Circuit Design"
+  },
+  {
+    "title": "All Experiments | miniPCB",
+    "url": "16/16.html",
+    "keywords": "All Experiments, miniPCB, 20-series miniPCB, PCB Catalog, Digital PCB, Electronic Components, Miniature PCB, Digital Circuit Boards, High-tech PCB, PCB Online, PCB Design, All Experiments Products, Digital PCB Solutions, Advanced PCB, Compact PCB, 20-series Electronic Parts, PCB Series, Digital Technology, Electronics Catalog, All Experiments miniPCB Series"
+  },
+  {
+    "title": "16A-05 | Animal Box Trap Control Board",
+    "url": "16/16A-05.html",
+    "keywords": "Animal Box Trap Control Board, 16A-05, Details, Board Layout, Schematic Downloads, Schematic View, Expanded Schematic, Top View MiniPCB, MiniPCB, ATmega328P-AU, PIC16F1829, Microcontroller Board, UTSA Board, VIVA UTSA Schematic, ATmega328P-AU Board, PIC16F1829 Board, Microcontroller PCB, Schematic Details, UTSA Microcontroller, VIVA PCB"
   },
   {
     "title": "All Experiments | miniPCB",
@@ -1510,7 +1555,3 @@ const siteIndex = [
     "keywords": ""
   }
 ];
-
-if (typeof window !== "undefined") {
-  window.siteIndex = siteIndex;
-}
