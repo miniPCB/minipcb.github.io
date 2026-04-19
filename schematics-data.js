@@ -221,6 +221,7 @@ window.SCHEMATICS = [
   { title: '11B-10 | Differentiator, Adjustable', href: 'draft/11/11B-10.html' },
   { title: '13A-001 | Cascade Noise Amplifier', href: '13/13A-001.html' },
   { title: '13A-001 | Cascade Noise Amplifier', href: 'draft/13/13A-001.html' },
+  { title: '16A-01 | Isolated Temperature Sensor', href: '16/16A-01.html' },
   { title: '16A-05 | Animal Box Trap Control Board', href: '16/16A-05.html' },
   { title: '20A-30 | Pulse Generator, Adjustable', href: '20/20A-30.html' },
   { title: '20A-30 | Pulse Generator, Adjustable', href: 'draft/20/20A-30.html' },

@@ -740,6 +740,11 @@ const siteIndex = [
     "keywords": "All Instruments, miniPCB, 16-series miniPCB, PCB Catalog, Digital PCB, Electronic Components, Miniature PCB, Digital Circuit Boards, High-tech PCB, PCB Online, PCB Design, All Instruments Products, Digital PCB Solutions, Advanced PCB, Compact PCB, 16-series Electronic Parts, PCB Series, Digital Technology, Electronics Catalog, All Instruments miniPCB Series"
   },
   {
+    "title": "16A-01 | Isolated Temperature Sensor",
+    "url": "16/16A-01.html",
+    "keywords": "Isolated Temperature Sensor, 16A-01, Details, Board Layout, Schematic Downloads, Schematic View, Expanded Schematic, Top View MiniPCB, MiniPCB, ATmega328P-AU, PIC16F1829, Microcontroller Board, UTSA Board, VIVA UTSA Schematic, ATmega328P-AU Board, PIC16F1829 Board, Microcontroller PCB, Schematic Details, UTSA Microcontroller, VIVA PCB"
+  },
+  {
     "title": "16A-05 | Animal Box Trap Control Board",
     "url": "16/16A-05.html",
     "keywords": "Animal Box Trap Control Board, 16A-05, Details, Board Layout, Schematic Downloads, Schematic View, Expanded Schematic, Top View MiniPCB, MiniPCB, ATmega328P-AU, PIC16F1829, Microcontroller Board, UTSA Board, VIVA UTSA Schematic, ATmega328P-AU Board, PIC16F1829 Board, Microcontroller PCB, Schematic Details, UTSA Microcontroller, VIVA PCB"
