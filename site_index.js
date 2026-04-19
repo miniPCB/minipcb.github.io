@@ -735,9 +735,9 @@ const siteIndex = [
     "keywords": "13A-001, Cascade Noise Amplifier, Details, Schematic, Board Layout, Coming Soon, Expanded schematic, Top view, miniPCB, Adjustable differentiator design, Basic differentiator, Differentiator circuit, Electronics, PCB Design, Electronic Components, Circuit Board, Adjustable Circuit, Electronic Schematics, Circuit Design"
   },
   {
-    "title": "All Experiments | miniPCB",
+    "title": "All Instruments | miniPCB",
     "url": "16/16.html",
-    "keywords": "All Experiments, miniPCB, 20-series miniPCB, PCB Catalog, Digital PCB, Electronic Components, Miniature PCB, Digital Circuit Boards, High-tech PCB, PCB Online, PCB Design, All Experiments Products, Digital PCB Solutions, Advanced PCB, Compact PCB, 20-series Electronic Parts, PCB Series, Digital Technology, Electronics Catalog, All Experiments miniPCB Series"
+    "keywords": "All Instruments, miniPCB, 16-series miniPCB, PCB Catalog, Digital PCB, Electronic Components, Miniature PCB, Digital Circuit Boards, High-tech PCB, PCB Online, PCB Design, All Instruments Products, Digital PCB Solutions, Advanced PCB, Compact PCB, 16-series Electronic Parts, PCB Series, Digital Technology, Electronics Catalog, All Instruments miniPCB Series"
   },
   {
     "title": "16A-05 | Animal Box Trap Control Board",
