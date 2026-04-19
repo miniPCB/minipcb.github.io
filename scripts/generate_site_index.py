@@ -37,6 +37,9 @@ output_file = "site_index.js"
 with open(output_file, "w", encoding="utf-8") as f:
     f.write("const siteIndex = ")
     json.dump(site_index, f, indent=2)
-    f.write(";")
+    f.write(";\n\n")
+    f.write("if (typeof window !== \"undefined\") {\n")
+    f.write("  window.siteIndex = siteIndex;\n")
+    f.write("}\n")
 
 print(f"✅ siteIndex generated with {len(site_index)} entries → {output_file}")
