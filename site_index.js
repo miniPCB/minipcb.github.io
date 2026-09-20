@@ -220,6 +220,11 @@ const siteIndex = [
     "keywords": "Inverting Amplifier, 04A-005, Details, Schematic, Board Layout, MiniPCB, Amplifier Design, Basic Inverting Amplifier, Electronics, Circuit Design, Amplifier Schematic, PCB Layout, Electronic Components, Circuit Board, Amplifier Board, Inverting Circuit, Amplifier Diagram, Electronic Schematics, PCB Schematic, Coming Soon."
   },
   {
+    "title": "04A-006 | Non-Inverting | Inverting Amplifiers",
+    "url": "04A/04A-006.html",
+    "keywords": "04A-006, amplifier, amplifiers, op amp, op-amp, operational amplifier, inverting amplifier, non-inverting amplifier, inverting op amp, non-inverting op amp, op amp circuit, amplifier circuit, voltage amplifier, voltage gain, gain, negative feedback, feedback resistor, feedback network, biasing, bias circuit, virtual ground, reference voltage, AC coupling, input coupling, output coupling, coupling capacitor, decoupling capacitor, bypass capacitor, power supply conditioning, small signal amplifier, analog circuit, analog electronics, electronics education, electronics learning, circuit analysis, amplifier comparison, inverting vs non-inverting, op amp gain, schematic, PCB, printed circuit board, board layout, test points, breadboard alternative, laboratory circuit, teaching circuit, educational PCB, YouTube, miniPCB"
+  },
+  {
     "title": "04A-010 | Non-Inverting Amplifier",
     "url": "04A/04A-010.html",
     "keywords": "Non-Inverting Amplifier, 04A-010, Details, Schematic, Board Layout, Amplifier Design, Expanded Schematic, MiniPCB, Amplifier Circuit, Electronic Components, Non-Inverting Circuit, Amplifier Board, PCB Design, Circuit Schematic, Amplifier Layout, Electronic Schematic, MiniPCB Top View, YouTube Amplifier, Coming Soon Amplifier, Basic Amplifier Design"

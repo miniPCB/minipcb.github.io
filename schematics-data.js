@@ -38,6 +38,7 @@ window.SCHEMATICS = [
   { title: '04A-00 | Voltage Follower', href: 'draft/04A/04A-00.html' },
   { title: '04A-005 | Inverting Amplifier', href: '04A/04A-005.html' },
   { title: '04A-005 | Inverting Amplifier', href: 'draft/04A/04A-005.html' },
+  { title: '04A-006 | Non-Inverting | Inverting Amplifiers', href: '04A/04A-006.html' },
   { title: '04A-010 | Non-Inverting Amplifier', href: '04A/04A-010.html' },
   { title: '04A-010 | Non-Inverting Amplifier', href: 'draft/04A/04A-010.html' },
   { title: '04A-015 | Difference Amplifier, Single Supply', href: '04A/04A-015.html' },

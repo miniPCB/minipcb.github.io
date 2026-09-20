@@ -42,4 +42,4 @@ with open(output_file, "w", encoding="utf-8") as f:
     f.write("  window.siteIndex = siteIndex;\n")
     f.write("}\n")
 
-print(f"✅ siteIndex generated with {len(site_index)} entries → {output_file}")
+print(f"siteIndex generated with {len(site_index)} entries -> {output_file}")
