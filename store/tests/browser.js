@@ -27,7 +27,16 @@
       if (!request.body) body = { ok: true, checkoutEnabled: true, clientId: "test-client", currency: "USD", environment: "sandbox", shippingFlatCents: 450 };
       else if (url.endsWith("paypal-create-order")) body = { ok: true, paypalOrderId: id };
       else if (options.networkFailure) throw new Error("simulated network failure");
-      else body = { ok: true, status: options.pending ? "PENDING" : "COMPLETED", paypalOrderId: id };
+      else {
+        body = { ok: true, status: options.pending ? "PENDING" : "COMPLETED", paypalOrderId: id };
+        if (options.storageFailure) {
+          const setItem = win.Storage.prototype.setItem;
+          win.Storage.prototype.setItem = function (key, value) {
+            if (key === receiptKey) throw new Error("simulated storage failure");
+            return setItem.call(this, key, value);
+          };
+        }
+      }
       return { ok: true, json: async () => body };
     };
     win.paypal = { Buttons(callbacks) {
@@ -107,6 +116,13 @@
     sessionStorage.removeItem(receiptKey);
     win = await load("success.html?orderId=" + id);
     check(win.document.getElementById("payment-title").textContent !== "Payment received", "a query parameter alone cannot claim payment success");
+    localStorage.setItem(key, JSON.stringify([{ sku: "04A-006-KIT", quantity: 1 }]));
+    win = await load("cart.html"); activate(win);
+    const noReceipt = checkoutMock(win, { storageFailure: true });
+    win.document.getElementById("checkout-start").click(); await tick();
+    await noReceipt.callbacks().createOrder(); await noReceipt.callbacks().onApprove({ orderID: id });
+    check(win.document.getElementById("checkout-status").textContent.startsWith("Payment received"), "receipt storage failure cannot turn a paid order into failure");
+    check(!localStorage.getItem(key), "paid cart is cleared even if receipt storage fails");
     result.dataset.status = "passed";
     result.textContent = lines.join("\n") + `\n${checks} browser checks passed. Mock payments only.`;
   } catch (error) {

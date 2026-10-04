@@ -1,5 +1,12 @@
 const { StoreError, browserRequest, payload, validateOrderId, calculateOrder, verifyOrder, accessToken, paypalRequest, completedCapture, normalizedOrder, sendOrderNotice, reportError } = require("./_paypal");
 
+function unresolvedStatus(order) {
+  const captures = order.purchase_units[0].payments?.captures || [];
+  if (!captures.length || captures.some(item => item.status === "PENDING")) return "PENDING";
+  if (captures.every(item => ["DECLINED", "FAILED"].includes(item.status))) return "NOT_COMPLETED";
+  return "REVIEW_REQUIRED";
+}
+
 module.exports = async (req, res) => {
   if (!browserRequest(req, res)) return;
   try {
@@ -13,12 +20,11 @@ module.exports = async (req, res) => {
     if (!capture) {
       // Do not initiate another capture for a pending payment.
       if (order.purchase_units[0].payments?.captures?.length) {
-        const pending = order.purchase_units[0].payments.captures.some(item => item.status === "PENDING");
-        return res.status(200).json({ ok: true, status: pending ? "PENDING" : "NOT_COMPLETED", paypalOrderId: id });
+        return res.status(200).json({ ok: true, status: unresolvedStatus(order), paypalOrderId: id });
       }
       if (order.status !== "APPROVED") throw new StoreError(409, "Approve the order in PayPal before completing payment.");
       const current = calculateOrder(snapshot.items);
-      if (JSON.stringify(current) !== JSON.stringify(snapshot)) throw new StoreError(409, "Prices or availability changed. Return to the cart and start checkout again.");
+      if (JSON.stringify(current) !== JSON.stringify(snapshot)) throw new StoreError(409, "Prices or availability changed. Contact miniPCB about this order before paying again.");
       let captured;
       try {
         captured = await paypalRequest(`${path}/capture`, { method: "POST", body: {}, requestId: `minipcb-capture-${id}`, token });
@@ -36,7 +42,10 @@ module.exports = async (req, res) => {
         capture = completedCapture(order, snapshot);
       }
     }
-    if (!capture) return res.status(202).json({ ok: true, status: "PENDING", paypalOrderId: id });
+    if (!capture) {
+      const status = unresolvedStatus(order);
+      return res.status(status === "PENDING" ? 202 : 200).json({ ok: true, status, paypalOrderId: id });
+    }
     try {
       // Use the same canonical GET representation in both capture and webhook notices.
       const noticeOrder = await paypalRequest(path, { token });

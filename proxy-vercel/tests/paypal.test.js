@@ -202,6 +202,32 @@ test("capture failure is not reported as paid", async () => {
   const before = fixture(); oauth(); response(before); responses.push({ status: 422, body: {} }); response(before);
   assert.equal((await invoke(capture, { paypalOrderId: orderId })).code, 502);
 });
+test("capture responses without line items still confirm the signed order", async () => {
+  const before = fixture(); const paid = structuredCloneFixture(before, "COMPLETED");
+  const minimal = { id: orderId, status: "COMPLETED", purchase_units: [{ reference_id: paid.purchase_units[0].reference_id, payments: paid.purchase_units[0].payments }] };
+  oauth(); response(before); response(minimal); response(paid); response({ id: "email-test-id" });
+  assert.equal((await invoke(capture, { paypalOrderId: orderId })).body.status, "COMPLETED");
+});
+test("failure to fetch notification metadata cannot undo successful capture", async () => {
+  const before = fixture(); const paid = structuredCloneFixture(before, "COMPLETED");
+  oauth(); response(before); response(paid); responses.push({ status: 500, body: {} });
+  assert.equal((await invoke(capture, { paypalOrderId: orderId })).body.status, "COMPLETED");
+});
+test("an incorrect completed amount needs review, not fulfillment", async () => {
+  const paid = fixture("COMPLETED", "COMPLETED"); paid.purchase_units[0].payments.captures[0].amount.value = "0.01";
+  oauth(); response(paid);
+  const res = await invoke(capture, { paypalOrderId: orderId });
+  assert.equal(res.code, 409); assert.ok(res.body.error.includes("before paying again"));
+});
+test("a declined immediate capture returns NOT_COMPLETED", async () => {
+  const before = fixture(); const declined = structuredCloneFixture(before, "DECLINED");
+  oauth(); response(before); response(declined);
+  assert.equal((await invoke(capture, { paypalOrderId: orderId })).body.status, "NOT_COMPLETED");
+});
+test("refunded payments require review instead of initiating another payment", async () => {
+  oauth(); response(fixture("COMPLETED", "PARTIALLY_REFUNDED"));
+  assert.equal((await invoke(capture, { paypalOrderId: orderId })).body.status, "REVIEW_REQUIRED");
+});
 test("pending and declined captures are not paid or captured again", async () => {
   for (const [paypalStatus, expected] of [["PENDING", "PENDING"], ["DECLINED", "NOT_COMPLETED"]]) {
     oauth(); response(fixture("COMPLETED", paypalStatus));
@@ -231,6 +257,11 @@ test("webhook retries email failures without trusting payload amounts", async ()
 test("verified irrelevant events are acknowledged and ignored", async () => {
   oauth(); response({ verification_status: "SUCCESS" });
   assert.equal((await invoke(webhook, { event_type: "CUSTOMER.DISPUTE.CREATED" }, { headers: sigHeaders })).body.ignored, true);
+});
+test("verified webhook with a mismatched capture cannot send a notice", async () => {
+  const paid = fixture("COMPLETED", "COMPLETED"); const wrong = event(); wrong.resource.id = "WRONGCAPTURE12345";
+  oauth(); response({ verification_status: "SUCCESS" }); response(paid);
+  assert.equal((await invoke(webhook, wrong, { headers: sigHeaders })).code, 409);
 });
 
 (async () => {

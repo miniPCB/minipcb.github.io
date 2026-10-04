@@ -42,8 +42,8 @@
   }
   function savePending(id) {
     // Persist before capture so a lost response never requires starting another payment.
-    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ paypalOrderId: id, apiBase: store.resolveApiBase() }));
     pendingOrderId = id;
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ paypalOrderId: id, apiBase: store.resolveApiBase() }));
   }
   function loadSdk(clientId, currency) {
     if (sdkPromise) return sdkPromise;
@@ -81,7 +81,7 @@
         return;
       }
       if (result.status !== "COMPLETED") {
-        status("PayPal has not confirmed a completed payment yet. Use Check payment status before starting another checkout.");
+        status(result.status === "REVIEW_REQUIRED" ? `This payment needs review. Contact miniPCB with order ${id} before paying again.` : "PayPal has not confirmed a completed payment yet. Use Check payment status before starting another checkout.");
         retry.hidden = false;
         return;
       }
@@ -105,8 +105,8 @@
       const url = store.pageUrl("success.html");
       url.searchParams.set("orderId", id);
       location.assign(url.href);
-    } catch (_) {
-      status(`We could not confirm payment status. Check this order before paying again: ${id}. You can retry confirmation or contact miniPCB.`, true);
+    } catch (error) {
+      status(`We could not confirm payment status. ${error.message || "Please check your connection."} Check order ${id} before paying again. You can retry confirmation or contact miniPCB.`, true);
       retry.hidden = false;
     } finally { busy = false; }
   }
