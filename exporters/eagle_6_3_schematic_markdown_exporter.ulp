@@ -1,0 +1,882 @@
+/* 0_export_sch_md2.ulp
+ * EAGLE 6.3 ULP — Markdown export from SCHEMATIC:
+ * - Circuit Identification (from PCB1/DWG1, with Pieces per Panel lookup)
+ * - Revision History (from SHEET1)
+ * - Published Resources (manual DWG1 URLs + script-generated links)
+ * - Schematic Notes (fixed NOTES: text at x=0.3 in, y=9.5 in)
+ * - Netlist (schematic)
+ * - Partlist (schematic)
+ * - Test Points (TPx FUNCTION attributes)
+ * - Pinouts for all P/J connectors (labels from each connector's pinN attributes)
+ *
+ * Revision History
+ * 13SEP2026 Initial Markdown schematic export baseline.
+ * 18SEP2026 Added FUNCTION attribute to part list.
+ * 18SEP2026 Netlist: use physical package contact for Pad and include gate name in functional Pin text.
+ * 18SEP2026 Netlist: append gate name only for multi-gate parts; suppress single-gate names such as R and C.
+ * 18SEP2026 Netlist: removed duplicate connector pin number from P1 functional Pin label.
+ * 18SEP2026 Netlist: suppress -PWR gate annotation from IC power pins.
+ * 18SEP2026 Pinout: added NOTE1, NOTE2, ... attribute data to Notes column.
+ * 18SEP2026 Removed Omega-character handling; schematic metadata standardized on ASCII "ohm" notation.
+ * 18SEP2026 Added Test Points table using TPx FUNCTION attributes.
+ * 18SEP2026 Added print-friendly miniPCB header with website, YouTube, and GitHub links.
+ * 20SEP2026 Added schematic NOTES text export, revision-history table, and published-resource links.
+ * 20SEP2026 Script-generated schematic image/JSON/Markdown and board top/bottom view links.
+ * 20SEP2026 Added ENG_NOTES published-resource link from DWG1.
+ * 20SEP2026 Added TEST_SCRIPT published-resource link from DWG1.
+ * 11OCT2026 Documented existing netlist support for multiple physical pads per logical pin using contacts(); export comma-separated pad names and preserve P1 label lookup by rejecting multi-pad strings as pinN indices.
+ * 11OCT2026 Added netlist labels and separate pinout tables for all numbered P/J connectors, with no connector-count limit.
+ */
+
+string outpath;
+string pcb_part = "PCB1";
+string dwg_part = "DWG1";
+string sheet_part = "SHEET1";
+
+
+/* ---------- helpers (ULP-safe) ---------- */
+string nz(string s) { if (strlen(s)) return s; return ""; }
+
+string md_escape(string s) {
+  string r = "";
+  int start = 0;
+  int i;
+
+  /* Preserve source text and escape only Markdown table separators. */
+  for (i = 0; i < strlen(s); i++) {
+    if (s[i] == '|') {
+      if (i > start) r += strsub(s, start, i - start);
+      r += "\\|";
+      start = i + 1;
+    }
+  }
+
+  if (start < strlen(s)) r += strsub(s, start);
+  return r;
+}
+
+string to_lower(string s) {
+  int i; 
+  for (i = 0; i < strlen(s); i++)
+    if (s[i] >= 'A' && s[i] <= 'Z') s[i] += 32;
+  return s;
+}
+
+string to_upper(string s) {
+  int i;
+  for (i = 0; i < strlen(s); i++)
+    if (s[i] >= 'a' && s[i] <= 'z') s[i] -= 32;
+  return s;
+}
+
+int eq_nocase(string a, string b) { return to_lower(a) == to_lower(b); }
+
+int is_all_digits(string s) {
+  int i; if (!strlen(s)) return 0;
+  for (i = 0; i < strlen(s); i++) if (s[i] < '0' || s[i] > '9') return 0;
+  return 1;
+}
+string make_pin_attr_key(string digits) { return to_lower("pin" + digits); }
+
+/* Connector reference designators: P1, P2, ..., J1, J2, ... (case-insensitive). */
+int is_connector_refdes(string name) {
+  string r = to_upper(name);
+  if (strlen(r) < 2) return 0;
+  if (r[0] != 'P' && r[0] != 'J') return 0;
+  return is_all_digits(strsub(r, 1));
+}
+
+/* simple case-insensitive starts-with */
+int starts_with_ci(string s, string pfx) {
+  string su = to_upper(s);
+  string pu = to_upper(pfx);
+  if (strlen(su) < strlen(pu)) return 0;
+  return strsub(su, 0, strlen(pu)) == pu;
+}
+
+/* remove .sch/.brd (case-insensitive) from a design name */
+string strip_design_ext(string s) {
+  string ls = to_lower(s);
+  if (strlen(ls) >= 4) {
+    string suf4 = strsub(ls, strlen(ls) - 4);
+    if (suf4 == ".sch") return strsub(s, 0, strlen(s) - 4);
+    if (suf4 == ".brd") return strsub(s, 0, strlen(s) - 4);
+  }
+  return s;
+}
+
+/* Exclude common supply symbols so they don't appear as parts in the netlist */
+int is_symbol_part(string name) {
+  if (starts_with_ci(name, "GND")) return 1;
+  if (starts_with_ci(name, "P+"))  return 1;
+  if (starts_with_ci(name, "P-"))  return 1;
+  if (starts_with_ci(name, "VCC")) return 1;
+  if (starts_with_ci(name, "VDD")) return 1;
+  if (starts_with_ci(name, "VSS")) return 1;
+  if (starts_with_ci(name, "VEE")) return 1;
+  if (starts_with_ci(name, "DWG")) return 1;
+  return 0;
+}
+
+/* keep only digits from a string (e.g., "-12" -> "12") */
+string digits_only(string s) {
+  string r = "";
+  int i;
+  for (i = 0; i < strlen(s); i++) {
+    if (s[i] >= '0' && s[i] <= '9') {
+      string ch; sprintf(ch, "%c", s[i]); r += ch;
+    }
+  }
+  return r;
+}
+
+/* look up connector label attribute "pinN" on a specific part (e.g., partname="P1", pin_num="7") */
+string find_pin_label(string partname, string pin_num) {
+  if (!schematic) return "";
+  if (!strlen(partname) || !strlen(pin_num)) return "";
+  schematic(SCH) {
+    SCH.parts(P) {
+      if (eq_nocase(P.name, partname)) {
+        /* fast path via attribute[] accessor (case-sensitive key) */
+        string key = "pin" + to_lower(pin_num);
+        if (strlen(P.attribute[key])) return nz(P.attribute[key]);
+        /* fallback: iterate attributes case-insensitively */
+        P.attributes(A) {
+          string an = to_lower(nz(A.name));
+          if (an == key) return nz(A.value);
+        }
+      }
+    }
+  }
+  return "";
+}
+
+/* ---------- attribute lookups & panelization helpers ---------- */
+
+/* Return attribute value from a given PART by name (case-insensitive). */
+string get_part_attr_ci(string partname, string attrname) {
+  if (!schematic) return "";
+  if (!strlen(partname) || !strlen(attrname)) return "";
+  string want_part = to_lower(partname);
+  string want_attr = to_lower(attrname);
+
+  schematic(SCH) {
+    SCH.parts(P) {
+      if (to_lower(nz(P.name)) == want_part) {
+        /* fast path: attribute[] accessor (exact key) */
+        if (strlen(P.attribute[attrname])) return nz(P.attribute[attrname]);
+
+        /* fallback: iterate attributes case-insensitively */
+        P.attributes(A) {
+          if (to_lower(nz(A.name)) == want_attr) return nz(A.value);
+        }
+        return "";
+      }
+    }
+  }
+  return "";
+}
+
+/* Normalize dimension strings to a compact key, e.g.
+ * "50 mm x 50 mm", "50mm×50mm", " 50x50 " -> "50x50"
+ * rules: lowercase, convert '×'(215) to 'x', strip spaces, strip all 'm' chars (for "mm").
+ */
+string normalize_dims_key(string s) {
+  string r = to_lower(nz(s));
+  int i;
+  string out = "";
+  for (i = 0; i < strlen(r); i++) {
+    int ch = r[i];
+    if (ch == 215) ch = 'x';          /* Unicode multiply sign -> 'x' */
+    if (ch == ' ') continue;          /* drop spaces */
+    if (ch == 'm') continue;          /* drop 'm' (to remove "mm") */
+    string t; sprintf(t, "%c", ch);
+    out += t;
+  }
+  return out;
+}
+
+/* Map dimensions -> pieces per panel. Extend as you standardize more sizes. */
+string pieces_for_dimensions(string dims_raw) {
+  string key = normalize_dims_key(dims_raw);  /* e.g., "50x50" */
+
+  /* --- starter map (edit to suit your panels) --- */
+  if (key == "20x20")   return "25";
+  if (key == "20x25")   return "20";
+  if (key == "20x33")   return "15";
+  if (key == "20x50")   return "10";
+  if (key == "25x20")   return "20";
+  if (key == "25x25")   return "16";
+  if (key == "25x33")   return "12";
+  if (key == "25x50")   return "8";
+  if (key == "33x20")   return "15";
+  if (key == "33x25")   return "12";
+  if (key == "33x33")   return "9";
+  if (key == "33x50")   return "6";
+  if (key == "50x20")   return "10";
+  if (key == "50x25")   return "8";
+  if (key == "50x33")   return "6";
+  if (key == "50x50")   return "4";
+  if (key == "50x75")   return "2";
+  if (key == "75x20")   return "5";
+  if (key == "75x25")   return "4";
+  if (key == "75x33")   return "3";
+  if (key == "75x50")   return "2";
+  if (key == "75x75")   return "1";
+  if (key == "100x20")  return "5";
+  if (key == "100x25")  return "4";
+  if (key == "100x33")  return "3";
+  if (key == "100x50")  return "2";
+  if (key == "100x100") return "1";
+
+  /* default: leave blank */
+  return "";
+}
+
+/* ---------- miniPCB document header ---------- */
+void write_minipcb_header() {
+  printf("# miniPCB\n\n");
+  printf("**Circuit boards for electronics education.**\n\n");
+  printf("[www.minipcb.com](https://www.minipcb.com)  \n");
+  printf("[youtube.com/@minipcb](https://www.youtube.com/@minipcb)  \n");
+  printf("[github.com/miniPCB/minipcb.github.io](https://github.com/miniPCB/minipcb.github.io)\n\n");
+  printf("---\n\n");
+  printf("# Schematic Export (Markdown)\n\n");
+  printf("**ULP Revision Date:** 20261011  \n\n");
+}
+
+/* ---------- Circuit Identification (from PCB1/DWG1) ---------- */
+void write_circuit_identification() {
+  string pn      = nz(get_part_attr_ci(pcb_part, "PART_NUMBER"));
+  string rev     = nz(get_part_attr_ci(pcb_part, "REVISION"));
+  string title   = nz(get_part_attr_ci(pcb_part, "TITLE"));
+  string dims    = nz(get_part_attr_ci(dwg_part, "DIMENSIONS"));
+  string pieces  = pieces_for_dimensions(dims);
+
+  printf("# Circuit Identification\n\n");
+  printf("| Field            | Value |\n");
+  printf("| ---------------- | ----- |\n");
+  printf("| Part Number      | %s |\n", md_escape(pn));
+  printf("| Revision         | %s |\n", md_escape(rev));
+  printf("| Title            | %s |\n", md_escape(title));
+  printf("| PCB Dimensions   | %s |\n", md_escape(dims));
+  printf("| Pieces per Panel | %s |\n\n", md_escape(pieces));
+}
+
+
+/* ---------- Revision History (from SHEET1) ---------- */
+string first_nonempty_attr(string partname, string attr1, string attr2) {
+  string v = nz(get_part_attr_ci(partname, attr1));
+  if (strlen(v)) return v;
+  return nz(get_part_attr_ci(partname, attr2));
+}
+
+void write_revision_row(string rev, string date, string description, string instructables) {
+  if (!strlen(rev)) return;
+
+  string link = "";
+  if (strlen(instructables))
+    link = "[" + instructables + "](" + instructables + ")";
+
+  printf("| %s | %s | %s | %s |\n",
+         md_escape(rev),
+         md_escape(date),
+         md_escape(description),
+         link);
+}
+
+void write_revision_history() {
+  /* The current drawing symbol uses REV_1/DATE_1/DESCRIPTION_1 style fields.
+   * Lettered aliases are accepted so older/future SHEET1 variants still export.
+   */
+  string rev_a  = first_nonempty_attr(sheet_part, "REV_1",         "REVA");
+  string date_a = first_nonempty_attr(sheet_part, "DATE_1",        "DATEA");
+  string desc_a = first_nonempty_attr(sheet_part, "DESCRIPTION_1", "DESCRIPTIONA");
+  string url_a  = nz(get_part_attr_ci(sheet_part, "REVA_INSTRUCTABLES"));
+
+  string rev_b  = first_nonempty_attr(sheet_part, "REV_2",         "REVB");
+  string date_b = first_nonempty_attr(sheet_part, "DATE_2",        "DATEB");
+  string desc_b = first_nonempty_attr(sheet_part, "DESCRIPTION_2", "DESCRIPTIONB");
+  string url_b  = nz(get_part_attr_ci(sheet_part, "REVB_INSTRUCTABLES"));
+
+  string rev_c  = first_nonempty_attr(sheet_part, "REV_3",         "REVC");
+  string date_c = first_nonempty_attr(sheet_part, "DATE_3",        "DATEC");
+  string desc_c = first_nonempty_attr(sheet_part, "DESCRIPTION_3", "DESCRIPTIONC");
+  string url_c  = nz(get_part_attr_ci(sheet_part, "REVC_INSTRUCTABLES"));
+
+  if (!strlen(rev_a) && !strlen(rev_b) && !strlen(rev_c)) return;
+
+  printf("# Revision History\n\n");
+  printf("| Revision | Date | Description | Instructables |\n");
+  printf("|----------|------|-------------|---------------|\n");
+  write_revision_row(rev_a, date_a, desc_a, url_a);
+  write_revision_row(rev_b, date_b, desc_b, url_b);
+  write_revision_row(rev_c, date_c, desc_c, url_c);
+  printf("\n");
+}
+
+/* ---------- Schematic Notes ---------- */
+string normalize_note_newlines(string s) {
+  string r = "";
+  int i = 0;
+
+  /* EAGLE text may expose a line break either as an actual newline or as \n. */
+  while (i < strlen(s)) {
+    if (i + 1 < strlen(s) && s[i] == '\\' && s[i + 1] == 'n') {
+      r += "\n";
+      i += 2;
+    } else {
+      int start = i;
+      while (i < strlen(s) &&
+             !(i + 1 < strlen(s) && s[i] == '\\' && s[i + 1] == 'n')) i++;
+      r += strsub(s, start, i - start);
+    }
+  }
+  return r;
+}
+
+string strip_leading_whitespace(string s) {
+  int i = 0;
+  while (i < strlen(s) &&
+         (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n')) i++;
+  if (i > 0) return strsub(s, i);
+  return s;
+}
+
+void write_schematic_notes() {
+  if (!schematic) return;
+
+  schematic(SCH) {
+    SCH.sheets(SH) {
+      SH.texts(T) {
+        real tx = u2inch(T.x);
+        real ty = u2inch(T.y);
+        string raw = nz(T.value);
+
+        /* Intended miniPCB NOTES block: x=0.3 in, y=9.5 in. */
+        if (tx >= 0.295 && tx <= 0.305 &&
+            ty >= 9.495 && ty <= 9.505 &&
+            starts_with_ci(raw, "NOTES:")) {
+
+          string notes = strip_leading_whitespace(normalize_note_newlines(strsub(raw, 6)));
+          if (strlen(notes)) {
+            printf("# Schematic Notes\n\n");
+            printf("%s\n\n", notes);
+          }
+          return;
+        }
+      }
+    }
+  }
+}
+
+/* ---------- Schematic Netlist (connector pin positions + symbol filtering) ---------- */
+/* ---------- Schematic Netlist (connector pin positions + symbol filtering) ---------- */
+void write_schematic_netlist() {
+  if (!schematic) return;
+
+  schematic(SCH) {
+    printf("# Netlist\n\n");
+    printf("| Net | Part | Pad | Pin | Sheet |\n");
+    printf("|-----|------|-----|-----|-------|\n");
+
+    int sheet_index = 0;
+    SCH.sheets(S) {
+      sheet_index++;
+
+      S.nets(N) {
+        string netname = md_escape(nz(N.name));
+        if (!strlen(netname)) netname = "(unnamed)";
+
+        N.segments(SEG) {
+          SEG.pinrefs(PR) {
+            string raw_part = nz(PR.part.name);
+
+            /* Skip non-electrical schematic symbols.
+             * Current is_symbol_part() excludes:
+             * GND*, P+*, P-*, VCC*, VDD*, VSS*, VEE*, DWG*
+             */
+            if (is_symbol_part(raw_part)) continue;
+
+            /* Symbol pin name carries functional information
+             * such as "+IN", "-IN", "OUT", "A", "C", etc.
+             */
+            string sym_pin = nz(PR.pin.name);
+
+            /* Gate name identifies the device section.
+             * Examples:
+             *   A, B       for multi-gate ICs
+             *   -PWR       for power gate
+             *   -1, -2...  for miniPCB connector positions
+             */
+            string gname = nz(PR.instance.gate.name);
+
+            /* Physical package contact/pad(s) assigned through the
+             * library CONNECT definition.
+             *
+             * IMPORTANT:
+             * A logical schematic pin may map to one OR MORE physical
+             * package contacts. Therefore use contacts() rather than
+             * the singular contact accessor.
+             *
+             * Examples:
+             *   one contact:       "1"
+             *   multiple contacts: "1, 2"
+             */
+            string pad_raw = "";
+
+            PR.pin.contacts(C) {
+              string contact_name = nz(C.name);
+
+              if (strlen(contact_name)) {
+                if (strlen(pad_raw))
+                  pad_raw += ", ";
+
+                pad_raw += contact_name;
+              }
+            }
+
+            /* Default Pin field is the functional symbol pin name. */
+            string pin_raw = sym_pin;
+
+            /* Count the number of placed instances/gates belonging
+             * to this part.
+             *
+             * For true multi-gate devices, append the gate name so
+             * functional pins remain unambiguous:
+             *
+             *   +IN (A)
+             *   -IN (A)
+             *   OUT (A)
+             *   +IN (B)
+             *
+             * Single-gate parts such as resistors and capacitors
+             * retain their normal pin names.
+             */
+            int instance_count = 0;
+
+            PR.part.instances(I) {
+              if (I.sheet != 0)
+                instance_count++;
+            }
+
+            if (instance_count > 1 &&
+                strlen(gname) &&
+                !eq_nocase(gname, "-PWR")) {
+
+              pin_raw = sym_pin + " (" + gname + ")";
+            }
+
+            /* P/J connector handling.
+             *
+             * miniPCB connector symbols encode connector position in the
+             * gate name:
+             *
+             *   -1 -> pin 1
+             *   -2 -> pin 2
+             *   -3 -> pin 3
+             *
+             * The pinN attributes provide the human-readable label.
+             */
+            if (is_connector_refdes(raw_part)) {
+              string pos = "";
+
+              /* Accept numeric position gates, but not generic gate
+               * names such as G$1 on a connector with several pins.
+               */
+              if (is_all_digits(gname))
+                pos = gname;
+              else if (strlen(gname) > 1 && gname[0] == '-' &&
+                       is_all_digits(strsub(gname, 1)))
+                pos = strsub(gname, 1);
+
+              /* Prefer gate-derived connector position.
+               * Fall back to physical pad, then symbol pin.
+               *
+               * Only use pad_raw as a position when it represents
+               * a single pad. A multi-contact string such as
+               * "1, 2" is not a valid pinN attribute index.
+               */
+              if (!strlen(pos)) {
+                if (is_all_digits(pad_raw))
+                  pos = pad_raw;
+              }
+
+              if (!strlen(pos))
+                pos = sym_pin;
+
+              string lbl = find_pin_label(raw_part, pos);
+
+              if (strlen(lbl))
+                pin_raw = lbl;
+              else
+                pin_raw = pos;
+
+              /* If the connector has no package contact information,
+               * use the logical connector position as the pad.
+               */
+              if (!strlen(pad_raw))
+                pad_raw = pos;
+            }
+
+            /* Conservative fallback for library entries without
+             * an assigned physical package contact.
+             */
+            if (!strlen(pad_raw))
+              pad_raw = sym_pin;
+
+            string padname = md_escape(pad_raw);
+            string pinname = md_escape(pin_raw);
+
+            printf("| %s | %s | %s | %s | %d |\n",
+                   netname,
+                   md_escape(raw_part),
+                   padname,
+                   pinname,
+                   sheet_index);
+          }
+        }
+      }
+    }
+
+    printf("\n");
+  }
+}
+
+/* ---------- Schematic Partlist ---------- */
+
+/* Map Ref Des prefix -> short component category (per your standard) */
+string classify_part(string refdes) {
+  string r = to_upper(refdes);
+
+  /* --- longest prefixes first --- */
+  if (starts_with_ci(r, "LED")) return "Light emitting diode";
+
+  /* 2-letter prefixes from your table */
+  if (starts_with_ci(r, "AR")) return "Amplifier / Repeater";
+  if (starts_with_ci(r, "AT")) return "Attenuator";
+  if (starts_with_ci(r, "BT")) return "Battery / PV";
+  if (starts_with_ci(r, "CB")) return "Circuit breaker";
+  if (starts_with_ci(r, "CP")) return "Connector adaptor / Junction";
+  if (starts_with_ci(r, "CR")) return "Current regulator";
+  if (starts_with_ci(r, "DC")) return "Directional coupler";
+  if (starts_with_ci(r, "DL")) return "Delay line";
+  if (starts_with_ci(r, "DS")) return "Display device";
+  if (starts_with_ci(r, "EQ")) return "Equalizing network";
+  if (starts_with_ci(r, "FL")) return "Filter";
+  if (starts_with_ci(r, "HP")) return "Hydraulic part";
+  if (starts_with_ci(r, "HR")) return "Heater";
+  if (starts_with_ci(r, "HS")) return "Handset";
+  if (starts_with_ci(r, "HT")) return "Earphone";
+  if (starts_with_ci(r, "HW")) return "Wearable HID";
+  if (starts_with_ci(r, "HX")) return "HID (other)";
+  if (starts_with_ci(r, "LS")) return "Audible alarm / Speaker";
+  if (starts_with_ci(r, "MG")) return "Motor";
+  if (starts_with_ci(r, "MK")) return "Microphone";
+  if (starts_with_ci(r, "MP")) return "Mechanical part";
+  if (starts_with_ci(r, "MT")) return "Measurement transducer";
+  if (starts_with_ci(r, "PS")) return "Power supply";
+  if (starts_with_ci(r, "RT")) return "Thermistor";
+  if (starts_with_ci(r, "TB")) return "Terminal board";
+  if (starts_with_ci(r, "TP")) return "Test point";
+  if (starts_with_ci(r, "VR")) return "Voltage regulator";
+  if (starts_with_ci(r, "WT")) return "Wiring tie point";
+
+  /* 1-letter prefixes */
+  if (starts_with_ci(r, "A")) return "Gyroscope / Computational / Sensor (to power)";
+  if (starts_with_ci(r, "B")) return "Blower / Fan";
+  if (starts_with_ci(r, "C")) return "Capacitor";
+  if (starts_with_ci(r, "D")) return "Diode";
+  if (starts_with_ci(r, "E")) return "Antenna / Terminal / Cell";
+  if (starts_with_ci(r, "F")) return "Fuse";
+  if (starts_with_ci(r, "G")) return "Oscillator / Generator";
+  if (starts_with_ci(r, "H")) return "Hardware";
+  if (starts_with_ci(r, "J")) return "Connector (jack)";
+  if (starts_with_ci(r, "K")) return "Relay";
+  if (starts_with_ci(r, "L")) return "Inductor";
+  if (starts_with_ci(r, "M")) return "Module";
+  if (starts_with_ci(r, "P")) return "Connector (plug)";
+  if (starts_with_ci(r, "Q")) return "Transistor";
+  if (starts_with_ci(r, "R")) return "Resistor";
+  if (starts_with_ci(r, "S")) return "Switch";
+  if (starts_with_ci(r, "T")) return "Transformer";
+  if (starts_with_ci(r, "U")) return "Integrated circuit";
+  if (starts_with_ci(r, "W")) return "Cable / Wire";
+  if (starts_with_ci(r, "X")) return "Holder / Socket";
+  if (starts_with_ci(r, "Y")) return "Crystal / Resonator";
+
+  return "OTHER";
+}
+
+void write_schematic_partlist() {
+  if (!schematic) return;
+
+  schematic(SCH) {
+    printf("# Partlist\n\n");
+
+    printf("| REF DES | PART TYPE | VALUE / DESCRIPTION | FUNCTION |\n");
+    printf("|---------|-----------|---------------------|----------|\n");
+
+    SCH.parts(P) {
+      string refdes = md_escape(nz(P.name));
+
+      /* ---- exclude non-electrical / utility parts ---- */
+      if (starts_with_ci(refdes, "P+"))    continue;
+      if (starts_with_ci(refdes, "P-"))    continue;
+      if (starts_with_ci(refdes, "GND"))   continue;
+      if (starts_with_ci(refdes, "SHEET")) continue;
+      if (starts_with_ci(refdes, "U$"))    continue;
+      if (starts_with_ci(refdes, "PCB"))   continue;
+      if (starts_with_ci(refdes, "DWG"))   continue;
+      if (starts_with_ci(refdes, "NC"))    continue;
+      /* ------------------------------------------------ */
+
+      string val      = md_escape(nz(P.value));
+      string partcat  = classify_part(refdes);
+      string function = md_escape(nz(P.attribute["FUNCTION"]));
+
+      printf("| %s | %s | %s | %s |\n",
+             refdes,
+             partcat,
+             val,
+             function);
+    }
+
+    printf("\n");
+  }
+}
+
+/* ---------- Test Points (FUNCTION attributes from TPx parts) ---------- */
+void write_test_points() {
+  if (!schematic) return;
+
+  schematic(SCH) {
+    printf("# Test Points\n\n");
+    printf("| Test Point | Function |\n");
+    printf("|------------|----------|\n");
+
+    SCH.parts(P) {
+      string refdes = nz(P.name);
+
+      if (!starts_with_ci(refdes, "TP")) continue;
+
+      string function = md_escape(nz(P.attribute["FUNCTION"]));
+
+      printf("| %s | %s |\n",
+             md_escape(refdes),
+             function);
+    }
+
+    printf("\n");
+  }
+}
+
+/* ---------- Connector pinouts (labels from pin1, pin2, ...) ---------- */
+int starts_with_pin_ci(string s) {
+  string p = to_lower(s);
+  if (strlen(p) < 3) return 0;
+  return strsub(p,0,3) == "pin";
+}
+
+void write_connector_pinouts() {
+  if (!schematic) {
+    printf("_Pinout export requires a schematic to be open._\n\n");
+    return;
+  }
+
+  int connector_count = 0;
+  schematic(SCH) {
+    SCH.parts(P) {
+      if (is_connector_refdes(P.name)) {
+        connector_count++;
+        printf("# Pinout Description Table, %s  \n\n", md_escape(nz(P.name)));
+        printf("| Pin | Label | Notes |\n");
+        printf("|-----|-------|-------|\n");
+
+        P.attributes(A) {
+          string an  = to_lower(nz(A.name));
+          string val = md_escape(nz(A.value));
+          if (starts_with_pin_ci(an)) {
+            string pinidx = strsub(an,3);  /* strip "pin" */
+            if (!is_all_digits(pinidx)) continue;
+
+            /* Matching NOTE attribute: pin1 -> NOTE1, pin2 -> NOTE2, etc. */
+            string note_key = "NOTE" + pinidx;
+            string note = md_escape(nz(P.attribute[note_key]));
+
+            printf("| %s | %s | %s |\n",
+                   pinidx,
+                   val,
+                   note);
+          }
+        }
+
+        printf("\n");
+      }
+    }
+  }
+
+  if (!connector_count)
+    printf("_No P/J connectors found in schematic._\n\n");
+}
+
+/* Return just the file name (no folders) from a path like C:\foo\bar\design.sch */
+string basename_only(string s) {
+  int i, last = -1;
+  for (i = 0; i < strlen(s); i++) {
+    if (s[i] == '/' || s[i] == '\\') last = i;
+  }
+  if (last >= 0) return strsub(s, last + 1);
+  return s;
+}
+
+/* keep only filename-safe chars; replace others with '-' */
+string filenamize(string s) {
+  string out = "";
+  int i;
+  for (i = 0; i < strlen(s); i++) {
+    int ch = s[i];
+    /* allow [A-Za-z0-9._-] */
+    if ((ch >= 'A' && ch <= 'Z') ||
+        (ch >= 'a' && ch <= 'z') ||
+        (ch >= '0' && ch <= '9') ||
+        ch == '.' || ch == '_' || ch == '-') {
+      string t; sprintf(t, "%c", ch); out += t;
+    } else {
+      out += "-";
+    }
+  }
+  return out;
+}
+
+
+/* ---------- Published Resources ---------- */
+void write_resource_row(string label, string url) {
+  if (!strlen(url)) return;
+  printf("| %s | [%s](%s) |\n", label, url, url);
+}
+
+void write_published_resources() {
+  string pn  = nz(get_part_attr_ci(pcb_part, "PART_NUMBER"));
+  string rev = nz(get_part_attr_ci(pcb_part, "REVISION"));
+  string stem = "";
+  string github = "https://github.com/miniPCB/minipcb.github.io/blob/main/";
+
+  if (strlen(pn) && strlen(rev)) stem = filenamize(pn + "_" + rev);
+
+  printf("# Published Resources\n\n");
+  printf("| Resource | URL |\n");
+  printf("|----------|-----|\n");
+
+  /* Manually maintained design-level URLs on DWG1. Empty fields are omitted. */
+  write_resource_row("Part Webpage",        nz(get_part_attr_ci(dwg_part, "PART_WEBPAGE")));
+  write_resource_row("Datasheet",           nz(get_part_attr_ci(dwg_part, "DATASHEET")));
+  write_resource_row("Engineering Notes",  nz(get_part_attr_ci(dwg_part, "ENG_NOTES")));
+  write_resource_row("Test Script",        nz(get_part_attr_ci(dwg_part, "TEST_SCRIPT")));
+  write_resource_row("Gerbers",             nz(get_part_attr_ci(dwg_part, "GERBERS")));
+  write_resource_row("LTspice",             nz(get_part_attr_ci(dwg_part, "LTSPICE")));
+  write_resource_row("CAD Source",          nz(get_part_attr_ci(dwg_part, "CAD_SOURCE")));
+  write_resource_row("Design Review Video", nz(get_part_attr_ci(dwg_part, "VID_DESIGN_REVIEW")));
+  write_resource_row("Build Video",         nz(get_part_attr_ci(dwg_part, "VID_BUILD")));
+  write_resource_row("Test Video",          nz(get_part_attr_ci(dwg_part, "VID_TEST")));
+  write_resource_row("Demo Video",          nz(get_part_attr_ci(dwg_part, "VID_DEMO")));
+  write_resource_row("Tutorial Video",      nz(get_part_attr_ci(dwg_part, "VID_TUTORIAL")));
+
+  /* Deterministic URLs generated from miniPCB file naming conventions. */
+  if (strlen(stem)) {
+    write_resource_row("Schematic JSON",     github + "json/" + stem + "_sch.json");
+    write_resource_row("Schematic Markdown", github + "md/" + stem + "_sch.md");
+  }
+
+  if (strlen(pn)) {
+    write_resource_row("Board Top View",    github + "images/" + pn + "_components_top.png");
+    write_resource_row("Board Bottom View", github + "images/" + pn + "_components_bottom.png");
+
+    if (schematic) {
+      schematic(SCH) {
+        int sheet_index = 0;
+        SCH.sheets(SH) {
+          string image_url;
+          string image_label;
+          sheet_index++;
+          sprintf(image_url, "%simages/%s_schematic_%02d.png", github, pn, sheet_index);
+          sprintf(image_label, "Schematic Image, Sheet %d", sheet_index);
+          write_resource_row(image_label, image_url);
+        }
+      }
+    }
+  }
+
+  printf("\n");
+}
+
+/* ---------- run + main ---------- */
+int main(void) {
+  string base = "design";
+  string suggested;
+
+  /* derive base from schematic file name as a fallback */
+  if (schematic) {
+    schematic(S) {
+      if (strlen(nz(S.name))) base = strip_design_ext(basename_only(nz(S.name)));
+    }
+  }
+
+  /* NEW: read PN + REVISION from PCB1 for filename */
+  string pn  = nz(get_part_attr_ci(pcb_part, "PART_NUMBER"));
+  string rev = nz(get_part_attr_ci(pcb_part, "REVISION"));
+
+  /* build filename stem PN_REVISION (fallbacks if missing) */
+  string stem = "";
+  if (strlen(pn) && strlen(rev))        stem = filenamize(pn + "_" + rev);
+  else if (strlen(pn))                  stem = filenamize(pn + "_REV");
+  else if (strlen(rev))                 stem = filenamize(base + "_" + rev);
+  else                                  stem = filenamize(base);
+
+  suggested = stem + "_sch.md";
+
+  string out_local;
+  string out_mirror;
+
+  /* fixed output folders */
+  out_local  = "C:\\Repos\\EAGLE\\md\\" + suggested;
+  out_mirror = "C:\\Repos\\minipcb.github.io\\md\\" + suggested;
+
+
+  /* ---------- LOCAL OUTPUT ---------- */
+  output(out_local) {
+    write_minipcb_header();
+
+    write_circuit_identification();
+    write_revision_history();
+    write_published_resources();
+    write_schematic_notes();
+    write_schematic_netlist();
+    write_schematic_partlist();
+    write_test_points();
+    write_connector_pinouts();
+  }
+
+  /* ---------- MIRRORED OUTPUT ---------- */
+  output(out_mirror) {
+    write_minipcb_header();
+
+    write_circuit_identification();
+    write_revision_history();
+    write_published_resources();
+    write_schematic_notes();
+    write_schematic_netlist();
+    write_schematic_partlist();
+    write_test_points();
+    write_connector_pinouts();
+  }
+
+  dlgMessageBox(
+    "Schematic export complete:\n" +
+    out_local + "\n\nMirrored to:\n" +
+    out_mirror
+  );
+
+  return 0;
+}
+
