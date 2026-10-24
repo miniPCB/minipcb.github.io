@@ -202,5 +202,30 @@
     return results.sort((a, b) => Math.abs(a.errorPct) - Math.abs(b.errorPct) || b.tolerancePct - a.tolerancePct || a.mpn.localeCompare(b.mpn)).slice(0, request.limit ?? 12);
   }
 
-  root.ResistorParts = Object.freeze({ load, validate, family, evaluate, decode, suggest, preferred });
+  function enumerate(catalog, id, request) {
+    need(positive(request.minOhms) && positive(request.maxOhms) && request.minOhms <= request.maxOhms, "Select a finite positive resistance range.");
+    const f = family(catalog, id), options = { ...f.defaults, ...request };
+    const pkg = find(f.packages, options.package), tolerance = f.toleranceCodes.find(t => t.pct === options.tolerancePct);
+    if (!pkg || !tolerance) return [];
+    const values = new Set(), results = [];
+    for (const range of pkg.limits.filter(l => l.tcrCodes.includes(options.tcrCode) && l.tolerancesPct.includes(tolerance.pct))) {
+      const low = Math.max(range.minOhms, request.minOhms), high = Math.min(range.maxOhms, request.maxOhms);
+      if (low > high) continue;
+      for (const series of seriesFor(range, tolerance)) {
+        for (let exponent = Math.floor(Math.log10(low)); exponent <= Math.floor(Math.log10(high)); exponent++) {
+          for (const mantissa of catalog.series[series]) {
+            const value = Number((mantissa / 100 * Math.pow(10, exponent)).toPrecision(12));
+            if (value >= low * (1 - 1e-12) && value <= high * (1 + 1e-12)) values.add(value);
+          }
+        }
+      }
+    }
+    for (const resistanceOhms of values) {
+      try { results.push(evaluate(catalog, id, { ...options, resistanceOhms })); }
+      catch (_) { /* Dependent ordering and operating rules still apply. */ }
+    }
+    return results.sort((a, b) => a.resistanceOhms - b.resistanceOhms || a.mpn.localeCompare(b.mpn));
+  }
+
+  root.ResistorParts = Object.freeze({ load, validate, family, evaluate, decode, suggest, enumerate, preferred });
 })(window);

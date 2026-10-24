@@ -376,10 +376,10 @@
         assert(activeView() === "toleranceTab" && d.activeElement === get("vin") && text("voutMin") === "11.88 V", "Live edits update a selected view without changing tabs or input focus");
         get("methodTab").click(); set("r1", "0");
         assert(visible("inputError") && activeView() === "methodTab" && text("solutionValue") === "—", "Validation errors and cleared solved values remain visible from every tab");
-        await reset(); pick("tolerance");
-        assert(activeView() === "toleranceTab", "Choosing tolerance solving opens its result view");
-        get("partsTab").click(); get("dividerForm").requestSubmit();
-        assert(activeView() === "toleranceTab", "Calculate tolerance returns to the relevant result view");
+        await reset(); pick("pairs");
+        assert(activeView() === "pairTab" && visible("pairVin") && !visible("dividerForm"), "Choosing real resistor pairs opens its focused form and result view");
+        get("partsTab").click(); get("pairForm").requestSubmit(); await w.pairSearchReady;
+        assert(activeView() === "pairTab", "Finding pairs returns to the performance chart");
         pick("vout");
         assert(activeView() === "overviewTab", "Choosing a voltage calculation returns to the overview");
         get("methodTab").click(); get("dividerForm").requestSubmit();
@@ -399,8 +399,7 @@
           ["vin", ["targetVout", "r1", "r2"], ["vin"], "Calculate VTOP"],
           ["r1", ["vin", "targetVout", "r2"], ["r1"], "Calculate RTOP"],
           ["r2", ["vin", "targetVout", "r1"], ["r2"], "Calculate RBOT"],
-          ["rl", ["vin", "targetVout", "r1", "r2"], ["rl"], "Calculate RL"],
-          ["tolerance", ["targetError", "vin", "r1", "r2", "tolVin", "tolRl"], ["targetVout", "tolR1", "tolR2"], "Calculate tolerance"]
+          ["rl", ["vin", "targetVout", "r1", "r2"], ["rl"], "Calculate RL"]
         ];
         for (const [mode, known, calculated, action] of views) {
           await reset(); pick(mode); valid(`Visible mode choice ${mode}`);

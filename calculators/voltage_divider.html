@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Solve DC voltage divider voltages, resistances, and tolerances; analyze loaded circuits and compare resistor power, voltage, and current stress." />
+  <meta name="description" content="Find real resistor pairs for a target voltage and tolerance, compare their performance, and analyze voltage divider power, voltage, and current stress." />
   <title>Voltage Divider Calculator | miniPCB</title>
   <style>
     :root {
@@ -101,7 +101,7 @@
     .source-tolerance-slot:empty { display: none; }
     .layout { display: grid; grid-template-columns: minmax(310px, 370px) minmax(0, 1fr); gap: 16px; align-items: start; }
     .column { display: grid; gap: 16px; min-width: 0; }
-    .result-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 5px; border-radius: 12px; background: rgba(19, 32, 44, 0.75); }
+    .result-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 5px; border-radius: 12px; background: rgba(19, 32, 44, 0.75); }
     .result-tab { min-width: 0; min-height: 42px; padding: 10px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 0.8rem; cursor: pointer; }
     .result-tab:hover { background: rgba(84, 210, 255, 0.07); color: var(--text); }
     .result-tab[aria-selected="true"] { background: rgba(84, 210, 255, 0.17); color: var(--accent); }
@@ -204,6 +204,14 @@
     .parts-bom { margin-top: 12px; }
     .parts-table-actions { margin-top: 14px; }
     .bom-copy-text { width: 100%; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #101823; color: var(--text); font: 0.78rem/1.5 var(--mono); }
+    .pair-chart { display: block; width: 100%; height: 340px; margin-top: 12px; border-radius: 10px; background: #101823; cursor: crosshair; }
+    .pair-controls { margin: 16px 0; }
+    .pair-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0; }
+    .pair-legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--point-color); }
+    .pair-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+    .pair-table { margin-top: 14px; max-height: 430px; }
+    .pair-inspector { margin: 16px 0; padding: 14px; border-radius: 10px; background: #101823; }
+    .pair-inspector p { margin: 8px 0 0; }
     fieldset { margin: 2px 0 0; padding: 10px 0 0; border: 0; }
     legend { padding: 0 8px 0 0; }
     details { border: 0; padding-top: 0; }
@@ -275,7 +283,7 @@
       .column { margin-bottom: 16px; }
       .panel, .header { box-shadow: none; break-inside: avoid; }
       .result-panel, .result-panel[hidden] { display: block !important; margin-bottom: 16px; }
-      .parts-values { max-height: none; }
+      .parts-values, .pair-table { max-height: none; }
       .parts-values thead th { position: static; }
     }
   </style>
@@ -360,9 +368,9 @@
         <button class="mode-choice" type="button" data-solve-mode="r1" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RBOT</span><strong>Solve for RTOP</strong></button>
         <button class="mode-choice" type="button" data-solve-mode="r2" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP</span><strong>Solve for RBOT</strong></button>
         <button class="mode-choice" type="button" data-solve-mode="rl" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP, RBOT</span><strong>Solve for RL</strong></button>
-        <button class="mode-choice" type="button" data-solve-mode="tolerance" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, RTOP, RBOT, VMID error</span><strong>Solve for R1/R2 tolerance</strong></button>
+        <button class="mode-choice" type="button" data-solve-mode="pairs" aria-pressed="false" aria-controls="pairForm pairPanel"><span>Given VTOP, VMID, tolerances</span><strong>Find real resistor pairs</strong></button>
       </div>
-      <p class="hint">Optional RL applies to voltage and arm-resistance calculations. Tolerance solving also includes VTOP/RL variations.</p>
+      <p class="hint">Optional RL loads the divider. Pair searches include the selected source, load, and resistor tolerances.</p>
     </section>
     <div class="layout">
       <div class="column">
@@ -377,7 +385,8 @@
                 <option value="r1">RTOP · Upper resistor (R1)</option>
                 <option value="r2">RBOT · Lower resistor (R2)</option>
                 <option value="rl">RL · Output load</option>
-                <option value="tolerance">R1/R2 tolerance · Target VMID error</option>
+                <option value="pairs">Real resistor pairs · Target VMID and tolerances</option>
+                <option value="tolerance" hidden>Common tolerance analysis</option>
               </select>
             </div>
             <div class="mode-context">
@@ -501,11 +510,42 @@
             </div>
             <p class="hint">Results update as you edit. Reference downloads contain the default 12 V, 10 kΩ / 10 kΩ circuit.</p>
           </form>
+          <form id="pairForm" class="panel-body form-grid" novalidate hidden>
+            <div class="mode-context"><h3>Find real resistor pairs</h3><p class="hint">Specify your target and tolerances. Search one catalog resistor per arm, then compare and apply a pair to the circuit and BOM.</p></div>
+            <div class="rating-fields">
+              <div class="field"><label for="pairVin">VTOP (V)</label><input id="pairVin" type="number" value="12" step="any" required /></div>
+              <div class="field"><label for="pairSourceTol">VTOP tolerance · ± (%)</label><input id="pairSourceTol" type="number" value="0" min="0" max="99.999" step="any" /></div>
+              <div class="field"><label for="pairVmid">Target VMID (V)</label><input id="pairVmid" type="number" value="6" step="any" required /></div>
+              <div class="field"><label for="pairErrorPct">Allowed VMID error · ± (%)</label><input id="pairErrorPct" type="number" value="5" min="0" max="99.999" step="any" /></div>
+              <div class="field"><label for="pairTolTop">RTOP catalog tolerance (%)</label><select id="pairTolTop"></select></div>
+              <div class="field"><label for="pairTolBot">RBOT catalog tolerance (%)</label><select id="pairTolBot"></select></div>
+            </div>
+            <p class="hint">The entire VMID range must fit the target error band, including nominal value mismatch and all entered tolerances. Catalog tolerances are exact selections.</p>
+            <details><summary>Families, packages, and resistance range</summary><div class="rating-fields">
+              <div class="field"><label for="pairFamilyTop">RTOP family</label><select id="pairFamilyTop"></select></div>
+              <div class="field"><label for="pairFamilyBot">RBOT family</label><select id="pairFamilyBot"></select></div>
+              <div class="field"><label for="pairPackageTop">RTOP package size</label><select id="pairPackageTop"></select></div>
+              <div class="field"><label for="pairPackageBot">RBOT package size</label><select id="pairPackageBot"></select></div>
+              <div class="field"><label for="pairMinR">Minimum resistance (Ω)</label><input id="pairMinR" type="number" value="1000" min="0" step="any" /></div>
+              <div class="field"><label for="pairMaxR">Maximum resistance (Ω)</label><input id="pairMaxR" type="number" value="100000" min="0" step="any" /></div>
+            </div><p class="hint">Search every supported catalog value in this inclusive range for each arm, including mixed-family pairs.</p></details>
+            <details><summary>Load, temperature, and stress limits</summary><div class="rating-fields">
+              <div class="field"><label for="pairRl">Optional RL (Ω)</label><input id="pairRl" type="number" placeholder="Open circuit" min="0" step="any" /></div>
+              <div class="field"><label for="pairLoadTol">RL tolerance · ± (%)</label><input id="pairLoadTol" type="number" value="0" min="0" max="99.999" step="any" /></div>
+              <div class="field"><label for="pairTemperature">Selection ambient (°C)</label><input id="pairTemperature" type="number" value="70" step="any" /></div>
+              <div class="field"><label for="pairTcr">TCR (ppm/°C)</label><select id="pairTcr"></select></div>
+              <div class="field"><label for="pairMaxStress">Maximum P/V/I stress (%)</label><input id="pairMaxStress" type="number" value="100" min="0" max="100" step="any" /></div>
+              <div class="field"><label for="pairMaxPower">Maximum total power (mW)</label><input id="pairMaxPower" type="number" placeholder="No extra limit" min="0" step="any" /></div>
+            </div><p class="hint">Limits use worst-case source and resistor intervals. Power includes RL; its rating is not checked. Family default power modes and compatible packing apply. TCR filters part numbers; temperature drift and tracking are not modeled.</p></details>
+            <p id="pairCatalogStatus" class="hint" role="status">Loading resistor catalogs…</p>
+            <p id="pairError" class="error" role="alert" hidden></p>
+            <div class="actions"><button id="pairFind" class="btn btn-accent" type="submit" disabled>Find resistor pairs</button><button id="pairCancel" class="btn" type="button" hidden>Cancel</button><button class="btn" type="reset">Reset search</button></div>
+          </form>
         </section>
       </div>
       <div class="column">
         <p id="inputError" class="error" role="alert" hidden></p>
-        <div class="solution"><span id="solutionLabel">Solved value</span><output id="solutionValue" for="solveFor vin targetVout r1 r2 rl tolVin tolR1 tolR2 tolRl targetError">—</output></div>
+        <div class="solution"><span id="solutionLabel">Solved value</span><output id="solutionValue" for="solveFor vin targetVout r1 r2 rl tolVin tolR1 tolR2 tolRl targetError pairVin pairVmid pairSourceTol pairErrorPct pairTolTop pairTolBot">—</output></div>
         <div id="resultTabs" class="result-tabs" role="tablist" aria-label="Result views">
           <button id="overviewTab" class="result-tab" type="button" role="tab" aria-selected="true" aria-controls="overviewPanel" tabindex="0">Overview</button>
           <button id="toleranceTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="tolerancePanel" tabindex="-1">Tolerances</button>
@@ -513,6 +553,7 @@
           <button id="ratingsTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="ratingsPanel" tabindex="-1">Ratings</button>
           <button id="partsTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="catalogPanel" tabindex="-1">Parts</button>
           <button id="parts2Tab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="parts2Panel" tabindex="-1">Parts (2)</button>
+          <button id="pairTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="pairPanel" tabindex="-1">Resistor pairs</button>
           <button id="methodTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="methodPanel" tabindex="-1">Method</button>
         </div>
         <section id="overviewPanel" class="panel result-panel" role="tabpanel" aria-labelledby="overviewTab" tabindex="0">
@@ -654,6 +695,29 @@
             </div>
           </div>
         </section>
+        <section id="pairPanel" class="panel result-panel" role="tabpanel" aria-labelledby="pairTab" tabindex="0" hidden>
+          <h2>Resistor pair performance</h2>
+          <div class="panel-body">
+            <p id="pairStatus" class="hint" role="status">Choose “Find real resistor pairs” above to enter a target and search the catalogs.</p>
+            <div id="pairResults" hidden>
+              <div class="rating-fields pair-controls">
+                <div class="field"><label for="pairAxisX">Chart X axis</label><select id="pairAxisX"><option value="power">Total power (mW)</option><option value="current">Input current (µA)</option><option value="rth">Output resistance Rth (kΩ)</option></select></div>
+                <div class="field"><label for="pairAxisY">Chart Y axis</label><select id="pairAxisY"><option value="error">Worst-case target error (%)</option><option value="nominalError">Nominal target error (%)</option><option value="vmid">Nominal VMID (V)</option><option value="pstress">Worst-case Pstress (%)</option><option value="vstress">Worst-case V/I stress (%)</option></select></div>
+              </div>
+              <p class="hint">Every matching combination appears on the chart; identical performance can overlap. Hover to inspect; click a point or select a table row to compare the pair. X axes use a logarithmic scale.</p>
+              <canvas id="pairChart" class="pair-chart" width="900" height="340" aria-label="Resistor pair performance scatter chart. All plotted combinations are available in the table and CSV below."></canvas>
+              <div class="pair-legend hint"><span style="--point-color:#54d2ff">TNPW / TNPW</span><span style="--point-color:#ffba52">M55342 / M55342</span><span style="--point-color:#6ee7ac">Mixed families</span></div>
+              <p id="pairHover" class="hint" role="status">Select a combination to inspect its part numbers and performance.</p>
+              <div id="pairInspector" class="pair-inspector" hidden></div>
+              <div class="actions"><button id="pairApply" class="btn btn-accent" type="button" disabled>Apply selected pair</button><button id="pairCsv" class="btn" type="button" disabled>Download all combinations CSV ↓</button></div>
+              <div class="field pair-controls"><label for="pairSort">Sort combinations</label><select id="pairSort"><option value="error">Worst-case target error</option><option value="power">Total power</option><option value="current">Input current</option><option value="rth">Output resistance Rth</option><option value="pstress">Worst-case Pstress</option></select></div>
+              <div class="table-wrap parts-values pair-table" tabindex="0" role="region" aria-label="Matching resistor combinations, scroll for all performance columns">
+                <table class="parts-table"><caption id="pairTableCaption">Matching combinations · all results are included in the CSV.</caption><thead><tr><th scope="col">Select</th><th scope="col">RTOP part</th><th scope="col">RBOT part</th><th scope="col">VMID</th><th scope="col">VMID range</th><th scope="col">Worst error</th><th scope="col">Power</th><th scope="col">Input I</th><th scope="col">Rth</th><th scope="col">Pstress</th><th scope="col">V/I stress</th></tr></thead><tbody id="pairRows"></tbody></table>
+              </div>
+              <div class="pair-pagination"><button id="pairPrevious" class="btn" type="button">Previous</button><span id="pairPage" class="hint"></span><button id="pairNext" class="btn" type="button">Next</button></div>
+            </div>
+          </div>
+        </section>
         <section id="methodPanel" class="panel result-panel" role="tabpanel" aria-labelledby="methodTab" tabindex="0" hidden>
           <h2 id="methodHeading">Equations, stress definitions, and assumptions</h2>
           <div class="panel-body">
@@ -672,8 +736,8 @@
                 </div>
               </div>
               <p class="note">Inverse solutions use <code>g = VMID / VTOP</code>, <code>Rb = RTOP × g / (1 − g)</code>, <code>RTOP = Rb × (1 − g) / g</code>, and <code>RBOT = Rb / (1 − Rb / RL)</code> when loaded. A finite positive divider needs 0 &lt; g &lt; 1. RL may be open when the target equals the unloaded output.</p>
-              <p class="note">Tolerance bounds evaluate the endpoint VTOP values with minimum gain (R1 high, R2/RL low) and maximum gain (R1 low, R2/RL high). Common R1/R2 tolerance is solved by bisection to six decimal places in percent; a nonzero nominal VMID is required.</p>
-              <p class="note">Multiple-part arms support a series chain or parallel bank. Each part has its own rating, tolerance, and optional working voltage. Equivalent resistance is the series sum or reciprocal conductance sum. Series parts share arm current; parallel parts share arm voltage. Solving RTOP/RBOT scales that arm's part resistances proportionally; it does not select standard values. Common tolerance solving applies the same independent tolerance to every physical part. Stress remains nominal for each part; ratings are not pooled into a fictitious arm rating.</p>
+              <p class="note">Tolerance bounds evaluate the endpoint VTOP values with minimum gain (R1 high, R2/RL low) and maximum gain (R1 low, R2/RL high). Resistor-pair searches require this entire interval to fit the allowed band around the target VMID. Pair searches also evaluate worst-case power and voltage, including interior resistance values where power peaks; the other analysis tabs show nominal stress.</p>
+              <p class="note">Multiple-part arms support a series chain or parallel bank. Each part has its own rating, tolerance, and optional working voltage. Equivalent resistance is the series sum or reciprocal conductance sum. Series parts share arm current; parallel parts share arm voltage. Solving RTOP/RBOT scales that arm's part resistances proportionally; it does not select standard values. The pair search selects one resistor per arm. Manual multi-part analysis remains available; ratings are not pooled into a fictitious arm rating.</p>
               <p class="note">Working voltage follows the lower of the power-derived voltage and the component's maximum working voltage. See <a href="https://www.vishay.com/docs/49873/49873_sg2113.pdf" target="_blank" rel="noopener">Vishay's resistor technical guide</a>.</p>
               <p class="note" id="updateStatus" role="status" aria-live="polite">Ready to calculate.</p>
           </div>
@@ -717,6 +781,7 @@
         byId(tab.getAttribute("aria-controls")).hidden = !active;
       }
       if (focus || focusedPanel?.hidden) selected.focus();
+      if (id === "pairTab") drawPairChart();
     }
 
     for (const tab of resultTabs) {
@@ -970,6 +1035,14 @@
 
     function configureSolver() {
       const mode = byId("solveFor").value;
+      form.hidden = mode === "pairs";
+      byId("pairForm").hidden = mode !== "pairs";
+      if (mode === "pairs") {
+        for (const button of document.querySelectorAll("[data-solve-mode]")) button.setAttribute("aria-pressed", String(button.dataset.solveMode === mode));
+        byId("inputError").hidden = true;
+        updatePairSummary();
+        return mode;
+      }
       for (const arm of ARMS) prepareNetwork(arm);
       for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolR1", "tolR2"]) {
         byId(id).readOnly = id === mode || (id === "targetVout" && ["vout", "tolerance"].includes(mode)) || (["tolR1", "tolR2"].includes(id) && mode === "tolerance");
@@ -1135,6 +1208,8 @@
     const appliedCatalogParts = new Map();
     const parts2Families = [{ key: "tnpw", id: "vishay-tnpw-e3", label: "TNPW" }, { key: "mil", id: "vishay-eh-m55342", label: "M55342 / D55342" }];
     let parts2Values = [], parts2BomData = [], parts2Selection = null, parts2Target = null;
+    let pairGeneration = 0, pairItems = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
+    const PAIR_PAGE_SIZE = 50;
     const catalogSame = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1e-12, Math.abs(a), Math.abs(b));
 
     function catalogAssignment(part) {
@@ -1149,6 +1224,259 @@
       const previous = selected ?? select.value;
       select.replaceChildren(...options.map(option => new Option(option.label, option.value)));
       if (options.some(option => String(option.value) === previous)) select.value = previous;
+    }
+
+    function initializePairSearch() {
+      const families = [{ value: "all", label: "All catalog families" }, ...resistorCatalog.families.map(f => ({ value: f.id, label: f.name }))];
+      const sizes = [...new Set(resistorCatalog.families.flatMap(f => f.packages.map(p => p.case)))].sort();
+      const tolerances = [...new Set(resistorCatalog.families.flatMap(f => f.toleranceCodes.map(t => t.pct)))].sort((a, b) => a - b);
+      const tcrs = [...new Set(resistorCatalog.families.flatMap(f => f.tcrCodes.map(t => t.ppm)))].sort((a, b) => a - b);
+      for (const side of ["Top", "Bot"]) {
+        catalogOptions(`pairFamily${side}`, families, "all");
+        catalogOptions(`pairPackage${side}`, sizes.map(value => ({ value, label: value })), "0805");
+        catalogOptions(`pairTol${side}`, tolerances.map(value => ({ value, label: `±${value}%` })), "1");
+      }
+      catalogOptions("pairTcr", tcrs.map(value => ({ value, label: `±${value} ppm/°C` })), "25");
+      for (const select of byId("pairForm").querySelectorAll("select")) for (const option of select.options) option.defaultSelected = option.selected;
+      byId("pairFind").disabled = false;
+      byId("pairCatalogStatus").textContent = `${resistorCatalog.families.length} shared resistor families loaded. Numbers follow the supported catalog rules; supplier stock is not checked.`;
+    }
+
+    function updatePairSummary() {
+      if (byId("solveFor").value !== "pairs") return;
+      byId("solutionLabel").textContent = "3. Matching resistor pairs";
+      byId("solutionValue").textContent = pairSpec ? `${pairItems.length.toLocaleString()} combinations` : "Set targets and search";
+    }
+
+    function invalidatePairSearch(message = "Search settings changed. Run the search to update combinations.") {
+      pairGeneration++; pairItems = []; pairSpec = null; pairSelected = null; pairPoints = []; pairPage = 0;
+      byId("pairResults").hidden = true; byId("pairRows").replaceChildren();
+      byId("pairApply").disabled = true; byId("pairCsv").disabled = true;
+      byId("pairCancel").hidden = true; byId("pairFind").disabled = !resistorCatalog;
+      byId("pairStatus").textContent = message;
+      byId("pairError").hidden = true;
+      updatePairSummary();
+    }
+
+    function readPairSpec() {
+      for (const input of byId("pairForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
+      const spec = {
+        vin: readInput("pairVin", "VTOP"), target: readInput("pairVmid", "Target VMID"),
+        sourceTolerance: readTolerance("pairSourceTol", "VTOP tolerance"), errorPct: readTolerance("pairErrorPct", "Allowed VMID error"),
+        toleranceTop: Number(byId("pairTolTop").value), toleranceBot: Number(byId("pairTolBot").value),
+        familyTop: byId("pairFamilyTop").value, familyBot: byId("pairFamilyBot").value,
+        packageTop: byId("pairPackageTop").value, packageBot: byId("pairPackageBot").value,
+        minOhms: readInput("pairMinR", "Minimum resistance", false, true), maxOhms: readInput("pairMaxR", "Maximum resistance", false, true),
+        temperatureC: readInput("pairTemperature", "Selection ambient"), tcrPpm: Number(byId("pairTcr").value),
+        rl: readInput("pairRl", "RL", true, true), maxStress: readInput("pairMaxStress", "Maximum stress", false, true),
+        maxPower: readInput("pairMaxPower", "Maximum total power", true, false, 0.001)
+      };
+      spec.loadTolerance = spec.rl === null ? 0 : readTolerance("pairLoadTol", "RL tolerance");
+      const gain = spec.target / spec.vin;
+      if (!Number.isFinite(gain) || gain <= 0 || gain >= 1) throw new Error("VTOP and VMID must have the same sign, with 0 < |VMID| < |VTOP|.");
+      if (!Number.isFinite(spec.vin * spec.vin) || spec.vin * spec.vin === 0) throw new Error("VTOP is outside the supported numeric range.");
+      if (spec.minOhms > spec.maxOhms) throw new Error("Minimum resistance must not exceed maximum resistance.");
+      if (spec.maxStress > 100) throw new Error("Maximum stress must be greater than zero and no more than 100%.");
+      if (spec.maxPower !== null && spec.maxPower < 0) throw new Error("Maximum total power must be zero or greater, or blank.");
+      return spec;
+    }
+
+    function catalogPairParts(spec, side) {
+      const parts = [];
+      for (const family of resistorCatalog.families) {
+        if (spec[`family${side}`] !== "all" && spec[`family${side}`] !== family.id) continue;
+        const options = parts2Options(family, spec[`package${side}`], spec.temperatureC, spec.tcrPpm);
+        if (!options) continue;
+        parts.push(...ResistorParts.enumerate(resistorCatalog, family.id, { ...options, minOhms: spec.minOhms, maxOhms: spec.maxOhms, tolerancePct: spec[`tolerance${side}`] }));
+      }
+      return parts.sort((a, b) => a.resistanceOhms - b.resistanceOhms || a.mpn.localeCompare(b.mpn));
+    }
+
+    function pairWorstStress(spec, top, bot) {
+      const v = Math.abs(spec.vin) * (1 + spec.sourceTolerance / 100);
+      const a = top.resistanceOhms * (1 - top.tolerancePct / 100), b = top.resistanceOhms * (1 + top.tolerancePct / 100);
+      const c = bot.resistanceOhms * (1 - bot.tolerancePct / 100), d = bot.resistanceOhms * (1 + bot.tolerancePct / 100);
+      const loadMin = spec.rl === null ? null : spec.rl * (1 - spec.loadTolerance / 100);
+      const loadMax = spec.rl === null ? null : spec.rl * (1 + spec.loadTolerance / 100);
+      const lowerMin = loadMin === null ? c : parallel(c, loadMin), lowerMax = loadMax === null ? d : parallel(d, loadMax);
+      const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+      // Power can peak inside a resistance interval: evaluate the matched-load point.
+      const pTop = analyze(v, clamp(lowerMin, a, b), c, loadMin).p1;
+      const botThevenin = loadMax === null ? a : parallel(a, loadMax);
+      const pBot = analyze(v, a, clamp(botThevenin, c, d), loadMax).p2;
+      const vTop = v * b / (b + lowerMin), vBot = v * lowerMax / (a + lowerMax);
+      const stressFor = (part, power, voltage) => ({ p: 100 * power / part.powerW, v: 100 * Math.max(Math.sqrt(power / part.powerW), voltage / part.workingVoltageV) });
+      return { top: stressFor(top, pTop, vTop), bot: stressFor(bot, pBot, vBot), power: v * v / (a + lowerMin), current: v / (a + lowerMin) };
+    }
+
+    function evaluateResistorPair(spec, top, bot) {
+      const circuit = { vin: spec.vin, r1: top.resistanceOhms, r2: bot.resistanceOhms, rl: spec.rl };
+      const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl);
+      const bounds = toleranceAnalysis(circuit, { vin: spec.sourceTolerance, r1: top.tolerancePct, r2: bot.tolerancePct, rl: spec.loadTolerance });
+      const error = 100 * Math.max(Math.abs(bounds.min - spec.target), Math.abs(bounds.max - spec.target)) / Math.abs(spec.target);
+      const worst = pairWorstStress(spec, top, bot);
+      const pstress = Math.max(worst.top.p, worst.bot.p), vstress = Math.max(worst.top.v, worst.bot.v);
+      const values = [error, pstress, vstress, worst.power, worst.current, ...Object.values(result), bounds.min, bounds.max];
+      if (!values.every(Number.isFinite) || result.total <= 0 || result.rth <= 0) return null;
+      if (error > spec.errorPct + 1e-9 || Math.max(pstress, vstress) > spec.maxStress + 1e-9 || (spec.maxPower !== null && worst.power > spec.maxPower * (1 + 1e-12))) return null;
+      return { top, bot, result, bounds, error, nominalError: 100 * Math.abs(result.vout - spec.target) / Math.abs(spec.target), worst, pstress, vstress };
+    }
+
+    function pairMetric(pair, key) {
+      return ({ power: () => pair.result.total * 1000, current: () => Math.abs(pair.result.i1) * 1e6, rth: () => pair.result.rth / 1000, vmid: () => pair.result.vout, error: () => pair.error, nominalError: () => pair.nominalError, pstress: () => pair.pstress, vstress: () => pair.vstress })[key]();
+    }
+
+    async function searchResistorPairs() {
+      invalidatePairSearch("Searching catalog pairs…");
+      if (!resistorCatalog) return [];
+      const generation = pairGeneration;
+      byId("pairFind").disabled = true; byId("pairCancel").hidden = false;
+      selectResultTab("pairTab");
+      try {
+        const spec = readPairSpec(), tops = catalogPairParts(spec, "Top"), bots = catalogPairParts(spec, "Bot"), matches = [];
+        const targetGain = spec.target / spec.vin;
+        const gainMin = targetGain * (1 - spec.errorPct / 100), gainMax = Math.min(1, targetGain * (1 + spec.errorPct / 100));
+        const lowerBound = value => { let low = 0, high = bots.length; while (low < high) { const middle = (low + high) >>> 1; if (bots[middle].resistanceOhms < value) low = middle + 1; else high = middle; } return low; };
+        for (let index = 0; index < tops.length; index++) {
+          if (generation !== pairGeneration) return [];
+          const top = tops[index];
+          const equivalentMin = top.resistanceOhms * gainMin / (1 - gainMin);
+          const equivalentMax = gainMax >= 1 ? Infinity : top.resistanceOhms * gainMax / (1 - gainMax);
+          if (spec.rl !== null && equivalentMin >= spec.rl) continue;
+          const botMin = spec.rl === null ? equivalentMin : equivalentMin / (1 - equivalentMin / spec.rl);
+          const botMax = spec.rl === null || equivalentMax === Infinity ? Infinity : equivalentMax >= spec.rl ? Infinity : equivalentMax / (1 - equivalentMax / spec.rl);
+          const upper = spec.rl === null ? equivalentMax : botMax;
+          for (let j = lowerBound(botMin * (1 - 1e-12)); j < bots.length && bots[j].resistanceOhms <= upper * (1 + 1e-12); j++) {
+            const pair = evaluateResistorPair(spec, top, bots[j]);
+            if (pair) matches.push(pair);
+          }
+          if (index % 16 === 0) { byId("pairStatus").textContent = `Checking ${index + 1} / ${tops.length} RTOP parts against ${bots.length} RBOT parts…`; await new Promise(resolve => setTimeout(resolve, 0)); }
+        }
+        if (generation !== pairGeneration) return [];
+        pairSpec = spec; pairItems = matches; pairSelected = null; pairPage = 0;
+        sortPairItems();
+        byId("pairStatus").textContent = `${pairItems.length.toLocaleString()} valid combinations from ${tops.length} RTOP and ${bots.length} RBOT catalog parts. All supported values from ${format(spec.minOhms, "Ω")} to ${format(spec.maxOhms, "Ω")} were searched. Target ${format(spec.target, "V")} ±${spec.errorPct}%; worst-case stress ≤ ${spec.maxStress}%.`;
+        byId("pairResults").hidden = !pairItems.length;
+        byId("pairCsv").disabled = !pairItems.length;
+        if (pairItems.length) selectPair(0);
+        updatePairSummary();
+        return pairItems;
+      } catch (error) {
+        if (generation !== pairGeneration) return [];
+        byId("pairError").textContent = error.message; byId("pairError").hidden = false;
+        byId("pairStatus").textContent = "Check the search settings and try again.";
+        for (const input of byId("pairForm").querySelectorAll('[aria-invalid="true"]')) for (let parent = input.parentElement; parent && parent !== byId("pairForm"); parent = parent.parentElement) if (parent.tagName === "DETAILS") parent.open = true;
+        return [];
+      } finally {
+        if (generation === pairGeneration) { byId("pairFind").disabled = false; byId("pairCancel").hidden = true; }
+      }
+    }
+
+    function sortPairItems() {
+      const key = byId("pairSort").value;
+      pairItems.sort((a, b) => pairMetric(a, key) - pairMetric(b, key) || a.error - b.error || a.result.total - b.result.total || a.top.mpn.localeCompare(b.top.mpn) || a.bot.mpn.localeCompare(b.bot.mpn));
+      pairPage = pairSelected ? Math.floor(pairItems.indexOf(pairSelected) / PAIR_PAGE_SIZE) : 0;
+      renderPairTable(); drawPairChart();
+    }
+
+    function renderPairTable() {
+      const host = byId("pairRows"); host.replaceChildren();
+      const start = pairPage * PAIR_PAGE_SIZE, end = Math.min(pairItems.length, start + PAIR_PAGE_SIZE);
+      for (let index = start; index < end; index++) {
+        const pair = pairItems[index], row = document.createElement("tr"), cell = parts2Cell(row, ""), radio = document.createElement("input");
+        row.dataset.valueRow = String(index); row.dataset.selected = String(pair === pairSelected);
+        radio.type = "radio"; radio.name = "pairChoice"; radio.checked = pair === pairSelected; radio.setAttribute("aria-label", `Select ${pair.top.mpn} and ${pair.bot.mpn}`);
+        radio.addEventListener("change", () => selectPair(index));
+        row.addEventListener("click", event => { if (event.target !== radio) { radio.focus(); selectPair(index); } });
+        cell.append(radio);
+        for (const part of [pair.top, pair.bot]) {
+          const partCell = parts2Cell(row, part.mpn); partCell.className = "part-number";
+          const detail = document.createElement("small"); detail.textContent = `${format(part.resistanceOhms, "Ω")} · ±${part.tolerancePct}% · ${part.case}`; partCell.append(detail);
+        }
+        for (const value of [format(pair.result.vout, "V"), `${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")}`, percent(pair.error), format(pair.result.total, "W"), format(Math.abs(pair.result.i1), "A"), format(pair.result.rth, "Ω"), percent(pair.pstress), percent(pair.vstress)]) parts2Cell(row, value);
+        host.append(row);
+      }
+      byId("pairPage").textContent = pairItems.length ? `${start + 1}–${end} of ${pairItems.length.toLocaleString()} combinations` : "No combinations";
+      byId("pairPrevious").disabled = pairPage === 0; byId("pairNext").disabled = end >= pairItems.length;
+      byId("pairTableCaption").textContent = `Nominal VMID, power, current and Rth; error and P/V/I stress use worst-case intervals. Showing ${PAIR_PAGE_SIZE} per page; CSV includes all ${pairItems.length.toLocaleString()} combinations.`;
+    }
+
+    function selectPair(index) {
+      const pair = pairItems[index]; if (!pair) return;
+      pairSelected = pair;
+      const page = Math.floor(index / PAIR_PAGE_SIZE);
+      if (page !== pairPage) { pairPage = page; renderPairTable(); }
+      for (const row of byId("pairRows").children) { const selected = Number(row.dataset.valueRow) === index; row.dataset.selected = String(selected); row.querySelector("input").checked = selected; }
+      const inspector = byId("pairInspector"); inspector.replaceChildren(); inspector.hidden = false;
+      for (const [label, part] of [["RTOP", pair.top], ["RBOT", pair.bot]]) {
+        const line = document.createElement("p"); line.className = "part-number";
+        line.textContent = `${label}: ${part.mpn} · ${format(part.resistanceOhms, "Ω")} · ±${part.tolerancePct}% · ${format(part.powerW, "W")} allowed at ${part.temperatureC} °C · ${part.workingVoltageV} V max · ${part.tcrPpm} ppm/°C`; inspector.append(line);
+      }
+      for (const text of [`VMID ${format(pair.result.vout, "V")}; range ${format(pair.bounds.min, "V")} to ${format(pair.bounds.max, "V")}. Worst target error ${percent(pair.error)}.`, `Total power ${format(pair.result.total, "W")} nominal / ${format(pair.worst.power, "W")} worst; input current ${format(Math.abs(pair.result.i1), "A")} nominal / ${format(pair.worst.current, "A")} worst. Rth ${format(pair.result.rth, "Ω")} (load excluded).`, `Worst stress RTOP: P ${percent(pair.worst.top.p)}, V/I ${percent(pair.worst.top.v)}; RBOT: P ${percent(pair.worst.bot.p)}, V/I ${percent(pair.worst.bot.v)}.`]) {
+        const line = document.createElement("p"); line.className = "hint"; line.textContent = text; inspector.append(line);
+      }
+      byId("pairApply").disabled = false;
+      byId("pairHover").textContent = `Selected combination ${index + 1} of ${pairItems.length.toLocaleString()}.`;
+      drawPairChart();
+    }
+
+    function drawPairChart() {
+      const canvas = byId("pairChart"); if (!canvas || !pairItems.length) return;
+      const width = Math.max(260, canvas.clientWidth || 900), height = 340, ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
+      const ctx = canvas.getContext("2d"); ctx.setTransform(ratio, 0, 0, ratio, 0, 0); ctx.clearRect(0, 0, width, height);
+      const xKey = byId("pairAxisX").value, yKey = byId("pairAxisY").value;
+      let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+      for (const pair of pairItems) { const x = Math.log10(pairMetric(pair, xKey)), y = pairMetric(pair, yKey); xMin = Math.min(xMin, x); xMax = Math.max(xMax, x); yMin = Math.min(yMin, y); yMax = Math.max(yMax, y); }
+      const xPad = Math.max(0.05, (xMax - xMin) * 0.04), yPad = Math.max(0.000001, (yMax - yMin) * 0.08, Math.abs(yMin) * 0.01);
+      xMin -= xPad; xMax += xPad; yMin = yKey === "vmid" ? yMin - yPad : Math.max(0, yMin - yPad); yMax += yPad;
+      const left = 62, right = width - 18, top = 27, bottom = height - 53;
+      const xPos = value => left + (Math.log10(value) - xMin) / (xMax - xMin) * (right - left), yPos = value => bottom - (value - yMin) / (yMax - yMin) * (bottom - top);
+      ctx.font = "11px Consolas, monospace"; ctx.lineWidth = 1;
+      for (let tick = 0; tick <= 4; tick++) {
+        const x = left + (right - left) * tick / 4, y = bottom - (bottom - top) * tick / 4;
+        ctx.strokeStyle = "rgba(168,190,206,.14)"; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+        ctx.fillStyle = "#a8bece"; ctx.textAlign = "center"; ctx.fillText(Number(Math.pow(10, xMin + (xMax - xMin) * tick / 4).toPrecision(3)).toString(), x, bottom + 18);
+        ctx.textAlign = "right"; ctx.fillText(Number((yMin + (yMax - yMin) * tick / 4).toPrecision(3)).toString(), left - 7, y + 4);
+      }
+      ctx.fillStyle = "#d3e6f4"; ctx.textAlign = "left"; ctx.fillText(byId("pairAxisY").selectedOptions[0].textContent, 10, 15);
+      ctx.textAlign = "center"; ctx.fillText(byId("pairAxisX").selectedOptions[0].textContent + " · log scale", width / 2, height - 9);
+      pairPoints = [];
+      for (const [index, pair] of pairItems.entries()) {
+        const x = xPos(pairMetric(pair, xKey)), y = yPos(pairMetric(pair, yKey));
+        const milTop = pair.top.familyId.includes("m55342"), milBot = pair.bot.familyId.includes("m55342");
+        ctx.fillStyle = milTop && milBot ? "#ffba52" : !milTop && !milBot ? "#54d2ff" : "#6ee7ac";
+        ctx.fillRect(x - 2, y - 2, 4, 4); pairPoints.push({ x, y, index });
+      }
+      const selected = pairPoints.find(point => pairItems[point.index] === pairSelected);
+      if (selected) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(selected.x, selected.y, 6, 0, 2 * Math.PI); ctx.stroke(); }
+    }
+
+    function nearestPairPoint(event) {
+      const bounds = byId("pairChart").getBoundingClientRect(); let nearest = null, distance = 144;
+      for (const point of pairPoints) { const delta = (point.x - (event.clientX - bounds.left)) ** 2 + (point.y - (event.clientY - bounds.top)) ** 2; if (delta < distance) { nearest = point; distance = delta; } }
+      return nearest;
+    }
+
+    function pairSearchCsv() {
+      if (!pairSpec || !pairItems.length) return "";
+      const rows = [["RTOP part", "RBOT part", "RTOP (ohm)", "RBOT (ohm)", "RTOP tolerance (%)", "RBOT tolerance (%)", "VTOP (V)", "VTOP tolerance (%)", "Target VMID (V)", "Allowed error (%)", "RL (ohm)", "RL tolerance (%)", "Nominal VMID (V)", "Minimum VMID (V)", "Maximum VMID (V)", "Worst target error (%)", "Nominal power (W)", "Worst power (W)", "Nominal input current (A)", "Worst input current (A)", "Rth (ohm)", "Worst RTOP Pstress (%)", "Worst RBOT Pstress (%)", "Worst RTOP V/I stress (%)", "Worst RBOT V/I stress (%)", "RTOP allowed power (W)", "RBOT allowed power (W)", "Ambient (C)", "TCR (ppm/C)", "RTOP mode", "RBOT mode", "RTOP source", "RBOT source", "Stock"]];
+      for (const pair of pairItems) rows.push([pair.top.mpn, pair.bot.mpn, pair.top.resistanceOhms, pair.bot.resistanceOhms, pair.top.tolerancePct, pair.bot.tolerancePct, pairSpec.vin, pairSpec.sourceTolerance, pairSpec.target, pairSpec.errorPct, pairSpec.rl ?? "Open", pairSpec.loadTolerance, pair.result.vout, pair.bounds.min, pair.bounds.max, pair.error, pair.result.total, pair.worst.power, Math.abs(pair.result.i1), pair.worst.current, pair.result.rth, pair.worst.top.p, pair.worst.bot.p, pair.worst.top.v, pair.worst.bot.v, pair.top.powerW, pair.bot.powerW, pairSpec.temperatureC, pairSpec.tcrPpm, pair.top.mode, pair.bot.mode, pair.top.sourceUrl, pair.bot.sourceUrl, "Not checked"]);
+      return rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(",")).join("\r\n") + "\r\n";
+    }
+
+    function applySelectedPair() {
+      if (!pairSelected || !pairSpec) return;
+      const pair = pairSelected, spec = pairSpec;
+      byId("vin").value = spec.vin; byId("tolVin").value = spec.sourceTolerance;
+      byId("rl").value = spec.rl === null ? "" : spec.rl / Number(byId("rlUnit").value); byId("tolRl").value = spec.loadTolerance;
+      for (const [arm, index, part] of [["r1", "1", pair.top], ["r2", "2", pair.bot]]) {
+        byId(`${arm}Multiple`).checked = false; byId(arm).value = part.resistanceOhms / Number(byId(`${arm}Unit`).value);
+        byId(`tolR${index}`).value = part.tolerancePct; byId(`vmax${index}`).value = part.workingVoltageV;
+        const rating = byId(`p${index}`); if (![...rating.options].some(option => Number(option.value) === part.powerW)) rating.add(new Option(`${format(part.powerW, "W")} · catalog limit`, part.powerW)); rating.value = part.powerW;
+        appliedCatalogParts.set(arm, { ...part });
+      }
+      byId("solveFor").value = "vout"; update(); selectResultTab("parts2Tab");
     }
 
     function initializeParts2() {
@@ -1462,11 +1790,13 @@
         byId("catalogControls").hidden = false;
         byId("catalogStatus").textContent = `Shared resistor catalogs · ${resistorCatalog.revision}`;
         initializeParts2();
+        initializePairSearch();
         configureCatalogFamily(true);
         return true;
       } catch (error) {
         byId("catalogStatus").textContent = `Part suggestions unavailable: ${error.message} Serve this page over HTTP to load the shared JSON catalogs. Manual circuit analysis remains available.`;
         byId("parts2Status").textContent = byId("catalogStatus").textContent;
+        byId("pairCatalogStatus").textContent = byId("catalogStatus").textContent;
         return false;
       }
     }
@@ -1535,6 +1865,7 @@
     function update() {
       for (const input of form.querySelectorAll("input")) input.removeAttribute("aria-invalid");
       const mode = configureSolver();
+      if (mode === "pairs") return;
       try {
         const networks = Object.fromEntries(ARMS.map(arm => [arm, readNetwork(arm, mode)]));
         const inputs = {
@@ -1692,7 +2023,7 @@
     for (const button of document.querySelectorAll("[data-solve-mode]")) button.addEventListener("click", () => {
       byId("solveFor").value = button.dataset.solveMode;
       update();
-      selectResultTab(button.dataset.solveMode === "tolerance" ? "toleranceTab" : "overviewTab");
+      selectResultTab(button.dataset.solveMode === "pairs" ? "pairTab" : "overviewTab");
     });
     for (const id of ["compareR1", "compareR2"]) byId(id).addEventListener("change", update);
     form.addEventListener("input", () => { catalogDesignVmid = null; update(); });
@@ -1709,6 +2040,29 @@
       if (match) applyCatalogPart(match.candidate, byId("parts2Part").value);
     });
     byId("parts2Copy").addEventListener("click", copyParts2Bom);
+    byId("pairForm").addEventListener("input", () => invalidatePairSearch());
+    byId("pairForm").addEventListener("submit", event => { event.preventDefault(); window.pairSearchReady = searchResistorPairs(); });
+    byId("pairForm").addEventListener("reset", () => setTimeout(() => {
+      invalidatePairSearch("Search defaults restored. Enter a target and find resistor pairs.");
+      for (const details of byId("pairForm").querySelectorAll("details")) details.open = false;
+      for (const input of byId("pairForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
+    }, 0));
+    byId("pairCancel").addEventListener("click", () => invalidatePairSearch("Search canceled."));
+    for (const id of ["pairAxisX", "pairAxisY"]) byId(id).addEventListener("change", drawPairChart);
+    byId("pairSort").addEventListener("change", () => { sortPairItems(); if (pairSelected) selectPair(pairItems.indexOf(pairSelected)); });
+    byId("pairPrevious").addEventListener("click", () => { if (pairPage > 0) { pairPage--; renderPairTable(); } });
+    byId("pairNext").addEventListener("click", () => { if ((pairPage + 1) * PAIR_PAGE_SIZE < pairItems.length) { pairPage++; renderPairTable(); } });
+    byId("pairChart").addEventListener("pointermove", event => {
+      const point = nearestPairPoint(event); if (!point) return;
+      const pair = pairItems[point.index]; byId("pairHover").textContent = `${pair.top.mpn} / ${pair.bot.mpn}: VMID ${format(pair.result.vout, "V")}; worst error ${percent(pair.error)}; power ${format(pair.result.total, "W")}.`;
+    });
+    byId("pairChart").addEventListener("click", event => { const point = nearestPairPoint(event); if (point) selectPair(point.index); });
+    byId("pairApply").addEventListener("click", applySelectedPair);
+    byId("pairCsv").addEventListener("click", () => {
+      const text = pairSearchCsv(); if (!text) return;
+      const link = document.createElement("a"), url = URL.createObjectURL(new Blob(["\ufeff", text], { type: "text/csv;charset=utf-8" }));
+      link.href = url; link.download = "voltage_divider_pairs.csv"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
     byId("catalogBom").addEventListener("click", () => {
       const link = document.createElement("a");
       const url = URL.createObjectURL(new Blob(["\ufeff", catalogBomCsv()], { type: "text/csv;charset=utf-8" }));
@@ -1716,6 +2070,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     window.addEventListener("resize", renderSchematic);
+    window.addEventListener("resize", drawPairChart);
     form.addEventListener("submit", event => {
       event.preventDefault();
       update();

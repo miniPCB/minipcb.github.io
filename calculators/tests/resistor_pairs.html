@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Resistor pair search checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui,sans-serif}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:1800px;border:0;margin-top:16px}</style></head>
+<body><h1>Resistor pair search checks</h1><p>Serve the repository root over HTTP to test catalog completeness, tolerance/rating limits, charts, exports, and pair application.</p><pre id="results" role="status">RUNNING</pre>
+<iframe id="calculator" title="Voltage divider under test" src="../voltage_divider.html?pair-test=1"></iframe>
+<script>
+"use strict";
+const checks=[], failures=[];
+const assert=(condition,label)=>{checks.push(label);if(!condition)failures.push(label);};
+const near=(actual,expected,label)=>assert(Number.isFinite(actual)&&Math.abs(actual-expected)<=1e-9*Math.max(1,Math.abs(expected)),label);
+const pause=()=>new Promise(resolve=>setTimeout(resolve,10));
+document.getElementById('calculator').addEventListener('load',async()=>{
+ try {
+  const frame=document.getElementById('calculator'),w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id);
+  assert(await w.resistorCatalogReady,'Shared catalogs load');
+  const api=w.ResistorParts,catalog=await api.load(),tid='vishay-tnpw-e3',mid='vishay-eh-m55342';
+  const errors=[];w.addEventListener('error',event=>errors.push(event.message));
+  const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));get(id).dispatchEvent(new w.Event('change',{bubbles:true}));};
+  const pick=()=>d.querySelector('[data-solve-mode="pairs"]').click();
+  const reset=async()=>{get('pairForm').reset();await pause();pick();};
+  const run=async()=>{get('pairForm').requestSubmit();return await w.pairSearchReady;};
+  const key=pair=>pair.top.mpn+'|'+pair.bot.mpn;
+  const thrown=fn=>{try{fn();return false;}catch(_){return true;}};
+  for(const id of [tid,mid]){
+   const options={package:id===tid?'0805':'06',tolerancePct:0.1};
+   const actual=api.enumerate(catalog,id,{...options,minOhms:9500,maxOhms:10500});
+   const brute=[];for(let resistanceOhms=9500;resistanceOhms<=10500;resistanceOhms++)try{brute.push(api.evaluate(catalog,id,{...options,resistanceOhms}).mpn);}catch(_){}
+   assert(actual.map(p=>p.mpn).sort().join('|')===brute.sort().join('|'),`${id}: enumeration equals independent integer-value evaluation over 9.5–10.5 kohm`);
+   assert(new Set(actual.map(p=>p.mpn)).size===actual.length,`${id}: overlapping preferred series produce no duplicate part numbers`);
+   const endpoint=api.enumerate(catalog,id,{...options,minOhms:10000,maxOhms:10000});
+   assert(endpoint.length===1&&endpoint[0].resistanceOhms===10000,`${id}: inclusive single-value range is retained`);
+  }
+  assert(thrown(()=>api.enumerate(catalog,tid,{minOhms:0,maxOhms:1000}))&&thrown(()=>api.enumerate(catalog,tid,{minOhms:2000,maxOhms:1000})),'Enumeration rejects invalid/reversed ranges');
+  assert(api.enumerate(catalog,tid,{package:'0201',tolerancePct:1,minOhms:1000,maxOhms:10000}).length===0,'Enumeration respects dependent package/tolerance exclusions');
+  assert(api.enumerate(catalog,tid,{minOhms:1e-100,maxOhms:1e100,tolerancePct:1}).every(p=>Number.isFinite(p.resistanceOhms)),'Huge requested ranges are clipped to catalog limits');
+  pick();
+  assert(!get('pairForm').hidden&&get('dividerForm').hidden&&get('pairTab').getAttribute('aria-selected')==='true','The replacement tile opens a focused VTOP/VMID/tolerance form');
+  assert(!d.querySelector('[data-solve-mode="tolerance"]')&&get('pairVin')&&get('pairVmid')&&get('pairTolTop')&&get('pairTolBot'),'The old tolerance-solving tile is replaced by explicit target inputs');
+  let items=await run();
+  assert(items.length>50&&!get('pairResults').hidden,'Default search returns more than one page of real pairs');
+  assert(items.some(p=>p.top.familyId!==p.bot.familyId)&&items.some(p=>p.top.familyId===tid&&p.bot.familyId===tid)&&items.some(p=>p.top.familyId===mid&&p.bot.familyId===mid),'Both same-family and mixed-family combinations are included');
+  assert(items.every(p=>p.error<=5+1e-9&&p.pstress<=100+1e-9&&p.vstress<=100+1e-9),'Every result satisfies the full target band and worst-case stress limits');
+  assert(items.every(p=>api.decode(catalog,p.top.familyId,p.top.mpn).resistanceOhms===p.top.resistanceOhms&&api.decode(catalog,p.bot.familyId,p.bot.mpn).tolerancePct===1),'Every output pair contains decodable real-family part numbers');
+  const csv=w.pairSearchCsv();
+  assert(csv.trim().split('\r\n').length===items.length+1&&get('pairRows').rows.length===50,'CSV includes all combinations while the table paginates fifty rows');
+  assert(csv.includes('Worst target error (%)')&&csv.includes('Worst RTOP Pstress (%)')&&csv.includes('Not checked'),'CSV includes performance parameters and unknown stock');
+  get('pairNext').click();assert(get('pairPage').textContent.startsWith('51–'),'Next page exposes subsequent combinations');
+  get('pairPrevious').click();assert(get('pairPage').textContent.startsWith('1–'),'Previous page returns to the first combinations');
+  get('pairRows').rows[2].cells[1].click();
+  assert(get('pairRows').rows[2].dataset.selected==='true'&&d.activeElement===get('pairRows').rows[2].querySelector('input'),'Selecting a row updates the inspector and preserves radio focus');
+  for(const x of ['power','current','rth'])for(const y of ['error','nominalError','vmid','pstress','vstress']){set('pairAxisX',x);set('pairAxisY',y);assert(get('pairChart').width>0&&!get('pairInspector').hidden,`Chart supports ${x} versus ${y}`);}
+  const rect=get('pairChart').getBoundingClientRect();let point=null;
+  for(let y=30;y<285&&!point;y+=5)for(let x=65;x<rect.width-15&&!point;x+=5)point=w.nearestPairPoint({clientX:rect.left+x,clientY:rect.top+y});
+  assert(!!point,'The chart renders selectable performance points');
+  if(point){get('pairChart').dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:rect.left+point.x,clientY:rect.top+point.y}));assert(get('pairInspector').textContent.includes(items[point.index].top.mpn),'Clicking a chart point selects the corresponding real pair');}
+  set('pairSort','power');
+  assert(items.every((p,i)=>i===0||items[i-1].result.total<=p.result.total+1e-15),'Sorting orders the full result set by performance');
+  await reset();set('pairMinR','1000');set('pairMaxR','3000');set('pairVmid','4');set('pairRl','10000');set('pairSourceTol','1');set('pairLoadTol','3');
+  items=await run();const spec=w.readPairSpec(),tops=w.catalogPairParts(spec,'Top'),bots=w.catalogPairParts(spec,'Bot'),brute=[];
+  for(const top of tops)for(const bot of bots){const match=w.evaluateResistorPair(spec,top,bot);if(match)brute.push(key(match));}
+  assert(items.map(key).sort().join('|')===brute.sort().join('|'),'Optimized loaded search returns every valid pair from an exhaustive Cartesian comparison');
+  for(const pair of items){
+   const outputs=[];
+   for(const v of [-1,1])for(const a of [-1,1])for(const b of [-1,1])for(const load of [-1,1]){
+    const vin=spec.vin*(1+v*spec.sourceTolerance/100),r1=pair.top.resistanceOhms*(1+a*pair.top.tolerancePct/100),r2=pair.bot.resistanceOhms*(1+b*pair.bot.tolerancePct/100),rl=spec.rl*(1+load*spec.loadTolerance/100),lower=r2*rl/(r2+rl);outputs.push(vin*lower/(r1+lower));
+   }
+   near(pair.bounds.min,Math.min(...outputs),'Loaded candidate minimum equals all physical tolerance corners');near(pair.bounds.max,Math.max(...outputs),'Loaded candidate maximum equals all physical tolerance corners');
+  }
+  // Independent stress oracle includes the interior power maximum, not only corners.
+  const top=api.evaluate(catalog,tid,{resistanceOhms:10000,tolerancePct:1}),bot=api.evaluate(catalog,mid,{resistanceOhms:10000,tolerancePct:1});
+  const stressSpec={vin:12,sourceTolerance:2,rl:null,loadTolerance:0};const worst=w.pairWorstStress(stressSpec,top,bot),peakVoltage=12*1.02;
+  near(worst.top.p*top.powerW/100,peakVoltage**2/(4*9900),'RTOP maximum power includes the balanced-resistance point');
+  near(worst.bot.p*bot.powerW/100,peakVoltage**2/(4*9900),'RBOT maximum power includes the balanced-resistance point');
+  near(worst.power,peakVoltage**2/19800,'Worst total power uses the minimum total resistance');
+  const loadedStress={...stressSpec,rl:12000,loadTolerance:5};const loadedWorst=w.pairWorstStress(loadedStress,top,bot);let sampledTop=0,sampledBot=0;
+  for(let a=0;a<=20;a++)for(let b=0;b<=20;b++)for(const load of [-1,1]){const point=w.analyze(peakVoltage,9900+a*10,9900+b*10,12000*(1+load*0.05));sampledTop=Math.max(sampledTop,point.p1);sampledBot=Math.max(sampledBot,point.p2);}
+  assert(loadedWorst.top.p*top.powerW/100>=sampledTop-1e-12&&loadedWorst.bot.p*bot.powerW/100>=sampledBot-1e-12,'Loaded analytical stress bounds enclose an independent resistance grid');
+  await reset();set('pairMinR','10000');set('pairMaxR','10000');set('pairErrorPct','0.5');
+  assert((await run()).length===0,'A nominally perfect ratio is rejected when its tolerance interval exceeds the target budget');
+  set('pairErrorPct','5');set('pairSourceTol','6');assert((await run()).length===0,'Source tolerance consumes the allowed VMID target error');
+  await reset();set('pairSourceTol','1');set('pairRl','100000');set('pairLoadTol','2');items=await run();
+  assert(items.length>0,'A loaded target with source and load tolerances produces valid pairs');
+  get('r1Multiple').checked=true;get('r1Multiple').dispatchEvent(new w.Event('input',{bubbles:true}));
+  const applied=items[0];get('pairApply').click();
+  assert(get('solveFor').value==='vout'&&!get('r1Multiple').checked&&!get('r2Multiple').checked&&get('pairForm').hidden,'Applying a pair switches atomically to two catalog resistors in forward analysis');
+  near(get('targetVout').valueAsNumber,applied.result.vout,'Applying both parts reproduces the searched VMID');
+  assert(get('tolVin').valueAsNumber===1&&get('tolRl').valueAsNumber===2&&get('rl').valueAsNumber*Number(get('rlUnit').value)===100000,'Applied circuit includes source and load conditions');
+  assert(w.catalogBomCsv().includes(applied.top.mpn)&&w.catalogBomCsv().includes(applied.bot.mpn)&&get('liveSchematic').textContent.includes(applied.top.mpn),'Both applied part numbers reach the BOM and live schematic');
+  pick();set('pairVin','24');assert(get('pairResults').hidden&&get('pairApply').disabled&&w.pairSearchCsv()==='','Editing a search input invalidates stale matches, export, and application');
+  await reset();set('pairMaxStress','25');set('pairMaxPower','1');items=await run();
+  assert(items.length>0&&items.every(p=>Math.max(p.pstress,p.vstress)<=25+1e-9&&p.worst.power<=0.001+1e-12),'Optional derating and total-power limits apply to worst-case results');
+  await reset();set('pairTemperature','125');items=await run();
+  assert(items.length>0&&items.every(p=>p.top.familyId===mid&&p.bot.familyId===mid),'Family-specific ambient limits remove affected catalog parts only');
+  set('pairFamilyTop',tid);assert((await run()).length===0,'A selected family outside its thermal range produces no invalid matches');
+  await reset();set('pairVin','-12');set('pairVmid','-6');const negative=await run();set('pairVin','12');set('pairVmid','6');const positive=await run();
+  assert(negative.map(key).sort().join('|')===positive.map(key).sort().join('|')&&negative.every(p=>p.bounds.min<0&&p.bounds.max<0),'Negative sources produce the corresponding valid pair set and signed voltage bounds');
+  for(const [id,value]of [['pairVin','0'],['pairVmid','12'],['pairSourceTol','100'],['pairMinR','0'],['pairMaxR','1'],['pairMaxStress','101'],['pairRl','-1'],['pairTemperature','']]){
+   await reset();set(id,value);assert((await run()).length===0&&!get('pairError').hidden&&get('pairResults').hidden,`Invalid search ${id}=${value} clears results and shows an error`);
+  }
+  await reset();set('pairTolTop','0.1');set('pairTolBot','0.1');set('pairMinR','100');set('pairMaxR','1000000');const pending=run();get('pairCancel').click();await pending;
+  assert(get('pairStatus').textContent==='Search canceled.'&&get('pairResults').hidden&&get('pairFind').disabled===false,'Cancel discards incomplete search results');
+  await reset();await run();
+  for(const width of [320,390,768,900,1440]){frame.style.width=width+'px';await pause();assert(d.documentElement.scrollWidth<=width&&get('pairChart').getBoundingClientRect().width<=get('pairPanel').getBoundingClientRect().width,`Focused search and chart fit at ${width}px`);}
+  assert(errors.length===0,'No browser runtime errors during chart/search interactions: '+errors.join('; '));
+  await reset();assert(get('pairPackageTop').value==='0805'&&get('pairTolTop').value==='1'&&get('pairTcr').value==='25'&&get('pairResults').hidden,'Search reset restores catalog defaults and clears prior results');
+ }catch(error){failures.push(error.stack);}
+ document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);document.body.dataset.status=failures.length?'FAIL':'PASS';
+});
+</script></body></html>
