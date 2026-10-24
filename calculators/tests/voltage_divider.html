@@ -228,11 +228,11 @@
         set(`${ids("r1")[0]}Vmax`, "1");
         assert(stressOutputs().slice(0, 3).join(",") === "0.72,150,150", "Per-part working voltage caps stress");
         assert(schematicField(ids("r1")[0], "v") === "150%" && schematicField(ids("r1")[0], "i") === "150%", "Schematic includes each part's working-voltage limit");
-        const snapshotLink = d.querySelector('[data-schematic-link][download]');
+        const snapshotLink = get("schematicDownload");
         const snapshot = new DOMParser().parseFromString(await (await fetch(snapshotLink.href)).text(), "image/svg+xml");
         assert(!snapshot.querySelector("parsererror") && snapshot.documentElement.namespaceURI === "http://www.w3.org/2000/svg", "SVG download is well-formed standalone XML");
         assert(snapshot.querySelectorAll('[data-schematic-part]').length === 5 && snapshot.getElementById("schematicVmid").textContent === "VMID 6 V" && snapshot.querySelector(`[data-schematic-part="${ids("r1")[0]}"] [data-field="v"]`).textContent === "150%", "SVG download captures all current values and stresses");
-        assert(!snapshot.querySelector("image, script, link") && [...d.querySelectorAll('[data-schematic-link]')].every(link => link.href === snapshotLink.href), "Full-size and download links share a self-contained live snapshot");
+        assert(!snapshot.querySelector("image, script, link") && !get("schematicViewport").querySelector("a") && snapshotLink.download === "voltage_divider.svg" && !snapshotLink.target, "Schematic stays on the page and retains a self-contained SVG download");
         choosePart("r1", ids("r1")[3]);
         assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 16, "Comparison selector includes custom individual power rating");
         assert(get("ratingRows").querySelectorAll(".chosen").length === 6, "Custom and standard chosen ratings are highlighted");

@@ -14,10 +14,10 @@ and identify the series/parallel connection; ratings are not combined. Stress
 values use the nominal operating point and include each part's working-voltage
 limit when entered. Invalid circuit data clears the live values and stresses.
 
-The SVG reflows for smaller screens. **Full-size schematic** and **Download SVG**
-capture the current annotations in a standalone SVG. The image below and the
-LTspice/Markdown downloads remain the default circuit references; the calculator
-keeps its live SVG, styling, and logic in the one HTML file.
+The SVG reflows for smaller screens and stays on the calculator page.
+**Download SVG** captures the current annotations in a standalone SVG. The image
+below and the LTspice/Markdown downloads remain the default circuit references;
+the calculator keeps its live SVG, styling, and logic in the one HTML file.
 
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
 

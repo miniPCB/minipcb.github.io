@@ -116,7 +116,6 @@
     .circuit-reference h2 { font-size: 1.15rem; }
     .circuit-reference-body { display: grid; gap: 16px; padding: 0 20px 20px; }
     .circuit-reference .schematic { border-radius: 10px; }
-    .schematic-link { display: block; text-decoration: none; }
     #schematicFallback { max-height: 260px; object-fit: contain; }
     .circuit-reference figcaption { padding: 0; font-size: 0.9rem; line-height: 1.65; }
     .circuit-reference figcaption p { margin: 0 0 16px; }
@@ -273,7 +272,7 @@
       <h2 id="schematicHeading">Circuit reference</h2>
       <figure class="circuit-reference-body">
         <div id="schematicViewport">
-          <a class="schematic-link" data-schematic-link href="../images/voltage_divider.svg" target="_blank" rel="noopener" aria-label="Open full-size voltage divider schematic">
+          <div>
             <img id="schematicFallback" class="schematic" src="../images/voltage_divider.svg" width="640" height="370" alt="DC source VTOP supplies R1 in series with R2 to ground. VMID is the junction of R1 and R2. Optional load RL connects from VMID to ground, in parallel with R2." />
             <svg id="liveSchematic" class="schematic" xmlns="http://www.w3.org/2000/svg" width="1120" height="370" viewBox="0 0 1120 370" role="img" aria-labelledby="liveSchematicTitle liveSchematicDesc" font-family="Consolas, 'Courier New', monospace" hidden="">
               <title id="liveSchematicTitle">Voltage divider · live circuit values</title>
@@ -314,13 +313,12 @@
               </g>
               <g id="schematicParts" />
             </svg>
-          </a>
+          </div>
         </div>
         <figcaption>
           <p>Live values and nominal stresses update as you edit. R1/RTOP and R2/RBOT show equivalent arm values; each physical resistor has its own tolerance, power rating, and stress. Optional RL loads VMID in parallel with RBOT.</p>
           <div class="resource-links">
-            <a class="btn btn-accent" data-schematic-link href="../images/voltage_divider.svg" target="_blank" rel="noopener">Full-size schematic ↗</a>
-            <a class="btn" data-schematic-link href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
+            <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
             <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
             <a class="btn" href="../md/voltage_divider_sch.md">Schematic Markdown ↗</a>
           </div>
@@ -982,13 +980,13 @@
       byId("liveSchematicDesc").textContent = state ? `${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. RTOP and RBOT are equivalent arms. ${descriptions.join(" ")} Stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.";
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
-      // Each full-size view/download is a self-contained snapshot of the live SVG.
+      // The download is a self-contained snapshot of the live SVG.
       const markup = new XMLSerializer().serializeToString(svg);
       if (markup !== schematicMarkup) {
         const previousUrl = schematicUrl;
         schematicUrl = URL.createObjectURL(new Blob([markup], { type: "image/svg+xml" }));
         schematicMarkup = markup;
-        for (const link of document.querySelectorAll("[data-schematic-link]")) link.href = schematicUrl;
+        byId("schematicDownload").href = schematicUrl;
         if (previousUrl) URL.revokeObjectURL(previousUrl);
       }
     }
