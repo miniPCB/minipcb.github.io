@@ -52,6 +52,50 @@ approximate an open circuit. Set `LOAD_ON=1` to use the `RLOAD` parameter.
 At the defaults, Vout is 6 V, I1 and I2 are 0.6 mA, and R1 and R2 each dissipate
 3.6 mW. Total power is 7.2 mW and Rth is 5 kΩ.
 
+## Solve modes
+
+RTOP is R1 and RBOT is R2. The calculator can solve for VOUT, VIN, RTOP, RBOT,
+or RL while the remaining nominal quantities are held at their entered values.
+The calculated field is read-only and uses the selected resistance unit.
+
+- VOUT uses the loaded divider equation above.
+- `VIN = VOUT × (1 + RTOP / Rb)`.
+- With `g = VOUT / VIN`, `RTOP = Rb × (1 − g) / g`.
+- To solve a lower resistance, first calculate `Rb = RTOP × g / (1 − g)`.
+- Unloaded: `RBOT = Rb`. Loaded: `RBOT = Rb / (1 − Rb / RL)`.
+- To solve the load: `RL = Rb / (1 − Rb / RBOT)`.
+
+Resistance solutions require the same sign for VIN and VOUT with
+`0 < abs(VOUT) < abs(VIN)`. A passive load cannot increase the unloaded output
+magnitude. The load solution is open circuit when the target equals the unloaded
+output. Zero, negative, infinite, and otherwise infeasible resistance solutions
+are rejected. Solved resistances are exact design values, not rounded to a
+preferred component series.
+
+## Tolerance analysis and solving
+
+Independent VIN, R1, R2, and RL tolerances range from 0 to 99.999 percent. Each
+input varies over `nominal ± abs(nominal) × tolerance / 100`. Defaults are ±1%
+for R1/R2 and 0% for VIN/RL. Open loads ignore RL tolerance.
+
+Minimum gain uses R1 high, R2 low, and RL low. Maximum gain uses R1 low, R2 high,
+and RL high. Combining these gains with both VIN endpoints gives exact
+worst-case VOUT bounds for the ideal resistive model, including negative sources.
+Largest deviation is the larger endpoint distance from nominal VOUT, divided by
+`abs(nominal VOUT)`. It is undefined for zero nominal output.
+
+The **R1/R2 tolerance** solve mode finds the largest common independent tolerance
+for both resistors that meets an entered VOUT error budget. VIN and RL tolerances
+remain fixed inputs. Bisection searches from 0 to 99.999%; the result is rounded
+down to six decimal places in percent. A nonzero nominal VOUT is required. A
+budget already exceeded by VIN/RL variation with exact R1/R2 is rejected.
+
+At the defaults, ±1% R1/R2 gives VOUT from 5.94 to 6.06 V. A ±5% output error
+budget allows ±5% R1/R2 when VIN is exact and the load is open. Adding ±1% VIN
+tolerance reduces that shared resistor allowance to approximately ±3.960396%.
+These bounds apply to output voltage; displayed operating-point and stress
+results continue to use nominal values.
+
 ## Stress definitions
 
 | Result | Definition |
@@ -74,6 +118,6 @@ limited by both power and maximum working voltage; see
 
 The calculator uses nominal, positive, finite resistances and an ideal DC source.
 Signed voltages and currents follow the positive-to-negative node directions
-above; power and stress are nonnegative. Temperature derating, tolerances,
-transients, and independent datasheet current limits are not modeled. RL power is
-reported but its rating is not evaluated.
+above; power and stress are nonnegative. Temperature derating, transients, and
+independent datasheet current limits are not modeled. RL power is reported but
+its rating is not evaluated.

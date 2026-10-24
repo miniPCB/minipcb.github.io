@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Analyze a loaded or unloaded DC voltage divider and compare resistor power, voltage, and current stress across common power ratings." />
+  <meta name="description" content="Solve DC voltage divider voltages, resistances, and tolerances; analyze loaded circuits and compare resistor power, voltage, and current stress." />
   <title>Voltage Divider Calculator | miniPCB</title>
   <style>
     :root {
@@ -128,6 +128,11 @@
     .input-unit select { width: 76px; flex: 0 0 76px; }
     .unit { min-width: 22px; color: var(--muted); font: 0.85rem var(--mono); }
     input[aria-invalid="true"] { border-color: var(--bad); background: rgba(255, 87, 87, 0.1); }
+    input[readonly] { border-color: #4289a6; background: rgba(84, 210, 255, 0.08); color: var(--accent); }
+    .solution { padding: 14px 16px; border: 1px solid #4289a6; border-radius: 12px; background: #122938; }
+    .solution span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 0.76rem; }
+    .solution output { font: 700 1.1rem var(--mono); color: var(--accent); overflow-wrap: anywhere; }
+    .tolerance-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .hint { margin: 0; color: var(--muted); font-size: 0.76rem; line-height: 1.5; }
     .rating-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     fieldset { margin: 2px 0 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--border); }
@@ -188,6 +193,9 @@
       .live-tag { display: none; }
       .tool-path-nav { padding: 10px 12px; }
     }
+    @media (max-width: 440px) {
+      .tolerance-metrics { grid-template-columns: 1fr; }
+    }
     @media print {
       body { background: #fff; color: #111; }
       .tool-path-nav, .actions, footer { display: none; }
@@ -200,14 +208,14 @@
 <body>
   <nav class="tool-path-nav" aria-label="Tool navigation">
     <a href="../index.html">miniPCB Home</a><span aria-hidden="true">/</span>
-    <a href="../part_number_radar.html">Part Number Radar</a><span aria-hidden="true">/</span>
+    <a href="../tools.html">Tools</a><span aria-hidden="true">/</span>
     <span aria-current="page">Voltage Divider</span>
   </nav>
   <main class="page">
     <header class="header">
       <div>
         <h1>Voltage Divider Calculator</h1>
-        <p class="subtitle">Explore the operating point. Check resistor power, voltage, and current stress.</p>
+        <p class="subtitle">Solve the divider. Explore tolerances. Check resistor power, voltage, and current stress.</p>
       </div>
       <span class="live-tag">DC analysis · Live updates</span>
     </header>
@@ -231,18 +239,34 @@
           <h2 id="inputHeading">Circuit data</h2>
           <form id="dividerForm" class="panel-body form-grid" novalidate>
             <div class="field">
-              <label for="vin">Input voltage · Vin</label>
+              <label for="solveFor">Solve for</label>
+              <select id="solveFor" name="solveFor" aria-describedby="solveHelp">
+                <option value="vout" selected>VOUT · Output voltage</option>
+                <option value="vin">VIN · Input voltage</option>
+                <option value="r1">RTOP · Upper resistor (R1)</option>
+                <option value="r2">RBOT · Lower resistor (R2)</option>
+                <option value="rl">RL · Output load</option>
+                <option value="tolerance">R1/R2 tolerance · Target VOUT error</option>
+              </select>
+              <p id="solveHelp" class="hint">The blue field is calculated. Enter the other circuit values.</p>
+            </div>
+            <div class="field">
+              <label for="vin">Input voltage · VIN</label>
               <div class="input-unit"><input id="vin" name="vin" type="number" step="any" value="12" required /><span class="unit">V</span></div>
             </div>
             <div class="field">
-              <label for="r1">Upper resistor · R1</label>
+              <label for="targetVout" id="targetVoutLabel">Output voltage · VOUT (calculated)</label>
+              <div class="input-unit"><input id="targetVout" name="targetVout" type="number" step="any" value="6" readonly /><span class="unit">V</span></div>
+            </div>
+            <div class="field">
+              <label for="r1">Upper resistor · RTOP (R1)</label>
               <div class="input-unit">
                 <input id="r1" name="r1" type="number" min="0" step="any" value="10" required />
                 <select id="r1Unit" name="r1Unit" aria-label="R1 resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
               </div>
             </div>
             <div class="field">
-              <label for="r2">Lower resistor · R2</label>
+              <label for="r2">Lower resistor · RBOT (R2)</label>
               <div class="input-unit">
                 <input id="r2" name="r2" type="number" min="0" step="any" value="10" required />
                 <select id="r2Unit" name="r2Unit" aria-label="R2 resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
@@ -255,6 +279,21 @@
                 <select id="rlUnit" name="rlUnit" aria-label="Load resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
               </div>
               <p id="loadHelp" class="hint">Leave blank for an unloaded divider. Resistances must be greater than zero.</p>
+            </div>
+            <fieldset>
+              <legend>Tolerances · ± percent</legend>
+              <div class="rating-fields">
+                <div class="field"><label for="tolVin">VIN tolerance (%)</label><input id="tolVin" name="tolVin" type="number" min="0" max="99.999" step="any" value="0" /></div>
+                <div class="field"><label for="tolRl">RL tolerance (%)</label><input id="tolRl" name="tolRl" type="number" min="0" max="99.999" step="any" value="0" /></div>
+                <div class="field"><label for="tolR1">R1 tolerance (%)</label><input id="tolR1" name="tolR1" type="number" min="0" max="99.999" step="any" value="1" /></div>
+                <div class="field"><label for="tolR2">R2 tolerance (%)</label><input id="tolR2" name="tolR2" type="number" min="0" max="99.999" step="any" value="1" /></div>
+              </div>
+              <p class="hint">Independent component limits, from 0 to 99.999%. RL tolerance applies only when a load is connected.</p>
+            </fieldset>
+            <div id="targetErrorField" class="field" hidden>
+              <label for="targetError">Allowed VOUT error · ± (%)</label>
+              <input id="targetError" name="targetError" type="number" min="0" step="any" value="5" aria-describedby="targetErrorHelp" />
+              <p id="targetErrorHelp" class="hint">Find the largest shared R1/R2 tolerance, up to 99.999%, keeping VOUT within this percentage of its nominal value. VIN and RL tolerances are included.</p>
             </div>
             <fieldset>
               <legend>Resistor power ratings</legend>
@@ -281,6 +320,7 @@
       </div>
       <div class="column">
         <p id="inputError" class="error" role="alert" hidden></p>
+        <div class="solution"><span id="solutionLabel">Solved value</span><output id="solutionValue" for="solveFor vin targetVout r1 r2 rl tolVin tolR1 tolR2 tolRl targetError">—</output></div>
         <section class="panel" aria-labelledby="operatingHeading">
           <h2 id="operatingHeading">Operating point</h2>
           <div class="panel-body">
@@ -298,6 +338,24 @@
               </table>
             </div>
             <p id="loadSummary" class="note">—</p>
+          </div>
+        </section>
+        <section class="panel" aria-labelledby="toleranceHeading">
+          <h2 id="toleranceHeading">Tolerance analysis · worst-case VOUT</h2>
+          <div class="panel-body">
+            <div class="metrics tolerance-metrics">
+              <div class="metric"><span class="metric-label">Minimum VOUT</span><output id="voutMin">—</output><small>All entered tolerance limits</small></div>
+              <div class="metric"><span class="metric-label">Maximum VOUT</span><output id="voutMax">—</output><small>All entered tolerance limits</small></div>
+              <div class="metric"><span class="metric-label">Largest deviation</span><output id="voutError">—</output><small>Relative to nominal |VOUT|</small></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <caption>Component intervals used for the output bounds. Each tolerance varies independently.</caption>
+                <thead><tr><th scope="col">Quantity</th><th scope="col">Minimum</th><th scope="col">Nominal</th><th scope="col">Maximum</th></tr></thead>
+                <tbody id="toleranceRows"><tr><td colspan="4">—</td></tr></tbody>
+              </table>
+            </div>
+            <p class="note">These are output-voltage bounds. The operating-point and stress results use nominal values. Solved component values are exact design values; select and recheck available resistor values separately.</p>
           </div>
         </section>
         <section class="panel" aria-labelledby="stressHeading">
@@ -338,9 +396,11 @@
                   <p><code>Pstress = P / Prated × 100%</code></p>
                   <p><code>Vlimit = √(Prated × R)</code>, capped by Vmax when entered.<br /><code>Ilimit = Vlimit / R</code></p>
                   <p><code>Vstress = |V| / Vlimit × 100%</code><br /><code>Istress = |I| / Ilimit × 100%</code></p>
-                  <p>Ideal resistors, an ideal DC source, and nominal resistance values. Temperature derating, tolerance, transients, and any independent datasheet current limit are not modeled.</p>
+                  <p>Nominal DC operating point with independent tolerance intervals for VIN, R1, R2, and RL. Temperature derating, transients, and independent datasheet current limits are not modeled.</p>
                 </div>
               </div>
+              <p class="note">Inverse solutions use <code>g = VOUT / VIN</code>, <code>Rb = RTOP × g / (1 − g)</code>, <code>RTOP = Rb × (1 − g) / g</code>, and <code>RBOT = Rb / (1 − Rb / RL)</code> when loaded. A finite positive divider needs 0 &lt; g &lt; 1. RL may be open when the target equals the unloaded output.</p>
+              <p class="note">Tolerance bounds evaluate the endpoint VIN values with minimum gain (R1 high, R2/RL low) and maximum gain (R1 low, R2/RL high). Common R1/R2 tolerance is solved by bisection to six decimal places in percent; a nonzero nominal VOUT is required.</p>
               <p class="note">Working voltage follows the lower of the power-derived voltage and the component's maximum working voltage. See <a href="https://www.vishay.com/docs/49873/49873_sg2113.pdf" target="_blank" rel="noopener">Vishay's resistor technical guide</a>.</p>
               <p class="note" id="updateStatus" role="status" aria-live="polite">Ready to calculate.</p>
             </details>
@@ -410,6 +470,93 @@
       return { ratio, vout, v1, i1, i2, il, p1, p2, pl, total: p1 + p2 + pl, rth: parallel(r1, r2), unloaded: vin / (1 + r1 / r2), bottom };
     }
 
+    function solveCircuit(mode, circuit, target) {
+      const solved = { ...circuit };
+      const { vin, r1, r2, rl } = circuit;
+      if (mode === "vin") {
+        const bottom = rl === null ? r2 : parallel(r2, rl);
+        solved.vin = target * (1 + r1 / bottom);
+      } else if (["r1", "r2", "rl"].includes(mode)) {
+        const gain = target / vin;
+        if (!Number.isFinite(gain) || gain <= 0 || gain >= 1) {
+          throw new Error("A positive finite divider requires VIN and VOUT to have the same sign, with 0 < |VOUT| < |VIN|. Zero VIN cannot determine a resistance.");
+        }
+        if (mode === "r1") {
+          const bottom = rl === null ? r2 : parallel(r2, rl);
+          solved.r1 = bottom * ((1 - gain) / gain);
+        } else {
+          const bottom = r1 * (gain / (1 - gain));
+          if (mode === "r2") {
+            if (rl !== null && bottom >= rl) throw new Error("This target needs an open or negative RBOT. Reduce |VOUT| or increase RL.");
+            solved.r2 = rl === null ? bottom : bottom / (1 - bottom / rl);
+          } else {
+            const unloadedGain = 1 / (1 + r1 / r2);
+            if (Math.abs(gain - unloadedGain) <= 8 * Number.EPSILON * unloadedGain) {
+              solved.rl = null;
+            } else if (gain > unloadedGain) {
+              throw new Error("A passive load cannot raise the output above its unloaded magnitude. Reduce |VOUT| or change R1/R2.");
+            } else {
+              solved.rl = bottom / (1 - bottom / r2);
+            }
+          }
+        }
+      }
+      if (!Number.isFinite(solved.vin) || [solved.r1, solved.r2, solved.rl].some(value => value !== null && (!Number.isFinite(value) || value <= 0))) {
+        throw new Error("No finite positive solution exists within the calculator's numeric range.");
+      }
+      return solved;
+    }
+
+    function toleranceAnalysis(circuit, tolerances) {
+      const { vin, r1, r2, rl } = circuit;
+      const interval = (value, tolerance) => [value - Math.abs(value) * (tolerance / 100), value + Math.abs(value) * (tolerance / 100)];
+      const [vinMin, vinMax] = interval(vin, tolerances.vin);
+      const [r1Min, r1Max] = interval(r1, tolerances.r1);
+      const [r2Min, r2Max] = interval(r2, tolerances.r2);
+      const [rlMin, rlMax] = rl === null ? [null, null] : interval(rl, tolerances.rl);
+      const lowBottom = rl === null ? r2Min : parallel(r2Min, rlMin);
+      const highBottom = rl === null ? r2Max : parallel(r2Max, rlMax);
+      const gainMin = 1 / (1 + r1Max / lowBottom);
+      const gainMax = 1 / (1 + r1Min / highBottom);
+      const outputs = [vinMin * gainMin, vinMin * gainMax, vinMax * gainMin, vinMax * gainMax];
+      const min = Math.min(...outputs);
+      const max = Math.max(...outputs);
+      const nominal = analyze(vin, r1, r2, rl).vout;
+      const deviation = nominal === 0 ? null : Math.max(Math.abs(min - nominal), Math.abs(max - nominal)) / Math.abs(nominal) * 100;
+      return { min, max, deviation, vinMin, vinMax, r1Min, r1Max, r2Min, r2Max, rlMin, rlMax };
+    }
+
+    function solveTolerance(circuit, tolerances, target) {
+      if (analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl).vout === 0) throw new Error("Tolerance solving requires a nonzero nominal VOUT.");
+      const deviationAt = value => {
+        const deviation = toleranceAnalysis(circuit, { ...tolerances, r1: value, r2: value }).deviation;
+        if (!Number.isFinite(deviation)) throw new Error("Tolerance limits exceed the calculator's numeric range.");
+        return deviation;
+      };
+      if (deviationAt(0) > target + 1e-10) throw new Error("VIN and RL tolerances already exceed the allowed VOUT error, even with exact R1/R2. Reduce those tolerances or allow more output error.");
+      let low = 0;
+      let high = 99.999;
+      if (deviationAt(high) <= target) return high;
+      for (let iteration = 0; iteration < 70; iteration++) {
+        const middle = (low + high) / 2;
+        if (deviationAt(middle) <= target + 1e-10) low = middle;
+        else high = middle;
+      }
+      // Round down so the displayed tolerance remains inside the output budget.
+      return Math.floor(low * 1e6) / 1e6;
+    }
+
+    function configureSolver() {
+      const mode = byId("solveFor").value;
+      for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolR1", "tolR2"]) {
+        byId(id).readOnly = id === mode || (id === "targetVout" && ["vout", "tolerance"].includes(mode)) || (["tolR1", "tolR2"].includes(id) && mode === "tolerance");
+      }
+      byId("targetVoutLabel").textContent = `Output voltage · VOUT (${["vout", "tolerance"].includes(mode) ? "calculated" : "target"})`;
+      byId("targetErrorField").hidden = mode !== "tolerance";
+      byId("solveHelp").textContent = mode === "tolerance" ? "Blue R1/R2 tolerance fields are calculated for the allowed VOUT error. All nominal circuit values remain inputs." : "The blue field is calculated. Enter the other circuit values, including target VOUT for inverse solutions.";
+      return mode;
+    }
+
     function stress(resistance, voltage, current, power, rating, vmax) {
       const vlimit = Math.min(Math.sqrt(rating) * Math.sqrt(resistance), vmax === null ? Infinity : vmax);
       const ilimit = vlimit / resistance;
@@ -428,9 +575,20 @@
       return value;
     }
 
+    function readTolerance(id, label) {
+      const value = readInput(id, label);
+      if (value < 0 || value > 99.999) {
+        byId(id).setAttribute("aria-invalid", "true");
+        throw new Error(`${label}: enter a percentage from 0 to 99.999.`);
+      }
+      return value;
+    }
+
     function clearResults(message) {
-      for (const id of ["vout", "iin", "ptotal", "ratio"]) byId(id).textContent = "—";
+      for (const id of ["vout", "iin", "ptotal", "ratio", "solutionValue", "voutMin", "voutMax", "voutError"]) byId(id).textContent = "—";
+      for (const input of form.querySelectorAll("input[readonly]")) input.value = "";
       byId("operatingRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate.</td></tr>';
+      byId("toleranceRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate tolerance bounds.</td></tr>';
       byId("ratingRows").innerHTML = '<tr><td colspan="7">Enter valid circuit data to compare ratings.</td></tr>';
       byId("stressCards").replaceChildren();
       byId("loadSummary").textContent = "—";
@@ -458,11 +616,32 @@
 
     function update() {
       for (const input of form.querySelectorAll("input")) input.removeAttribute("aria-invalid");
+      const mode = configureSolver();
       try {
-        const vin = readInput("vin", "Input voltage");
-        const r1 = readInput("r1", "R1 resistance", false, true, Number(byId("r1Unit").value));
-        const r2 = readInput("r2", "R2 resistance", false, true, Number(byId("r2Unit").value));
-        const rl = readInput("rl", "Load resistance", true, true, Number(byId("rlUnit").value));
+        const inputs = {
+          vin: mode === "vin" ? null : readInput("vin", "Input voltage"),
+          r1: mode === "r1" ? null : readInput("r1", "RTOP resistance", false, true, Number(byId("r1Unit").value)),
+          r2: mode === "r2" ? null : readInput("r2", "RBOT resistance", false, true, Number(byId("r2Unit").value)),
+          rl: mode === "rl" ? null : readInput("rl", "Load resistance", true, true, Number(byId("rlUnit").value))
+        };
+        const target = ["vout", "tolerance"].includes(mode) ? null : readInput("targetVout", "Target VOUT");
+        const circuit = solveCircuit(mode, inputs, target);
+        const { vin, r1, r2, rl } = circuit;
+        const tolerances = {
+          vin: readTolerance("tolVin", "VIN tolerance"),
+          r1: mode === "tolerance" ? 0 : readTolerance("tolR1", "R1 tolerance"),
+          r2: mode === "tolerance" ? 0 : readTolerance("tolR2", "R2 tolerance"),
+          rl: rl === null ? 0 : readTolerance("tolRl", "RL tolerance")
+        };
+        if (mode === "tolerance") {
+          const allowedError = readInput("targetError", "Allowed VOUT error");
+          if (allowedError < 0) {
+            byId("targetError").setAttribute("aria-invalid", "true");
+            throw new Error("Allowed VOUT error must be zero or greater.");
+          }
+          tolerances.r1 = tolerances.r2 = solveTolerance(circuit, tolerances, allowedError);
+        }
+        const bounds = toleranceAnalysis(circuit, tolerances);
         const vmax1 = readInput("vmax1", "R1 maximum working voltage", true, true);
         const vmax2 = readInput("vmax2", "R2 maximum working voltage", true, true);
         const p1 = Number(byId("p1").value);
@@ -475,10 +654,27 @@
           r1: stress(r1, result.v1, result.i1, result.p1, rating.watts, vmax1),
           r2: stress(r2, result.vout, result.i2, result.p2, rating.watts, vmax2)
         }));
-        const numbers = [...Object.values(result), ...Object.values(s1), ...Object.values(s2), ...comparisons.flatMap(row => [...Object.values(row.r1), ...Object.values(row.r2)])];
+        const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null), ...Object.values(s1), ...Object.values(s2), ...comparisons.flatMap(row => [...Object.values(row.r1), ...Object.values(row.r2)])];
         if (numbers.some(value => !Number.isFinite(value))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
 
         byId("inputError").hidden = true;
+        if (["vout", "tolerance"].includes(mode)) byId("targetVout").value = result.vout;
+        else if (mode === "vin") byId("vin").value = vin;
+        else byId(mode).value = circuit[mode] === null ? "" : circuit[mode] / Number(byId(`${mode}Unit`).value);
+        if (mode === "tolerance") {
+          byId("tolR1").value = tolerances.r1;
+          byId("tolR2").value = tolerances.r2;
+        }
+        byId("tolRl").disabled = rl === null;
+        const names = { vin: "VIN", vout: "VOUT", r1: "RTOP (R1)", r2: "RBOT (R2)", rl: "RL", tolerance: "Common R1/R2 tolerance" };
+        byId("solutionLabel").textContent = `Solved · ${names[mode]}`;
+        byId("solutionValue").textContent = mode === "tolerance" ? `±${tolerances.r1}% each` : mode === "vout" ? format(result.vout, "V") : mode === "vin" ? format(vin, "V") : circuit[mode] === null ? "Open circuit" : format(circuit[mode], "Ω");
+        byId("voutMin").textContent = format(bounds.min, "V");
+        byId("voutMax").textContent = format(bounds.max, "V");
+        byId("voutError").textContent = bounds.deviation === null ? "— (zero nominal)" : percent(bounds.deviation);
+        const toleranceRows = [["VIN", bounds.vinMin, vin, bounds.vinMax, "V"], ["RTOP (R1)", bounds.r1Min, r1, bounds.r1Max, "Ω"], ["RBOT (R2)", bounds.r2Min, r2, bounds.r2Max, "Ω"]];
+        if (rl !== null) toleranceRows.push(["RL", bounds.rlMin, rl, bounds.rlMax, "Ω"]);
+        byId("toleranceRows").innerHTML = toleranceRows.map(([name, min, nominal, max, unit]) => `<tr><th scope="row">${name}</th><td>${format(min, unit)}</td><td>${format(nominal, unit)}</td><td>${format(max, unit)}</td></tr>`).join("");
         byId("vout").textContent = format(result.vout, "V");
         byId("iin").textContent = format(result.i1, "A");
         byId("ptotal").textContent = format(result.total, "W");

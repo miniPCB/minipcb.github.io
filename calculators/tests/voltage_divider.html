@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voltage Divider Browser Checks</title>
+  <style>
+    body { margin: 16px; background: #101823; color: #eaf6ff; font: 14px system-ui, sans-serif; }
+    pre { white-space: pre-wrap; }
+    iframe { display: block; border: 1px solid #2f495d; width: 1440px; height: 2200px; }
+  </style>
+</head>
+<body>
+  <h1>Voltage divider browser checks</h1>
+  <p>Serve the repository root with a local HTTP server and open this page. Checks use the real calculator in the frame below.</p>
+  <pre id="testResults" role="status">RUNNING</pre>
+  <iframe id="subject" src="../voltage_divider.html" title="Calculator under test"></iframe>
+  <script>
+    "use strict";
+    const checks = [];
+    const failures = [];
+    const assert = (condition, label) => { checks.push(label); if (!condition) failures.push(label); };
+    const near = (actual, expected, label, tolerance = 1e-9) => assert(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${label}: ${actual} ≈ ${expected}`);
+    document.getElementById("subject").addEventListener("load", async event => {
+      try {
+        const frame = event.target, w = frame.contentWindow, d = w.document;
+        const get = id => d.getElementById(id);
+        const text = id => get(id).textContent;
+        const set = (id, value) => { get(id).value = value; get(id).dispatchEvent(new w.Event("input", { bubbles: true })); };
+        const reset = async () => { get("dividerForm").reset(); await new Promise(resolve => setTimeout(resolve, 5)); };
+        const stressOutputs = () => [...get("stressCards").querySelectorAll("output")].map(el => Number.parseFloat(el.textContent));
+        const valid = label => assert(get("inputError").hidden, `${label}: ${text("inputError")}`);
+        const invalid = label => {
+          assert(!get("inputError").hidden, `${label}: visible error`);
+          assert(text("vout") === "—" && text("voutMin") === "—" && text("solutionValue") === "—", `${label}: stale results cleared`);
+        };
+
+        valid("Initial calculation");
+        assert(text("vout") === "6 V" && text("iin") === "600 µA" && text("ptotal") === "7.2 mW", "Original default operating point");
+        assert(stressOutputs().join(",") === "1.44,12,12,1.44,12,12", "Original default resistor stresses");
+        assert(text("voutMin") === "5.94 V" && text("voutMax") === "6.06 V" && text("voutError") === "1%", "Default ±1% resistor output bounds");
+        assert(get("targetVout").readOnly && !get("vin").readOnly, "VOUT mode marks the calculated field");
+        assert(get("ratingRows").rows.length === 7 && get("ratingRows").querySelectorAll(".chosen").length === 6, "Seven common ratings retain selected highlights");
+
+        set("rl", "100");
+        valid("Loaded forward solution");
+        assert(text("vout") === "5.714 V" && get("operatingRows").rows.length === 3, "Loaded output and operating row");
+        const loaded = w.analyze(12, 10000, 10000, 100000);
+        near(loaded.vout, 40 / 7, "Known loaded output");
+        near(loaded.i1, 0.0006285714285714286, "Known loaded input current");
+        near(loaded.total, 0.007542857142857143, "Known loaded total dissipation");
+        assert(text("loadSummary").includes("4.76%"), "Loading reduction retained");
+
+        await reset(); set("solveFor", "vin"); set("targetVout", "5");
+        valid("VIN solution");
+        near(get("vin").valueAsNumber, 10, "VIN = 10 V for 5 V unloaded target");
+        assert(get("vin").readOnly && !get("targetVout").readOnly, "VIN mode field states");
+        set("rl", "10");
+        near(get("vin").valueAsNumber, 15, "VIN = 15 V for 5 V target with 10 kΩ load");
+        set("targetVout", "-5");
+        near(get("vin").valueAsNumber, -15, "Negative VIN inverse solution");
+        assert(text("vout") === "-5 V" && !text("ptotal").startsWith("-"), "Negative source maintains passive power sign");
+        set("targetVout", "0");
+        valid("Zero VIN solution");
+        assert(get("vin").valueAsNumber === 0 && text("voutError").includes("zero nominal"), "Zero output has undefined relative tolerance");
+
+        await reset(); set("solveFor", "r1"); set("targetVout", "4");
+        valid("RTOP solution");
+        near(get("r1").valueAsNumber, 20, "Unloaded RTOP = 20 kΩ");
+        set("r1Unit", "1");
+        near(get("r1").valueAsNumber, 20000, "Solved RTOP follows Ω unit selection");
+        set("rl", "10");
+        near(get("r1").valueAsNumber, 10000, "Loaded RTOP = 10 kΩ");
+        assert(text("vout") === "4 V" && get("r1").readOnly, "RTOP solution feeds operating point");
+
+        await reset(); set("solveFor", "r2"); set("targetVout", "4");
+        valid("RBOT solution");
+        near(get("r2").valueAsNumber, 5, "Unloaded RBOT = 5 kΩ");
+        set("rl", "10");
+        near(get("r2").valueAsNumber, 10, "Loaded RBOT = 10 kΩ");
+        set("targetVout", "8"); invalid("Infeasible loaded RBOT");
+        set("targetVout", "4"); valid("RBOT recovers after infeasible target");
+        for (const target of ["0", "12", "-4"]) {
+          set("targetVout", target); invalid(`Invalid resistance target ${target}`);
+        }
+        set("targetVout", "4"); set("vin", "0"); invalid("Zero VIN underdetermines resistance");
+        await reset(); set("solveFor", "r1"); set("vin", "-12"); set("targetVout", "-4");
+        valid("Negative-source resistance solution");
+        near(get("r1").valueAsNumber, 20, "Negative source RTOP remains positive");
+
+        await reset(); set("solveFor", "rl");
+        valid("Open load solution");
+        assert(get("rl").value === "" && text("solutionValue") === "Open circuit", "Unloaded target solves RL as open");
+        set("targetVout", "4");
+        valid("Finite load solution");
+        near(get("rl").valueAsNumber, 10, "RL = 10 kΩ for a 4 V target");
+        assert(!get("tolRl").disabled, "Finite solved load enables load tolerance");
+        set("targetVout", "8"); invalid("Passive load cannot boost output");
+        set("targetVout", "6"); valid("Open load recovers from infeasible target");
+        assert(get("tolRl").disabled, "Open load disables unused tolerance input");
+
+        await reset(); set("solveFor", "tolerance");
+        valid("Shared resistor tolerance solution");
+        near(get("tolR1").valueAsNumber, 5, "Exact source permits ±5% R1");
+        near(get("tolR2").valueAsNumber, 5, "Exact source permits ±5% R2");
+        assert(get("tolR1").readOnly && get("tolR2").readOnly && !get("targetErrorField").hidden, "Tolerance mode controls");
+        assert(text("voutMin") === "5.7 V" && text("voutMax") === "6.3 V", "Solved tolerance bounds meet ±5% budget");
+        set("tolVin", "1");
+        near(get("tolR1").valueAsNumber, 3.960396, "VIN variation consumes tolerance budget", 1e-7);
+        set("targetError", "0"); invalid("VIN tolerance alone exceeds zero budget");
+        set("targetError", "5"); valid("Tolerance solver recovers after impossible budget");
+        set("vin", "0"); invalid("Tolerance solving rejects zero nominal output");
+        set("vin", "12"); set("targetError", "-1"); invalid("Negative tolerance budget");
+        await reset(); set("solveFor", "tolerance"); set("targetError", "0");
+        valid("Zero error with exact source");
+        assert(get("tolR1").valueAsNumber === 0 && get("tolR2").valueAsNumber === 0, "Zero error solves exact resistors");
+        set("targetError", "1000");
+        near(get("tolR1").valueAsNumber, 99.999, "Tolerance search caps at documented range");
+
+        const sampleCircuit = { vin: 12, r1: 10000, r2: 20000, rl: 30000 };
+        const sampleTolerances = { vin: 1, r1: 5, r2: 10, rl: 20 };
+        const bounds = w.toleranceAnalysis(sampleCircuit, sampleTolerances);
+        near(bounds.min, 14256 / 2425, "Independent hand-derived loaded minimum");
+        near(bounds.max, 239976 / 33575, "Independent hand-derived loaded maximum");
+        const negative = w.toleranceAnalysis({ ...sampleCircuit, vin: -12 }, sampleTolerances);
+        near(negative.min, -239976 / 33575, "Negative source minimum uses reversed magnitude corner");
+        near(negative.max, -14256 / 2425, "Negative source maximum uses reversed magnitude corner");
+
+        for (const circuit of [sampleCircuit, { vin: -24, r1: 3300, r2: 4700, rl: 8200 }, { vin: 1.8, r1: 1e6, r2: 1e7, rl: 10 }, { vin: 48, r1: 100, r2: 10000, rl: null }]) {
+          const point = w.analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl);
+          near(point.i1, point.i2 + point.il, "Current conservation");
+          near(point.total, circuit.vin * point.i1, "Power conservation");
+          near(point.v1 + point.vout, circuit.vin, "Voltage conservation");
+          for (const mode of ["vin", "r1", "r2", "rl"]) {
+            const solved = w.solveCircuit(mode, { ...circuit, [mode]: null }, point.vout);
+            if (mode === "rl" && circuit.rl === null) assert(solved.rl === null, "Inverse round trip retains open load");
+            else near(solved[mode], circuit[mode], `Inverse ${mode} round trip`, 1e-7);
+          }
+          const t = { vin: 1, r1: 5, r2: 10, rl: 20 };
+          const range = w.toleranceAnalysis(circuit, t);
+          const corners = [];
+          for (const a of [-1, 1]) for (const b of [-1, 1]) for (const c of [-1, 1]) for (const e of [-1, 1]) {
+            corners.push(w.analyze(circuit.vin + a * Math.abs(circuit.vin) * 0.01, circuit.r1 * (1 + b * 0.05), circuit.r2 * (1 + c * 0.1), circuit.rl === null ? null : circuit.rl * (1 + e * 0.2)).vout);
+          }
+          near(range.min, Math.min(...corners), "Optimized bound equals exhaustive corner minimum");
+          near(range.max, Math.max(...corners), "Optimized bound equals exhaustive corner maximum");
+          const fixed = { vin: 1, r1: 0, r2: 0, rl: 2 };
+          const allowance = w.solveTolerance(circuit, fixed, 5);
+          const achieved = w.toleranceAnalysis(circuit, { ...fixed, r1: allowance, r2: allowance });
+          assert(achieved.deviation <= 5 + 1e-8, "Solved tolerance stays inside budget");
+          const beyond = w.toleranceAnalysis(circuit, { ...fixed, r1: allowance + 0.00001, r2: allowance + 0.00001 });
+          assert(beyond.deviation > 5, "Larger tolerance exceeds budget");
+        }
+
+        await reset(); set("p1", "0.0625"); set("p2", "2");
+        assert(stressOutputs().join(",") === "5.76,24,24,0.18,4.24,4.24", "Independent power rating regressions");
+        await reset(); set("vmax1", "3");
+        assert(stressOutputs().slice(0, 3).join(",") === "1.44,200,200", "Working voltage stress cap retained");
+        await reset(); set("vin", "100");
+        assert(stressOutputs().every(value => value === 100), "Exact power limit remains 100% stress");
+        set("vin", "200");
+        assert(stressOutputs().join(",") === "400,200,200,400,200,200", "Overload stress scaling retained");
+
+        for (const [id, value] of [["r1", "0"], ["r2", "-1"], ["rl", "0"], ["vin", ""], ["tolR1", "-1"], ["tolR2", "100"], ["tolVin", ""], ["vmax1", "0"], ["vin", "1e309"]]) {
+          await reset(); set(id, value); invalid(`Invalid ${id}=${value}`);
+          assert(get(id).getAttribute("aria-invalid") === "true", `Invalid ${id} exposes aria-invalid`);
+        }
+        await reset(); set("vin", "1e308"); invalid("Numeric overflow");
+        await reset();
+        get("vin").value = "24"; get("dividerForm").requestSubmit();
+        assert(text("vout") === "12 V", "Calculate submit updates in place");
+        await reset();
+        assert(get("solveFor").value === "vout" && get("tolR1").valueAsNumber === 1 && get("rl").value === "" && text("vout") === "6 V", "Reset restores original mode and defaults");
+        assert(d.querySelector("img.schematic").complete && d.querySelector("img.schematic").naturalWidth === 640, "Schematic image loads");
+        for (const link of [...d.querySelectorAll("a[href]")].filter(a => a.origin === location.origin)) {
+          assert((await fetch(link.href)).ok, `Local resource loads: ${link.getAttribute("href")}`);
+        }
+        const toolsPage = await (await fetch("../../tools.html")).text();
+        const toolsDocument = new DOMParser().parseFromString(toolsPage, "text/html");
+        assert(!!toolsDocument.querySelector('a[href="calculators/voltage_divider.html"]'), "Tools page links to calculator");
+        for (const mode of ["vout", "vin", "r1", "r2", "rl", "tolerance"]) {
+          await reset(); set("solveFor", mode); valid(`Mode ${mode} default transition`);
+          for (const width of [320, 390, 768, 900, 1440]) {
+            frame.style.width = `${width}px`;
+            await new Promise(resolve => setTimeout(resolve, 5));
+            assert(d.documentElement.scrollWidth <= width, `No page overflow: ${mode} at ${width}px`);
+            assert(get("r1").getBoundingClientRect().width >= 100, `Usable resistance input: ${mode} at ${width}px`);
+          }
+        }
+        await reset();
+      } catch (error) { failures.push(error.stack); }
+      document.getElementById("testResults").textContent = JSON.stringify({ status: failures.length ? "FAIL" : "PASS", count: checks.length, failures, checks }, null, 2);
+      document.body.dataset.status = failures.length ? "FAIL" : "PASS";
+    });
+  </script>
+</body>
+</html>
