@@ -39,7 +39,7 @@
         assert(text("vout") === "6 V" && text("iin") === "600 µA" && text("ptotal") === "7.2 mW", "Original default operating point");
         assert(stressOutputs().join(",") === "1.44,12,12,1.44,12,12", "Original default resistor stresses");
         assert(text("voutMin") === "5.94 V" && text("voutMax") === "6.06 V" && text("voutError") === "1%", "Default ±1% resistor output bounds");
-        assert(get("targetVout").readOnly && !get("vin").readOnly, "VOUT mode marks the calculated field");
+        assert(get("targetVout").readOnly && !get("vin").readOnly, "VMID mode marks the calculated field");
         assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 6, "Fifteen common ratings retain selected highlights");
 
         set("rl", "100");
@@ -52,16 +52,16 @@
         assert(text("loadSummary").includes("4.76%"), "Loading reduction retained");
 
         await reset(); set("solveFor", "vin"); set("targetVout", "5");
-        valid("VIN solution");
-        near(get("vin").valueAsNumber, 10, "VIN = 10 V for 5 V unloaded target");
-        assert(get("vin").readOnly && !get("targetVout").readOnly, "VIN mode field states");
+        valid("VTOP solution");
+        near(get("vin").valueAsNumber, 10, "VTOP = 10 V for 5 V unloaded target");
+        assert(get("vin").readOnly && !get("targetVout").readOnly, "VTOP mode field states");
         set("rl", "10");
-        near(get("vin").valueAsNumber, 15, "VIN = 15 V for 5 V target with 10 kΩ load");
+        near(get("vin").valueAsNumber, 15, "VTOP = 15 V for 5 V target with 10 kΩ load");
         set("targetVout", "-5");
-        near(get("vin").valueAsNumber, -15, "Negative VIN inverse solution");
+        near(get("vin").valueAsNumber, -15, "Negative VTOP inverse solution");
         assert(text("vout") === "-5 V" && !text("ptotal").startsWith("-"), "Negative source maintains passive power sign");
         set("targetVout", "0");
-        valid("Zero VIN solution");
+        valid("Zero VTOP solution");
         assert(get("vin").valueAsNumber === 0 && text("voutError").includes("zero nominal"), "Zero output has undefined relative tolerance");
 
         await reset(); set("solveFor", "r1"); set("targetVout", "4");
@@ -83,7 +83,7 @@
         for (const target of ["0", "12", "-4"]) {
           set("targetVout", target); invalid(`Invalid resistance target ${target}`);
         }
-        set("targetVout", "4"); set("vin", "0"); invalid("Zero VIN underdetermines resistance");
+        set("targetVout", "4"); set("vin", "0"); invalid("Zero VTOP underdetermines resistance");
         await reset(); set("solveFor", "r1"); set("vin", "-12"); set("targetVout", "-4");
         valid("Negative-source resistance solution");
         near(get("r1").valueAsNumber, 20, "Negative source RTOP remains positive");
@@ -107,8 +107,8 @@
         assert(get("tolR1").readOnly && get("tolR2").readOnly && !get("targetErrorField").hidden, "Tolerance mode controls");
         assert(text("voutMin") === "5.7 V" && text("voutMax") === "6.3 V", "Solved tolerance bounds meet ±5% budget");
         set("tolVin", "1");
-        near(get("tolR1").valueAsNumber, 3.960396, "VIN variation consumes tolerance budget", 1e-7);
-        set("targetError", "0"); invalid("VIN tolerance alone exceeds zero budget");
+        near(get("tolR1").valueAsNumber, 3.960396, "VTOP variation consumes tolerance budget", 1e-7);
+        set("targetError", "0"); invalid("VTOP tolerance alone exceeds zero budget");
         set("targetError", "5"); valid("Tolerance solver recovers after impossible budget");
         set("vin", "0"); invalid("Tolerance solving rejects zero nominal output");
         set("vin", "12"); set("targetError", "-1"); invalid("Negative tolerance budget");
@@ -326,8 +326,8 @@
         const pick = mode => d.querySelector(`[data-solve-mode="${mode}"]`).click();
         assert(d.querySelector(".live-tag").textContent === "DC analysis · Online calculator", "Header uses the requested calculator label");
         const views = [
-          ["vout", ["vin", "r1", "r2"], ["targetVout"], "Calculate VOUT"],
-          ["vin", ["targetVout", "r1", "r2"], ["vin"], "Calculate VIN"],
+          ["vout", ["vin", "r1", "r2"], ["targetVout"], "Calculate VMID"],
+          ["vin", ["targetVout", "r1", "r2"], ["vin"], "Calculate VTOP"],
           ["r1", ["vin", "targetVout", "r2"], ["r1"], "Calculate RTOP"],
           ["r2", ["vin", "targetVout", "r1"], ["r2"], "Calculate RBOT"],
           ["rl", ["vin", "targetVout", "r1", "r2"], ["rl"], "Calculate RL"],
@@ -348,7 +348,7 @@
         assert(d.activeElement === get("r1") && text("vout") === "4 V", "Typing updates results without losing input focus");
         pick("vin"); pick("r1"); pick("vout");
         near(get("r1").valueAsNumber, 20, "Mode changes retain circuit values");
-        assert(visible("r1") && visible("vin") && !visible("targetVout"), "Returning to VOUT restores the proper input view");
+        assert(visible("r1") && visible("vin") && !visible("targetVout"), "Returning to VMID restores the proper input view");
         await reset(); set("tolR1", "-1");
         assert(get("advancedOptions").open && visible("tolR1"), "Invalid hidden tolerance settings reveal themselves");
         set("tolR1", "1"); valid("Revealed tolerance error recovers");

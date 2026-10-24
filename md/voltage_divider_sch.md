@@ -16,12 +16,15 @@ choices, with a full-size image link and the LTspice/Markdown downloads beside i
 
 ## Circuit data
 
+VTOP is the source voltage at the top of RTOP. VMID is the midpoint voltage
+between RTOP and RBOT. Both voltages are measured relative to ground.
+
 | Reference | Description | Default value | Positive node | Negative node |
 | --- | --- | --- | --- | --- |
-| V1 | Ideal DC source | 12 V | VIN | 0 (ground) |
-| R1 | Upper divider resistor | 10 kΩ | VIN | VOUT |
-| R2 | Lower divider resistor | 10 kΩ | VOUT | 0 (ground) |
-| RL | Optional output load | Open; 100 kΩ when enabled in LTspice | VOUT | 0 (ground) |
+| V1 | Ideal DC source | 12 V | VTOP | 0 (ground) |
+| R1 | Upper divider resistor | 10 kΩ | VTOP | VMID |
+| R2 | Lower divider resistor | 10 kΩ | VMID | 0 (ground) |
+| RL | Optional output load | Open; 100 kΩ when enabled in LTspice | VMID | 0 (ground) |
 
 R1 and R2 default to 1/4 W in the calculator. Power ratings and optional maximum
 working voltages are analysis inputs; the ideal LTspice resistors do not model
@@ -31,11 +34,11 @@ rating limits or failure.
 
 ```spice
 * Default unloaded divider
-V1 VIN 0 DC 12
-R1 VIN VOUT 10k
-R2 VOUT 0 10k
+V1 VTOP 0 DC 12
+R1 VTOP VMID 10k
+R2 VMID 0 10k
 * Optional load: uncomment to enable
-* RL VOUT 0 100k
+* RL VMID 0 100k
 .op
 .end
 ```
@@ -46,18 +49,18 @@ approximate an open circuit. Set `LOAD_ON=1` to use the `RLOAD` parameter.
 ## Analysis
 
 - `Rb = R2 || RL`, or `R2` when the load is open.
-- `Vout = Vin × Rb / (R1 + Rb)`.
-- `I1 = (Vin − Vout) / R1`; `I2 = Vout / R2`; `IL = Vout / RL` (zero for open load).
+- `VMID = VTOP × Rb / (R1 + Rb)`.
+- `I1 = (VTOP − VMID) / R1`; `I2 = VMID / R2`; `IL = VMID / RL` (zero for open load).
 - Each resistor dissipates `P = I² × R`.
-- Total dissipation is `P1 + P2 + PL = Vin × I1`.
+- Total dissipation is `P1 + P2 + PL = VTOP × I1`.
 - The unloaded Thevenin resistance is `Rth = R1 || R2`.
 
-At the defaults, Vout is 6 V, I1 and I2 are 0.6 mA, and R1 and R2 each dissipate
+At the defaults, VMID is 6 V, I1 and I2 are 0.6 mA, and R1 and R2 each dissipate
 3.6 mW. Total power is 7.2 mW and Rth is 5 kΩ.
 
 ## Solve modes
 
-RTOP is R1 and RBOT is R2. The calculator can solve for VOUT, VIN, RTOP, RBOT,
+RTOP is R1 and RBOT is R2. The calculator can solve for VMID, VTOP, RTOP, RBOT,
 or RL while the remaining nominal quantities are held at their entered values.
 Choose one of the six calculation buttons at the top of the page. Each focused
 view names the goal, explains its inputs, and shows a matching equation and
@@ -65,19 +68,19 @@ Calculate action. Only known quantities appear as primary inputs; the calculated
 quantity appears in the result banner. Switching views preserves circuit data.
 
 Output load and tolerance/rating settings are collapsible. In tolerance-solve
-mode, the output error budget and VIN/RL variations move into the primary input
+mode, the output error budget and VTOP/RL variations move into the primary input
 view. An invalid setting automatically opens the containing sections so it can
 be corrected. All page styling and calculator logic remain in the one HTML file.
 
-- VOUT uses the loaded divider equation above.
-- `VIN = VOUT × (1 + RTOP / Rb)`.
-- With `g = VOUT / VIN`, `RTOP = Rb × (1 − g) / g`.
+- VMID uses the loaded divider equation above.
+- `VTOP = VMID × (1 + RTOP / Rb)`.
+- With `g = VMID / VTOP`, `RTOP = Rb × (1 − g) / g`.
 - To solve a lower resistance, first calculate `Rb = RTOP × g / (1 − g)`.
 - Unloaded: `RBOT = Rb`. Loaded: `RBOT = Rb / (1 − Rb / RL)`.
 - To solve the load: `RL = Rb / (1 − Rb / RBOT)`.
 
-Resistance solutions require the same sign for VIN and VOUT with
-`0 < abs(VOUT) < abs(VIN)`. A passive load cannot increase the unloaded output
+Resistance solutions require the same sign for VTOP and VMID with
+`0 < abs(VMID) < abs(VTOP)`. A passive load cannot increase the unloaded output
 magnitude. The load solution is open circuit when the target equals the unloaded
 output. Zero, negative, infinite, and otherwise infeasible resistance solutions
 are rejected. Solved resistances are exact design values, not rounded to a
@@ -123,31 +126,31 @@ Turning an arm back to a single resistor retains the equivalent nominal value;
 re-enabling the network restores its part list. Reset removes all networks.
 
 For example, RTOP can be four 2.5 kΩ series resistors with RBOT = 10 kΩ and
-VIN = 12 V. Each upper part then drops 1.5 V, carries 0.6 mA, and dissipates
+VTOP = 12 V. Each upper part then drops 1.5 V, carries 0.6 mA, and dissipates
 0.9 mW. If each is entered as 0.125 W, its Pstress is 0.72%. The 0.125 W value is
 an example input, not a rating assigned to all 0805 components. Four 40 kΩ parts
 in parallel give the same 10 kΩ arm, with 6 V and 0.15 mA per upper part.
 
 ## Tolerance analysis and solving
 
-Independent VIN, R1, R2, and RL tolerances range from 0 to 99.999 percent. Each
+Independent VTOP, R1, R2, and RL tolerances range from 0 to 99.999 percent. Each
 input varies over `nominal ± abs(nominal) × tolerance / 100`. Defaults are ±1%
-for R1/R2 and 0% for VIN/RL. Open loads ignore RL tolerance.
+for R1/R2 and 0% for VTOP/RL. Open loads ignore RL tolerance.
 
 Minimum gain uses R1 high, R2 low, and RL low. Maximum gain uses R1 low, R2 high,
-and RL high. Combining these gains with both VIN endpoints gives exact
-worst-case VOUT bounds for the ideal resistive model, including negative sources.
-Largest deviation is the larger endpoint distance from nominal VOUT, divided by
-`abs(nominal VOUT)`. It is undefined for zero nominal output.
+and RL high. Combining these gains with both VTOP endpoints gives exact
+worst-case VMID bounds for the ideal resistive model, including negative sources.
+Largest deviation is the larger endpoint distance from nominal VMID, divided by
+`abs(nominal VMID)`. It is undefined for zero nominal output.
 
 The **R1/R2 tolerance** solve mode finds the largest common independent tolerance
-for both resistors that meets an entered VOUT error budget. VIN and RL tolerances
+for both resistors that meets an entered VMID error budget. VTOP and RL tolerances
 remain fixed inputs. Bisection searches from 0 to 99.999%; the result is rounded
-down to six decimal places in percent. A nonzero nominal VOUT is required. A
-budget already exceeded by VIN/RL variation with exact R1/R2 is rejected.
+down to six decimal places in percent. A nonzero nominal VMID is required. A
+budget already exceeded by VTOP/RL variation with exact R1/R2 is rejected.
 
-At the defaults, ±1% R1/R2 gives VOUT from 5.94 to 6.06 V. A ±5% output error
-budget allows ±5% R1/R2 when VIN is exact and the load is open. Adding ±1% VIN
+At the defaults, ±1% R1/R2 gives VMID from 5.94 to 6.06 V. A ±5% output error
+budget allows ±5% R1/R2 when VTOP is exact and the load is open. Adding ±1% VTOP
 tolerance reduces that shared resistor allowance to approximately ±3.960396%.
 These bounds apply to output voltage; displayed operating-point and stress
 results continue to use nominal values.
