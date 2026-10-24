@@ -72,6 +72,47 @@ output. Zero, negative, infinite, and otherwise infeasible resistance solutions
 are rejected. Solved resistances are exact design values, not rounded to a
 preferred component series.
 
+## Multiple physical resistors per arm
+
+Enable **Use multiple resistors** under RTOP or RBOT to replace that single
+resistor with a series chain or parallel bank. Each physical part has its own
+resistance/unit, power rating in watts, tolerance, and optional maximum working
+voltage. Add/remove controls keep at least one part in an active arm. The two
+arms may use different connection types; nested series/parallel networks are
+not supported.
+
+The **Split into 4 equal parts** shortcut is available for a one-part arm. It
+preserves nominal equivalent resistance: each series part becomes one quarter
+of the original resistance; each parallel part becomes four times the original.
+New parts copy the existing part's rating, tolerance, and working-voltage input.
+Edit those values for your selected components. A package such as 0805 does not
+uniquely specify power, tolerance, or working voltage.
+
+- Series: `Rarm = sum(Ri)`, `Ii = Iarm`, `Vi = Iarm × Ri`.
+- Parallel: `Rarm = 1 / sum(1 / Ri)`, `Vi = Varm`, `Ii = Varm / Ri`.
+- Each physical part dissipates `Pi = Vi × Ii`; its stress uses its own rating.
+- Part powers sum to arm dissipation. Displayed arm totals already include their
+  parts; the total circuit power does not count them twice.
+
+The arm resistance and equivalent tolerance become calculated fields. Single
+resistor rating/working-voltage controls are replaced by the per-part controls.
+Power ratings are never pooled into a combined rating that could hide an
+overloaded part. The common-rating comparison lets you choose one physical part
+from each arm and includes custom power ratings entered for the selected parts.
+
+Solving RTOP or RBOT scales all its physical resistances by the same factor,
+preserving their ratios and each part's entered rating and tolerance. This is a
+proportional design solution, not a search for standard resistor values. Parts
+and their ratios remain available after an infeasible target so it can be fixed.
+Turning an arm back to a single resistor retains the equivalent nominal value;
+re-enabling the network restores its part list. Reset removes all networks.
+
+For example, RTOP can be four 2.5 kΩ series resistors with RBOT = 10 kΩ and
+VIN = 12 V. Each upper part then drops 1.5 V, carries 0.6 mA, and dissipates
+0.9 mW. If each is entered as 0.125 W, its Pstress is 0.72%. The 0.125 W value is
+an example input, not a rating assigned to all 0805 components. Four 40 kΩ parts
+in parallel give the same 10 kΩ arm, with 6 V and 0.15 mA per upper part.
+
 ## Tolerance analysis and solving
 
 Independent VIN, R1, R2, and RL tolerances range from 0 to 99.999 percent. Each
@@ -95,6 +136,21 @@ budget allows ±5% R1/R2 when VIN is exact and the load is open. Adding ±1% VIN
 tolerance reduces that shared resistor allowance to approximately ±3.960396%.
 These bounds apply to output voltage; displayed operating-point and stress
 results continue to use nominal values.
+
+For multiple-part arms, the minimum/maximum equivalent resistance is evaluated
+using every physical part's own lower/upper resistance limit. Series endpoints
+sum; parallel endpoints use the reciprocal conductance sum. Unequal parallel
+tolerances can produce an asymmetric interval around nominal resistance. The
+equivalent tolerance field reports the larger relative deviation, while the
+output calculation uses the actual asymmetric interval. Tolerance tables show
+both arm intervals and the individual part intervals.
+
+These are independent worst-case limits, not a statistical average: four equal
+1% parts still allow a 1% equivalent arm excursion when they all vary together
+in the same direction. The common-tolerance solve mode explicitly replaces
+every physical R1/R2 part's tolerance with the same solved value. Its nominal
+resistance and power rating remain unchanged. Stress calculations continue to
+use nominal per-part voltages and currents; worst-case stress is not calculated.
 
 ## Stress definitions
 

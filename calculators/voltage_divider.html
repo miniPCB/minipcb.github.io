@@ -135,6 +135,19 @@
     .tolerance-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .hint { margin: 0; color: var(--muted); font-size: 0.76rem; line-height: 1.5; }
     .rating-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .network-toggle { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .network-toggle input { width: 16px; min-height: auto; accent-color: var(--accent); }
+    .network-editor { display: grid; gap: 10px; margin-top: 8px; }
+    .part-list { display: grid; gap: 10px; }
+    .part-editor { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: #101823; }
+    .part-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .part-heading h3 { color: #c6e3ff; }
+    .part-heading .btn { min-height: 28px; padding: 4px 8px; font-size: 0.72rem; }
+    .part-editor .rating-fields { gap: 10px; margin-top: 10px; }
+    .network-summary { color: var(--accent); font-size: 0.76rem; line-height: 1.5; margin: 0; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    input:disabled, select:disabled { opacity: 0.55; }
+    .comparison-controls { margin-bottom: 14px; }
     fieldset { margin: 2px 0 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--border); }
     legend { padding: 0 8px 0 0; }
     details { border-top: 1px solid var(--border); padding-top: 12px; }
@@ -228,7 +241,7 @@
             <a href="../images/voltage_divider.svg" target="_blank" rel="noopener" aria-label="Open full-size voltage divider schematic">
               <img class="schematic" src="../images/voltage_divider.svg" width="640" height="370" alt="DC source Vin supplies R1 in series with R2 to ground. Vout is the junction of R1 and R2. Optional load RL connects from Vout to ground, in parallel with R2." />
             </a>
-            <figcaption>R1 is the upper resistor; R2 is the lower resistor. Optional RL loads the output in parallel with R2.</figcaption>
+            <figcaption>R1/RTOP and R2/RBOT are the equivalent upper and lower arms. Each arm can contain multiple resistors. Optional RL loads the output in parallel with RBOT.</figcaption>
           </figure>
           <div class="resource-links">
             <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
@@ -264,6 +277,14 @@
                 <input id="r1" name="r1" type="number" min="0" step="any" value="10" required />
                 <select id="r1Unit" name="r1Unit" aria-label="R1 resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
               </div>
+              <label class="network-toggle" for="r1Multiple"><input id="r1Multiple" name="r1Multiple" type="checkbox" />Use multiple resistors for RTOP</label>
+              <div id="r1Editor" class="network-editor" hidden>
+                <label for="r1Connection">RTOP connection</label>
+                <select id="r1Connection" name="r1Connection"><option value="series">Series chain</option><option value="parallel">Parallel bank</option></select>
+                <div id="r1Parts" class="part-list"></div>
+                <div class="actions"><button class="btn" type="button" data-add-part="r1">Add resistor</button><button class="btn" id="r1Split" type="button" data-split-parts="r1">Split into 4 equal parts</button></div>
+                <p id="r1Summary" class="network-summary">—</p>
+              </div>
             </div>
             <div class="field">
               <label for="r2">Lower resistor · RBOT (R2)</label>
@@ -271,7 +292,16 @@
                 <input id="r2" name="r2" type="number" min="0" step="any" value="10" required />
                 <select id="r2Unit" name="r2Unit" aria-label="R2 resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
               </div>
+              <label class="network-toggle" for="r2Multiple"><input id="r2Multiple" name="r2Multiple" type="checkbox" />Use multiple resistors for RBOT</label>
+              <div id="r2Editor" class="network-editor" hidden>
+                <label for="r2Connection">RBOT connection</label>
+                <select id="r2Connection" name="r2Connection"><option value="series">Series chain</option><option value="parallel">Parallel bank</option></select>
+                <div id="r2Parts" class="part-list"></div>
+                <div class="actions"><button class="btn" type="button" data-add-part="r2">Add resistor</button><button class="btn" id="r2Split" type="button" data-split-parts="r2">Split into 4 equal parts</button></div>
+                <p id="r2Summary" class="network-summary">—</p>
+              </div>
             </div>
+            <p class="hint">For four 0805 parts, enable multiple resistors and choose “Split into 4 equal parts.” The split preserves the arm resistance and copies its current rating/tolerance to each part; edit each to match your chosen components. Package size alone does not determine a power rating.</p>
             <div class="field">
               <label for="rl">Output load · RL <span class="hint">(optional)</span></label>
               <div class="input-unit">
@@ -285,28 +315,28 @@
               <div class="rating-fields">
                 <div class="field"><label for="tolVin">VIN tolerance (%)</label><input id="tolVin" name="tolVin" type="number" min="0" max="99.999" step="any" value="0" /></div>
                 <div class="field"><label for="tolRl">RL tolerance (%)</label><input id="tolRl" name="tolRl" type="number" min="0" max="99.999" step="any" value="0" /></div>
-                <div class="field"><label for="tolR1">R1 tolerance (%)</label><input id="tolR1" name="tolR1" type="number" min="0" max="99.999" step="any" value="1" /></div>
-                <div class="field"><label for="tolR2">R2 tolerance (%)</label><input id="tolR2" name="tolR2" type="number" min="0" max="99.999" step="any" value="1" /></div>
+                <div class="field"><label for="tolR1" id="tolR1Label">R1 tolerance (%)</label><input id="tolR1" name="tolR1" type="number" min="0" max="99.999" step="any" value="1" /></div>
+                <div class="field"><label for="tolR2" id="tolR2Label">R2 tolerance (%)</label><input id="tolR2" name="tolR2" type="number" min="0" max="99.999" step="any" value="1" /></div>
               </div>
-              <p class="hint">Independent component limits, from 0 to 99.999%. RL tolerance applies only when a load is connected.</p>
+              <p class="hint">Independent component limits, from 0 to 99.999%. For multiple parts, the equivalent tolerance shows the largest deviation; output bounds use each part's actual limits, including asymmetric parallel-bank bounds. RL tolerance applies only when a load is connected.</p>
             </fieldset>
             <div id="targetErrorField" class="field" hidden>
               <label for="targetError">Allowed VOUT error · ± (%)</label>
               <input id="targetError" name="targetError" type="number" min="0" step="any" value="5" aria-describedby="targetErrorHelp" />
-              <p id="targetErrorHelp" class="hint">Find the largest shared R1/R2 tolerance, up to 99.999%, keeping VOUT within this percentage of its nominal value. VIN and RL tolerances are included.</p>
+              <p id="targetErrorHelp" class="hint">Find the largest shared tolerance for every physical R1/R2 part, up to 99.999%, keeping VOUT within this percentage of nominal. This mode replaces the individual tolerance entries. VIN and RL tolerances are included.</p>
             </div>
-            <fieldset>
+            <fieldset id="singleRatingFields">
               <legend>Resistor power ratings</legend>
               <div class="rating-fields">
-                <div class="field"><label for="p1">R1 rating</label><select id="p1" name="p1"></select></div>
-                <div class="field"><label for="p2">R2 rating</label><select id="p2" name="p2"></select></div>
+                <div id="p1Field" class="field"><label for="p1">R1 rating</label><select id="p1" name="p1"></select></div>
+                <div id="p2Field" class="field"><label for="p2">R2 rating</label><select id="p2" name="p2"></select></div>
               </div>
             </fieldset>
-            <details>
+            <details id="singleVoltageOptions">
               <summary>Maximum working voltages (optional)</summary>
               <div class="rating-fields">
-                <div class="field"><label for="vmax1">R1 · Vmax (V)</label><input id="vmax1" name="vmax1" type="number" min="0" step="any" placeholder="Power-based" /></div>
-                <div class="field"><label for="vmax2">R2 · Vmax (V)</label><input id="vmax2" name="vmax2" type="number" min="0" step="any" placeholder="Power-based" /></div>
+                <div id="vmax1Field" class="field"><label for="vmax1">R1 · Vmax (V)</label><input id="vmax1" name="vmax1" type="number" min="0" step="any" placeholder="Power-based" /></div>
+                <div id="vmax2Field" class="field"><label for="vmax2">R2 · Vmax (V)</label><input id="vmax2" name="vmax2" type="number" min="0" step="any" placeholder="Power-based" /></div>
               </div>
               <p class="hint">Enter limits from the resistor datasheets. If blank, voltage and current limits are derived from power only.</p>
             </details>
@@ -332,7 +362,7 @@
             </div>
             <div class="table-wrap">
               <table>
-                <caption id="operatingCaption">Signed voltage drops and currents follow the schematic from top to bottom.</caption>
+                <caption id="operatingCaption">Signed voltage drops and currents follow the schematic from top to bottom. Arm totals include their listed parts; total power counts each part once.</caption>
                 <thead><tr><th scope="col">Element</th><th scope="col">Voltage drop</th><th scope="col">Current</th><th scope="col">Power</th></tr></thead>
                 <tbody id="operatingRows"><tr><td colspan="4">—</td></tr></tbody>
               </table>
@@ -359,7 +389,7 @@
           </div>
         </section>
         <section class="panel" aria-labelledby="stressHeading">
-          <h2 id="stressHeading">Resistor stress · selected ratings</h2>
+          <h2 id="stressHeading">Physical resistor stress · selected ratings</h2>
           <div class="panel-body">
             <div id="stressCards" class="stress-cards"></div>
             <p class="note">Stress is actual / limit × 100%. Values above 100% exceed the entered limit. With no Vmax entered, Vstress and Istress are power-equivalent checks; both equal √(Pstress / 100) × 100%.</p>
@@ -368,11 +398,15 @@
         <section class="panel" aria-labelledby="ratingsHeading">
           <h2 id="ratingsHeading">Compare typical resistor power ratings</h2>
           <div class="panel-body">
+            <div class="rating-fields comparison-controls">
+              <div class="field"><label for="compareR1">RTOP part to compare</label><select id="compareR1" form="dividerForm"><option value="r1">R1</option></select></div>
+              <div class="field"><label for="compareR2">RBOT part to compare</label><select id="compareR2" form="dividerForm"><option value="r2">R2</option></select></div>
+            </div>
             <div class="table-wrap" tabindex="0" role="region" aria-label="Power rating stress comparison, scroll horizontally on small screens">
               <table class="rating-table">
-                <caption>Same circuit, different ratings. Highlighted cells match each resistor's selected rating. Red values exceed 100%.</caption>
+                <caption>Compare the chosen physical parts at different ratings. Highlighted cells match their actual ratings; custom ratings are included. Red values exceed 100%.</caption>
                 <thead>
-                  <tr><th scope="col" rowspan="2">Power rating</th><th scope="colgroup" colspan="3">R1 · upper resistor</th><th scope="colgroup" colspan="3">R2 · lower resistor</th></tr>
+                  <tr><th scope="col" rowspan="2">Power rating</th><th scope="colgroup" id="compareR1Heading" colspan="3">R1 · upper resistor</th><th scope="colgroup" id="compareR2Heading" colspan="3">R2 · lower resistor</th></tr>
                   <tr><th scope="col">Pstress</th><th scope="col">Vstress</th><th scope="col">Istress</th><th scope="col">Pstress</th><th scope="col">Vstress</th><th scope="col">Istress</th></tr>
                 </thead>
                 <tbody id="ratingRows"><tr><td colspan="7">—</td></tr></tbody>
@@ -401,6 +435,7 @@
               </div>
               <p class="note">Inverse solutions use <code>g = VOUT / VIN</code>, <code>Rb = RTOP × g / (1 − g)</code>, <code>RTOP = Rb × (1 − g) / g</code>, and <code>RBOT = Rb / (1 − Rb / RL)</code> when loaded. A finite positive divider needs 0 &lt; g &lt; 1. RL may be open when the target equals the unloaded output.</p>
               <p class="note">Tolerance bounds evaluate the endpoint VIN values with minimum gain (R1 high, R2/RL low) and maximum gain (R1 low, R2/RL high). Common R1/R2 tolerance is solved by bisection to six decimal places in percent; a nonzero nominal VOUT is required.</p>
+              <p class="note">Multiple-part arms support a series chain or parallel bank. Each part has its own rating, tolerance, and optional working voltage. Equivalent resistance is the series sum or reciprocal conductance sum. Series parts share arm current; parallel parts share arm voltage. Solving RTOP/RBOT scales that arm's part resistances proportionally; it does not select standard values. Common tolerance solving applies the same independent tolerance to every physical part. Stress remains nominal for each part; ratings are not pooled into a fictitious arm rating.</p>
               <p class="note">Working voltage follows the lower of the power-derived voltage and the component's maximum working voltage. See <a href="https://www.vishay.com/docs/49873/49873_sg2113.pdf" target="_blank" rel="noopener">Vishay's resistor technical guide</a>.</p>
               <p class="note" id="updateStatus" role="status" aria-live="polite">Ready to calculate.</p>
             </details>
@@ -424,6 +459,8 @@
     ];
     const form = document.getElementById("dividerForm");
     const byId = id => document.getElementById(id);
+    const ARMS = ["r1", "r2"];
+    const nextPart = { r1: 0, r2: 0 };
 
     for (const id of ["p1", "p2"]) {
       for (const rating of RATINGS) {
@@ -453,6 +490,109 @@
     function parallel(a, b) {
       const smaller = Math.min(a, b);
       return smaller / (1 + smaller / Math.max(a, b));
+    }
+
+    function networkEquivalent(parts, connection) {
+      const combine = values => connection === "series" ? values.reduce((sum, value) => sum + value, 0) : values.reduce((sum, value) => parallel(sum, value));
+      const resistance = combine(parts.map(part => part.resistance));
+      const min = combine(parts.map(part => part.resistance * (1 - part.tolerance / 100)));
+      const max = combine(parts.map(part => part.resistance * (1 + part.tolerance / 100)));
+      const tolerance = Math.max(resistance - min, max - resistance) / resistance * 100;
+      if (![resistance, min, max, tolerance].every(Number.isFinite) || min <= 0) throw new Error("The resistor network exceeds the calculator's numeric range.");
+      return { resistance, min, max, tolerance };
+    }
+
+    function analyzeParts(parts, connection, voltage, current) {
+      return parts.map(part => {
+        const v = connection === "series" ? current * part.resistance : voltage;
+        const i = connection === "series" ? current : voltage / part.resistance;
+        const power = v * i;
+        return { ...part, voltage: v, current: i, power, stress: stress(part.resistance, v, i, power, part.rating, part.vmax) };
+      });
+    }
+
+    function partSeed(id) {
+      return {
+        resistance: byId(`${id}R`).valueAsNumber * Number(byId(`${id}Unit`).value),
+        rating: byId(`${id}Power`).valueAsNumber,
+        tolerance: byId(`${id}Tol`).valueAsNumber,
+        vmax: byId(`${id}Vmax`).value === "" ? null : byId(`${id}Vmax`).valueAsNumber
+      };
+    }
+
+    function appendPart(arm, seed) {
+      const number = ++nextPart[arm];
+      const id = `${arm}part${number}`;
+      const name = `${arm.toUpperCase()}.${number}`;
+      const row = document.createElement("article");
+      row.id = id;
+      row.className = "part-editor";
+      row.dataset.part = id;
+      row.dataset.name = name;
+      row.innerHTML = `<div class="part-heading"><h3>${name}</h3><button class="btn" type="button" data-remove-part="${id}" aria-label="Remove ${name}">Remove</button></div>
+        <div class="field"><label for="${id}R">${name} resistance</label><div class="input-unit">
+          <input id="${id}R" type="number" min="0" step="any" required />
+          <select id="${id}Unit" aria-label="${name} resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+        </div></div>
+        <div class="rating-fields">
+          <div class="field"><label for="${id}Power">Power rating (W)</label><input id="${id}Power" type="number" min="0" step="any" required /></div>
+          <div class="field"><label for="${id}Tol">Tolerance ± (%)</label><input id="${id}Tol" type="number" min="0" max="99.999" step="any" required /></div>
+        </div>
+        <div class="field" style="margin-top:10px"><label for="${id}Vmax">Max working voltage (V, optional)</label><input id="${id}Vmax" type="number" min="0" step="any" placeholder="Power-based" /></div>`;
+      byId(`${arm}Parts`).append(row);
+      byId(`${id}R`).value = Number.isFinite(seed.resistance) ? seed.resistance / 1000 : "";
+      byId(`${id}Power`).value = Number.isFinite(seed.rating) ? seed.rating : "";
+      byId(`${id}Tol`).value = Number.isFinite(seed.tolerance) ? seed.tolerance : "";
+      byId(`${id}Vmax`).value = seed.vmax === null || !Number.isFinite(seed.vmax) ? "" : seed.vmax;
+    }
+
+    function prepareNetwork(arm) {
+      const active = byId(`${arm}Multiple`).checked;
+      const list = byId(`${arm}Parts`);
+      if (active && !list.children.length) {
+        const index = arm === "r1" ? "1" : "2";
+        appendPart(arm, {
+          resistance: byId(arm).valueAsNumber * Number(byId(`${arm}Unit`).value),
+          rating: Number(byId(`p${index}`).value),
+          tolerance: byId(`tolR${index}`).valueAsNumber,
+          vmax: byId(`vmax${index}`).value === "" ? null : byId(`vmax${index}`).valueAsNumber
+        });
+      }
+      byId(`${arm}Editor`).hidden = !active;
+      for (const control of list.querySelectorAll("input, select, button")) control.disabled = !active;
+      for (const button of list.querySelectorAll("[data-remove-part]")) button.disabled = !active || list.children.length <= 1;
+      byId(`${arm}Split`).disabled = list.children.length !== 1;
+    }
+
+    function readNetwork(arm, mode) {
+      if (!byId(`${arm}Multiple`).checked) return null;
+      const parts = [...byId(`${arm}Parts`).children].map(row => {
+        const id = row.dataset.part;
+        const name = row.dataset.name;
+        return {
+          id, name,
+          resistance: readInput(`${id}R`, `${name} resistance`, false, true, Number(byId(`${id}Unit`).value)),
+          rating: readInput(`${id}Power`, `${name} power rating`, false, true),
+          tolerance: mode === "tolerance" ? 0 : readTolerance(`${id}Tol`, `${name} tolerance`),
+          vmax: readInput(`${id}Vmax`, `${name} maximum working voltage`, true, true)
+        };
+      });
+      const connection = byId(`${arm}Connection`).value;
+      return { parts, connection, equivalent: networkEquivalent(parts, connection) };
+    }
+
+    function comparisonPart(arm, parts) {
+      return parts.find(part => part.id === byId(arm === "r1" ? "compareR1" : "compareR2").value) || parts[0];
+    }
+
+    function renderComparison(arm, parts, selected) {
+      const select = byId(arm === "r1" ? "compareR1" : "compareR2");
+      if ([...select.options].map(option => option.value).join(",") !== parts.map(part => part.id).join(",")) {
+        select.replaceChildren(...parts.map(part => new Option(part.name, part.id)));
+      }
+      select.value = selected.id;
+      select.disabled = parts.length === 1;
+      byId(`${select.id}Heading`).textContent = `${selected.name} · ${arm === "r1" ? "upper" : "lower"} part`;
     }
 
     function analyze(vin, r1, r2, rl) {
@@ -507,12 +647,12 @@
       return solved;
     }
 
-    function toleranceAnalysis(circuit, tolerances) {
+    function toleranceAnalysis(circuit, tolerances, armRanges = {}) {
       const { vin, r1, r2, rl } = circuit;
       const interval = (value, tolerance) => [value - Math.abs(value) * (tolerance / 100), value + Math.abs(value) * (tolerance / 100)];
       const [vinMin, vinMax] = interval(vin, tolerances.vin);
-      const [r1Min, r1Max] = interval(r1, tolerances.r1);
-      const [r2Min, r2Max] = interval(r2, tolerances.r2);
+      const [r1Min, r1Max] = armRanges.r1 || interval(r1, tolerances.r1);
+      const [r2Min, r2Max] = armRanges.r2 || interval(r2, tolerances.r2);
       const [rlMin, rlMax] = rl === null ? [null, null] : interval(rl, tolerances.rl);
       const lowBottom = rl === null ? r2Min : parallel(r2Min, rlMin);
       const highBottom = rl === null ? r2Max : parallel(r2Max, rlMax);
@@ -548,12 +688,33 @@
 
     function configureSolver() {
       const mode = byId("solveFor").value;
+      for (const arm of ARMS) prepareNetwork(arm);
       for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolR1", "tolR2"]) {
         byId(id).readOnly = id === mode || (id === "targetVout" && ["vout", "tolerance"].includes(mode)) || (["tolR1", "tolR2"].includes(id) && mode === "tolerance");
       }
+      for (const arm of ARMS) {
+        const active = byId(`${arm}Multiple`).checked;
+        const index = arm === "r1" ? "1" : "2";
+        byId(arm).readOnly ||= active;
+        byId(`tolR${index}`).readOnly ||= active;
+        byId(`tolR${index}Label`).textContent = active ? `${arm.toUpperCase()} equivalent tolerance (%)` : `${arm.toUpperCase()} tolerance (%)`;
+        byId(`p${index}Field`).hidden = active;
+        byId(`p${index}`).disabled = active;
+        byId(`vmax${index}Field`).hidden = active;
+        byId(`vmax${index}`).disabled = active;
+        for (const row of byId(`${arm}Parts`).children) {
+          const id = row.dataset.part;
+          byId(`${id}R`).readOnly = mode === arm;
+          byId(`${id}Unit`).disabled = !active || mode === arm;
+          byId(`${id}Tol`).readOnly = mode === "tolerance";
+        }
+      }
+      const bothMultiple = ARMS.every(arm => byId(`${arm}Multiple`).checked);
+      byId("singleRatingFields").hidden = bothMultiple;
+      byId("singleVoltageOptions").hidden = bothMultiple;
       byId("targetVoutLabel").textContent = `Output voltage · VOUT (${["vout", "tolerance"].includes(mode) ? "calculated" : "target"})`;
       byId("targetErrorField").hidden = mode !== "tolerance";
-      byId("solveHelp").textContent = mode === "tolerance" ? "Blue R1/R2 tolerance fields are calculated for the allowed VOUT error. All nominal circuit values remain inputs." : "The blue field is calculated. Enter the other circuit values, including target VOUT for inverse solutions.";
+      byId("solveHelp").textContent = mode === "tolerance" ? "Every physical R1/R2 part receives the solved common tolerance. Blue equivalent fields are calculated." : "Blue fields are calculated. Enter target VOUT for inverse solutions. Solving a multiple-resistor arm scales its part resistances proportionally, preserving their ratios.";
       return mode;
     }
 
@@ -586,7 +747,8 @@
 
     function clearResults(message) {
       for (const id of ["vout", "iin", "ptotal", "ratio", "solutionValue", "voutMin", "voutMax", "voutError"]) byId(id).textContent = "—";
-      for (const input of form.querySelectorAll("input[readonly]")) input.value = "";
+      for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolR1", "tolR2"]) if (byId(id).readOnly) byId(id).value = "";
+      for (const arm of ARMS) byId(`${arm}Summary`).textContent = "Enter valid part values to calculate the equivalent arm.";
       byId("operatingRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate.</td></tr>';
       byId("toleranceRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate tolerance bounds.</td></tr>';
       byId("ratingRows").innerHTML = '<tr><td colspan="7">Enter valid circuit data to compare ratings.</td></tr>';
@@ -618,19 +780,28 @@
       for (const input of form.querySelectorAll("input")) input.removeAttribute("aria-invalid");
       const mode = configureSolver();
       try {
+        const networks = Object.fromEntries(ARMS.map(arm => [arm, readNetwork(arm, mode)]));
         const inputs = {
           vin: mode === "vin" ? null : readInput("vin", "Input voltage"),
-          r1: mode === "r1" ? null : readInput("r1", "RTOP resistance", false, true, Number(byId("r1Unit").value)),
-          r2: mode === "r2" ? null : readInput("r2", "RBOT resistance", false, true, Number(byId("r2Unit").value)),
+          r1: mode === "r1" ? null : networks.r1 ? networks.r1.equivalent.resistance : readInput("r1", "RTOP resistance", false, true, Number(byId("r1Unit").value)),
+          r2: mode === "r2" ? null : networks.r2 ? networks.r2.equivalent.resistance : readInput("r2", "RBOT resistance", false, true, Number(byId("r2Unit").value)),
           rl: mode === "rl" ? null : readInput("rl", "Load resistance", true, true, Number(byId("rlUnit").value))
         };
         const target = ["vout", "tolerance"].includes(mode) ? null : readInput("targetVout", "Target VOUT");
         const circuit = solveCircuit(mode, inputs, target);
         const { vin, r1, r2, rl } = circuit;
+        for (const arm of ARMS) {
+          const network = networks[arm];
+          if (network && mode === arm) {
+            const scale = circuit[arm] / network.equivalent.resistance;
+            network.parts = network.parts.map(part => ({ ...part, resistance: part.resistance * scale }));
+            network.equivalent = networkEquivalent(network.parts, network.connection);
+          }
+        }
         const tolerances = {
           vin: readTolerance("tolVin", "VIN tolerance"),
-          r1: mode === "tolerance" ? 0 : readTolerance("tolR1", "R1 tolerance"),
-          r2: mode === "tolerance" ? 0 : readTolerance("tolR2", "R2 tolerance"),
+          r1: mode === "tolerance" ? 0 : networks.r1 ? networks.r1.equivalent.tolerance : readTolerance("tolR1", "R1 tolerance"),
+          r2: mode === "tolerance" ? 0 : networks.r2 ? networks.r2.equivalent.tolerance : readTolerance("tolR2", "R2 tolerance"),
           rl: rl === null ? 0 : readTolerance("tolRl", "RL tolerance")
         };
         if (mode === "tolerance") {
@@ -640,21 +811,36 @@
             throw new Error("Allowed VOUT error must be zero or greater.");
           }
           tolerances.r1 = tolerances.r2 = solveTolerance(circuit, tolerances, allowedError);
+          for (const arm of ARMS) {
+            if (networks[arm]) {
+              networks[arm].parts = networks[arm].parts.map(part => ({ ...part, tolerance: tolerances[arm] }));
+              networks[arm].equivalent = networkEquivalent(networks[arm].parts, networks[arm].connection);
+            }
+          }
         }
-        const bounds = toleranceAnalysis(circuit, tolerances);
-        const vmax1 = readInput("vmax1", "R1 maximum working voltage", true, true);
-        const vmax2 = readInput("vmax2", "R2 maximum working voltage", true, true);
-        const p1 = Number(byId("p1").value);
-        const p2 = Number(byId("p2").value);
+        const armRanges = Object.fromEntries(ARMS.filter(arm => networks[arm]).map(arm => [arm, [networks[arm].equivalent.min, networks[arm].equivalent.max]]));
+        const bounds = toleranceAnalysis(circuit, tolerances, armRanges);
+        const vmax1 = networks.r1 ? null : readInput("vmax1", "R1 maximum working voltage", true, true);
+        const vmax2 = networks.r2 ? null : readInput("vmax2", "R2 maximum working voltage", true, true);
         const result = analyze(vin, r1, r2, rl);
-        const s1 = stress(r1, result.v1, result.i1, result.p1, p1, vmax1);
-        const s2 = stress(r2, result.vout, result.i2, result.p2, p2, vmax2);
-        const comparisons = RATINGS.map(rating => ({
+        const physical = {
+          r1: analyzeParts(networks.r1 ? networks.r1.parts : [{ id: "r1", name: "R1", resistance: r1, tolerance: tolerances.r1, rating: Number(byId("p1").value), vmax: vmax1 }], networks.r1 ? networks.r1.connection : "series", result.v1, result.i1),
+          r2: analyzeParts(networks.r2 ? networks.r2.parts : [{ id: "r2", name: "R2", resistance: r2, tolerance: tolerances.r2, rating: Number(byId("p2").value), vmax: vmax2 }], networks.r2 ? networks.r2.connection : "series", result.vout, result.i2)
+        };
+        const selected1 = comparisonPart("r1", physical.r1);
+        const selected2 = comparisonPart("r2", physical.r2);
+        const p1 = selected1.rating;
+        const p2 = selected2.rating;
+        const comparisonRatings = [...RATINGS];
+        for (const watts of [p1, p2]) if (!comparisonRatings.some(rating => rating.watts === watts)) comparisonRatings.push({ watts, label: format(watts, "W") });
+        comparisonRatings.sort((a, b) => a.watts - b.watts);
+        const comparisons = comparisonRatings.map(rating => ({
           rating,
-          r1: stress(r1, result.v1, result.i1, result.p1, rating.watts, vmax1),
-          r2: stress(r2, result.vout, result.i2, result.p2, rating.watts, vmax2)
+          r1: stress(selected1.resistance, selected1.voltage, selected1.current, selected1.power, rating.watts, selected1.vmax),
+          r2: stress(selected2.resistance, selected2.voltage, selected2.current, selected2.power, rating.watts, selected2.vmax)
         }));
-        const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null), ...Object.values(s1), ...Object.values(s2), ...comparisons.flatMap(row => [...Object.values(row.r1), ...Object.values(row.r2)])];
+        const allParts = [...physical.r1, ...physical.r2];
+        const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null), ...allParts.flatMap(part => [part.resistance, part.voltage, part.current, part.power, ...Object.values(part.stress)]), ...comparisons.flatMap(row => [...Object.values(row.r1), ...Object.values(row.r2)])];
         if (numbers.some(value => !Number.isFinite(value))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
 
         byId("inputError").hidden = true;
@@ -665,6 +851,19 @@
           byId("tolR1").value = tolerances.r1;
           byId("tolR2").value = tolerances.r2;
         }
+        for (const arm of ARMS) {
+          const network = networks[arm];
+          if (!network) continue;
+          byId(arm).value = network.equivalent.resistance / Number(byId(`${arm}Unit`).value);
+          byId(arm === "r1" ? "tolR1" : "tolR2").value = Number(network.equivalent.tolerance.toPrecision(12));
+          for (const part of network.parts) {
+            if (mode === arm) byId(`${part.id}R`).value = part.resistance / Number(byId(`${part.id}Unit`).value);
+            if (mode === "tolerance") byId(`${part.id}Tol`).value = part.tolerance;
+          }
+          byId(`${arm}Summary`).textContent = `${network.parts.length} ${network.connection} part${network.parts.length === 1 ? "" : "s"} · ${format(network.equivalent.resistance, "Ω")} equivalent · ${format(network.equivalent.min, "Ω")} to ${format(network.equivalent.max, "Ω")}`;
+        }
+        renderComparison("r1", physical.r1, selected1);
+        renderComparison("r2", physical.r2, selected2);
         byId("tolRl").disabled = rl === null;
         const names = { vin: "VIN", vout: "VOUT", r1: "RTOP (R1)", r2: "RBOT (R2)", rl: "RL", tolerance: "Common R1/R2 tolerance" };
         byId("solutionLabel").textContent = `Solved · ${names[mode]}`;
@@ -673,18 +872,23 @@
         byId("voutMax").textContent = format(bounds.max, "V");
         byId("voutError").textContent = bounds.deviation === null ? "— (zero nominal)" : percent(bounds.deviation);
         const toleranceRows = [["VIN", bounds.vinMin, vin, bounds.vinMax, "V"], ["RTOP (R1)", bounds.r1Min, r1, bounds.r1Max, "Ω"], ["RBOT (R2)", bounds.r2Min, r2, bounds.r2Max, "Ω"]];
+        for (const arm of ARMS) if (networks[arm]) for (const part of networks[arm].parts) toleranceRows.push([part.name, part.resistance * (1 - part.tolerance / 100), part.resistance, part.resistance * (1 + part.tolerance / 100), "Ω"]);
         if (rl !== null) toleranceRows.push(["RL", bounds.rlMin, rl, bounds.rlMax, "Ω"]);
         byId("toleranceRows").innerHTML = toleranceRows.map(([name, min, nominal, max, unit]) => `<tr><th scope="row">${name}</th><td>${format(min, unit)}</td><td>${format(nominal, unit)}</td><td>${format(max, unit)}</td></tr>`).join("");
         byId("vout").textContent = format(result.vout, "V");
         byId("iin").textContent = format(result.i1, "A");
         byId("ptotal").textContent = format(result.total, "W");
         byId("ratio").textContent = percent(result.ratio * 100);
-        const rows = [["R1 · upper", result.v1, result.i1, result.p1], ["R2 · lower", result.vout, result.i2, result.p2]];
+        const rows = [];
+        for (const arm of ARMS) {
+          rows.push(arm === "r1" ? ["R1 · upper total", result.v1, result.i1, result.p1] : ["R2 · lower total", result.vout, result.i2, result.p2]);
+          if (networks[arm]) for (const part of physical[arm]) rows.push([part.name, part.voltage, part.current, part.power]);
+        }
         if (rl !== null) rows.push(["RL · load", result.vout, result.il, result.pl]);
         byId("operatingRows").innerHTML = rows.map(([name, voltage, current, power]) => `<tr><th scope="row">${name}</th><td>${format(voltage, "V")}</td><td>${format(current, "A")}</td><td>${format(power, "W")}</td></tr>`).join("");
         const loading = rl === null ? 0 : 100 / (1 + rl / result.rth);
         byId("loadSummary").textContent = `Unloaded Vout: ${format(result.unloaded, "V")} · Rth: ${format(result.rth, "Ω")} · ${rl === null ? "Open load (IL = 0 A)." : `RL = ${format(rl, "Ω")}; output magnitude reduced by ${percent(Math.max(0, loading))}.`}`;
-        byId("stressCards").innerHTML = stressCard("R1", r1, p1, s1, vmax1) + stressCard("R2", r2, p2, s2, vmax2);
+        byId("stressCards").innerHTML = allParts.map(part => stressCard(part.name, part.resistance, part.rating, part.stress, part.vmax)).join("");
         byId("ratingRows").innerHTML = comparisons.map(({ rating, r1: a, r2: b }) => {
           const cells = [a.p, a.v, a.i, b.p, b.v, b.i].map((value, index) => {
             const selected = rating.watts === (index < 3 ? p1 : p2);
@@ -698,11 +902,40 @@
       }
     }
 
+    form.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const arm = button.dataset.addPart || button.dataset.splitParts;
+      if (arm) {
+        const list = byId(`${arm}Parts`);
+        const seed = partSeed(list.lastElementChild.dataset.part);
+        if (button.dataset.splitParts) {
+          if (list.children.length !== 1) return;
+          const equivalent = seed.resistance;
+          seed.resistance = byId(`${arm}Connection`).value === "series" ? equivalent / 4 : equivalent * 4;
+          list.replaceChildren();
+          nextPart[arm] = 0;
+          for (let index = 0; index < 4; index++) appendPart(arm, seed);
+        } else appendPart(arm, seed);
+        update();
+      } else if (button.dataset.removePart) {
+        const row = byId(button.dataset.removePart);
+        if (row.parentElement.children.length > 1) row.remove();
+        update();
+      }
+    });
+    for (const id of ["compareR1", "compareR2"]) byId(id).addEventListener("change", update);
     form.addEventListener("input", update);
     form.addEventListener("change", update);
     form.addEventListener("submit", event => { event.preventDefault(); update(); });
     // The reset event precedes the browser restoring each control's default value.
-    form.addEventListener("reset", () => setTimeout(update, 0));
+    form.addEventListener("reset", () => setTimeout(() => {
+      for (const arm of ARMS) {
+        byId(`${arm}Parts`).replaceChildren();
+        nextPart[arm] = 0;
+      }
+      update();
+    }, 0));
     update();
   </script>
 </body>

@@ -96,6 +96,7 @@
         near(get("rl").valueAsNumber, 10, "RL = 10 kΩ for a 4 V target");
         assert(!get("tolRl").disabled, "Finite solved load enables load tolerance");
         set("targetVout", "8"); invalid("Passive load cannot boost output");
+        assert(get("rl").value === "", "Infeasible load target clears the calculated RL field");
         set("targetVout", "6"); valid("Open load recovers from infeasible target");
         assert(get("tolRl").disabled, "Open load disables unused tolerance input");
 
@@ -171,6 +172,146 @@
         assert(text("vout") === "12 V", "Calculate submit updates in place");
         await reset();
         assert(get("solveFor").value === "vout" && get("tolR1").valueAsNumber === 1 && get("rl").value === "" && text("vout") === "6 V", "Reset restores original mode and defaults");
+        const enableParts = arm => { get(`${arm}Multiple`).checked = true; get(`${arm}Multiple`).dispatchEvent(new w.Event("input", { bubbles: true })); };
+        const ids = arm => [...get(`${arm}Parts`).children].map(row => row.dataset.part);
+        const split = arm => get(`${arm}Split`).click();
+        const click = selector => d.querySelector(selector).click();
+        const choosePart = (arm, id) => { get(arm === "r1" ? "compareR1" : "compareR2").value = id; get(arm === "r1" ? "compareR1" : "compareR2").dispatchEvent(new w.Event("change", { bubbles: true })); };
+        const armParts = arm => {
+          const network = w.readNetwork(arm, "vout");
+          const point = w.analyze(get("vin").valueAsNumber, get("r1").valueAsNumber * Number(get("r1Unit").value), get("r2").valueAsNumber * Number(get("r2Unit").value), null);
+          return w.analyzeParts(network.parts, network.connection, arm === "r1" ? point.v1 : point.vout, arm === "r1" ? point.i1 : point.i2);
+        };
+        enableParts("r1");
+        assert(ids("r1").length === 1 && get("r1").readOnly && get("tolR1").readOnly && get("p1Field").hidden, "Multiple RTOP uses per-part fields and calculated equivalents");
+        assert(d.querySelector('[data-remove-part]').disabled, "Cannot remove the only physical part");
+        split("r1"); valid("Four equal series parts");
+        assert(ids("r1").length === 4 && get("r1Split").disabled, "Four-part shortcut creates exactly four parts");
+        near(get("r1").valueAsNumber, 10, "Four series parts preserve 10 kΩ equivalent");
+        for (const id of ids("r1")) near(get(`${id}R`).valueAsNumber, 2.5, "Four series parts are each 2.5 kΩ");
+        assert(text("vout") === "6 V" && get("stressCards").children.length === 5, "Every physical part has a stress card");
+        assert(get("operatingRows").rows.length === 6, "Operating table includes arm totals and each series part");
+        for (const part of armParts("r1")) {
+          near(part.voltage, 1.5, "Equal series part voltage");
+          near(part.current, 0.0006, "Equal series part current");
+          near(part.power, 0.0009, "Equal series part dissipation");
+        }
+        set(`${ids("r1")[0]}Unit`, "1"); set(`${ids("r1")[0]}R`, "2500");
+        near(get("r1").valueAsNumber, 10, "Mixed physical resistance units preserve the arm equivalent");
+        assert([...d.querySelectorAll(".part-editor input")].every(input => input.labels.length === 1), "Every physical input has an associated label");
+        for (const [index, id] of ids("r1").entries()) {
+          set(`${id}Power`, [0.125, 0.1, 0.0625, 0.2][index]);
+          set(`${id}Tol`, index + 1);
+        }
+        near(get("tolR1").valueAsNumber, 2.5, "Unequal series tolerances use resistance weighting");
+        const seriesBounds = w.networkEquivalent(w.readNetwork("r1", "vout").parts, "series");
+        near(seriesBounds.min, 9750, "Series minimum sums individual limits");
+        near(seriesBounds.max, 10250, "Series maximum sums individual limits");
+        assert(stressOutputs().filter((value, index) => index % 3 === 0).join(",") === "0.72,0.9,1.44,0.45,1.44", "Each part uses its unique power rating");
+        set(`${ids("r1")[0]}Vmax`, "1");
+        assert(stressOutputs().slice(0, 3).join(",") === "0.72,150,150", "Per-part working voltage caps stress");
+        choosePart("r1", ids("r1")[3]);
+        assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 8, "Comparison selector includes custom individual power rating");
+        assert(get("ratingRows").querySelectorAll(".chosen").length === 6, "Custom and standard chosen ratings are highlighted");
+
+        await reset(); enableParts("r1"); split("r1");
+        for (const [index, id] of ids("r1").entries()) { set(`${id}R`, index + 1); set(`${id}Power`, index === 3 ? 0.01 : 0.125); }
+        set("vin", "100");
+        const unequalParts = armParts("r1");
+        for (const [index, part] of unequalParts.entries()) near(part.power, [0.025, 0.05, 0.075, 0.1][index], "Unequal series power distribution");
+        near(unequalParts.reduce((sum, part) => sum + part.power, 0), 0.25, "Physical powers sum to arm power");
+        assert(get("stressCards").querySelectorAll(".badge.bad").length === 1 && stressOutputs()[9] === 1000, "Weak part overload is not hidden by total available wattage");
+        set("vin", "12"); set("solveFor", "r1"); set("targetVout", "4");
+        valid("Inverse solve scales a series arm");
+        near(get("r1").valueAsNumber, 20, "Solved series equivalent is 20 kΩ");
+        for (const [index, id] of ids("r1").entries()) {
+          near(get(`${id}R`).valueAsNumber, (index + 1) * 2, "Inverse solve preserves part ratios");
+          assert(get(`${id}R`).readOnly, "Solved part resistance is read-only");
+        }
+        assert(get(`${ids("r1")[3]}Power`).valueAsNumber === 0.01, "Solving resistance preserves individual power ratings");
+        set("targetVout", "12"); invalid("Infeasible network solve");
+        assert(ids("r1").every(id => get(`${id}R`).value !== ""), "An infeasible target preserves physical resistance ratios");
+        set("targetVout", "4"); valid("Network inverse solve recovers");
+
+        await reset(); enableParts("r1"); set("r1Connection", "parallel"); split("r1");
+        valid("Four equal parallel parts");
+        for (const id of ids("r1")) near(get(`${id}R`).valueAsNumber, 40, "Four parallel parts preserve equivalent resistance with 40 kΩ each");
+        for (const part of armParts("r1")) {
+          near(part.voltage, 6, "Parallel parts share arm voltage");
+          near(part.current, 0.00015, "Equal parallel part current");
+          near(part.power, 0.0009, "Equal parallel part dissipation");
+        }
+
+        await reset(); enableParts("r1"); set("r1Connection", "parallel");
+        set(`${ids("r1")[0]}R`, "2"); set(`${ids("r1")[0]}Tol`, "10");
+        click('[data-add-part="r1"]'); set(`${ids("r1")[1]}R`, "6"); set(`${ids("r1")[1]}Tol`, "20");
+        const parallelNetwork = w.readNetwork("r1", "vout");
+        near(parallelNetwork.equivalent.resistance, 1500, "Unequal parallel nominal resistance");
+        near(parallelNetwork.equivalent.min, 14400 / 11, "Unequal parallel exact minimum");
+        near(parallelNetwork.equivalent.max, 79200 / 47, "Unequal parallel exact maximum");
+        assert(Math.abs(1500 - parallelNetwork.equivalent.min - (parallelNetwork.equivalent.max - 1500)) > 1, "Unequal parallel tolerance interval is asymmetric");
+        assert(text("voutMin") === w.format(5583600 / 544500, "V") && text("voutMax") === w.format(1333200 / 125500, "V"), "Output uses exact asymmetric network bounds");
+        const physicalParallel = armParts("r1");
+        near(physicalParallel[0].power / physicalParallel[1].power, 3, "Unequal parallel power follows inverse resistance");
+        set("vin", "-12");
+        assert(text("voutMin") === w.format(-1333200 / 125500, "V") && text("voutMax") === w.format(-5583600 / 544500, "V"), "Negative source reverses network output bounds");
+        enableParts("r2"); click('[data-add-part="r2"]');
+        set(`${ids("r2")[0]}R`, "3"); set(`${ids("r2")[0]}Tol`, "5"); set(`${ids("r2")[1]}R`, "7"); set(`${ids("r2")[1]}Tol`, "1");
+        set("vin", "-24"); set("tolVin", "2"); set("rl", "8"); set("tolRl", "3");
+        valid("Both arms use mixed network types with a load");
+        assert(get("singleRatingFields").hidden && get("singleVoltageOptions").hidden, "Multiple arms use no fictitious aggregate rating");
+        const top = w.readNetwork("r1", "vout"), bot = w.readNetwork("r2", "vout");
+        const networkRange = w.toleranceAnalysis({ vin: -24, r1: 1500, r2: 10000, rl: 8000 }, { vin: 2, r1: 0, r2: 0, rl: 3 }, { r1: [top.equivalent.min, top.equivalent.max], r2: [bot.equivalent.min, bot.equivalent.max] });
+        const physicalCorners = [];
+        for (let mask = 0; mask < 64; mask++) {
+          const sign = bit => (mask & (1 << bit)) ? 1 : -1;
+          const a = 2000 * (1 + sign(0) * 0.1), b = 6000 * (1 + sign(1) * 0.2);
+          physicalCorners.push(w.analyze(-24 + sign(4) * 0.48, a * b / (a + b), 3000 * (1 + sign(2) * 0.05) + 7000 * (1 + sign(3) * 0.01), 8000 * (1 + sign(5) * 0.03)).vout);
+        }
+        near(networkRange.min, Math.min(...physicalCorners), "Physical 64-corner exhaustive minimum");
+        near(networkRange.max, Math.max(...physicalCorners), "Physical 64-corner exhaustive maximum");
+        set("solveFor", "tolerance"); valid("Shared tolerance solve with multiple physical parts");
+        const solvedCommon = get(`${ids("r1")[0]}Tol`).valueAsNumber;
+        for (const arm of ["r1", "r2"]) for (const id of ids(arm)) {
+          near(get(`${id}Tol`).valueAsNumber, solvedCommon, "Tolerance solver assigns every physical part");
+          assert(get(`${id}Tol`).readOnly, "Solved physical tolerance is read-only");
+        }
+        assert(Number.parseFloat(text("voutError")) <= 5, "Shared network tolerance meets output error budget");
+
+        await reset(); enableParts("r2"); set("r2Connection", "parallel"); split("r2");
+        set("solveFor", "r2"); set("targetVout", "4"); valid("RBOT inverse solve with parallel parts");
+        near(get("r2").valueAsNumber, 5, "Solved parallel RBOT equivalent");
+        for (const id of ids("r2")) near(get(`${id}R`).valueAsNumber, 20, "Solved parallel part values");
+        set("rl", "10"); near(get("r2").valueAsNumber, 10, "Loaded parallel RBOT inverse solve");
+
+        for (const [suffix, value] of [["R", "0"], ["Power", "0"], ["Power", ""], ["Tol", "100"], ["Vmax", "-1"]]) {
+          await reset(); enableParts("r1"); split("r1");
+          const id = ids("r1")[1]; set(`${id}${suffix}`, value); invalid(`Invalid physical ${suffix}`);
+          assert(get(`${id}${suffix}`).getAttribute("aria-invalid") === "true", "Physical input exposes invalid state");
+          set(`${id}${suffix}`, suffix === "Vmax" ? "" : suffix === "Power" ? "0.125" : suffix === "Tol" ? "1" : "2.5");
+          valid("Physical input recovers without losing the other parts");
+          assert(ids("r1").length === 4, "Invalid part preserves the network");
+        }
+        await reset(); enableParts("r1"); split("r1"); choosePart("r1", ids("r1")[2]);
+        const removedId = ids("r1")[2]; get(removedId).querySelector("button").click();
+        assert(ids("r1").length === 3 && get("stressCards").children.length === 4 && ![...get("compareR1").options].some(option => option.value === removedId), "Removing a part updates analysis, stress, and comparison choices");
+        get("r1Multiple").checked = false; get("r1Multiple").dispatchEvent(new w.Event("input", { bubbles: true }));
+        assert(!get("r1").readOnly && get("r1Editor").hidden && ids("r1").every(id => get(`${id}R`).disabled), "Single-part mode ignores retained editor fields");
+        enableParts("r1"); assert(ids("r1").length === 3, "Re-enabling preserves the physical parts");
+        assert(new Set([...d.querySelectorAll("[id]")].map(element => element.id)).size === d.querySelectorAll("[id]").length, "Dynamic physical part IDs remain unique");
+        for (const connection of ["series", "parallel"]) {
+          set("r1Connection", connection); enableParts("r2"); split("r2");
+          for (const mode of ["vout", "vin", "r1", "r2", "rl", "tolerance"]) {
+            set("solveFor", mode); valid(`Network mode ${mode} with ${connection}`);
+            for (const width of [320, 390, 768, 900, 1440]) {
+              frame.style.width = `${width}px`; await new Promise(resolve => setTimeout(resolve, 5));
+              assert(d.documentElement.scrollWidth <= width, `Network layout: ${connection}, ${mode}, ${width}px`);
+            }
+          }
+          await reset(); enableParts("r1"); split("r1");
+        }
+        await reset();
+        assert(!get("r1Multiple").checked && !get("r2Multiple").checked && !ids("r1").length && !ids("r2").length && get("stressCards").children.length === 2 && text("vout") === "6 V", "Reset removes networks and restores the original calculator");
         assert(d.querySelector("img.schematic").complete && d.querySelector("img.schematic").naturalWidth === 640, "Schematic image loads");
         for (const link of [...d.querySelectorAll("a[href]")].filter(a => a.origin === location.origin)) {
           assert((await fetch(link.href)).ok, `Local resource loads: ${link.getAttribute("href")}`);
