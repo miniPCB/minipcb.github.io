@@ -101,7 +101,7 @@
     .source-tolerance-slot:empty { display: none; }
     .layout { display: grid; grid-template-columns: minmax(310px, 370px) minmax(0, 1fr); gap: 16px; align-items: start; }
     .column { display: grid; gap: 16px; min-width: 0; }
-    .result-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; padding: 5px; border-radius: 12px; background: rgba(19, 32, 44, 0.75); }
+    .result-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 5px; border-radius: 12px; background: rgba(19, 32, 44, 0.75); }
     .result-tab { min-width: 0; min-height: 42px; padding: 10px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 0.8rem; cursor: pointer; }
     .result-tab:hover { background: rgba(84, 210, 255, 0.07); color: var(--text); }
     .result-tab[aria-selected="true"] { background: rgba(84, 210, 255, 0.17); color: var(--accent); }
@@ -191,6 +191,19 @@
     .part-candidate p { margin: 8px 0 12px; }
     .parts-settings { margin-top: 14px; }
     .parts-settings .rating-fields { margin-top: 12px; }
+    .parts-table th, .parts-table td { text-align: left; vertical-align: top; }
+    .parts-table small { display: block; margin-top: 5px; font: 0.7rem/1.5 var(--sans); color: var(--muted); white-space: normal; min-width: 125px; }
+    .parts-table .part-number { font-size: 0.77rem; white-space: nowrap; }
+    .parts-table input[type="radio"] { width: 17px; min-height: auto; margin: 2px 0; accent-color: var(--accent); }
+    .parts-table tr[data-value-row] { cursor: pointer; }
+    .parts-table tr[data-value-row]:hover > * { background: #1b3040; }
+    .parts-table tr[data-selected="true"] > * { background: #1c394a; }
+    .parts-values { max-height: 420px; margin-top: 12px; }
+    .parts-values thead th { position: sticky; top: 0; z-index: 1; }
+    .parts-table-title { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin: 26px 0 12px; }
+    .parts-bom { margin-top: 12px; }
+    .parts-table-actions { margin-top: 14px; }
+    .bom-copy-text { width: 100%; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #101823; color: var(--text); font: 0.78rem/1.5 var(--mono); }
     fieldset { margin: 2px 0 0; padding: 10px 0 0; border: 0; }
     legend { padding: 0 8px 0 0; }
     details { border: 0; padding-top: 0; }
@@ -257,11 +270,13 @@
     }
     @media print {
       body { background: #fff; color: #111; }
-      .tool-path-nav, .actions, .result-tabs, footer { display: none; }
+      .tool-path-nav, .actions, .result-tabs, .parts-table-title .btn, footer { display: none; }
       .layout { display: block; }
       .column { margin-bottom: 16px; }
       .panel, .header { box-shadow: none; break-inside: avoid; }
       .result-panel, .result-panel[hidden] { display: block !important; margin-bottom: 16px; }
+      .parts-values { max-height: none; }
+      .parts-values thead th { position: static; }
     }
   </style>
 </head>
@@ -497,6 +512,7 @@
           <button id="stressTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="stressPanel" tabindex="-1">Stress</button>
           <button id="ratingsTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="ratingsPanel" tabindex="-1">Ratings</button>
           <button id="partsTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="catalogPanel" tabindex="-1">Parts</button>
+          <button id="parts2Tab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="parts2Panel" tabindex="-1">Parts (2)</button>
           <button id="methodTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="methodPanel" tabindex="-1">Method</button>
         </div>
         <section id="overviewPanel" class="panel result-panel" role="tabpanel" aria-labelledby="overviewTab" tabindex="0">
@@ -592,6 +608,49 @@
               <p id="catalogApplied" class="note"></p>
               <div class="actions" style="margin-top:14px"><button id="catalogBom" type="button" class="btn" disabled>Download resistor BOM ↓</button></div>
               <p class="note">Applying a part fixes its catalog resistance, tolerance, and limits, then switches to VMID analysis. Generated candidates are checked against the supported family rules. “Manufacturer documented” identifies a sourced example; supplier stock has not been checked.</p>
+            </div>
+          </div>
+        </section>
+        <section id="parts2Panel" class="panel result-panel" role="tabpanel" aria-labelledby="parts2Tab" tabindex="0" hidden>
+          <h2 id="parts2Heading">Compare values and build a BOM</h2>
+          <div class="panel-body">
+            <p id="parts2Status" class="hint" role="status">Loading shared resistor catalogs…</p>
+            <div id="parts2Controls" hidden>
+              <div class="rating-fields">
+                <div class="field"><label for="parts2Part">Physical resistor</label><select id="parts2Part"></select></div>
+                <div class="field"><label for="parts2Package">Package size</label><select id="parts2Package"></select></div>
+                <div class="field"><label for="parts2Tolerance">Tolerance at most</label><select id="parts2Tolerance"></select></div>
+                <div class="field"><label for="parts2Family">Family to apply</label><select id="parts2Family"><option value="tnpw">TNPW</option><option value="mil">M55342 / D55342</option></select></div>
+              </div>
+              <details class="parts-settings">
+                <summary>Temperature, TCR, and family conditions</summary>
+                <div class="rating-fields">
+                  <div class="field"><label for="parts2Temperature">Ambient for selection (°C)</label><input id="parts2Temperature" type="number" value="70" step="any" /></div>
+                  <div class="field"><label for="parts2Tcr">TCR</label><select id="parts2Tcr"></select></div>
+                </div>
+                <p id="parts2Conditions" class="note"></p>
+                <p class="hint">Use the original Parts tab for other ordering and power-mode options. Ambient adjusts allowable power; TCR does not add temperature drift to VMID bounds.</p>
+              </details>
+              <p id="parts2MatchStatus" class="note" role="status"></p>
+              <p id="parts2TableHelp" class="hint">Select a row, choose a family, and apply it. Scroll for more rows or both family columns. Each family has its own limits; a dash means no supported match meets the selected conditions and nominal stress limits. Stock is not checked.</p>
+              <div class="table-wrap parts-values" tabindex="0" role="region" aria-label="Selectable resistor values and family part numbers" aria-describedby="parts2TableHelp">
+                <table class="parts-table" aria-label="Resistor value candidates">
+                  <thead><tr><th scope="col">Select</th><th scope="col">Resistance</th><th scope="col">Tolerance</th><th scope="col">TNPW</th><th scope="col">M55342 / D55342</th></tr></thead>
+                  <tbody id="parts2Rows"></tbody>
+                </table>
+              </div>
+              <p id="parts2Preview" class="note" role="status"></p>
+              <div class="actions parts-table-actions"><button id="parts2Apply" class="btn btn-accent" type="button" disabled>Apply selected part</button></div>
+              <div class="parts-table-title"><h3>Circuit BOM</h3><button id="parts2Copy" class="btn" type="button" disabled>Copy BOM</button></div>
+              <p id="parts2BomHelp" class="hint">One row per physical RTOP/RBOT resistor. Applied parts are shared with the original Parts tab. Other family numbers are evaluated options at the listed conditions, with independent ratings.</p>
+              <div class="table-wrap" tabindex="0" role="region" aria-label="Circuit resistor BOM, scroll horizontally on small screens">
+                <table id="parts2Bom" class="parts-table parts-bom" aria-describedby="parts2BomHelp">
+                  <thead><tr><th scope="col">Reference</th><th scope="col">Value / tolerance</th><th scope="col">TNPW option</th><th scope="col">M55342 / D55342 option</th><th scope="col">Applied part</th></tr></thead>
+                  <tbody id="parts2BomRows"></tbody>
+                </table>
+              </div>
+              <p id="parts2CopyStatus" class="hint" role="status"></p>
+              <div id="parts2CopyFallback" hidden><label for="parts2CopyText">BOM text · copy into a spreadsheet</label><textarea id="parts2CopyText" class="bom-copy-text" rows="6" readonly spellcheck="false"></textarea></div>
             </div>
           </div>
         </section>
@@ -1074,6 +1133,8 @@
     let resistorCatalog = null;
     let catalogDesignVmid = null;
     const appliedCatalogParts = new Map();
+    const parts2Families = [{ key: "tnpw", id: "vishay-tnpw-e3", label: "TNPW" }, { key: "mil", id: "vishay-eh-m55342", label: "M55342 / D55342" }];
+    let parts2Values = [], parts2BomData = [], parts2Selection = null, parts2Target = null;
     const catalogSame = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1e-12, Math.abs(a), Math.abs(b));
 
     function catalogAssignment(part) {
@@ -1088,6 +1149,175 @@
       const previous = selected ?? select.value;
       select.replaceChildren(...options.map(option => new Option(option.label, option.value)));
       if (options.some(option => String(option.value) === previous)) select.value = previous;
+    }
+
+    function initializeParts2() {
+      const families = resistorCatalog.families.filter(f => parts2Families.some(entry => entry.id === f.id));
+      const sizes = [...new Set(families.flatMap(f => f.packages.map(p => p.case)))].sort();
+      const tolerances = [...new Set(families.flatMap(f => f.toleranceCodes.map(t => t.pct)))].sort((a, b) => a - b);
+      const tcrs = [...new Set(families.flatMap(f => f.tcrCodes.map(t => t.ppm)))].sort((a, b) => a - b);
+      catalogOptions("parts2Package", sizes.map(value => ({ value, label: value })), "0805");
+      catalogOptions("parts2Tolerance", [{ value: "match", label: "Current tolerance or better" }, ...tolerances.map(value => ({ value, label: `±${value}%` }))], "match");
+      catalogOptions("parts2Tcr", tcrs.map(value => ({ value, label: `±${value} ppm/°C` })), "25");
+      const conditions = byId("parts2Conditions");
+      for (const [index, family] of families.entries()) {
+        if (index) conditions.append(document.createElement("br"));
+        const link = document.createElement("a");
+        link.href = family.sources[0].url; link.textContent = family.name; link.target = "_blank"; link.rel = "noopener";
+        const mode = family.powerModes.find(m => m.id === family.defaults.mode);
+        conditions.append(link, document.createTextNode(` · ${mode.label} · default packing when supported, otherwise the first compatible packing${family.defaults.failureRate ? ` · failure level ${family.defaults.failureRate}` : ""}.`));
+      }
+      byId("parts2Controls").hidden = false;
+      byId("parts2Status").textContent = "Compare supported family parts at the same resistance, tolerance, package size, and TCR.";
+    }
+
+    function parts2Options(family, size, temperatureC, tcrPpm) {
+      const pkg = family.packages.find(p => p.case === size);
+      const tcr = family.tcrCodes.find(t => t.ppm === tcrPpm);
+      if (!pkg || !tcr) return null;
+      const packing = family.packaging.filter(p => pkg.packagingCodes.includes(p.code) && (!p.tcrCodes || p.tcrCodes.includes(tcr.code)));
+      const packaging = packing.find(p => p.code === family.defaults.packaging) || packing[0];
+      if (!packaging) return null;
+      return { package: pkg.code, tcrCode: tcr.code, packaging: packaging.code, mode: family.defaults.mode, temperatureC };
+    }
+
+    function parts2Cell(row, text, tag = "td") {
+      const cell = document.createElement(tag); cell.textContent = text;
+      if (tag === "th") cell.scope = "row";
+      row.append(cell); return cell;
+    }
+
+    function parts2CandidateCell(row, match) {
+      const cell = parts2Cell(row, "");
+      if (!match) { cell.textContent = "—"; return; }
+      const { candidate, preview } = match;
+      const number = document.createElement("span"); number.className = "part-number"; number.textContent = candidate.mpn;
+      const limits = document.createElement("small");
+      limits.textContent = `${format(candidate.powerW, "W")} allowed at ${candidate.temperatureC} °C · ${candidate.workingVoltageV} V max · ${candidate.tcrPpm} ppm/°C · pack ${candidate.packaging} · max stress ${percent(preview.highest)}`;
+      cell.append(number, limits);
+    }
+
+    function updateParts2Selection(chooseAvailable = false) {
+      const selected = parts2Values.find(row => row.key === parts2Selection);
+      if (chooseAvailable && selected && !selected.matches[byId("parts2Family").value]) byId("parts2Family").value = Object.keys(selected.matches)[0];
+      const match = selected?.matches[byId("parts2Family").value];
+      for (const row of byId("parts2Rows").children) {
+        row.dataset.selected = String(row.dataset.valueRow === parts2Selection);
+        row.querySelector("input").checked = row.dataset.valueRow === parts2Selection;
+      }
+      byId("parts2Apply").disabled = !match;
+      const part = schematicState && ARMS.flatMap(arm => schematicState.physical[arm]).find(p => p.id === byId("parts2Part").value);
+      const family = parts2Families.find(f => f.key === byId("parts2Family").value);
+      byId("parts2Apply").textContent = part ? `Apply ${family.label} to ${part.name}` : "Apply selected part";
+      byId("parts2Preview").textContent = match ? `Selected ${format(match.candidate.resistanceOhms, "Ω")} · ±${match.candidate.tolerancePct}% → VMID ${format(match.preview.result.vout, "V")}; bounds ${format(match.preview.bounds.min, "V")} to ${format(match.preview.bounds.max, "V")}. Selected-part max stress ${percent(match.preview.highest)}. Apply to update the circuit and BOM.` : selected ? "This family has no matching part under the selected limits. Choose the other family or another row." : "Select a supported value to preview the circuit.";
+    }
+
+    function renderParts2Bom(parts) {
+      const host = byId("parts2BomRows"); host.replaceChildren();
+      parts2BomData = [["Reference", "Quantity", "Resistance (ohm)", "Tolerance (%)", "TNPW option", "TNPW allowed power (W)", "M55342 option", "M55342 allowed power (W)", "Option package", "Option ambient (C)", "Option TCR (ppm/C)", "Applied part", "Applied allowed power (W)", "Applied ambient (C)", "Stock"]];
+      for (const part of parts) {
+        const chosen = catalogAssignment(part);
+        const size = chosen?.case || byId("parts2Package").value;
+        const temperature = chosen?.temperatureC ?? byId("parts2Temperature").valueAsNumber;
+        const tcr = chosen?.tcrPpm ?? Number(byId("parts2Tcr").value);
+        const matches = {};
+        for (const entry of parts2Families) {
+          try {
+            const family = ResistorParts.family(resistorCatalog, entry.id);
+            const options = parts2Options(family, size, temperature, tcr);
+            if (!options) continue;
+            const candidate = chosen?.familyId === entry.id ? chosen : ResistorParts.evaluate(resistorCatalog, entry.id, { ...options, resistanceOhms: part.resistance, tolerancePct: part.tolerance });
+            const preview = previewCatalogPart(candidate, part.id);
+            if (chosen?.mpn === candidate.mpn || preview.highest <= 100 + 1e-9) matches[entry.key] = { candidate, preview };
+          } catch (_) { /* No supported exact-value alternative under these conditions. */ }
+        }
+        const row = document.createElement("tr"); row.dataset.bomPart = part.id;
+        parts2Cell(row, part.name, "th");
+        parts2Cell(row, `${format(part.resistance, "Ω")} · ±${part.tolerance}%`);
+        for (const entry of parts2Families) parts2CandidateCell(row, matches[entry.key]);
+        const applied = parts2Cell(row, chosen?.mpn || "Unassigned");
+        if (chosen) { const detail = document.createElement("small"); detail.textContent = `${format(part.rating, "W")} allowed · ${chosen.temperatureC} °C · ${chosen.mode}`; applied.append(detail); }
+        host.append(row);
+        parts2BomData.push([part.name, 1, part.resistance, part.tolerance, matches.tnpw?.candidate.mpn || "", matches.tnpw?.candidate.powerW ?? "", matches.mil?.candidate.mpn || "", matches.mil?.candidate.powerW ?? "", size, Number.isFinite(temperature) ? temperature : "", tcr, chosen?.mpn || "Unassigned", part.rating, chosen?.temperatureC ?? "Manual", "Not checked"]);
+      }
+      byId("parts2Copy").disabled = !parts.length;
+      byId("parts2CopyStatus").textContent = "";
+      byId("parts2CopyFallback").hidden = true;
+      byId("parts2CopyText").value = "";
+    }
+
+    function parts2BomTsv() {
+      return parts2BomData.length > 1 ? parts2BomData.map(row => row.map(value => String(value).replace(/[\t\r\n]+/g, " ")).join("\t")).join("\r\n") + "\r\n" : "";
+    }
+
+    async function copyParts2Bom() {
+      const text = parts2BomTsv();
+      if (!text) return;
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(text);
+        byId("parts2CopyStatus").textContent = "BOM copied. Paste into a spreadsheet or document.";
+        byId("parts2CopyFallback").hidden = true;
+      } catch (_) {
+        byId("parts2CopyFallback").hidden = false;
+        byId("parts2CopyText").value = text;
+        byId("parts2CopyText").focus(); byId("parts2CopyText").select();
+        byId("parts2CopyStatus").textContent = "Select and copy the BOM text below (Ctrl+C or Command+C), then paste into a spreadsheet.";
+      }
+    }
+
+    function renderParts2() {
+      const parts = schematicState ? ARMS.flatMap(arm => schematicState.physical[arm]) : [];
+      renderParts2Bom(parts);
+      const host = byId("parts2Rows"); host.replaceChildren(); parts2Values = [];
+      if (!parts.length) {
+        byId("parts2MatchStatus").textContent = "Enter valid circuit data to compare resistor parts.";
+        updateParts2Selection(); return;
+      }
+      const select = byId("parts2Part");
+      if ([...select.options].map(option => option.value).join(",") !== parts.map(part => part.id).join(",")) catalogOptions("parts2Part", parts.map(part => ({ value: part.id, label: `${part.name} · ${format(part.resistance, "Ω")}` })));
+      else for (const [index, part] of parts.entries()) select.options[index].textContent = `${part.name} · ${format(part.resistance, "Ω")}`;
+      const target = parts.find(part => part.id === select.value);
+      if (parts2Target !== target.id) parts2Selection = null;
+      parts2Target = target.id;
+      const temperatureC = byId("parts2Temperature").valueAsNumber;
+      const maxTolerancePct = byId("parts2Tolerance").value === "match" ? target.tolerance : Number(byId("parts2Tolerance").value);
+      try {
+        if (!Number.isFinite(temperatureC)) throw new Error("Enter a finite selection ambient temperature.");
+        const values = new Map(), excluded = [];
+        for (const entry of parts2Families) {
+          const family = resistorCatalog.families.find(f => f.id === entry.id);
+          if (!family) continue;
+          const options = parts2Options(family, byId("parts2Package").value, temperatureC, Number(byId("parts2Tcr").value));
+          if (!options) continue;
+          const mode = family.powerModes.find(m => m.id === options.mode);
+          if (temperatureC < mode.minimumAmbientC || temperatureC >= mode.zeroAtC) { excluded.push(`${entry.label}: ambient must be ${mode.minimumAmbientC} °C to below ${mode.zeroAtC} °C.`); continue; }
+          const candidates = ResistorParts.suggest(resistorCatalog, family.id, { ...options, resistanceOhms: target.resistance, maxTolerancePct, maxErrorPct: 5, limit: 200 });
+          for (const candidate of candidates) {
+            const preview = previewCatalogPart(candidate, target.id);
+            if (preview.highest > 100 + 1e-9) continue;
+            const key = `${candidate.resistanceOhms}:${candidate.tolerancePct}`;
+            if (!values.has(key)) values.set(key, { key, resistance: candidate.resistanceOhms, tolerance: candidate.tolerancePct, error: candidate.errorPct, matches: {} });
+            values.get(key).matches[entry.key] = { candidate, preview };
+          }
+        }
+        parts2Values = [...values.values()].sort((a, b) => Math.abs(a.error) - Math.abs(b.error) || b.tolerance - a.tolerance).slice(0, 12);
+        if (!parts2Values.some(row => row.key === parts2Selection)) parts2Selection = parts2Values[0]?.key || null;
+        for (const value of parts2Values) {
+          const row = document.createElement("tr"); row.dataset.valueRow = value.key;
+          const cell = parts2Cell(row, ""), radio = document.createElement("input");
+          radio.type = "radio"; radio.name = "parts2Value"; radio.value = value.key;
+          radio.setAttribute("aria-label", `Select ${format(value.resistance, "Ω")}, ±${value.tolerance}%`);
+          const choose = () => { parts2Selection = value.key; updateParts2Selection(true); };
+          radio.addEventListener("change", choose);
+          row.addEventListener("click", event => { if (event.target !== radio) { radio.focus(); choose(); } });
+          cell.append(radio); parts2Cell(row, format(value.resistance, "Ω"), "th"); parts2Cell(row, `±${value.tolerance}%`);
+          for (const entry of parts2Families) parts2CandidateCell(row, value.matches[entry.key]);
+          host.append(row);
+        }
+        byId("parts2MatchStatus").textContent = `${parts2Values.length ? `${parts2Values.length} value/tolerance rows within ±5% of ${target.name}'s resistance.` : "No supported values meet the selected conditions and stress limits."} ${excluded.join(" ")}`;
+      } catch (error) { byId("parts2MatchStatus").textContent = error.message; }
+      updateParts2Selection(true);
     }
 
     function configureCatalogFamily(reset = false) {
@@ -1139,6 +1369,7 @@
 
     function renderCatalogMatches() {
       if (!resistorCatalog) return;
+      renderParts2();
       const host = byId("catalogCandidates");
       host.replaceChildren();
       byId("catalogBom").disabled = true;
@@ -1230,10 +1461,12 @@
         catalogOptions("catalogFamily", resistorCatalog.families.map(f => ({ value: f.id, label: f.name })), "vishay-tnpw-e3");
         byId("catalogControls").hidden = false;
         byId("catalogStatus").textContent = `Shared resistor catalogs · ${resistorCatalog.revision}`;
+        initializeParts2();
         configureCatalogFamily(true);
         return true;
       } catch (error) {
         byId("catalogStatus").textContent = `Part suggestions unavailable: ${error.message} Serve this page over HTTP to load the shared JSON catalogs. Manual circuit analysis remains available.`;
+        byId("parts2Status").textContent = byId("catalogStatus").textContent;
         return false;
       }
     }
@@ -1468,6 +1701,14 @@
     byId("catalogFamily").addEventListener("change", () => configureCatalogFamily(true));
     for (const id of ["catalogPackage", "catalogTcr"]) byId(id).addEventListener("change", () => configureCatalogFamily(false));
     byId("catalogPackaging").addEventListener("change", renderCatalogMatches);
+    for (const id of ["parts2Part", "parts2Package", "parts2Tolerance", "parts2Temperature", "parts2Tcr"]) byId(id).addEventListener("input", renderParts2);
+    byId("parts2Family").addEventListener("change", () => updateParts2Selection());
+    byId("parts2Apply").addEventListener("click", () => {
+      const row = parts2Values.find(value => value.key === parts2Selection);
+      const match = row?.matches[byId("parts2Family").value];
+      if (match) applyCatalogPart(match.candidate, byId("parts2Part").value);
+    });
+    byId("parts2Copy").addEventListener("click", copyParts2Bom);
     byId("catalogBom").addEventListener("click", () => {
       const link = document.createElement("a");
       const url = URL.createObjectURL(new Blob(["\ufeff", catalogBomCsv()], { type: "text/csv;charset=utf-8" }));
@@ -1484,6 +1725,8 @@
     form.addEventListener("reset", () => setTimeout(() => {
       appliedCatalogParts.clear();
       catalogDesignVmid = null;
+      parts2Selection = null;
+      parts2Target = null;
       for (const arm of ARMS) {
         byId(`${arm}Parts`).replaceChildren();
         nextPart[arm] = 0;

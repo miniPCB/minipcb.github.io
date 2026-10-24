@@ -78,7 +78,8 @@ Calculate action. Only known quantities appear as primary inputs; the calculated
 quantity appears in the result banner. Switching views preserves circuit data.
 
 The result area uses **Overview**, **Tolerances**, **Stress**,
-**Ratings**, **Parts**, and **Method** tabs to show one focused panel at a time.
+**Ratings**, **Parts**, **Parts (2)**, and **Method** tabs to show one focused
+panel at a time.
 The solved value stays visible above the tabs; all results continue updating as
 you edit. Switching result tabs preserves circuit data and selected parts.
 Choosing tolerance solving opens **Tolerances**; other calculation choices open
@@ -224,6 +225,38 @@ Neither status means **in stock**; supplier availability remains unverified.
 Catalog JSON updates are independent of calculator HTML and are also consumed
 by Part Number Radar. See the catalog README for schema, sources, scope, and
 maintenance instructions.
+
+### Parts (2): value table and copyable BOM
+
+The **Parts (2)** tab presents selectable resistance/tolerance rows with TNPW
+and M55342/D55342 part numbers side by side. Choose the physical resistor,
+package size, tolerance ceiling, and family to apply. Click a row (or use its
+radio button) to preview VMID and its tolerance bounds, then apply the selected
+family's part. Selection alone does not modify the circuit. Both Parts tabs
+share the same applied assignments, live schematic, and CSV export.
+The candidate list scrolls with fixed column headings so the BOM remains nearby;
+on smaller screens, scroll either table horizontally to see the family columns.
+
+This comparison uses each family's default power mode, package-compatible
+packing, and M55342 failure-rate level. Ambient and TCR can be selected;
+the original **Parts** tab retains the other ordering/power-mode controls.
+Rows align the same resistance, tolerance, size, and TCR. Each family retains
+its own allowed power and working-voltage limit. A dash means no supported match
+meets the selected family rules and selected-part nominal stress limits.
+
+The **Circuit BOM** table lists every physical RTOP/RBOT resistor, its actual
+value/tolerance, both exact-value family options where supported, and the
+applied part or **Unassigned**. Applied parts keep their own package, ambient,
+TCR, and power mode when the comparison filters change. Alternatives use the
+same package/ambient/TCR, with the other family's default power mode. An applied
+part remains listed if later circuit edits exceed its ratings; current maximum
+stress is displayed so the assignment does not imply compliance.
+
+**Copy BOM** copies tab-separated text for spreadsheets, including quantities,
+both family options and their independent power allowances, conditions, applied
+parts, and unverified stock status. If clipboard access is unavailable, a text
+area opens with the complete BOM selected for manual copying. Invalid circuit
+data clears the BOM; manual part edits and reset clear stale assignments.
 
 ## Stress definitions
 
