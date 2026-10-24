@@ -101,6 +101,11 @@
     .source-tolerance-slot:empty { display: none; }
     .layout { display: grid; grid-template-columns: minmax(310px, 370px) minmax(0, 1fr); gap: 16px; align-items: start; }
     .column { display: grid; gap: 16px; min-width: 0; }
+    .result-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; padding: 5px; border-radius: 12px; background: rgba(19, 32, 44, 0.75); }
+    .result-tab { min-width: 0; min-height: 42px; padding: 10px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 0.8rem; cursor: pointer; }
+    .result-tab:hover { background: rgba(84, 210, 255, 0.07); color: var(--text); }
+    .result-tab[aria-selected="true"] { background: rgba(84, 210, 255, 0.17); color: var(--accent); }
+    .result-panel:focus-visible { outline-offset: -3px; }
     .panel { min-width: 0; overflow: hidden; }
     .panel h2 {
       margin: 0;
@@ -226,14 +231,14 @@
     .rating-table thead tr:first-child th { text-align: center; }
     .rating-table .chosen { background: rgba(84, 210, 255, 0.13); }
     .rating-table .chosen-label { color: var(--accent); font-size: 0.66rem; }
-    .formula-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; }
+    .formula-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     .formula-grid p { margin: 0 0 8px; color: var(--muted); font-size: 0.8rem; line-height: 1.6; }
     .formula-grid code { font-family: var(--mono); color: #d3e6f4; overflow-wrap: anywhere; }
-    .method { border-top: 0; padding-top: 0; }
     footer { padding-top: 18px; color: var(--muted); font-size: 0.75rem; line-height: 1.5; }
     noscript p { margin: 16px 0; color: var(--accent-2); }
     @media (max-width: 1120px) {
       .mode-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .result-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .stress-cards { grid-template-columns: 1fr; }
       .formula-grid { grid-template-columns: 1fr; gap: 8px; }
@@ -252,10 +257,11 @@
     }
     @media print {
       body { background: #fff; color: #111; }
-      .tool-path-nav, .actions, footer { display: none; }
+      .tool-path-nav, .actions, .result-tabs, footer { display: none; }
       .layout { display: block; }
       .column { margin-bottom: 16px; }
       .panel, .header { box-shadow: none; break-inside: avoid; }
+      .result-panel, .result-panel[hidden] { display: block !important; margin-bottom: 16px; }
     }
   </style>
 </head>
@@ -485,7 +491,15 @@
       <div class="column">
         <p id="inputError" class="error" role="alert" hidden></p>
         <div class="solution"><span id="solutionLabel">Solved value</span><output id="solutionValue" for="solveFor vin targetVout r1 r2 rl tolVin tolR1 tolR2 tolRl targetError">—</output></div>
-        <section class="panel" aria-labelledby="operatingHeading">
+        <div id="resultTabs" class="result-tabs" role="tablist" aria-label="Result views">
+          <button id="overviewTab" class="result-tab" type="button" role="tab" aria-selected="true" aria-controls="overviewPanel" tabindex="0">Overview</button>
+          <button id="toleranceTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="tolerancePanel" tabindex="-1">Tolerances</button>
+          <button id="stressTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="stressPanel" tabindex="-1">Stress</button>
+          <button id="ratingsTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="ratingsPanel" tabindex="-1">Ratings</button>
+          <button id="partsTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="catalogPanel" tabindex="-1">Parts</button>
+          <button id="methodTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="methodPanel" tabindex="-1">Method</button>
+        </div>
+        <section id="overviewPanel" class="panel result-panel" role="tabpanel" aria-labelledby="overviewTab" tabindex="0">
           <h2 id="operatingHeading">Operating point</h2>
           <div class="panel-body">
             <div class="metrics">
@@ -504,7 +518,7 @@
             <p id="loadSummary" class="note">—</p>
           </div>
         </section>
-        <section class="panel" aria-labelledby="toleranceHeading">
+        <section id="tolerancePanel" class="panel result-panel" role="tabpanel" aria-labelledby="toleranceTab" tabindex="0" hidden>
           <h2 id="toleranceHeading">Tolerance analysis · worst-case VMID</h2>
           <div class="panel-body">
             <div class="metrics tolerance-metrics">
@@ -522,14 +536,14 @@
             <p class="note">These are output-voltage bounds. The operating-point and stress results use nominal values. Solved component values are exact design values; select and recheck available resistor values separately.</p>
           </div>
         </section>
-        <section class="panel" aria-labelledby="stressHeading">
+        <section id="stressPanel" class="panel result-panel" role="tabpanel" aria-labelledby="stressTab" tabindex="0" hidden>
           <h2 id="stressHeading">Physical resistor stress · selected ratings</h2>
           <div class="panel-body">
             <div id="stressCards" class="stress-cards"></div>
             <p class="note">Stress is actual / limit × 100%. Values above 100% exceed the entered limit. With no Vmax entered, Vstress and Istress are power-equivalent checks; both equal √(Pstress / 100) × 100%.</p>
           </div>
         </section>
-        <section class="panel" aria-labelledby="ratingsHeading">
+        <section id="ratingsPanel" class="panel result-panel" role="tabpanel" aria-labelledby="ratingsTab" tabindex="0" hidden>
           <h2 id="ratingsHeading">Compare typical resistor power ratings</h2>
           <div class="panel-body">
             <div class="rating-fields comparison-controls">
@@ -550,7 +564,7 @@
             <p class="note">Preset examples span small chip resistors through power resistors: <a href="https://www.bourns.com/docs/technical-documents/technical-library/fixed-resistors/publications/bourns_chip_resistors_arrays_sf.pdf" target="_blank" rel="noopener">Bourns chip resistor guide</a> · <a href="https://www.vishay.com/docs/30201/rhnh.pdf" target="_blank" rel="noopener">Vishay power resistor datasheet</a>. Higher-power datasheet ratings may require a specified heat sink; use the applicable rating for your mounting.</p>
           </div>
         </section>
-        <section id="catalogPanel" class="panel" aria-labelledby="catalogHeading">
+        <section id="catalogPanel" class="panel result-panel" role="tabpanel" aria-labelledby="partsTab" tabindex="0" hidden>
           <h2 id="catalogHeading">Choose real resistor parts</h2>
           <div class="panel-body">
             <p id="catalogStatus" class="hint" role="status">Loading shared resistor catalogs…</p>
@@ -581,10 +595,9 @@
             </div>
           </div>
         </section>
-        <section class="panel" aria-label="Calculation method">
+        <section id="methodPanel" class="panel result-panel" role="tabpanel" aria-labelledby="methodTab" tabindex="0" hidden>
+          <h2 id="methodHeading">Equations, stress definitions, and assumptions</h2>
           <div class="panel-body">
-            <details class="method">
-              <summary>Equations, stress definitions, and assumptions</summary>
               <div class="formula-grid">
                 <div>
                   <p><code>Rb = R2 || RL</code> (or R2 with no load)</p>
@@ -604,7 +617,6 @@
               <p class="note">Multiple-part arms support a series chain or parallel bank. Each part has its own rating, tolerance, and optional working voltage. Equivalent resistance is the series sum or reciprocal conductance sum. Series parts share arm current; parallel parts share arm voltage. Solving RTOP/RBOT scales that arm's part resistances proportionally; it does not select standard values. Common tolerance solving applies the same independent tolerance to every physical part. Stress remains nominal for each part; ratings are not pooled into a fictitious arm rating.</p>
               <p class="note">Working voltage follows the lower of the power-derived voltage and the component's maximum working voltage. See <a href="https://www.vishay.com/docs/49873/49873_sg2113.pdf" target="_blank" rel="noopener">Vishay's resistor technical guide</a>.</p>
               <p class="note" id="updateStatus" role="status" aria-live="polite">Ready to calculate.</p>
-            </details>
           </div>
         </section>
       </div>
@@ -634,6 +646,31 @@
     ];
     const form = document.getElementById("dividerForm");
     const byId = id => document.getElementById(id);
+    const resultTabs = [...byId("resultTabs").querySelectorAll('[role="tab"]')];
+
+    function selectResultTab(id, focus = false) {
+      const selected = byId(id);
+      const focusedPanel = document.activeElement.closest('[role="tabpanel"]');
+      for (const tab of resultTabs) {
+        const active = tab === selected;
+        tab.setAttribute("aria-selected", String(active));
+        tab.tabIndex = active ? 0 : -1;
+        byId(tab.getAttribute("aria-controls")).hidden = !active;
+      }
+      if (focus || focusedPanel?.hidden) selected.focus();
+    }
+
+    for (const tab of resultTabs) {
+      tab.addEventListener("click", () => selectResultTab(tab.id));
+      tab.addEventListener("keydown", event => {
+        const index = resultTabs.indexOf(tab);
+        const next = { ArrowRight: (index + 1) % resultTabs.length, ArrowLeft: (index + resultTabs.length - 1) % resultTabs.length, Home: 0, End: resultTabs.length - 1 }[event.key];
+        if (next === undefined) return;
+        event.preventDefault();
+        selectResultTab(resultTabs[next].id, true);
+      });
+    }
+
     const ARMS = ["r1", "r2"];
     const nextPart = { r1: 0, r2: 0 };
     const MODE_DETAILS = {
@@ -1422,6 +1459,7 @@
     for (const button of document.querySelectorAll("[data-solve-mode]")) button.addEventListener("click", () => {
       byId("solveFor").value = button.dataset.solveMode;
       update();
+      selectResultTab(button.dataset.solveMode === "tolerance" ? "toleranceTab" : "overviewTab");
     });
     for (const id of ["compareR1", "compareR2"]) byId(id).addEventListener("change", update);
     form.addEventListener("input", () => { catalogDesignVmid = null; update(); });
@@ -1437,7 +1475,11 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     window.addEventListener("resize", renderSchematic);
-    form.addEventListener("submit", event => { event.preventDefault(); update(); });
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      update();
+      selectResultTab(byId("solveFor").value === "tolerance" ? "toleranceTab" : "overviewTab");
+    });
     // The reset event precedes the browser restoring each control's default value.
     form.addEventListener("reset", () => setTimeout(() => {
       appliedCatalogParts.clear();
@@ -1448,6 +1490,7 @@
       }
       for (const details of form.querySelectorAll("details")) details.open = false;
       update();
+      selectResultTab("overviewTab");
     }, 0));
     update();
     window.resistorCatalogReady = initializeCatalog();

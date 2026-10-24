@@ -77,6 +77,15 @@ view names the goal, explains its inputs, and shows a matching equation and
 Calculate action. Only known quantities appear as primary inputs; the calculated
 quantity appears in the result banner. Switching views preserves circuit data.
 
+The result area uses **Overview**, **Tolerances**, **Stress**,
+**Ratings**, **Parts**, and **Method** tabs to show one focused panel at a time.
+The solved value stays visible above the tabs; all results continue updating as
+you edit. Switching result tabs preserves circuit data and selected parts.
+Choosing tolerance solving opens **Tolerances**; other calculation choices open
+**Overview**. The Calculate action opens the relevant result view, and Reset
+restores **Overview**. Use Left/Right Arrow, Home, or End to navigate the tabs
+with a keyboard. Printing includes all result panels.
+
 Output load and tolerance/rating settings are collapsible. In tolerance-solve
 mode, the output error budget and VTOP/RL variations move into the primary input
 view. An invalid setting automatically opens the containing sections so it can
@@ -183,7 +192,8 @@ use nominal per-part voltages and currents; worst-case stress is not calculated.
 
 ## Selecting actual resistor part numbers
 
-**Choose real resistor parts** uses the shared [parts catalog](../parts/README.md)
+Open the **Parts** tab. **Choose real resistor parts** uses the shared
+[parts catalog](../parts/README.md)
 for Vishay E/H M55342/D55342 and TNPW e3. Choose a physical resistor, family,
 package, and tolerance ceiling. The optional settings specify TCR, packaging,
 failure-rate level where applicable, power operating mode, and selection ambient.

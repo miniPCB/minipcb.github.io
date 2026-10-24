@@ -350,6 +350,49 @@
         assert(!!toolsDocument.querySelector('a[href="calculators/voltage_divider.html"]'), "Tools page links to calculator");
         const visible = id => get(id).getBoundingClientRect().width > 0 && get(id).getBoundingClientRect().height > 0;
         const pick = mode => d.querySelector(`[data-solve-mode="${mode}"]`).click();
+        const resultTabs = [...get("resultTabs").querySelectorAll('[role="tab"]')];
+        const activeView = () => d.querySelector('[role="tab"][aria-selected="true"]')?.id;
+        assert(activeView() === "overviewTab" && visible("overviewPanel") && !visible("catalogPanel"), "Results start with only the operating overview visible");
+        const circuitBeforeTabs = [...get("dividerForm").elements].map(input => input.value).join("|");
+        for (const tab of resultTabs) {
+          tab.click();
+          assert(d.querySelectorAll('[role="tabpanel"]:not([hidden])').length === 1 && visible(tab.getAttribute("aria-controls")), `${tab.textContent}: shows only the selected result panel`);
+          assert(tab.getAttribute("aria-selected") === "true" && resultTabs.filter(item => item.tabIndex === 0).length === 1 && tab.tabIndex === 0, `${tab.textContent}: selection and keyboard tab stop agree`);
+          assert(visible("solutionValue") && visible("vin") && visible("liveSchematic"), `${tab.textContent}: solved value, inputs, and circuit reference remain visible`);
+        }
+        assert([...get("dividerForm").elements].map(input => input.value).join("|") === circuitBeforeTabs, "Browsing every results tab preserves all circuit inputs");
+        const key = value => d.activeElement.dispatchEvent(new w.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true }));
+        get("overviewTab").focus(); key("End");
+        assert(activeView() === "methodTab" && d.activeElement === get("methodTab") && visible("methodPanel"), "End focuses and activates the last results tab");
+        key("ArrowRight");
+        assert(activeView() === "overviewTab" && d.activeElement === get("overviewTab"), "Right arrow wraps from last to first tab");
+        key("ArrowLeft");
+        assert(activeView() === "methodTab" && d.activeElement === get("methodTab"), "Left arrow wraps from first to last tab");
+        key("Home"); key("ArrowRight");
+        assert(activeView() === "toleranceTab" && d.activeElement === get("toleranceTab"), "Home and right arrow activate the expected result view");
+        get("overviewTab").click(); get("catalogFamily").focus();
+        assert(d.activeElement !== get("catalogFamily") && !visible("catalogCandidates"), "Inactive parts controls are hidden and cannot receive focus");
+        get("toleranceTab").click(); get("vin").focus(); set("vin", "24");
+        assert(activeView() === "toleranceTab" && d.activeElement === get("vin") && text("voutMin") === "11.88 V", "Live edits update a selected view without changing tabs or input focus");
+        get("methodTab").click(); set("r1", "0");
+        assert(visible("inputError") && activeView() === "methodTab" && text("solutionValue") === "—", "Validation errors and cleared solved values remain visible from every tab");
+        await reset(); pick("tolerance");
+        assert(activeView() === "toleranceTab", "Choosing tolerance solving opens its result view");
+        get("partsTab").click(); get("dividerForm").requestSubmit();
+        assert(activeView() === "toleranceTab", "Calculate tolerance returns to the relevant result view");
+        pick("vout");
+        assert(activeView() === "overviewTab", "Choosing a voltage calculation returns to the overview");
+        get("methodTab").click(); get("dividerForm").requestSubmit();
+        assert(activeView() === "overviewTab", "Calculate VMID returns to the overview");
+        for (const width of [320, 390, 768, 900, 1440]) {
+          frame.style.width = `${width}px`; await new Promise(resolve => setTimeout(resolve, 5));
+          for (const tab of resultTabs) {
+            tab.click();
+            assert(d.documentElement.scrollWidth <= width && resultTabs.every(item => item.getBoundingClientRect().width >= 60), `${tab.textContent}: tab navigation and selected content fit at ${width}px`);
+          }
+        }
+        await reset();
+        assert(activeView() === "overviewTab", "Reset restores the default results tab");
         assert(d.querySelector(".live-tag").textContent === "DC analysis · Online calculator", "Header uses the requested calculator label");
         const views = [
           ["vout", ["vin", "r1", "r2"], ["targetVout"], "Calculate VMID"],

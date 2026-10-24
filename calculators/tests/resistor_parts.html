@@ -90,9 +90,12 @@
         const get = id => d.getElementById(id);
         const set = (id, value) => { get(id).value = value; get(id).dispatchEvent(new w.Event("input", { bubbles: true })); get(id).dispatchEvent(new w.Event("change", { bubbles: true })); };
         const reset = async () => { get("dividerForm").reset(); await pause(); };
-        const use = () => get("catalogCandidates").querySelector("button").click();
+        const use = () => { get("partsTab").click(); get("catalogCandidates").querySelector("button").click(); };
+        get("partsTab").click();
+        assert(get("catalogControls").getBoundingClientRect().width > 0 && get("overviewPanel").hidden, "Parts tab reveals the catalog and hides the operating overview");
         assert(get("catalogCandidates").children.length > 0 && get("catalogFamily").value === tid, "Divider suggests TNPW parts without altering manual defaults");
         use();
+        assert(get("partsTab").getAttribute("aria-selected") === "true" && !get("catalogPanel").hidden, "Applying a part keeps the catalog view open for the next resistor");
         near(Number(get("p1").value), 0.14, "Applying a single resistor imports its actual P70 rating");
         near(get("vmax1").valueAsNumber, 150, "Applying a part imports its working-voltage limit");
         assert(get("vout").textContent === "6 V" && get("catalogApplied").textContent.includes("TNPW080510K0FEEA"), "Applying an exact-value candidate preserves VMID and associates the MPN");
@@ -123,6 +126,7 @@
         assert(get("catalogApplied").textContent.includes("TNPW") && get("inputError").hidden, "Physical MPN association survives a topology change and stress recalculates");
         set(partId + "Power", "0.1");
         assert(get("catalogBom").disabled, "Changing an applied physical rating removes its MPN");
+        get("partsTab").click();
         for (const width of [320, 390, 768, 900, 1440]) {
           frame.style.width = width + "px"; await pause();
           assert(d.documentElement.scrollWidth <= width, `Part-selection controls fit at ${width}px`);
