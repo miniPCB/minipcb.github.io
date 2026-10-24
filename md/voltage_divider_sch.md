@@ -56,7 +56,15 @@ At the defaults, Vout is 6 V, I1 and I2 are 0.6 mA, and R1 and R2 each dissipate
 
 RTOP is R1 and RBOT is R2. The calculator can solve for VOUT, VIN, RTOP, RBOT,
 or RL while the remaining nominal quantities are held at their entered values.
-The calculated field is read-only and uses the selected resistance unit.
+Choose one of the six calculation buttons at the top of the page. Each focused
+view names the goal, explains its inputs, and shows a matching equation and
+Calculate action. Only known quantities appear as primary inputs; the calculated
+quantity appears in the result banner. Switching views preserves circuit data.
+
+Output load and tolerance/rating settings are collapsible. In tolerance-solve
+mode, the output error budget and VIN/RL variations move into the primary input
+view. An invalid setting automatically opens the containing sections so it can
+be corrected. All page styling and calculator logic remain in the one HTML file.
 
 - VOUT uses the loaded divider equation above.
 - `VIN = VOUT × (1 + RTOP / Rb)`.
@@ -74,12 +82,16 @@ preferred component series.
 
 ## Multiple physical resistors per arm
 
-Enable **Use multiple resistors** under RTOP or RBOT to replace that single
-resistor with a series chain or parallel bank. Each physical part has its own
-resistance/unit, power rating in watts, tolerance, and optional maximum working
-voltage. Add/remove controls keep at least one part in an active arm. The two
-arms may use different connection types; nested series/parallel networks are
-not supported.
+Open **RTOP parts** or **RBOT parts** and enable **Use multiple resistors** to
+replace that single resistor with a series chain or parallel bank. When solving
+for an arm, its construction settings remain available below the known inputs.
+Each physical part has its own resistance/unit, power rating in watts,
+tolerance, and optional maximum working
+voltage. Each part has a compact resistance/rating/tolerance summary that opens
+for editing; adding a part opens it, while the four-part shortcut initially
+opens only the first part. Add/remove controls keep at least one part in an
+active arm. The two arms may use different connection types; nested
+series/parallel networks are not supported.
 
 The **Split into 4 equal parts** shortcut is available for a one-part arm. It
 preserves nominal equivalent resistance: each series part becomes one quarter

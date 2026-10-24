@@ -319,13 +319,62 @@
         const toolsPage = await (await fetch("../../tools.html")).text();
         const toolsDocument = new DOMParser().parseFromString(toolsPage, "text/html");
         assert(!!toolsDocument.querySelector('a[href="calculators/voltage_divider.html"]'), "Tools page links to calculator");
+        const visible = id => get(id).getBoundingClientRect().width > 0 && get(id).getBoundingClientRect().height > 0;
+        const pick = mode => d.querySelector(`[data-solve-mode="${mode}"]`).click();
+        assert(d.querySelector(".live-tag").textContent === "DC analysis · Online calculator", "Header uses the requested calculator label");
+        const views = [
+          ["vout", ["vin", "r1", "r2"], ["targetVout"], "Calculate VOUT"],
+          ["vin", ["targetVout", "r1", "r2"], ["vin"], "Calculate VIN"],
+          ["r1", ["vin", "targetVout", "r2"], ["r1"], "Calculate RTOP"],
+          ["r2", ["vin", "targetVout", "r1"], ["r2"], "Calculate RBOT"],
+          ["rl", ["vin", "targetVout", "r1", "r2"], ["rl"], "Calculate RL"],
+          ["tolerance", ["targetError", "vin", "r1", "r2", "tolVin", "tolRl"], ["targetVout", "tolR1", "tolR2"], "Calculate tolerance"]
+        ];
+        for (const [mode, known, calculated, action] of views) {
+          await reset(); pick(mode); valid(`Visible mode choice ${mode}`);
+          assert(get("solveFor").value === mode, "Goal button selects its calculation");
+          assert(d.querySelectorAll('[data-solve-mode][aria-pressed="true"]').length === 1 && d.querySelector(`[data-solve-mode="${mode}"]`).getAttribute("aria-pressed") === "true", "Exactly one goal is marked active");
+          assert(known.every(visible), `Known values are visible in ${mode}`);
+          assert(calculated.every(id => !visible(id)), `Calculated values are absent from the input view in ${mode}`);
+          assert(text("calculateButton") === action, "Calculate action names the quantity");
+          assert(!get("advancedOptions").open && !get("loadOptions").open, "Optional settings start collapsed");
+          if (["r1", "r2"].includes(mode)) assert(get(`${mode}Field`).parentElement === get("solvedArmSlot"), "Calculated arm construction remains available separately");
+        }
+        await reset();
+        get("r1").focus(); set("r1", "20");
+        assert(d.activeElement === get("r1") && text("vout") === "4 V", "Typing updates results without losing input focus");
+        pick("vin"); pick("r1"); pick("vout");
+        near(get("r1").valueAsNumber, 20, "Mode changes retain circuit values");
+        assert(visible("r1") && visible("vin") && !visible("targetVout"), "Returning to VOUT restores the proper input view");
+        await reset(); set("tolR1", "-1");
+        assert(get("advancedOptions").open && visible("tolR1"), "Invalid hidden tolerance settings reveal themselves");
+        set("tolR1", "1"); valid("Revealed tolerance error recovers");
+        get("advancedOptions").open = false; set("vin", "24");
+        assert(!get("advancedOptions").open, "Normal edits preserve disclosure choices");
+        await reset(); get("r1PartsOptions").open = true; enableParts("r1"); split("r1");
+        assert(ids("r1").filter(id => get(id).open).length === 1, "Four-part editor opens one part and summarizes the rest");
+        assert(ids("r1").every(id => text(`${id}Description`).includes("2.5 kΩ") && text(`${id}Description`).includes("250 mW")), "Closed part summaries show resistance and power rating");
+        const focusedPart = ids("r1")[0];
+        get(`${focusedPart}Power`).focus(); set(`${focusedPart}Power`, "0.125");
+        assert(d.activeElement === get(`${focusedPart}Power`) && text(`${focusedPart}Description`).includes("125 mW"), "Part editing preserves focus and updates its summary");
+        get(focusedPart).open = false; get("r1PartsOptions").open = false;
+        set(`${focusedPart}Power`, "0");
+        assert(get(focusedPart).open && get("r1PartsOptions").open && visible(`${focusedPart}Power`), "Nested invalid part settings expand for correction");
+        set(`${focusedPart}Power`, "0.125"); valid("Nested physical part error recovers");
+        pick("r1");
+        assert(get("r1Field").parentElement === get("solvedArmSlot") && ids("r1").length === 4, "Moving to an arm solve preserves physical parts");
+        pick("vout");
+        assert(get("r1Field").parentElement === get("r1KnownSlot") && ids("r1").length === 4, "Moving back restores the physical arm to known inputs");
+        await reset();
+        assert(!get("advancedOptions").open && !get("r1PartsOptions").open && !get("r2PartsOptions").open, "Reset closes optional editors");
         for (const mode of ["vout", "vin", "r1", "r2", "rl", "tolerance"]) {
           await reset(); set("solveFor", mode); valid(`Mode ${mode} default transition`);
           for (const width of [320, 390, 768, 900, 1440]) {
             frame.style.width = `${width}px`;
             await new Promise(resolve => setTimeout(resolve, 5));
             assert(d.documentElement.scrollWidth <= width, `No page overflow: ${mode} at ${width}px`);
-            assert(get("r1").getBoundingClientRect().width >= 100, `Usable resistance input: ${mode} at ${width}px`);
+            const knownArm = mode === "r1" ? "r2" : "r1";
+            assert(get(knownArm).getBoundingClientRect().width >= 100, `Usable known resistance input: ${mode} at ${width}px`);
           }
         }
         await reset();
