@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shared Resistor Catalog Checks</title>
+  <style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui,sans-serif}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:2200px;border:0;margin-top:16px}</style>
+</head>
+<body>
+  <h1>Shared resistor catalog checks</h1>
+  <p>Serve the repository root over HTTP. This suite exercises the real catalogs, divider, and Radar without supplier requests.</p>
+  <pre id="results" role="status">RUNNING</pre>
+  <script src="../../js/resistor-parts.js"></script>
+  <script>
+    "use strict";
+    const checks = [], failures = [];
+    const assert = (condition, label) => { checks.push(label); if (!condition) failures.push(label); };
+    const near = (actual, expected, label) => assert(Number.isFinite(actual) && Math.abs(actual - expected) <= 1e-9 * Math.max(1, Math.abs(expected)), label);
+    const throws = (fn, label) => { let failed = false; try { fn(); } catch (_) { failed = true; } assert(failed, label); };
+    const clone = value => JSON.parse(JSON.stringify(value));
+    const pause = () => new Promise(resolve => setTimeout(resolve, 30));
+    const loadFrame = async source => {
+      const frame = document.createElement("iframe"); frame.title = "Tool under test";
+      const loaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
+      frame.src = source; document.body.append(frame); await loaded; return frame;
+    };
+    (async () => {
+      try {
+        const api = ResistorParts, catalog = await api.load();
+        const mid = "vishay-eh-m55342", tid = "vishay-tnpw-e3";
+        assert(catalog.families.length === 2, "Both shared family files load");
+        for (const [name, values] of Object.entries(catalog.series)) assert(values.length === Number(name.slice(1)), `${name} contains the exact series count`);
+        assert(catalog.series.E192.includes(920) && !catalog.series.E192.includes(919), "E192 retains the published 920 exception");
+        const mil = api.evaluate(catalog, mid, { resistanceOhms: 10000 });
+        assert(mil.mpn === "M55342E06B10E0RTS" && mil.powerW === 0.15 && mil.workingVoltageV === 50, "M55342 0805/06 encoding and electrical ratings");
+        assert(api.evaluate(catalog, mid, { resistanceOhms: 10000, tcrCode: "K" }).mpn === "M55342K06B10E0RTSV", "Coarse K thin-film parts receive the mandatory V suffix");
+        const style7 = api.evaluate(catalog, mid, { package: "07", resistanceOhms: 10000 });
+        assert(style7.mpn.startsWith("D55342E07B") && style7.powerW === 0.25 && style7.workingVoltageV === 100, "Only style /07 uses D55342");
+        assert(api.decode(catalog, mid, "M55342K06B5E60R").resistanceOhms === 5600, "Manufacturer historical example retains its 5.6 kΩ value");
+        assert(api.decode(catalog, mid, "M55342K06B5E60R").status === "manufacturer-documented", "Exact historical source evidence is retained");
+        assert(api.evaluate(catalog, mid, { resistanceOhms: 5600, tcrCode: "K" }).status === "rules-validated", "Packaged generated numbers do not inherit historical evidence");
+        assert(api.decode(catalog, mid, "M55342E06B10E0M").failureRate === "M", "A legacy M failure rate is not confused with a marking suffix");
+        const tnpw = api.evaluate(catalog, tid, { resistanceOhms: 10000 });
+        assert(tnpw.mpn === "TNPW080510K0FEEA" && tnpw.powerW === 0.14 && tnpw.workingVoltageV === 150, "TNPW 0805 encoding and general P70 limits");
+        const example = api.decode(catalog, tid, "TNPW12061K32DEEA");
+        assert(example.resistanceOhms === 1320 && example.tolerancePct === 0.5 && example.tcrPpm === 25 && example.powerW === 0.27, "Manufacturer TNPW ordering example decodes correctly");
+        assert(example.status === "manufacturer-documented" && example.sourceUrl.endsWith("#page=4"), "TNPW exact-number evidence cites its source page");
+        for (const part of [mil, tnpw, example]) assert(part.stockStatus === "unknown" && part.stockCheckedAt === null, "Number validity never invents supplier availability");
+        near(api.evaluate(catalog, mid, { resistanceOhms: 10000, temperatureC: 110 }).powerW, 0.075, "MIL power derates from 70 to 150 °C");
+        near(api.evaluate(catalog, tid, { resistanceOhms: 10000, temperatureC: 97.5 }).powerW, 0.07, "TNPW general power derates to its 125 °C limit");
+        near(api.evaluate(catalog, tid, { resistanceOhms: 10000, mode: "power", temperatureC: 112.5 }).powerW, 0.11, "TNPW power mode uses its own 155 °C limit");
+        near(api.evaluate(catalog, tid, { resistanceOhms: 10000, mode: "advanced" }).powerW, 0.26, "TNPW advanced mode is distinct from general mode");
+        near(api.evaluate(catalog, tid, { resistanceOhms: 10000, temperatureC: 20 }).powerW, 0.14, "Cool ambient does not increase the rated P70 power");
+        for (const options of [
+          { package: "0201", mode: "advanced", packaging: "ED" },
+          { package: "0402", tolerancePct: 0.1, tcrCode: "X", resistanceOhms: 10, packaging: "ED" },
+          { package: "0603", tolerancePct: 0.1, resistanceOhms: 2 },
+          { package: "0201", tolerancePct: 0.1, resistanceOhms: 30000, packaging: "ED" },
+          { tolerancePct: 0.1, tcrCode: "X", packaging: "EC" },
+          { temperatureC: 125 }, { temperatureC: -56 }, { temperatureC: NaN },
+          { resistanceOhms: 2500 }, { resistanceOhms: 0 }, { resistanceOhms: Infinity },
+          { tolerancePct: 0.25 }, { package: "0303" }
+        ]) throws(() => api.evaluate(catalog, tid, { resistanceOhms: 10000, ...options }), "TNPW rejects unsupported range, mode, temperature, or ordering combination");
+        for (const number of ["M55342E07B10E0RTS", "D55342E06B10E0RTS", "M55342K06B10E0RTS", "M55342E06B1C00RTS", "M55342E11B10E0RTSM", "M55342Z06B10E0RTS"]) throws(() => api.decode(catalog, mid, number), `MIL rejects unsupported combination ${number}`);
+        throws(() => api.decode(catalog, tid, "TNPW080510K0FEEA0H"), "Unimplemented special suffixes are not silently accepted");
+        throws(() => api.evaluate(catalog, mid, { package: "12", resistanceOhms: 261000, tolerancePct: 0.1 }), "MIL /12 precision range uses its lower 258 kΩ ceiling");
+        assert(api.evaluate(catalog, mid, { package: "12", resistanceOhms: 261000, tolerancePct: 1 }).resistanceOhms === 261000, "MIL /12 coarse range allows 261 kΩ");
+        assert(api.evaluate(catalog, mid, { resistanceOhms: 20, tcrCode: "H" }).resistanceOhms === 20, "H characteristic supports the lower resistance range");
+        throws(() => api.evaluate(catalog, mid, { resistanceOhms: 20, tcrCode: "E" }), "E characteristic enforces its 49.9 Ω floor");
+        for (const family of catalog.families) for (const pkg of family.packages) for (const range of pkg.limits) {
+          const input = { package: pkg.code, resistanceOhms: 10000, tolerancePct: range.tolerancesPct[0], tcrCode: range.tcrCodes[0], packaging: pkg.packagingCodes[0], mode: family.defaults.mode };
+          const part = api.evaluate(catalog, family.id, input);
+          const decoded = api.decode(catalog, family.id, part.mpn);
+          assert(decoded.resistanceOhms === 10000 && decoded.package === pkg.code && decoded.tolerancePct === input.tolerancePct && decoded.tcrCode === input.tcrCode, `Build/decode round trip ${part.mpn}`);
+        }
+        const candidates = api.suggest(catalog, tid, { resistanceOhms: 2500, maxTolerancePct: 1 });
+        assert(candidates.length > 0 && candidates[0].resistanceOhms === 2490 && candidates[0].tolerancePct === 1, "Suggestions choose real 2.49 kΩ values near an ideal 2.5 kΩ");
+        assert(candidates.every(p => p.resistanceOhms !== 2500 && Math.abs(p.errorPct) <= 5 && p.tolerancePct <= 1), "Suggestions retain value-series, tolerance, and deviation limits");
+        assert(api.suggest(catalog, tid, { resistanceOhms: 1e9 }).length === 0, "No invented parts outside family range");
+        const badIndex = clone(catalog); badIndex.schemaVersion = 999;
+        throws(() => api.validate(badIndex, catalog.families), "Unknown schema versions fail closed");
+        for (const mutation of [f => f.packages.push(clone(f.packages[0])), f => { f.packages[0].powerW.general = -1; }, f => { f.packages[0].limits[0].maxOhms = -1; }, f => { f.sources = []; }, f => { f.stock.status = "in-stock"; }, f => { f.tcrCodes.push(clone(f.tcrCodes[0])); }, f => { f.defaults.tcrCode = "Z"; }, f => { f.packages[0].model = "WRONG"; }]) {
+          const families = clone(catalog.families); mutation(families[1]); throws(() => api.validate(catalog, families), "Malformed family data is rejected before use");
+        }
+        const editedFamilies = clone(catalog.families); editedFamilies[1].packages.find(p => p.code === "0805").powerW.general = 0.123;
+        near(api.evaluate(api.validate(catalog, editedFamilies), tid, { resistanceOhms: 10000 }).powerW, 0.123, "A data-only rating edit changes the shared engine result");
+
+        const frame = await loadFrame("../voltage_divider.html?catalog-test=1"), w = frame.contentWindow, d = w.document;
+        assert(await w.resistorCatalogReady, "Divider loads both shared catalogs");
+        const get = id => d.getElementById(id);
+        const set = (id, value) => { get(id).value = value; get(id).dispatchEvent(new w.Event("input", { bubbles: true })); get(id).dispatchEvent(new w.Event("change", { bubbles: true })); };
+        const reset = async () => { get("dividerForm").reset(); await pause(); };
+        const use = () => get("catalogCandidates").querySelector("button").click();
+        assert(get("catalogCandidates").children.length > 0 && get("catalogFamily").value === tid, "Divider suggests TNPW parts without altering manual defaults");
+        use();
+        near(Number(get("p1").value), 0.14, "Applying a single resistor imports its actual P70 rating");
+        near(get("vmax1").valueAsNumber, 150, "Applying a part imports its working-voltage limit");
+        assert(get("vout").textContent === "6 V" && get("catalogApplied").textContent.includes("TNPW080510K0FEEA"), "Applying an exact-value candidate preserves VMID and associates the MPN");
+        assert(get("liveSchematic").querySelector('[data-field="mpn"]').textContent === "TNPW080510K0FEEA", "Applied MPN appears in the live SVG");
+        const exportedSvg = await (await fetch(get("schematicDownload").href)).text();
+        assert(exportedSvg.includes("TNPW080510K0FEEA"), "Downloaded SVG captures the applied MPN");
+        assert(w.catalogBomCsv().includes('"TNPW080510K0FEEA"') && w.catalogBomCsv().includes('"Unassigned"') && w.catalogBomCsv().includes('"Not checked"'), "BOM distinguishes applied and unassigned parts and unknown stock");
+        set("r1", "20");
+        assert(!get("liveSchematic").querySelector('[data-field="mpn"]') && get("catalogBom").disabled, "Manual component changes remove stale MPN associations");
+        await reset(); set("solveFor", "vin"); set("targetVout", "5"); use();
+        assert(get("solveFor").value === "vout" && get("vin").valueAsNumber === 10 && get("r1").valueAsNumber === 10 && get("vout").textContent === "5 V", "Applying in inverse mode freezes the selected actual resistance and uses forward analysis");
+        await reset(); set("catalogFamily", mid); set("catalogPackage", "07");
+        assert(get("catalogCandidates").firstElementChild.dataset.mpn.startsWith("D55342"), "Divider M55342 selector enforces the /07 model exception");
+        await reset(); set("catalogFamily", tid); set("catalogTemperature", "97.5"); use();
+        near(Number(get("p1").value), 0.07, "Divider imports allowed power at the selection ambient");
+        assert(get("liveSchematic").querySelector('[data-field="rating"]').textContent === "Allowed 70 mW" && get("liveSchematicDesc").textContent.includes("140 mW rated at 70") && get("liveSchematicDesc").textContent.includes("97.5"), "SVG distinguishes rated power from the temperature-derated allowance");
+        assert(get("catalogApplied").textContent.includes("97.5"), "Applied part records its power-rating condition");
+        set("catalogTemperature", "125");
+        assert(!get("catalogCandidates").children.length && get("catalogMatchStatus").textContent.includes("below 125"), "Invalid candidate temperature suppresses suggestions");
+        await reset(); set("catalogTemperature", "70");
+        get("r1Multiple").checked = true; get("r1Multiple").dispatchEvent(new w.Event("input", { bubbles: true })); get("r1Split").click();
+        const partId = get("r1Parts").firstElementChild.dataset.part; set("catalogPart", partId); use();
+        near(get(partId + "R").valueAsNumber, 2.49, "Catalog application changes only the selected physical resistor");
+        near(get("r1").valueAsNumber, 9.99, "Applied physical values recalculate the series equivalent");
+        near(get("targetVout").valueAsNumber, 120 / 19.99, "Actual preferred-value part recalculates VMID");
+        assert(w.catalogBomCsv().split("\r\n").filter(Boolean).length === 6 && get("liveSchematic").querySelector('[data-field="mpn"]'), "Four upper parts and one lower part export as five physical BOM rows");
+        set("r1Connection", "parallel");
+        assert(get("catalogApplied").textContent.includes("TNPW") && get("inputError").hidden, "Physical MPN association survives a topology change and stress recalculates");
+        set(partId + "Power", "0.1");
+        assert(get("catalogBom").disabled, "Changing an applied physical rating removes its MPN");
+        for (const width of [320, 390, 768, 900, 1440]) {
+          frame.style.width = width + "px"; await pause();
+          assert(d.documentElement.scrollWidth <= width, `Part-selection controls fit at ${width}px`);
+        }
+        await reset(); set("r1", "0");
+        assert(!get("catalogCandidates").children.length && get("catalogBom").disabled, "Invalid circuit data clears candidate and BOM actions");
+        await reset(); assert(!get("liveSchematic").querySelector('[data-field="mpn"]') && get("catalogBom").disabled, "Reset clears applied part assignments");
+
+        const radar = await loadFrame("../../part_number_radar.html?catalog-test=1"), rw = radar.contentWindow, rd = rw.document;
+        await rw.radarCatalogReady;
+        assert(rd.getElementById("sharedCatalogStatus").textContent.includes("Shared catalog 2026-10-24"), "Radar uses the shared M55342 catalog");
+        assert(rd.getElementById("tcrFilter").textContent.includes("200 ppm") && rd.getElementById("tcrFilter").textContent.includes("300 ppm"), "Radar displays the corrected source-backed TCR values");
+        assert(rd.getElementById("milPreferredRows").rows.length === api.family(catalog, mid).toleranceCodes.length, "Radar preferred-value table is populated from the family data");
+        assert(rd.getElementById("tnpwResults").textContent.includes("TNPW080510K0FEEA"), "Radar has a TNPW browser using the same candidate engine");
+        assert(rw.decodeSharedResistorPn(tid, "TNPW12061K32DEEA").resistanceOhms === 1320, "Radar shares the TNPW decoder and sourced example");
+        const radarTolerance = rd.getElementById("tnpwTolerance"); radarTolerance.value = "0.5";
+        rd.getElementById("tnpwResistance").value = "1320"; radarTolerance.dispatchEvent(new rw.Event("input", { bubbles: true }));
+        rd.getElementById("tnpwPackage").value = "1206"; rd.getElementById("tnpwPackage").dispatchEvent(new rw.Event("input", { bubbles: true }));
+        assert(rd.getElementById("tnpwResults").textContent.includes("TNPW12061K32DEEA") && rd.getElementById("tnpwResults").textContent.includes("manufacturer-documented"), "Radar browser exposes exact manufacturer evidence");
+        assert(rw.PART_FAMILY_REFERENCE_DB.tnpw.documents[0].url === api.family(catalog, tid).sources[0].url, "Radar reference source is derived from the family file");
+        assert(rw.PART_FAMILY_REFERENCE_DB.m55342.documents[0].revision === api.family(catalog, mid).sources[0].revision, "Radar M55342 reference metadata is derived from the family file");
+        rd.querySelector('[data-choice-entry="pn_browser"]').click();
+        rd.querySelector('[data-choice-component="resistor"]').click();
+        rd.querySelector('[data-choice-family="tnpw"]').click();
+        assert(!rd.getElementById("tnpwView").classList.contains("hidden") && !rd.getElementById("workspace").classList.contains("hidden"), "Radar navigation opens the TNPW browser");
+        for (const width of [390, 900, 1440]) {
+          radar.style.width = width + "px"; await pause();
+          assert(rd.documentElement.scrollWidth <= width, `Radar TNPW browser fits at ${width}px`);
+        }
+        for (const [number, familyLabel] of [["TNPW12061K32DEEA", "TNPW e3"], ["M55342K06B10E0RTSV", "M55342 / D55342"], ["WSL25124L000FEA", "WSL"]]) {
+          rd.getElementById("pnDecipherInput").value = number; rd.getElementById("pnDecipherRunBtn").click();
+          assert(rd.getElementById("pnDecipherValidity").textContent === "Valid" && rd.getElementById("pnDecipherDetectedFamily").textContent === familyLabel, `Radar PN decipher recognizes ${number}`);
+        }
+        const source = await (await fetch("../voltage_divider.html")).text();
+        const fallback = document.createElement("iframe"); fallback.title = "Missing module fallback";
+        const fallbackLoaded = new Promise(resolve => fallback.addEventListener("load", resolve, { once: true }));
+        fallback.srcdoc = source.replace("<head>", `<head><base href="${new URL("../voltage_divider.html", location.href).href}">`).replace('src="../js/resistor-parts.js"', 'src="../js/missing-resistor-module.js"');
+        document.body.append(fallback); await fallbackLoaded;
+        assert(await fallback.contentWindow.resistorCatalogReady === false && fallback.contentDocument.getElementById("vout").textContent === "6 V", "Manual analysis survives a missing shared module");
+        const radarSource = await (await fetch("../../part_number_radar.html")).text();
+        const radarFallback = document.createElement("iframe"); radarFallback.title = "Radar missing module fallback";
+        const radarFallbackLoaded = new Promise(resolve => radarFallback.addEventListener("load", resolve, { once: true }));
+        radarFallback.srcdoc = radarSource.replace("<head>", `<head><base href="${new URL("../../part_number_radar.html", location.href).href}">`).replace('src="js/resistor-parts.js"', 'src="js/missing-resistor-module.js"');
+        document.body.append(radarFallback); await radarFallbackLoaded; await radarFallback.contentWindow.radarCatalogReady;
+        const fallbackRadar = radarFallback.contentDocument;
+        assert(fallbackRadar.getElementById("sharedCatalogStatus").textContent.includes("unavailable"), "Radar reports catalog failure without blocking startup");
+        fallbackRadar.getElementById("pnDecipherInput").value = "WSL25124L000FEA"; fallbackRadar.getElementById("pnDecipherRunBtn").click();
+        assert(fallbackRadar.getElementById("pnDecipherValidity").textContent === "Valid", "Unrelated Radar families still decode when shared catalogs are unavailable");
+      } catch (error) { failures.push(error.stack); }
+      document.getElementById("results").textContent = JSON.stringify({ status: failures.length ? "FAIL" : "PASS", count: checks.length, failures, checks }, null, 2);
+      document.body.dataset.status = failures.length ? "FAIL" : "PASS";
+    })();
+  </script>
+</body>
+</html>

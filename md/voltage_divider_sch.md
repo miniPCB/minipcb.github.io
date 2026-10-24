@@ -80,7 +80,8 @@ quantity appears in the result banner. Switching views preserves circuit data.
 Output load and tolerance/rating settings are collapsible. In tolerance-solve
 mode, the output error budget and VTOP/RL variations move into the primary input
 view. An invalid setting automatically opens the containing sections so it can
-be corrected. All page styling and calculator logic remain in the one HTML file.
+be corrected. The page styling and circuit-analysis logic remain in the one HTML
+file; shared part catalogs and their numbering engine are loaded separately.
 
 - VMID uses the loaded divider equation above.
 - `VTOP = VMID × (1 + RTOP / Rb)`.
@@ -180,6 +181,40 @@ every physical R1/R2 part's tolerance with the same solved value. Its nominal
 resistance and power rating remain unchanged. Stress calculations continue to
 use nominal per-part voltages and currents; worst-case stress is not calculated.
 
+## Selecting actual resistor part numbers
+
+**Choose real resistor parts** uses the shared [parts catalog](../parts/README.md)
+for Vishay E/H M55342/D55342 and TNPW e3. Choose a physical resistor, family,
+package, and tolerance ceiling. The optional settings specify TCR, packaging,
+failure-rate level where applicable, power operating mode, and selection ambient.
+Defaults use 70 °C and TNPW general operation. These are sourced, supported family
+subsets, not an exhaustive inventory or a live supplier stock search.
+Selection ambient adjusts allowed power; TCR filters part numbers. Temperature
+drift and TCR tracking are not included in the VMID tolerance bounds.
+
+Suggestions are preferred values within ±5% of the target physical resistance.
+Each preview recalculates the actual arm equivalents, VMID, tolerance bounds,
+and selected-part stress with the candidate's working voltage and allowed power
+at the chosen ambient. Candidates exceeding the selected part's nominal limits
+are omitted. Other parts' limits remain visible in the normal circuit results;
+matching one resistor does not guarantee a complete design meets its targets.
+
+Applying a part fixes its actual resistance, tolerance, allowed power, and working
+voltage and switches to forward VMID analysis. This prevents an inverse solver
+from replacing the chosen catalog value with an ideal value. Apply each physical
+part separately; parts can come from different families. Applied MPNs appear in
+the live SVG and **Download resistor BOM** exports the physical part list,
+ratings/conditions, source, and validation status as CSV. Unassigned parts are
+explicitly labeled. Manual changes to a part's resistance, tolerance, power, or
+working voltage remove its MPN association; reset clears all associations.
+
+Generated numbers are **rules validated**. An exact sourced example is
+**manufacturer documented**, with its evidence type recorded in the catalog.
+Neither status means **in stock**; supplier availability remains unverified.
+Catalog JSON updates are independent of calculator HTML and are also consumed
+by Part Number Radar. See the catalog README for schema, sources, scope, and
+maintenance instructions.
+
 ## Stress definitions
 
 | Result | Definition |
@@ -209,6 +244,7 @@ limited by both power and maximum working voltage; see
 
 The calculator uses nominal, positive, finite resistances and an ideal DC source.
 Signed voltages and currents follow the positive-to-negative node directions
-above; power and stress are nonnegative. Temperature derating, transients, and
+above; power and stress are nonnegative. Catalog selections import power derated
+for their selected ambient; manual ratings are used as entered. Transients and
 independent datasheet current limits are not modeled. RL power is reported but
 its rating is not evaluated.

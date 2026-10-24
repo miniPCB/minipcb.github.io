@@ -91,6 +91,7 @@
     }
 
     .component-view.hidden { display: none; }
+    #tnpwView a { color: #9fd8ff; text-underline-offset: 3px; }
 
     .pn-bar {
       padding: 10px 12px;
@@ -1183,6 +1184,10 @@
             <strong>M55342 / D55342</strong>
             <span>MIL-style resistor family with value, tolerance, and slash-code filtering.</span>
           </button>
+          <button type="button" class="splash-choice" data-choice-family="tnpw" data-family-component="resistor">
+            <strong>TNPW e3</strong>
+            <span>Vishay thin-film resistors from the shared parts catalog.</span>
+          </button>
           <button type="button" class="splash-choice" data-choice-family="wsl" data-family-component="resistor">
             <strong>WSL</strong>
             <span>Power Metal Strip low-value current-sense resistor family.</span>
@@ -1304,6 +1309,7 @@
             <p class="group-title">Current Family</p>
             <p class="detail-line"><strong>M55342 / D55342</strong></p>
             <p class="hint">QPL MIL-PRF-55342 qualified thin film surface-mount resistor family (Vishay E/H series).</p>
+            <p id="sharedCatalogStatus" class="hint" role="status">Loading shared resistor catalog…</p>
             <p class="detail-line" style="margin-top:6px;">Built for stringent stability/noise requirements: sputtered wraparound terminations, low voltage coefficient, non-inductive behavior, and established reliability screening.</p>
             <p class="hint">Intended for military/aerospace high-reliability resistor networks and precision analog/digital assemblies.</p>
           </div>
@@ -1320,16 +1326,12 @@
           </div>
           <div class="group"><p class="group-title">Tolerance / Multiplier Letter Code</p><div id="letterFilter" class="pill-cloud"></div></div>
           <div class="group">
-            <p class="group-title">MIL Value/Tolerance Table Used For Check</p>
+            <p class="group-title">Supported Preferred Value/Tolerance Subset</p>
             <table class="mini-table">
               <thead>
                 <tr><th>Tolerance</th><th>Series</th><th>Allowed 3-digit Mantissas</th></tr>
               </thead>
-              <tbody>
-                <tr><td>0.1%, 0.25%, 0.5%, 1%</td><td>E96</td><td>100..976 preferred set</td></tr>
-                <tr><td>2%, 5%</td><td>E24</td><td>100..910 preferred set</td></tr>
-                <tr><td>10%</td><td>E12</td><td>100..820 preferred set</td></tr>
-              </tbody>
+              <tbody id="milPreferredRows"></tbody>
             </table>
           </div>
           <div class="group"><p class="group-title">Failure Rate Code</p><div id="frFilter" class="pill-cloud"></div></div>
@@ -1352,6 +1354,27 @@
     </section>
     </section>
 
+    <section id="tnpwView" class="component-view hidden">
+      <section class="main">
+        <aside class="panel">
+          <h2>TNPW e3</h2>
+          <div class="panel-body">
+            <div class="group"><label for="tnpwResistance">Target resistance (Ω)</label><input id="tnpwResistance" class="text-input" type="number" value="10000" min="0" step="any" /></div>
+            <div class="group"><label for="tnpwPackage">Package</label><select id="tnpwPackage" class="text-input"></select></div>
+            <div class="group"><label for="tnpwTolerance">Tolerance at most (%)</label><select id="tnpwTolerance" class="text-input"></select></div>
+            <div class="group"><label for="tnpwTcr">TCR</label><select id="tnpwTcr" class="text-input"></select></div>
+            <div class="group"><label for="tnpwPackaging">Packaging</label><select id="tnpwPackaging" class="text-input"></select></div>
+            <p class="hint">General operation, P70 at 70 °C. These are supported preferred-value candidates; stock has not been checked. Use the voltage-divider calculator to preview VMID and resistor stress.</p>
+            <p><a href="calculators/voltage_divider.html">Use in the voltage-divider calculator ↗</a></p>
+          </div>
+        </aside>
+        <section class="panel">
+          <h2>TNPW part numbers</h2>
+          <div class="panel-body"><p id="tnpwStatus" class="hint" role="status"></p></div>
+          <div id="tnpwResults" class="results"></div>
+        </section>
+      </section>
+    </section>
     <section id="wslView" class="component-view hidden">
       <section class="pn-bar">
         <div class="pn-label">Selected PN</div>
@@ -2078,90 +2101,31 @@
   </div>
   <div id="s311PrefBackdrop" class="pref-backdrop"></div>
 
+  <script src="js/resistor-parts.js"></script>
   <script>
-    // Datasheet field dictionary: model designator.
-    // Keep these as explicit code keys because they directly map into the PN string.
-    const modelOptions = [
-      { key: "M55342", label: "M55342" },
-      { key: "D55342", label: "D55342" }
-    ];
-    // TCR code map used in the MIL-style PN composition.
-    const tcrOptions = [
-      { key: "E", label: "E (25 ppm/C)" },
-      { key: "H", label: "H (50 ppm/C)" },
-      { key: "K", label: "K (100 ppm/C)" },
-      { key: "L", label: "L (150 ppm/C)" },
-      { key: "M", label: "M (200 ppm/C)" }
-    ];
-    // Case/slash code mapping from reviewed dataset:
-    // 01=0502, 02=0505, 03=1005, 04=1505, 05=2208, 06=0805,
-    // 07=1206, 08=2010, 09=2512, 10=1010, 11=0402, 12=0603.
-    // Power/operating-voltage values below come from the user-provided
-    // M55342/D55342 table in this review thread.
-    const sizeOptions = [
-      { key: "01", footprint: "0502", powerMw: 50, opV: 40, label: "/01 (0502, 50 mW, 40 V op)" },
-      { key: "02", footprint: "0505", powerMw: 125, opV: 40, label: "/02 (0505, 125 mW, 40 V op)" },
-      { key: "03", footprint: "1005", powerMw: 200, opV: 75, label: "/03 (1005, 200 mW, 75 V op)" },
-      { key: "04", footprint: "1505", powerMw: 150, opV: 125, label: "/04 (1505, 150 mW, 125 V op)" },
-      { key: "05", footprint: "2208", powerMw: 225, opV: 175, label: "/05 (2208, 225 mW, 175 V op)" },
-      { key: "06", footprint: "0805", powerMw: 150, opV: 50, label: "/06 (0805, 150 mW, 50 V op)" },
-      { key: "07", footprint: "1206", powerMw: 250, opV: 100, label: "/07 (1206, 250 mW, 100 V op)" },
-      { key: "08", footprint: "2010", powerMw: 800, opV: 150, label: "/08 (2010, 800 mW, 150 V op)" },
-      { key: "09", footprint: "2512", powerMw: 1000, opV: 200, label: "/09 (2512, 1000 mW, 200 V op)" },
-      { key: "10", footprint: "1010", powerMw: 500, opV: 75, label: "/10 (1010, 500 mW, 75 V op)" },
-      { key: "11", footprint: "0402", powerMw: 50, opV: 30, label: "/11 (0402, 50 mW, 30 V op)" },
-      { key: "12", footprint: "0603", powerMw: 100, opV: 50, label: "/12 (0603, 100 mW, 50 V op)" }
-    ];
-    // Datasheet correction rule:
-    // all, and only, D55342 parts use /07 (1206 footprint).
-    const D55342_SIZE_CODE = "07";
-    // Termination code map (kept explicit even though only one option is active).
-    const terminationOptions = [{ key: "B", label: "B" }];
-    // Value-code letter map:
-    // - letter encodes both tolerance class and decimal/multiplier bucket.
-    // - digits come from user-entered 3-digit mantissa pattern.
-    const letterOptions = [
-      { key: "A", tol: "0.1%", mult: 1 }, { key: "B", tol: "0.1%", mult: 1e3 }, { key: "C", tol: "0.1%", mult: 1e6 },
-      { key: "R", tol: "0.25%", mult: 1 }, { key: "U", tol: "0.25%", mult: 1e3 }, { key: "V", tol: "0.25%", mult: 1e6 },
-      { key: "W", tol: "0.5%", mult: 1 }, { key: "Y", tol: "0.5%", mult: 1e3 }, { key: "Z", tol: "0.5%", mult: 1e6 },
-      { key: "D", tol: "1%", mult: 1 }, { key: "E", tol: "1%", mult: 1e3 }, { key: "F", tol: "1%", mult: 1e6 },
-      { key: "G", tol: "2%", mult: 1 }, { key: "H", tol: "2%", mult: 1e3 }, { key: "T", tol: "2%", mult: 1e6 },
-      { key: "J", tol: "5%", mult: 1 }, { key: "K", tol: "5%", mult: 1e3 }, { key: "L", tol: "5%", mult: 1e6 },
-      { key: "M", tol: "10%", mult: 1 }, { key: "N", tol: "10%", mult: 1e3 }, { key: "P", tol: "10%", mult: 1e6 }
-    ].map((x) => ({ ...x, label: x.key + " (" + x.tol + ", x" + formatMultiplier(x.mult) + ")" }));
-
-    // Failure-rate code descriptions (percent per 1000 hours at rated conditions).
-    const failureRateOptions = [
-      { key: "M", label: "M (1.0% / 1000h)" },
-      { key: "P", label: "P (0.1% / 1000h)" },
-      { key: "R", label: "R (0.01% / 1000h)" },
-      { key: "U", label: "U (0.001% / 1000h)" },
-      { key: "S", label: "S (0.005% / 1000h)" },
-      { key: "V", label: "V (0.0001% / 1000h)" },
-      { key: "C", label: "C (non-ER / commercial style)" }
-    ];
-    // Packaging code descriptions as shown in procurement tables.
-    const packagingOptions = [
-      { key: "BS", label: "BS (bulk, 100 pcs)" },
-      { key: "WS", label: "WS (waffle, 100 pcs)" },
-      { key: "W0", label: "W0 (waffle, 1000 pcs)" },
-      { key: "T0", label: "T0 (tape, 100 pcs)" },
-      { key: "T1", label: "T1 (tape, 1000 pcs)" },
-      { key: "T3", label: "T3 (tape, 3000 pcs)" },
-      { key: "T5", label: "T5 (tape, 5000 pcs)" },
-      { key: "TF", label: "TF (tape, full reel)" },
-      { key: "TS", label: "TS (tape, small reel)" },
-      { key: "WI", label: "WI (waffle, isolated)" },
-      { key: "WP", label: "WP (waffle, qty by size)" },
-      { key: "TI", label: "TI (tape, isolated)" },
-      { key: "TP", label: "TP (tape, qty by size)" }
-    ];
-    // Thin-film suffix behavior notes.
-    const thinFilmOptions = [
+    window.radarCatalogReady = (async () => {
+    // Both Radar and the calculators consume these source-checked family definitions.
+    let sharedResistorCatalog = null;
+    let sharedCatalogError = "";
+    try {
+      if (!window.ResistorParts) throw new Error("Shared resistor module unavailable.");
+      sharedResistorCatalog = await ResistorParts.load();
+    } catch (error) { sharedCatalogError = error.message; }
+    const sharedMil = sharedResistorCatalog && ResistorParts.family(sharedResistorCatalog, "vishay-eh-m55342");
+    const modelOptions = [...new Set((sharedMil?.packages || []).map(p => p.model))].map(key => ({ key, label: key }));
+    const tcrOptions = (sharedMil?.tcrCodes || []).map(t => ({ key: t.code, label: `${t.code} (${t.ppm} ppm/C)` }));
+    const sizeOptions = (sharedMil?.packages || []).map(p => ({ key: p.code, footprint: p.case, powerMw: p.powerW[sharedMil.defaults.mode] * 1000, opV: p.workingVoltageV, label: `/${p.code} (${p.case}, ${p.powerW[sharedMil.defaults.mode] * 1000} mW, ${p.workingVoltageV} V op)` }));
+    const D55342_SIZE_CODE = sharedMil?.packages.find(p => p.model === "D55342")?.code || "07";
+    const terminationOptions = (sharedMil?.terminationCodes || []).map(t => ({ key: t.code, label: t.code + " · " + t.label }));
+    const letterOptions = (sharedMil?.toleranceCodes || []).flatMap(t => [...t.letters].map((key, bucket) => ({ key, tol: t.pct + "%", mult: 1000 ** bucket, label: `${key} (${t.pct}%, x${formatMultiplier(1000 ** bucket)})` })));
+    const failureRateOptions = (sharedMil?.failureRates || []).map(f => ({ key: f.code, label: `${f.code} (${f.label})` }));
+    const packagingOptions = (sharedMil?.packaging || []).map(p => ({ key: p.code, label: `${p.code} (${p.label})` }));
+    const thinFilmOptions = sharedMil ? [
       { key: "", label: "(none) (standard construction)" },
-      { key: "V", label: "V (thin film style; constrained by TCR/tolerance rule)" },
-      { key: "M", label: "M (part marking / marking-required option)" }
-    ];
+      { key: sharedMil.suffixRules.thinFilmSuffix, label: `${sharedMil.suffixRules.thinFilmSuffix} (required for ${sharedMil.suffixRules.requiredThinFilmCodes.join("/")} with tolerance ≥ ${sharedMil.suffixRules.minimumTolerancePct}%)` },
+      { key: sharedMil.suffixRules.markingSuffix, label: `${sharedMil.suffixRules.markingSuffix} (part marking; supported cases only)` }
+    ] : [];
+    const sharedMilChecks = new Map();
 
     const PART_REQUEST_API_URL = "https://minipcb-github-io.vercel.app/api/part-request";
     const PART_AVAILABILITY_API_URL = "https://minipcb-github-io.vercel.app/api/part-availability";
@@ -2206,26 +2170,14 @@
       - notes: freeform notes
     */
     const PART_FAMILY_REFERENCE_DB = Object.freeze({
+      tnpw: Object.freeze({
+        label: "TNPW e3",
+        documents: Object.freeze((sharedResistorCatalog?.families.find(f => f.id === "vishay-tnpw-e3")?.sources || []).map(s => Object.freeze({ ...s }))),
+        reliabilityReports: Object.freeze([])
+      }),
       m55342: Object.freeze({
         label: "M55342 / D55342",
-        documents: Object.freeze([
-          Object.freeze({
-            id: "m55342_vishay_60018_eh",
-            category: "datasheet",
-            title: "M55342 Military Thin Film Chip Resistors (EH)",
-            organization: "Vishay",
-            url: "https://www.vishay.com/docs/60018/eh.pdf",
-            notes: "Primary source for code fields, tolerance letters, and packaging suffix patterns."
-          }),
-          Object.freeze({
-            id: "m55342_nasa_npsl_pn",
-            category: "specification",
-            title: "MIL-PRF-55342 Part Number Guide (NPSL)",
-            organization: "NASA NEPP / NPSL",
-            url: "https://nepp.nasa.gov/npsl/Resistors/55342/55342pn.htm",
-            notes: "Slash-sheet style and part-number interpretation reference."
-          })
-        ]),
+        documents: Object.freeze((sharedMil?.sources || []).map(s => Object.freeze({ ...s, id: ({ "vishay-60018": "m55342_vishay_60018_eh", "nasa-npsl": "m55342_nasa_npsl_pn" })[s.id] || s.id }))),
         reliabilityReports: Object.freeze([])
       }),
       wsl: Object.freeze({
@@ -2513,6 +2465,9 @@
     // PART FAMILY CONFIG REGISTRY:
     // This is the browser routing source of truth (splash family key -> view + launch behavior).
     const PART_FAMILY_CONFIG = {
+      tnpw: {
+        label: "TNPW e3 resistor radar", referenceKey: "tnpw", componentType: "resistor", viewNodeKey: "tnpwView", onLaunch: () => renderTnpw()
+      },
       m55342: {
         label: "M55342 / D55342 resistor radar",
         referenceKey: "m55342",
@@ -2664,6 +2619,7 @@
       // NEW FAMILY VIEW NODE INSERTION:
       // Add "<key>View: document.getElementById('<key>View')" here.
       m55342View: document.getElementById("m55342View"),
+      tnpwView: document.getElementById("tnpwView"),
       wslView: document.getElementById("wslView"),
       wscView: document.getElementById("wscView"),
       t502View: document.getElementById("t502View"),
@@ -4885,27 +4841,17 @@
     // - Vishay E/H M/D55342 global PN table (eh.pdf): letter/tolerance/multiplier definition
     const M55342_MIL_SERIES_ERROR = "Value code is out of MIL series for its tolerance letter.";
     const M55342_SIZE_RANGE_ERROR = "Value is outside allowed resistance range for selected slash size.";
-    const MIL_SERIES_E96 = new Set([
-      100,102,105,107,110,113,115,118,121,124,127,130,133,137,140,143,147,150,154,158,162,165,169,174,
-      178,182,187,191,196,200,205,210,215,221,226,232,237,243,249,255,261,267,274,280,287,294,301,309,
-      316,324,332,340,348,357,365,374,383,392,402,412,422,432,442,453,464,475,487,499,511,523,536,549,
-      562,576,590,604,619,634,649,665,681,698,715,732,750,768,787,806,825,845,866,887,909,931,953,976
-    ]);
-    const MIL_SERIES_E24 = new Set([100,110,120,130,150,160,180,200,220,240,270,300,330,360,390,430,470,510,560,620,680,750,820,910]);
-    const MIL_SERIES_E12 = new Set([100,120,150,180,220,270,330,390,470,560,680,820]);
+    const MIL_PREFERRED_BY_TOLERANCE = new Map((sharedMil?.toleranceCodes || []).map(t => [t.pct,
+      new Set([t.series, ...(t.additionalSeries || [])].flatMap(name => sharedResistorCatalog.series[name]))
+    ]));
 
     function selectMilSeriesByTolerance(tolPercent) {
       const t = Number(String(tolPercent || "").replace("%", ""));
-      if (!isFinite(t)) return null;
-      if (t <= 1) return MIL_SERIES_E96;
-      if (t <= 5) return MIL_SERIES_E24;
-      return MIL_SERIES_E12;
+      return MIL_PREFERRED_BY_TOLERANCE.get(t) || null;
     }
 
     const MIL_SERIES_ALL = new Set([
-      ...Array.from(MIL_SERIES_E96),
-      ...Array.from(MIL_SERIES_E24),
-      ...Array.from(MIL_SERIES_E12)
+      ...Array.from(MIL_PREFERRED_BY_TOLERANCE.values()).flatMap(values => Array.from(values))
     ]);
 
     const RESISTANCE_PILL_VALUES = Array.from(MIL_SERIES_ALL)
@@ -4916,22 +4862,10 @@
         raw: formatMantissaPillValue(digits, dotIndex)
       })));
 
-    // Allowed resistance ranges by slash size (ohms), derived from style decade tables.
-    const M55342_SIZE_RESISTANCE_RANGE_OHMS = {
-      "01": { min: 5.6, max: 1e6 },
-      "02": { min: 5.6, max: 1e6 },
-      "03": { min: 5.6, max: 1e6 },
-      "04": { min: 5.6, max: 4.7e6 },
-      "05": { min: 5.6, max: 15e6 },
-      "06": { min: 5.6, max: 1e6 },
-      "07": { min: 5.6, max: 5.62e6 },
-      "08": { min: 5.6, max: 15e6 },
-      "09": { min: 5.6, max: 15e6 },
-      "10": { min: 5.49, max: 5.62e6 },
-      "11": { min: 5.6, max: 1e6 },
-      "12": { min: 5.6, max: 1e6 },
-      "13": { min: 5.6, max: 1e6 }
-    };
+    // Broad style bounds for early UI filtering; the shared engine checks TCR/tolerance-specific limits.
+    const M55342_SIZE_RESISTANCE_RANGE_OHMS = Object.fromEntries((sharedMil?.packages || []).map(p => [p.code, {
+      min: Math.min(...p.limits.map(l => l.minOhms)), max: Math.max(...p.limits.map(l => l.maxOhms))
+    }]));
 
     function isM55342ValueInSizeRange(sizeKey, valueOhms) {
       const range = M55342_SIZE_RESISTANCE_RANGE_OHMS[sizeKey];
@@ -4950,10 +4884,8 @@
       const li = letterInfo(letterKey);
       if (!li) return { label: "All", set: null, tol: "" };
       const set = selectMilSeriesByTolerance(li.tol);
-      if (set === MIL_SERIES_E96) return { label: "E96", set, tol: li.tol };
-      if (set === MIL_SERIES_E24) return { label: "E24", set, tol: li.tol };
-      if (set === MIL_SERIES_E12) return { label: "E12", set, tol: li.tol };
-      return { label: "All", set: null, tol: li.tol };
+      const tolerance = sharedMil?.toleranceCodes.find(t => t.pct === Number(li.tol.replace("%", "")));
+      return tolerance ? { label: [tolerance.series, ...(tolerance.additionalSeries || [])].join("/"), set, tol: li.tol } : { label: "All", set: null, tol: li.tol };
     }
 
     function renderResistancePills(mantissa) {
@@ -5029,15 +4961,18 @@
       if (r.model === "M55342" && r.size === D55342_SIZE_CODE) return false;
       if (!isM55342ValueInSizeRange(r.size, r.valueNominal)) return false;
 
-      if (r.thinFilm === "V") {
-        const t = Number(r.letterTol.replace("%", ""));
-        if (!(r.tcr === "K" || r.tcr === "L" || r.tcr === "M")) return false;
-        if (!(t >= 1)) return false;
+      if (!sharedResistorCatalog) return false;
+      const pkg = sharedMil.packages.find(p => p.code === r.size);
+      const packaging = sharedMil.packaging.find(p => p.code === r.packaging);
+      if (!pkg || !packaging || !pkg.packagingCodes.includes(r.packaging) || (packaging.tcrCodes && !packaging.tcrCodes.includes(r.tcr))) return false;
+      const key = [r.tcr, r.size, r.letterTol, r.valueNominal, r.thinFilm].join("|");
+      if (!sharedMilChecks.has(key)) {
+        try {
+          ResistorParts.evaluate(sharedResistorCatalog, sharedMil.id, { package: r.size, resistanceOhms: r.valueNominal, tolerancePct: Number(r.letterTol.replace("%", "")), tcrCode: r.tcr, suffix: r.thinFilm });
+          sharedMilChecks.set(key, true);
+        } catch (_) { sharedMilChecks.set(key, false); }
       }
-      if (r.thinFilm === "M" && (r.size === "01" || r.size === "02" || r.size === "11" || r.size === "12")) {
-        return false;
-      }
-      return true;
+      return sharedMilChecks.get(key);
     }
 
     function selectedOrAll(key, options, localFilters) {
@@ -8016,11 +7951,55 @@
       }
     }
 
+    function decodeTnpwPn(inputPn) {
+      const normalized = normalizePnInput(inputPn);
+      const fields = [], errors = [];
+      if (!normalized.startsWith("TNPW")) return { ok: false, family: "tnpw", normalizedPn: normalized, fields, errors: ["PN must start with TNPW."] };
+      try {
+        if (!sharedResistorCatalog) throw new Error("Shared resistor catalog unavailable.");
+        const part = ResistorParts.decode(sharedResistorCatalog, "vishay-tnpw-e3", normalized);
+        for (const [key, label, value] of [["package", "Package", part.case], ["resistance", "Resistance (Ω)", part.resistanceOhms], ["tolerance", "Tolerance (%)", part.tolerancePct], ["tcr", "TCR (ppm/°C)", part.tcrPpm], ["packaging", "Packaging", part.packaging], ["power", "General P70 (W)", part.powerW], ["voltage", "Working voltage (V)", part.workingVoltageV], ["validation", "Validation", part.status + "; stock not checked"]]) fields.push(makeDecodeField(key, label, value, value, true));
+      } catch (error) { errors.push(error.message); }
+      return { ok: !errors.length, family: "tnpw", normalizedPn: normalized, fields, errors };
+    }
+
+    function renderTnpw() {
+      const status = document.getElementById("tnpwStatus");
+      const host = document.getElementById("tnpwResults");
+      host.replaceChildren();
+      if (!sharedResistorCatalog) { status.textContent = "Shared resistor catalog unavailable: " + sharedCatalogError; return; }
+      const family = ResistorParts.family(sharedResistorCatalog, "vishay-tnpw-e3");
+      const control = id => document.getElementById(id);
+      const populate = (id, options, fallback) => {
+        const select = control(id), selected = select.value || fallback;
+        select.replaceChildren(...options.map(o => new Option(o.label, o.code)));
+        if (options.some(o => String(o.code) === selected)) select.value = selected;
+      };
+      populate("tnpwPackage", family.packages.map(p => ({ code: p.code, label: p.case })), family.defaults.package);
+      populate("tnpwTolerance", family.toleranceCodes.map(t => ({ code: t.pct, label: `±${t.pct}%` })), String(family.defaults.tolerancePct));
+      populate("tnpwTcr", family.tcrCodes.map(t => ({ code: t.code, label: `±${t.ppm} ppm/°C` })), family.defaults.tcrCode);
+      const pkg = family.packages.find(p => p.code === control("tnpwPackage").value);
+      populate("tnpwPackaging", family.packaging.filter(p => pkg.packagingCodes.includes(p.code) && (!p.tcrCodes || p.tcrCodes.includes(control("tnpwTcr").value))).map(p => ({ code: p.code, label: `${p.code} · ${p.label}` })), family.defaults.packaging);
+      try {
+        const candidates = ResistorParts.suggest(sharedResistorCatalog, family.id, { resistanceOhms: control("tnpwResistance").valueAsNumber, package: pkg.code, maxTolerancePct: Number(control("tnpwTolerance").value), tcrCode: control("tnpwTcr").value, packaging: control("tnpwPackaging").value, limit: 8 });
+        status.textContent = `${candidates.length} candidates within ±5%. Shared catalog ${sharedResistorCatalog.revision}; source revision ${family.sources[0].revision}. Stock not checked.`;
+        for (const part of candidates) {
+          const card = document.createElement("article"); card.className = "group"; card.style.padding = "14px";
+          const number = document.createElement("p"); number.className = "pn-text"; number.style.overflowWrap = "anywhere"; number.textContent = part.mpn;
+          const specs = document.createElement("p"); specs.className = "hint"; specs.textContent = `${part.resistanceOhms} Ω · ±${part.tolerancePct}% · ${part.case} · ${part.tcrPpm} ppm/°C · ${part.powerW} W general P70 · ${part.workingVoltageV} V max · ${part.status}`;
+          const source = document.createElement("a"); source.href = part.sourceUrl; source.textContent = "Manufacturer datasheet ↗"; source.target = "_blank"; source.rel = "noopener";
+          card.append(number, specs, source); host.append(card);
+        }
+      } catch (error) { status.textContent = error.message; }
+    }
+
+    for (const id of ["tnpwResistance", "tnpwPackage", "tnpwTolerance", "tnpwTcr", "tnpwPackaging"]) document.getElementById(id).addEventListener("input", renderTnpw);
+
     function decodeM55342Pn(inputPn) {
       const normalized = normalizePnInput(inputPn);
       const errors = [];
       const fields = [];
-      const hasThinFilm = normalized.endsWith("V") || normalized.endsWith("M");
+      const hasThinFilm = normalized.length === 18 && (normalized.endsWith("V") || normalized.endsWith("M"));
       const core = hasThinFilm ? normalized.slice(0, -1) : normalized;
       // Compact legacy style can omit the 2-character packaging suffix.
       const coreHasPackaging = core.length >= 17;
@@ -8112,6 +8091,10 @@
         makeDecodeField("thin_film", "Thin Film", thinFilm || "(none)", thinFilm === "" ? "(none)" : (thinFilmOpt ? thinFilmOpt.label : "Unknown thin-film code"), thinFilm === "" || !!thinFilmOpt)
       );
 
+      if (sharedResistorCatalog) {
+        try { ResistorParts.decode(sharedResistorCatalog, sharedMil.id, normalized); }
+        catch (error) { errors.push("Shared family catalog: " + error.message); }
+      } else errors.push("Shared resistor catalog unavailable: " + sharedCatalogError);
       return { ok: errors.length === 0, family: "m55342", normalizedPn: normalized, fields, errors };
     }
 
@@ -8930,6 +8913,7 @@
     // - splash data-choice-family key
     // - decode function return `family` value
     const DECODER_REGISTRY = {
+      tnpw: { label: "TNPW e3", normalize: normalizePnInput, decode: decodeTnpwPn },
       m55342: {
         label: "M55342 / D55342",
         normalize: normalizePnInput,
@@ -10310,6 +10294,18 @@
     // Optional programmatic exports for tooling that scrapes this page at runtime.
     window.PART_FAMILY_REFERENCE_DB = PART_FAMILY_REFERENCE_DB;
     window.getFamilyReferenceForConfig = getFamilyReferenceForConfig;
+    window.decodeSharedResistorPn = (familyId, pn) => ResistorParts.decode(sharedResistorCatalog, familyId, pn);
+    document.getElementById("sharedCatalogStatus").textContent = sharedResistorCatalog ? `Shared catalog ${sharedResistorCatalog.revision} · ${sharedMil.sources[0].title}, revision ${sharedMil.sources[0].revision}. Rules validated; supplier stock not checked.` : `Shared resistor catalog unavailable: ${sharedCatalogError}. Other families remain available.`;
+    const preferredRows = document.getElementById("milPreferredRows");
+    for (const tolerance of sharedMil?.toleranceCodes || []) {
+      const row = document.createElement("tr");
+      for (const value of [`±${tolerance.pct}%`, [tolerance.series, ...(tolerance.additionalSeries || [])].join(" / "), "Listed preferred values"]) {
+        const cell = document.createElement("td"); cell.textContent = value; row.append(cell);
+      }
+      preferredRows.append(row);
+    }
+    renderTnpw();
+    })();
   </script>
 </body>
 </html>

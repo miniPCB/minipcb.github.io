@@ -180,6 +180,12 @@
     button:disabled { opacity: 0.45; cursor: default; }
     input:disabled, select:disabled { opacity: 0.55; }
     .comparison-controls { margin-bottom: 14px; }
+    .part-candidates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; margin-top: 16px; }
+    .part-candidate { padding: 14px; border: 0; border-radius: 10px; background: #101823; min-width: 0; }
+    .part-number { font: 0.84rem var(--mono); overflow-wrap: anywhere; color: var(--accent); }
+    .part-candidate p { margin: 8px 0 12px; }
+    .parts-settings { margin-top: 14px; }
+    .parts-settings .rating-fields { margin-top: 12px; }
     fieldset { margin: 2px 0 0; padding: 10px 0 0; border: 0; }
     legend { padding: 0 8px 0 0; }
     details { border: 0; padding-top: 0; }
@@ -544,6 +550,37 @@
             <p class="note">Preset examples span small chip resistors through power resistors: <a href="https://www.bourns.com/docs/technical-documents/technical-library/fixed-resistors/publications/bourns_chip_resistors_arrays_sf.pdf" target="_blank" rel="noopener">Bourns chip resistor guide</a> · <a href="https://www.vishay.com/docs/30201/rhnh.pdf" target="_blank" rel="noopener">Vishay power resistor datasheet</a>. Higher-power datasheet ratings may require a specified heat sink; use the applicable rating for your mounting.</p>
           </div>
         </section>
+        <section id="catalogPanel" class="panel" aria-labelledby="catalogHeading">
+          <h2 id="catalogHeading">Choose real resistor parts</h2>
+          <div class="panel-body">
+            <p id="catalogStatus" class="hint" role="status">Loading shared resistor catalogs…</p>
+            <div id="catalogControls" hidden>
+              <div class="rating-fields">
+                <div class="field"><label for="catalogPart">Physical resistor</label><select id="catalogPart"></select></div>
+                <div class="field"><label for="catalogFamily">Product family</label><select id="catalogFamily"></select></div>
+                <div class="field"><label for="catalogPackage">Package / style</label><select id="catalogPackage"></select></div>
+                <div class="field"><label for="catalogTolerance">Tolerance at most</label><select id="catalogTolerance"></select></div>
+              </div>
+              <details class="parts-settings">
+                <summary>Temperature, TCR, and ordering options</summary>
+                <div class="rating-fields">
+                  <div class="field"><label for="catalogTemperature">Ambient for selection (°C)</label><input id="catalogTemperature" type="number" value="70" step="any" /></div>
+                  <div class="field"><label for="catalogMode">Power operating mode</label><select id="catalogMode"></select></div>
+                  <div class="field"><label for="catalogTcr">TCR</label><select id="catalogTcr"></select></div>
+                  <div class="field"><label for="catalogPackaging">Packaging</label><select id="catalogPackaging"></select></div>
+                  <div id="catalogFailureField" class="field"><label for="catalogFailure">Failure-rate level</label><select id="catalogFailure"></select></div>
+                </div>
+                <p class="hint">Ambient adjusts allowable power; TCR filters part numbers. VMID bounds use resistor tolerances without temperature-induced resistance drift.</p>
+              </details>
+              <p id="catalogSource" class="note"></p>
+              <p id="catalogMatchStatus" class="note" role="status"></p>
+              <div id="catalogCandidates" class="part-candidates"></div>
+              <p id="catalogApplied" class="note"></p>
+              <div class="actions" style="margin-top:14px"><button id="catalogBom" type="button" class="btn" disabled>Download resistor BOM ↓</button></div>
+              <p class="note">Applying a part fixes its catalog resistance, tolerance, and limits, then switches to VMID analysis. Generated candidates are checked against the supported family rules. “Manufacturer documented” identifies a sourced example; supplier stock has not been checked.</p>
+            </div>
+          </div>
+        </section>
         <section class="panel" aria-label="Calculation method">
           <div class="panel-body">
             <details class="method">
@@ -559,7 +596,7 @@
                   <p><code>Pstress = P / Prated × 100%</code></p>
                   <p><code>Vlimit = √(Prated × R)</code>, capped by Vmax when entered.<br /><code>Ilimit = Vlimit / R</code></p>
                   <p><code>Vstress = |V| / Vlimit × 100%</code><br /><code>Istress = |I| / Ilimit × 100%</code></p>
-                  <p>Nominal DC operating point with independent tolerance intervals for VTOP, R1, R2, and RL. Temperature derating, transients, and independent datasheet current limits are not modeled.</p>
+                  <p>Nominal DC operating point with independent tolerance intervals for VTOP, R1, R2, and RL. Catalog parts use the allowed power at their selected ambient; manual ratings are used as entered. Transients and independent datasheet current limits are not modeled.</p>
                 </div>
               </div>
               <p class="note">Inverse solutions use <code>g = VMID / VTOP</code>, <code>Rb = RTOP × g / (1 − g)</code>, <code>RTOP = Rb × (1 − g) / g</code>, and <code>RBOT = Rb / (1 − Rb / RL)</code> when loaded. A finite positive divider needs 0 &lt; g &lt; 1. RL may be open when the target equals the unloaded output.</p>
@@ -574,6 +611,7 @@
     </div>
     <footer>miniPCB · Circuit boards for electronics education · <a href="../index.html">Back to home</a></footer>
   </main>
+  <script src="../js/resistor-parts.js"></script>
   <script>
     "use strict";
 
@@ -948,15 +986,17 @@
           const network = state.networks[arm];
           const summary = network ? `${network.parts.length} ${network.connection} · ${format(state.circuit[arm], "Ω")} eq · ±${percent(state.tolerances[arm])}` : "Single resistor";
           schematicText(group, 0, 37, summary, 12, "#a8bece");
-          for (const [partIndex, part] of state.physical[arm].entries()) {
+          let partY = 62;
+          for (const part of state.physical[arm]) {
             const row = document.createElementNS(svg.namespaceURI, "g");
             row.dataset.schematicPart = part.id;
-            row.setAttribute("transform", `translate(0 ${62 + partIndex * 94})`);
+            row.setAttribute("transform", `translate(0 ${partY})`);
             group.append(row);
             schematicText(row, 0, 0, part.name, 15);
             schematicText(row, columnWidth * 0.35, 0, format(part.resistance, "Ω"), 15, "#eaf6ff", "resistance");
             schematicText(row, 0, 21, `±${percent(part.tolerance)}`, 13, "#a8bece", "tolerance");
-            schematicText(row, columnWidth * 0.35, 21, `Rated ${format(part.rating, "W")}`, 13, "#a8bece", "rating");
+            const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
+            schematicText(row, columnWidth * 0.35, 21, `${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`, 13, "#a8bece", "rating");
             for (const [metricIndex, [key, label]] of [["p", "Pstress"], ["v", "Vstress"], ["i", "Istress"]].entries()) {
               const metricX = metricIndex * columnWidth / 3;
               const value = part.stress[key];
@@ -964,8 +1004,11 @@
               schematicText(row, metricX, 44, label, 11, "#a8bece");
               schematicText(row, metricX, 64, percent(value), 15, colors[stressClass(value)], key);
             }
+            if (part.mpn) { schematicText(row, 0, 86, part.mpn, 11, "#54d2ff", "mpn"); partY += 20; }
+            if (part.catalog) { schematicText(row, 0, 104, `${part.catalog.temperatureC} °C · ${part.catalog.mode} · P70 ${format(part.catalog.ratedPowerW, "W")}`, 11, "#a8bece", "condition"); partY += 18; }
+            partY += 94;
           }
-          bottom = Math.max(bottom, y + 62 + state.physical[arm].length * 94 + 16);
+          bottom = Math.max(bottom, y + partY + 16);
         }
       } else {
         schematicText(partsGroup, detailsX, detailsY + 20, "Enter valid circuit data", 15, "#ffba52");
@@ -976,7 +1019,7 @@
       svg.setAttribute("width", width);
       svg.setAttribute("height", height);
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      const descriptions = state ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, rated ${format(part.rating, "W")}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.`)) : [];
+      const descriptions = state ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.`)) : [];
       byId("liveSchematicDesc").textContent = state ? `${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. RTOP and RBOT are equivalent arms. ${descriptions.join(" ")} Stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.";
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
@@ -988,6 +1031,173 @@
         schematicMarkup = markup;
         byId("schematicDownload").href = schematicUrl;
         if (previousUrl) URL.revokeObjectURL(previousUrl);
+      }
+    }
+
+    let resistorCatalog = null;
+    let catalogDesignVmid = null;
+    const appliedCatalogParts = new Map();
+    const catalogSame = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1e-12, Math.abs(a), Math.abs(b));
+
+    function catalogAssignment(part) {
+      const chosen = appliedCatalogParts.get(part.id);
+      if (chosen && catalogSame(part.resistance, chosen.resistanceOhms) && catalogSame(part.tolerance, chosen.tolerancePct) && catalogSame(part.rating, chosen.powerW) && catalogSame(part.vmax, chosen.workingVoltageV)) return chosen;
+      appliedCatalogParts.delete(part.id);
+      return null;
+    }
+
+    function catalogOptions(id, options, selected) {
+      const select = byId(id);
+      const previous = selected ?? select.value;
+      select.replaceChildren(...options.map(option => new Option(option.label, option.value)));
+      if (options.some(option => String(option.value) === previous)) select.value = previous;
+    }
+
+    function configureCatalogFamily(reset = false) {
+      if (!resistorCatalog) return;
+      const family = ResistorParts.family(resistorCatalog, byId("catalogFamily").value);
+      const defaults = reset ? family.defaults : {};
+      if (reset) {
+        catalogOptions("catalogPackage", family.packages.map(p => ({ value: p.code, label: family.encoding === "mil55342" ? `/${p.code} · ${p.case}${p.code === "06" ? " (RM0705)" : ""}` : p.case })), defaults.package);
+        catalogOptions("catalogTolerance", [{ value: "match", label: "Current tolerance or better" }, ...family.toleranceCodes.map(t => ({ value: t.pct, label: `±${t.pct}%` }))], "match");
+        catalogOptions("catalogTcr", family.tcrCodes.map(t => ({ value: t.code, label: `±${t.ppm} ppm/°C` })), defaults.tcrCode);
+        catalogOptions("catalogFailure", (family.failureRates || []).map(f => ({ value: f.code, label: `${f.code} · ${f.label}` })), defaults.failureRate);
+      }
+      const pkg = family.packages.find(p => p.code === byId("catalogPackage").value);
+      catalogOptions("catalogTcr", family.tcrCodes.filter(t => pkg.limits.some(limit => limit.tcrCodes.includes(t.code))).map(t => ({ value: t.code, label: `±${t.ppm} ppm/°C` })));
+      catalogOptions("catalogMode", family.powerModes.filter(m => pkg.powerW[m.id]).map(m => ({ value: m.id, label: m.label })), defaults.mode);
+      catalogOptions("catalogPackaging", family.packaging.filter(p => pkg.packagingCodes.includes(p.code) && (!p.tcrCodes || p.tcrCodes.includes(byId("catalogTcr").value))).map(p => ({ value: p.code, label: `${p.code} · ${p.label}` })), defaults.packaging);
+      byId("catalogFailureField").hidden = family.encoding !== "mil55342";
+      const source = family.sources[0];
+      const link = document.createElement("a");
+      link.href = source.url; link.textContent = `${source.title} · ${source.revision}`;
+      link.target = "_blank"; link.rel = "noopener";
+      byId("catalogSource").replaceChildren(link, document.createTextNode(` · Checked ${source.verifiedOn}. ${family.scope}`));
+      renderCatalogMatches();
+    }
+
+    function previewCatalogPart(candidate, targetId) {
+      const state = schematicState;
+      const equivalents = {};
+      let targetArm;
+      const physical = {};
+      for (const arm of ARMS) {
+        physical[arm] = state.physical[arm].map(part => {
+          if (part.id !== targetId) return { ...part };
+          targetArm = arm;
+          return { ...part, resistance: candidate.resistanceOhms, tolerance: candidate.tolerancePct, rating: candidate.powerW, vmax: candidate.workingVoltageV };
+        });
+        equivalents[arm] = networkEquivalent(physical[arm], state.networks[arm]?.connection || "series");
+      }
+      if (!targetArm) throw new Error("Select a physical resistor.");
+      const circuit = { ...state.circuit, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance };
+      const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl);
+      const tolerances = { ...state.tolerances, r1: equivalents.r1.tolerance, r2: equivalents.r2.tolerance };
+      const bounds = toleranceAnalysis(circuit, tolerances, Object.fromEntries(ARMS.map(arm => [arm, [equivalents[arm].min, equivalents[arm].max]])));
+      const part = analyzeParts(physical[targetArm], state.networks[targetArm]?.connection || "series", targetArm === "r1" ? result.v1 : result.vout, targetArm === "r1" ? result.i1 : result.i2).find(p => p.id === targetId);
+      const highest = Math.max(part.stress.p, part.stress.v, part.stress.i);
+      if (![result.vout, bounds.min, bounds.max, highest].every(Number.isFinite)) throw new Error("Candidate exceeds the numeric range.");
+      return { result, bounds, highest, targetArm };
+    }
+
+    function renderCatalogMatches() {
+      if (!resistorCatalog) return;
+      const host = byId("catalogCandidates");
+      host.replaceChildren();
+      byId("catalogBom").disabled = true;
+      if (!schematicState) {
+        byId("catalogMatchStatus").textContent = "Enter valid circuit data to find resistor parts.";
+        byId("catalogApplied").textContent = "";
+        return;
+      }
+      const parts = ARMS.flatMap(arm => schematicState.physical[arm]);
+      const ids = parts.map(part => part.id);
+      for (const id of appliedCatalogParts.keys()) if (!ids.includes(id)) appliedCatalogParts.delete(id);
+      const select = byId("catalogPart");
+      if ([...select.options].map(option => option.value).join(",") !== ids.join(",")) catalogOptions("catalogPart", parts.map(part => ({ value: part.id, label: `${part.name} · ${format(part.resistance, "Ω")}` })));
+      else for (const [index, part] of parts.entries()) select.options[index].textContent = `${part.name} · ${format(part.resistance, "Ω")}`;
+      const target = parts.find(part => part.id === select.value) || parts[0];
+      const applied = parts.map(part => ({ part, chosen: catalogAssignment(part) })).filter(row => row.chosen);
+      byId("catalogApplied").textContent = applied.length ? "Applied: " + applied.map(({ part, chosen }) => `${part.name} = ${chosen.mpn} (${chosen.temperatureC} °C, ${format(chosen.powerW, "W")} allowed)`).join(" · ") : "No catalog parts applied yet.";
+      byId("catalogBom").disabled = !applied.length;
+      let count = 0;
+      try {
+        const temperatureC = byId("catalogTemperature").valueAsNumber;
+        if (!Number.isFinite(temperatureC)) throw new Error("Enter a finite ambient temperature for the candidate parts.");
+        const family = ResistorParts.family(resistorCatalog, byId("catalogFamily").value);
+        const mode = family.powerModes.find(m => m.id === byId("catalogMode").value);
+        if (temperatureC < mode.minimumAmbientC || temperatureC >= mode.zeroAtC) throw new Error(`For this mode, ambient must be ${mode.minimumAmbientC} °C to below ${mode.zeroAtC} °C.`);
+        const candidates = ResistorParts.suggest(resistorCatalog, family.id, {
+          resistanceOhms: target.resistance, maxTolerancePct: byId("catalogTolerance").value === "match" ? target.tolerance : Number(byId("catalogTolerance").value),
+          package: byId("catalogPackage").value, tcrCode: byId("catalogTcr").value, packaging: byId("catalogPackaging").value,
+          failureRate: byId("catalogFailure").value, mode: mode.id, temperatureC, limit: 100, maxErrorPct: 5
+        });
+        for (const candidate of candidates) {
+          const preview = previewCatalogPart(candidate, target.id);
+          if (preview.highest > 100 + 1e-9) continue;
+          const card = document.createElement("article"); card.className = "part-candidate"; card.dataset.mpn = candidate.mpn;
+          const number = document.createElement("div"); number.className = "part-number"; number.textContent = candidate.mpn;
+          const specs = document.createElement("p"); specs.className = "hint";
+          const powerCondition = `${format(candidate.powerW, "W")} allowed at ${candidate.temperatureC} °C${catalogSame(candidate.powerW, candidate.ratedPowerW) ? "" : ` (${format(candidate.ratedPowerW, "W")} rated at 70 °C)`}`;
+          specs.textContent = `${format(candidate.resistanceOhms, "Ω")} · ±${candidate.tolerancePct}% · ${candidate.case} · ${candidate.tcrPpm} ppm/°C · ${powerCondition} · ${candidate.workingVoltageV} V max`;
+          const performance = document.createElement("p"); performance.className = "hint";
+          const delta = preview.result.vout - (catalogDesignVmid ?? schematicState.result.vout);
+          const resistanceChange = `${candidate.errorPct < 0 ? "−" : ""}${percent(Math.abs(candidate.errorPct))}`;
+          performance.textContent = `VMID ${format(preview.result.vout, "V")} (Δ ${format(delta, "V")}); bounds ${format(preview.bounds.min, "V")} to ${format(preview.bounds.max, "V")}. Selected-part max stress ${percent(preview.highest)}. Resistance change ${resistanceChange}.`;
+          const evidence = document.createElement("p"); evidence.className = "hint";
+          evidence.textContent = `${candidate.status === "manufacturer-documented" ? "Manufacturer documented" : "Rules validated"} · Stock not checked`;
+          const button = document.createElement("button"); button.type = "button"; button.className = "btn"; button.textContent = `Use for ${target.name}`;
+          button.addEventListener("click", () => applyCatalogPart(candidate, target.id));
+          card.append(number, specs, performance, evidence, button); host.append(card);
+          if (++count === 6) break;
+        }
+        byId("catalogMatchStatus").textContent = count ? `${count} candidates within ±5% of ${target.name}'s resistance, with selected-part nominal stress ≤ 100%. ${mode.condition}` : "No matching preferred values meet the selected package, tolerance, TCR, temperature, and stress limits. Try another package or family.";
+      } catch (error) { byId("catalogMatchStatus").textContent = error.message; }
+    }
+
+    function applyCatalogPart(candidate, targetId) {
+      if (!schematicState) return;
+      const preview = previewCatalogPart(candidate, targetId);
+      if (preview.highest > 100 + 1e-9) return;
+      catalogDesignVmid ??= schematicState.result.vout;
+      const arm = preview.targetArm;
+      const multiple = byId(`${arm}Multiple`).checked;
+      const index = arm === "r1" ? "1" : "2";
+      const resistance = byId(multiple ? `${targetId}R` : arm);
+      const unit = byId(multiple ? `${targetId}Unit` : `${arm}Unit`);
+      resistance.value = candidate.resistanceOhms / Number(unit.value);
+      byId(multiple ? `${targetId}Tol` : `tolR${index}`).value = candidate.tolerancePct;
+      byId(multiple ? `${targetId}Vmax` : `vmax${index}`).value = candidate.workingVoltageV;
+      const power = byId(multiple ? `${targetId}Power` : `p${index}`);
+      if (!multiple && ![...power.options].some(option => Number(option.value) === candidate.powerW)) power.add(new Option(`${format(candidate.powerW, "W")} · catalog limit`, candidate.powerW));
+      power.value = candidate.powerW;
+      appliedCatalogParts.set(targetId, { ...candidate });
+      byId("solveFor").value = "vout";
+      update();
+    }
+
+    function catalogBomCsv() {
+      if (!schematicState) return "";
+      const rows = [["Reference", "Manufacturer", "Family", "Part number", "Resistance (ohm)", "Tolerance (%)", "Rated power at 70C (W)", "Allowed power (W)", "Selection ambient (C)", "Power mode", "Working voltage (V)", "Validation", "Evidence type", "Stock", "Source", "Source revision", "Source checked", "Catalog revision"]];
+      for (const part of ARMS.flatMap(arm => schematicState.physical[arm])) {
+        const chosen = catalogAssignment(part);
+        rows.push([part.name, chosen?.manufacturer, chosen?.familyName, chosen?.mpn, part.resistance, part.tolerance, chosen?.ratedPowerW, part.rating, chosen?.temperatureC, chosen?.mode, part.vmax, chosen?.status || "Unassigned", chosen?.evidence?.kind, "Not checked", chosen?.sourceUrl, chosen?.sourceRevision, chosen?.verifiedOn, chosen?.catalogRevision]);
+      }
+      return rows.map(row => row.map(cell => '"' + String(cell ?? "").replaceAll('"', '""') + '"').join(",")).join("\r\n") + "\r\n";
+    }
+
+    async function initializeCatalog() {
+      try {
+        if (!window.ResistorParts) throw new Error("Shared parts module unavailable.");
+        resistorCatalog = await ResistorParts.load();
+        catalogOptions("catalogFamily", resistorCatalog.families.map(f => ({ value: f.id, label: f.name })), "vishay-tnpw-e3");
+        byId("catalogControls").hidden = false;
+        byId("catalogStatus").textContent = `Shared resistor catalogs · ${resistorCatalog.revision}`;
+        configureCatalogFamily(true);
+        return true;
+      } catch (error) {
+        byId("catalogStatus").textContent = `Part suggestions unavailable: ${error.message} Serve this page over HTTP to load the shared JSON catalogs. Manual circuit analysis remains available.`;
+        return false;
       }
     }
 
@@ -1026,6 +1236,7 @@
       byId("updateStatus").textContent = "Calculation unavailable. Check the circuit data.";
       schematicState = null;
       renderSchematic();
+      renderCatalogMatches();
       for (const input of form.querySelectorAll('[aria-invalid="true"]')) {
         for (let parent = input.parentElement; parent && parent !== form; parent = parent.parentElement) {
           if (parent.tagName === "DETAILS") parent.open = true;
@@ -1033,7 +1244,7 @@
       }
     }
 
-    function stressCard(name, resistance, rating, values, vmax) {
+    function stressCard(name, resistance, rating, values, vmax, catalogPart = null) {
       const highest = Math.max(values.p, values.v, values.i);
       const state = stressClass(highest);
       const status = state === "bad" ? "Rating exceeded" : state === "warn" ? "At limit" : vmax === null ? "Within power limit" : "Within entered limits";
@@ -1045,7 +1256,8 @@
           <div><span>Istress</span><output class="${stressClass(values.i)}">${percent(values.i)}</output></div>
         </div>
         <div class="stress-bar" aria-hidden="true"><span class="${stressClass(values.p)}" style="width:${Math.min(100, values.p)}%"></span></div>
-        <p class="hint">Power utilization of ${format(rating, "W")} rating</p>
+        <p class="hint">Power utilization of ${format(rating, "W")} ${catalogPart ? `allowed at ${catalogPart.temperatureC} °C · ${catalogPart.mode} mode` : "rating"}</p>
+        ${catalogPart ? `<p class="limits">${catalogPart.mpn} · P70 ${format(catalogPart.ratedPowerW, "W")}</p>` : ""}
         <p class="limits">Vlimit ${format(values.vlimit, "V")} · Ilimit ${format(values.ilimit, "A")}<br />${vmax === null ? "Power-derived limits; Vmax not specified." : `Vmax entered: ${format(vmax, "V")}.`}</p>
       </article>`;
     }
@@ -1101,6 +1313,10 @@
           r1: analyzeParts(networks.r1 ? networks.r1.parts : [{ id: "r1", name: "R1", resistance: r1, tolerance: tolerances.r1, rating: Number(byId("p1").value), vmax: vmax1 }], networks.r1 ? networks.r1.connection : "series", result.v1, result.i1),
           r2: analyzeParts(networks.r2 ? networks.r2.parts : [{ id: "r2", name: "R2", resistance: r2, tolerance: tolerances.r2, rating: Number(byId("p2").value), vmax: vmax2 }], networks.r2 ? networks.r2.connection : "series", result.vout, result.i2)
         };
+        for (const part of ARMS.flatMap(arm => physical[arm])) {
+          const chosen = catalogAssignment(part);
+          if (chosen) { part.mpn = chosen.mpn; part.catalog = chosen; }
+        }
         const selected1 = comparisonPart("r1", physical.r1);
         const selected2 = comparisonPart("r2", physical.r2);
         const p1 = selected1.rating;
@@ -1164,7 +1380,7 @@
         byId("operatingRows").innerHTML = rows.map(([name, voltage, current, power]) => `<tr><th scope="row">${name}</th><td>${format(voltage, "V")}</td><td>${format(current, "A")}</td><td>${format(power, "W")}</td></tr>`).join("");
         const loading = rl === null ? 0 : 100 / (1 + rl / result.rth);
         byId("loadSummary").textContent = `Unloaded VMID: ${format(result.unloaded, "V")} · Rth: ${format(result.rth, "Ω")} · ${rl === null ? "Open load (IL = 0 A)." : `RL = ${format(rl, "Ω")}; output magnitude reduced by ${percent(Math.max(0, loading))}.`}`;
-        byId("stressCards").innerHTML = allParts.map(part => stressCard(part.name, part.resistance, part.rating, part.stress, part.vmax)).join("");
+        byId("stressCards").innerHTML = allParts.map(part => stressCard(part.name, part.resistance, part.rating, part.stress, part.vmax, part.catalog)).join("");
         byId("ratingRows").innerHTML = comparisons.map(({ rating, r1: a, r2: b }) => {
           const cells = [a.p, a.v, a.i, b.p, b.v, b.i].map((value, index) => {
             const selected = rating.watts === (index < 3 ? p1 : p2);
@@ -1175,6 +1391,7 @@
         byId("updateStatus").textContent = `Results updated. Output ${format(result.vout, "V")}; input current ${format(result.i1, "A")}.`;
         schematicState = { circuit, tolerances, networks, physical, result };
         renderSchematic();
+        renderCatalogMatches();
       } catch (error) {
         clearResults(error.message);
       }
@@ -1207,12 +1424,24 @@
       update();
     });
     for (const id of ["compareR1", "compareR2"]) byId(id).addEventListener("change", update);
-    form.addEventListener("input", update);
-    form.addEventListener("change", update);
+    form.addEventListener("input", () => { catalogDesignVmid = null; update(); });
+    form.addEventListener("change", () => { catalogDesignVmid = null; update(); });
+    for (const id of ["catalogPart", "catalogTolerance", "catalogTemperature", "catalogMode", "catalogFailure"]) byId(id).addEventListener("input", renderCatalogMatches);
+    byId("catalogFamily").addEventListener("change", () => configureCatalogFamily(true));
+    for (const id of ["catalogPackage", "catalogTcr"]) byId(id).addEventListener("change", () => configureCatalogFamily(false));
+    byId("catalogPackaging").addEventListener("change", renderCatalogMatches);
+    byId("catalogBom").addEventListener("click", () => {
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(new Blob(["\ufeff", catalogBomCsv()], { type: "text/csv;charset=utf-8" }));
+      link.href = url; link.download = "voltage_divider_bom.csv"; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
     window.addEventListener("resize", renderSchematic);
     form.addEventListener("submit", event => { event.preventDefault(); update(); });
     // The reset event precedes the browser restoring each control's default value.
     form.addEventListener("reset", () => setTimeout(() => {
+      appliedCatalogParts.clear();
+      catalogDesignVmid = null;
       for (const arm of ARMS) {
         byId(`${arm}Parts`).replaceChildren();
         nextPart[arm] = 0;
@@ -1221,6 +1450,7 @@
       update();
     }, 0));
     update();
+    window.resistorCatalogReady = initializeCatalog();
   </script>
 </body>
 </html>
