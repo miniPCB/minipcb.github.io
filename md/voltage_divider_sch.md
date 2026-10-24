@@ -6,6 +6,9 @@ This hand-authored reference describes the calculator's ideal DC circuit; it is
 not an EAGLE board export. The downloadable LTspice file contains the default
 values below. Calculator edits do not modify these reference files.
 
+The calculator shows the enlarged circuit reference above the calculation
+choices, with a full-size image link and the LTspice/Markdown downloads beside it.
+
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
 
 [Calculator](../calculators/voltage_divider.html) ·
@@ -174,7 +177,14 @@ use nominal per-part voltages and currents; worst-case stress is not calculated.
 | Vstress | `abs(Vdrop) / Vlimit × 100%` |
 | Istress | `abs(I) / Ilimit × 100%` |
 
-The comparison uses common ratings of 1/16, 1/10, 1/8, 1/4, 1/2, 1, and 2 W.
+The comparison and single-resistor selectors offer 15 presets: 0.03, 0.05,
+0.0625, 0.1, 0.125, 0.25, 0.5, 0.75, 1, 2, 3, 5, 10, 25, and 50 W.
+Per-part custom ratings are also supported. For manufacturer examples, see the
+[Bourns chip resistor guide](https://www.bourns.com/docs/technical-documents/technical-library/fixed-resistors/publications/bourns_chip_resistors_arrays_sf.pdf)
+and [Vishay RH/NH power resistor datasheet](https://www.vishay.com/docs/30201/rhnh.pdf).
+Use the actual component's rating for its temperature and mounting; some
+high-power ratings require a specified heat sink.
+
 At the defaults, each 1/4 W resistor has Pstress = 1.44%, Vstress = 12%, and
 Istress = 12% when no maximum working voltage is entered.
 

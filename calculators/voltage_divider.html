@@ -112,6 +112,13 @@
     .panel-body { padding: 16px; }
     figure { margin: 0; }
     .schematic { display: block; width: 100%; height: auto; background: #101823; }
+    .circuit-reference { margin: 20px 0 24px; }
+    .circuit-reference h2 { font-size: 1.15rem; }
+    .circuit-reference-body { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: center; padding: 0 20px 20px; }
+    .circuit-reference .schematic { max-height: 260px; object-fit: contain; border-radius: 10px; }
+    .circuit-reference figcaption { padding: 0; font-size: 0.9rem; line-height: 1.65; }
+    .circuit-reference figcaption p { margin: 0 0 16px; }
+    .circuit-reference .resource-links { padding: 0; }
     figcaption { padding: 0 16px 14px; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
     .resource-links { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
     .btn {
@@ -227,6 +234,7 @@
     @media (max-width: 780px) {
       .page { padding: 14px 12px 24px; }
       .layout { grid-template-columns: 1fr; }
+      .circuit-reference-body { grid-template-columns: 1fr; gap: 16px; padding: 0 16px 16px; }
       .header { padding: 17px; align-items: flex-start; flex-wrap: wrap; }
       h1 { font-size: 1.2rem; }
       .mode-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -259,6 +267,22 @@
       <span class="live-tag">DC analysis · Online calculator</span>
     </header>
     <noscript><p>Enable JavaScript to calculate circuit results and resistor stress. The schematic and reference files are available below.</p></noscript>
+    <section id="circuitReference" class="panel circuit-reference" aria-labelledby="schematicHeading">
+      <h2 id="schematicHeading">Circuit reference</h2>
+      <figure class="circuit-reference-body">
+        <a href="../images/voltage_divider.svg" target="_blank" rel="noopener" aria-label="Open full-size voltage divider schematic">
+          <img class="schematic" src="../images/voltage_divider.svg" width="640" height="370" alt="DC source Vin supplies R1 in series with R2 to ground. Vout is the junction of R1 and R2. Optional load RL connects from Vout to ground, in parallel with R2." />
+        </a>
+        <figcaption>
+          <p>R1/RTOP and R2/RBOT are the equivalent upper and lower arms. Each arm can contain multiple resistors. Optional RL loads the output in parallel with RBOT.</p>
+          <div class="resource-links">
+            <a class="btn btn-accent" href="../images/voltage_divider.svg" target="_blank" rel="noopener">Full-size schematic ↗</a>
+            <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
+            <a class="btn" href="../md/voltage_divider_sch.md">Schematic Markdown ↗</a>
+          </div>
+        </figcaption>
+      </figure>
+    </section>
     <section class="mode-picker" aria-labelledby="modePickerHeading">
       <h2 id="modePickerHeading">1. What would you like to calculate?</h2>
       <div class="mode-choices" role="group" aria-label="Calculation to perform">
@@ -409,19 +433,6 @@
             <p class="hint">Results update as you edit. Reference downloads contain the default 12 V, 10 kΩ / 10 kΩ circuit.</p>
           </form>
         </section>
-        <section class="panel" aria-labelledby="schematicHeading">
-          <h2 id="schematicHeading">Circuit reference</h2>
-          <figure>
-            <a href="../images/voltage_divider.svg" target="_blank" rel="noopener" aria-label="Open full-size voltage divider schematic">
-              <img class="schematic" src="../images/voltage_divider.svg" width="640" height="370" alt="DC source Vin supplies R1 in series with R2 to ground. Vout is the junction of R1 and R2. Optional load RL connects from Vout to ground, in parallel with R2." />
-            </a>
-            <figcaption>R1/RTOP and R2/RBOT are the equivalent upper and lower arms. Each arm can contain multiple resistors. Optional RL loads the output in parallel with RBOT.</figcaption>
-          </figure>
-          <div class="resource-links">
-            <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
-            <a class="btn" href="../md/voltage_divider_sch.md">Schematic Markdown ↗</a>
-          </div>
-        </section>
       </div>
       <div class="column">
         <p id="inputError" class="error" role="alert" hidden></p>
@@ -488,6 +499,7 @@
               </table>
             </div>
             <p class="note">Power ratings do not specify package size or working voltage. Use a rating suitable for the actual ambient temperature and mounting. RL power is shown above; its rating is not checked here.</p>
+            <p class="note">Preset examples span small chip resistors through power resistors: <a href="https://www.bourns.com/docs/technical-documents/technical-library/fixed-resistors/publications/bourns_chip_resistors_arrays_sf.pdf" target="_blank" rel="noopener">Bourns chip resistor guide</a> · <a href="https://www.vishay.com/docs/30201/rhnh.pdf" target="_blank" rel="noopener">Vishay power resistor datasheet</a>. Higher-power datasheet ratings may require a specified heat sink; use the applicable rating for your mounting.</p>
           </div>
         </section>
         <section class="panel" aria-label="Calculation method">
@@ -524,13 +536,21 @@
     "use strict";
 
     const RATINGS = [
+      { watts: 0.03, label: "30 mW" },
+      { watts: 0.05, label: "1/20 W" },
       { watts: 0.0625, label: "1/16 W" },
       { watts: 0.1, label: "1/10 W" },
       { watts: 0.125, label: "1/8 W" },
       { watts: 0.25, label: "1/4 W" },
       { watts: 0.5, label: "1/2 W" },
+      { watts: 0.75, label: "3/4 W" },
       { watts: 1, label: "1 W" },
-      { watts: 2, label: "2 W" }
+      { watts: 2, label: "2 W" },
+      { watts: 3, label: "3 W" },
+      { watts: 5, label: "5 W" },
+      { watts: 10, label: "10 W" },
+      { watts: 25, label: "25 W" },
+      { watts: 50, label: "50 W" }
     ];
     const form = document.getElementById("dividerForm");
     const byId = id => document.getElementById(id);

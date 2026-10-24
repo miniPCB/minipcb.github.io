@@ -40,7 +40,7 @@
         assert(stressOutputs().join(",") === "1.44,12,12,1.44,12,12", "Original default resistor stresses");
         assert(text("voutMin") === "5.94 V" && text("voutMax") === "6.06 V" && text("voutError") === "1%", "Default ±1% resistor output bounds");
         assert(get("targetVout").readOnly && !get("vin").readOnly, "VOUT mode marks the calculated field");
-        assert(get("ratingRows").rows.length === 7 && get("ratingRows").querySelectorAll(".chosen").length === 6, "Seven common ratings retain selected highlights");
+        assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 6, "Fifteen common ratings retain selected highlights");
 
         set("rl", "100");
         valid("Loaded forward solution");
@@ -155,6 +155,8 @@
 
         await reset(); set("p1", "0.0625"); set("p2", "2");
         assert(stressOutputs().join(",") === "5.76,24,24,0.18,4.24,4.24", "Independent power rating regressions");
+        await reset(); set("p1", "0.03"); set("p2", "50"); valid("Smallest and largest power presets");
+        assert(stressOutputs().join(",") === "12,34.64,34.64,0.0072,0.85,0.85", "30 mW and 50 W presets use their actual ratings");
         await reset(); set("vmax1", "3");
         assert(stressOutputs().slice(0, 3).join(",") === "1.44,200,200", "Working voltage stress cap retained");
         await reset(); set("vin", "100");
@@ -211,7 +213,7 @@
         set(`${ids("r1")[0]}Vmax`, "1");
         assert(stressOutputs().slice(0, 3).join(",") === "0.72,150,150", "Per-part working voltage caps stress");
         choosePart("r1", ids("r1")[3]);
-        assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 8, "Comparison selector includes custom individual power rating");
+        assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 16, "Comparison selector includes custom individual power rating");
         assert(get("ratingRows").querySelectorAll(".chosen").length === 6, "Custom and standard chosen ratings are highlighted");
 
         await reset(); enableParts("r1"); split("r1");
@@ -313,6 +315,7 @@
         await reset();
         assert(!get("r1Multiple").checked && !get("r2Multiple").checked && !ids("r1").length && !ids("r2").length && get("stressCards").children.length === 2 && text("vout") === "6 V", "Reset removes networks and restores the original calculator");
         assert(d.querySelector("img.schematic").complete && d.querySelector("img.schematic").naturalWidth === 640, "Schematic image loads");
+        assert(!!(get("circuitReference").compareDocumentPosition(d.querySelector(".mode-picker")) & w.Node.DOCUMENT_POSITION_FOLLOWING), "Circuit reference appears before the calculation choices");
         for (const link of [...d.querySelectorAll("a[href]")].filter(a => a.origin === location.origin)) {
           assert((await fetch(link.href)).ok, `Local resource loads: ${link.getAttribute("href")}`);
         }
