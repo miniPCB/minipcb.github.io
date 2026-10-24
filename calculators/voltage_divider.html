@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Analyze a loaded or unloaded DC voltage divider and compare resistor power, voltage, and current stress across common power ratings." />
+  <title>Voltage Divider Calculator | miniPCB</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #081016;
+      --panel: #13202c;
+      --text: #eaf6ff;
+      --muted: #a8bece;
+      --border: #2f495d;
+      --shadow: 0 14px 34px rgba(1, 10, 17, 0.48);
+      --mono: "Consolas", "Courier New", monospace;
+      --sans: "Bahnschrift", "Trebuchet MS", "Segoe UI", sans-serif;
+      --accent: #54d2ff;
+      --accent-2: #ffba52;
+      --ok: #6ee7ac;
+      --bad: #ff8e8e;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 5%, rgba(84, 210, 255, 0.2) 0%, transparent 46%),
+        radial-gradient(circle at 84% 94%, rgba(255, 186, 82, 0.2) 0%, transparent 42%),
+        linear-gradient(150deg, #061018 0%, #0d1a24 45%, #111f2a 100%);
+    }
+    a { color: #9fd8ff; text-underline-offset: 3px; }
+    button, input, select { font: inherit; }
+    button, a, input, select, summary { -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .tool-path-nav {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13, 24, 33, 0.96);
+      font-size: 0.8rem;
+    }
+    .tool-path-nav a { text-decoration: none; }
+    .tool-path-nav span { color: var(--muted); }
+    .tool-path-nav [aria-current] { color: var(--text); }
+    .page { width: min(1540px, 100%); margin: 0 auto; padding: 18px 24px 30px; }
+    .header, .panel {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .header {
+      padding: 20px 22px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      background: linear-gradient(120deg, rgba(30, 54, 73, 0.95), rgba(19, 32, 44, 0.95));
+    }
+    h1 { margin: 0; font-size: 1.4rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    .subtitle { margin: 8px 0 0; color: #d3e6f4; font-size: 0.92rem; line-height: 1.5; }
+    .live-tag, .badge {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 0.74rem;
+      white-space: nowrap;
+    }
+    .live-tag { color: var(--accent); background: rgba(84, 210, 255, 0.08); }
+    .layout { display: grid; grid-template-columns: minmax(310px, 370px) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .column { display: grid; gap: 16px; min-width: 0; }
+    .panel { min-width: 0; overflow: hidden; }
+    .panel h2 {
+      margin: 0;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #1a2230;
+      font-size: 1rem;
+    }
+    .panel-body { padding: 16px; }
+    figure { margin: 0; }
+    .schematic { display: block; width: 100%; height: auto; background: #101823; }
+    figcaption { padding: 0 16px 14px; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+    .resource-links { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 7px 11px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #1e2837;
+      color: var(--text);
+      font-size: 0.8rem;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn:hover { background: #293b50; border-color: #5b7e99; }
+    .btn-accent { border-color: #4289a6; background: rgba(84, 210, 255, 0.16); }
+    .form-grid { display: grid; gap: 14px; }
+    label, legend { color: #d3e6f4; font-size: 0.82rem; }
+    .field { display: grid; align-content: start; gap: 6px; min-width: 0; }
+    .input-unit { display: flex; gap: 6px; min-width: 0; align-items: center; }
+    input, select {
+      min-width: 0;
+      min-height: 38px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #1e2837;
+      color: var(--text);
+      padding: 7px 9px;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+    }
+    input { width: 100%; }
+    .input-unit input { flex: 1; }
+    .input-unit select { width: 76px; flex: 0 0 76px; }
+    .unit { min-width: 22px; color: var(--muted); font: 0.85rem var(--mono); }
+    input[aria-invalid="true"] { border-color: var(--bad); background: rgba(255, 87, 87, 0.1); }
+    .hint { margin: 0; color: var(--muted); font-size: 0.76rem; line-height: 1.5; }
+    .rating-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    fieldset { margin: 2px 0 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--border); }
+    legend { padding: 0 8px 0 0; }
+    details { border-top: 1px solid var(--border); padding-top: 12px; }
+    summary { cursor: pointer; font-size: 0.82rem; color: #c6e3ff; line-height: 1.5; }
+    details .rating-fields { margin: 12px 0 8px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .error { margin: 0 0 16px; padding: 12px 16px; border: 1px solid var(--bad); border-radius: 10px; color: var(--bad); background: #291e29; line-height: 1.5; }
+    [hidden] { display: none !important; }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .metric { padding: 13px 12px; border: 1px solid var(--border); border-radius: 10px; background: #101823; }
+    .metric-label { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 9px; }
+    .metric output { font: 700 1.18rem var(--mono); color: var(--accent); overflow-wrap: anywhere; }
+    .metric small { display: block; margin-top: 6px; color: var(--muted); font-size: 0.7rem; }
+    .metric:nth-child(3) output { color: var(--accent-2); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    caption { text-align: left; color: var(--muted); font-size: 0.76rem; padding-bottom: 10px; line-height: 1.5; }
+    th, td { border: 1px solid var(--border); padding: 9px 10px; text-align: right; white-space: nowrap; }
+    th { color: #d3e6f4; background: #1a2638; font-weight: 500; }
+    td { font-family: var(--mono); background: #101823; }
+    th:first-child, td:first-child { text-align: left; }
+    .stress-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stress-card { border: 1px solid var(--border); border-radius: 10px; padding: 13px; background: #101823; min-width: 0; }
+    .stress-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    h3 { margin: 0; font-size: 0.95rem; }
+    .stress-values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0 12px; }
+    .stress-values span { color: var(--muted); display: block; font-size: 0.72rem; margin-bottom: 6px; }
+    .stress-values output { font: 700 1rem var(--mono); overflow-wrap: anywhere; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--accent-2); }
+    .bad { color: var(--bad); }
+    .stress-bar { height: 5px; border-radius: 99px; background: #29394a; overflow: hidden; margin-bottom: 10px; }
+    .stress-bar span { display: block; height: 100%; background: currentColor; width: 0; }
+    .limits { margin-top: 8px; font-size: 0.73rem; line-height: 1.5; color: var(--muted); font-family: var(--mono); }
+    .note { margin: 14px 0 0; color: var(--muted); font-size: 0.78rem; line-height: 1.6; }
+    .rating-table { font-size: 0.76rem; }
+    .rating-table thead tr:first-child th { text-align: center; }
+    .rating-table .chosen { background: rgba(84, 210, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(84, 210, 255, 0.3); }
+    .rating-table .chosen-label { color: var(--accent); font-size: 0.66rem; }
+    .formula-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; }
+    .formula-grid p { margin: 0 0 8px; color: var(--muted); font-size: 0.8rem; line-height: 1.6; }
+    .formula-grid code { font-family: var(--mono); color: #d3e6f4; overflow-wrap: anywhere; }
+    .method { border-top: 0; padding-top: 0; }
+    footer { padding-top: 18px; color: var(--muted); font-size: 0.75rem; line-height: 1.5; }
+    noscript p { margin: 16px 0; color: var(--accent-2); }
+    @media (max-width: 1120px) {
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stress-cards { grid-template-columns: 1fr; }
+      .formula-grid { grid-template-columns: 1fr; gap: 8px; }
+    }
+    @media (max-width: 780px) {
+      .page { padding: 14px 12px 24px; }
+      .layout { grid-template-columns: 1fr; }
+      .header { padding: 17px; align-items: flex-start; }
+      h1 { font-size: 1.2rem; }
+      .live-tag { display: none; }
+      .tool-path-nav { padding: 10px 12px; }
+    }
+    @media print {
+      body { background: #fff; color: #111; }
+      .tool-path-nav, .actions, footer { display: none; }
+      .layout { display: block; }
+      .column { margin-bottom: 16px; }
+      .panel, .header { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="tool-path-nav" aria-label="Tool navigation">
+    <a href="../index.html">miniPCB Home</a><span aria-hidden="true">/</span>
+    <a href="../part_number_radar.html">Part Number Radar</a><span aria-hidden="true">/</span>
+    <span aria-current="page">Voltage Divider</span>
+  </nav>
+  <main class="page">
+    <header class="header">
+      <div>
+        <h1>Voltage Divider Calculator</h1>
+        <p class="subtitle">Explore the operating point. Check resistor power, voltage, and current stress.</p>
+      </div>
+      <span class="live-tag">DC analysis · Live updates</span>
+    </header>
+    <noscript><p>Enable JavaScript to calculate circuit results and resistor stress. The schematic and reference files are available below.</p></noscript>
+    <div class="layout">
+      <div class="column">
+        <section class="panel" aria-labelledby="schematicHeading">
+          <h2 id="schematicHeading">Circuit reference</h2>
+          <figure>
+            <a href="../images/voltage_divider.svg" target="_blank" rel="noopener" aria-label="Open full-size voltage divider schematic">
+              <img class="schematic" src="../images/voltage_divider.svg" width="640" height="370" alt="DC source Vin supplies R1 in series with R2 to ground. Vout is the junction of R1 and R2. Optional load RL connects from Vout to ground, in parallel with R2." />
+            </a>
+            <figcaption>R1 is the upper resistor; R2 is the lower resistor. Optional RL loads the output in parallel with R2.</figcaption>
+          </figure>
+          <div class="resource-links">
+            <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
+            <a class="btn" href="../md/voltage_divider_sch.md">Schematic Markdown ↗</a>
+          </div>
+        </section>
+        <section class="panel" aria-labelledby="inputHeading">
+          <h2 id="inputHeading">Circuit data</h2>
+          <form id="dividerForm" class="panel-body form-grid" novalidate>
+            <div class="field">
+              <label for="vin">Input voltage · Vin</label>
+              <div class="input-unit"><input id="vin" name="vin" type="number" step="any" value="12" required /><span class="unit">V</span></div>
+            </div>
+            <div class="field">
+              <label for="r1">Upper resistor · R1</label>
+              <div class="input-unit">
+                <input id="r1" name="r1" type="number" min="0" step="any" value="10" required />
+                <select id="r1Unit" name="r1Unit" aria-label="R1 resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="r2">Lower resistor · R2</label>
+              <div class="input-unit">
+                <input id="r2" name="r2" type="number" min="0" step="any" value="10" required />
+                <select id="r2Unit" name="r2Unit" aria-label="R2 resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="rl">Output load · RL <span class="hint">(optional)</span></label>
+              <div class="input-unit">
+                <input id="rl" name="rl" type="number" min="0" step="any" placeholder="Open circuit" aria-describedby="loadHelp" />
+                <select id="rlUnit" name="rlUnit" aria-label="Load resistance unit"><option value="1">Ω</option><option value="1000" selected>kΩ</option><option value="1000000">MΩ</option></select>
+              </div>
+              <p id="loadHelp" class="hint">Leave blank for an unloaded divider. Resistances must be greater than zero.</p>
+            </div>
+            <fieldset>
+              <legend>Resistor power ratings</legend>
+              <div class="rating-fields">
+                <div class="field"><label for="p1">R1 rating</label><select id="p1" name="p1"></select></div>
+                <div class="field"><label for="p2">R2 rating</label><select id="p2" name="p2"></select></div>
+              </div>
+            </fieldset>
+            <details>
+              <summary>Maximum working voltages (optional)</summary>
+              <div class="rating-fields">
+                <div class="field"><label for="vmax1">R1 · Vmax (V)</label><input id="vmax1" name="vmax1" type="number" min="0" step="any" placeholder="Power-based" /></div>
+                <div class="field"><label for="vmax2">R2 · Vmax (V)</label><input id="vmax2" name="vmax2" type="number" min="0" step="any" placeholder="Power-based" /></div>
+              </div>
+              <p class="hint">Enter limits from the resistor datasheets. If blank, voltage and current limits are derived from power only.</p>
+            </details>
+            <div class="actions">
+              <button class="btn btn-accent" type="submit">Calculate</button>
+              <button class="btn" type="reset">Reset defaults</button>
+            </div>
+            <p class="hint">Results update as you edit. Reference downloads contain the default 12 V, 10 kΩ / 10 kΩ circuit.</p>
+          </form>
+        </section>
+      </div>
+      <div class="column">
+        <p id="inputError" class="error" role="alert" hidden></p>
+        <section class="panel" aria-labelledby="operatingHeading">
+          <h2 id="operatingHeading">Operating point</h2>
+          <div class="panel-body">
+            <div class="metrics">
+              <div class="metric"><span class="metric-label">Output voltage</span><output id="vout" for="vin r1 r2 rl">—</output><small>Vout relative to ground</small></div>
+              <div class="metric"><span class="metric-label">Input current</span><output id="iin" for="vin r1 r2 rl">—</output><small>Through upper resistor R1</small></div>
+              <div class="metric"><span class="metric-label">Total power</span><output id="ptotal" for="vin r1 r2 rl">—</output><small>R1 + R2 + load dissipation</small></div>
+              <div class="metric"><span class="metric-label">Divider ratio</span><output id="ratio" for="r1 r2 rl">—</output><small>Vout / Vin · loaded gain</small></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <caption id="operatingCaption">Signed voltage drops and currents follow the schematic from top to bottom.</caption>
+                <thead><tr><th scope="col">Element</th><th scope="col">Voltage drop</th><th scope="col">Current</th><th scope="col">Power</th></tr></thead>
+                <tbody id="operatingRows"><tr><td colspan="4">—</td></tr></tbody>
+              </table>
+            </div>
+            <p id="loadSummary" class="note">—</p>
+          </div>
+        </section>
+        <section class="panel" aria-labelledby="stressHeading">
+          <h2 id="stressHeading">Resistor stress · selected ratings</h2>
+          <div class="panel-body">
+            <div id="stressCards" class="stress-cards"></div>
+            <p class="note">Stress is actual / limit × 100%. Values above 100% exceed the entered limit. With no Vmax entered, Vstress and Istress are power-equivalent checks; both equal √(Pstress / 100) × 100%.</p>
+          </div>
+        </section>
+        <section class="panel" aria-labelledby="ratingsHeading">
+          <h2 id="ratingsHeading">Compare typical resistor power ratings</h2>
+          <div class="panel-body">
+            <div class="table-wrap" tabindex="0" role="region" aria-label="Power rating stress comparison, scroll horizontally on small screens">
+              <table class="rating-table">
+                <caption>Same circuit, different ratings. Highlighted cells match each resistor's selected rating. Red values exceed 100%.</caption>
+                <thead>
+                  <tr><th scope="col" rowspan="2">Power rating</th><th scope="colgroup" colspan="3">R1 · upper resistor</th><th scope="colgroup" colspan="3">R2 · lower resistor</th></tr>
+                  <tr><th scope="col">Pstress</th><th scope="col">Vstress</th><th scope="col">Istress</th><th scope="col">Pstress</th><th scope="col">Vstress</th><th scope="col">Istress</th></tr>
+                </thead>
+                <tbody id="ratingRows"><tr><td colspan="7">—</td></tr></tbody>
+              </table>
+            </div>
+            <p class="note">Power ratings do not specify package size or working voltage. Use a rating suitable for the actual ambient temperature and mounting. RL power is shown above; its rating is not checked here.</p>
+          </div>
+        </section>
+        <section class="panel" aria-label="Calculation method">
+          <div class="panel-body">
+            <details class="method">
+              <summary>Equations, stress definitions, and assumptions</summary>
+              <div class="formula-grid">
+                <div>
+                  <p><code>Rb = R2 || RL</code> (or R2 with no load)</p>
+                  <p><code>Vout = Vin × Rb / (R1 + Rb)</code></p>
+                  <p><code>I1 = (Vin − Vout) / R1</code><br /><code>I2 = Vout / R2</code><br /><code>IL = Vout / RL</code> (0 with no load)</p>
+                  <p><code>P = I² × R</code><br /><code>Rth = R1 || R2</code> (load excluded)</p>
+                </div>
+                <div>
+                  <p><code>Pstress = P / Prated × 100%</code></p>
+                  <p><code>Vlimit = √(Prated × R)</code>, capped by Vmax when entered.<br /><code>Ilimit = Vlimit / R</code></p>
+                  <p><code>Vstress = |V| / Vlimit × 100%</code><br /><code>Istress = |I| / Ilimit × 100%</code></p>
+                  <p>Ideal resistors, an ideal DC source, and nominal resistance values. Temperature derating, tolerance, transients, and any independent datasheet current limit are not modeled.</p>
+                </div>
+              </div>
+              <p class="note">Working voltage follows the lower of the power-derived voltage and the component's maximum working voltage. See <a href="https://www.vishay.com/docs/49873/49873_sg2113.pdf" target="_blank" rel="noopener">Vishay's resistor technical guide</a>.</p>
+              <p class="note" id="updateStatus" role="status" aria-live="polite">Ready to calculate.</p>
+            </details>
+          </div>
+        </section>
+      </div>
+    </div>
+    <footer>miniPCB · Circuit boards for electronics education · <a href="../index.html">Back to home</a></footer>
+  </main>
+  <script>
+    "use strict";
+
+    const RATINGS = [
+      { watts: 0.0625, label: "1/16 W" },
+      { watts: 0.1, label: "1/10 W" },
+      { watts: 0.125, label: "1/8 W" },
+      { watts: 0.25, label: "1/4 W" },
+      { watts: 0.5, label: "1/2 W" },
+      { watts: 1, label: "1 W" },
+      { watts: 2, label: "2 W" }
+    ];
+    const form = document.getElementById("dividerForm");
+    const byId = id => document.getElementById(id);
+
+    for (const id of ["p1", "p2"]) {
+      for (const rating of RATINGS) {
+        const option = new Option(`${rating.label} (${rating.watts} W)`, rating.watts);
+        option.defaultSelected = rating.watts === 0.25;
+        byId(id).add(option);
+      }
+    }
+
+    function format(value, unit) {
+      if (value === 0) return `0 ${unit}`;
+      const magnitude = Math.abs(value);
+      const scales = [[1e9, "G"], [1e6, "M"], [1e3, "k"], [1, ""], [1e-3, "m"], [1e-6, "µ"], [1e-9, "n"], [1e-12, "p"]];
+      const scale = scales.find(([factor]) => magnitude >= factor);
+      if (!scale) return `${value.toExponential(3)} ${unit}`;
+      return `${Number((value / scale[0]).toPrecision(4))} ${scale[1]}${unit}`;
+    }
+
+    function percent(value) {
+      return value !== 0 && (value < 0.01 || value >= 1e6) ? `${value.toExponential(2)}%` : `${Number(value.toFixed(2))}%`;
+    }
+
+    function stressClass(value) {
+      return value > 100 + 1e-9 ? "bad" : value >= 100 - 1e-9 ? "warn" : "ok";
+    }
+
+    function parallel(a, b) {
+      const smaller = Math.min(a, b);
+      return smaller / (1 + smaller / Math.max(a, b));
+    }
+
+    function analyze(vin, r1, r2, rl) {
+      const bottom = rl === null ? r2 : parallel(r2, rl);
+      const ratio = 1 / (1 + r1 / bottom);
+      const vout = vin * ratio;
+      // Calculate the R1 drop independently to avoid cancellation near unity gain.
+      const v1 = vin / (1 + bottom / r1);
+      const i1 = v1 / r1;
+      const i2 = vout / r2;
+      const il = rl === null ? 0 : vout / rl;
+      const p1 = v1 * i1;
+      const p2 = vout * i2;
+      const pl = vout * il;
+      return { ratio, vout, v1, i1, i2, il, p1, p2, pl, total: p1 + p2 + pl, rth: parallel(r1, r2), unloaded: vin / (1 + r1 / r2), bottom };
+    }
+
+    function stress(resistance, voltage, current, power, rating, vmax) {
+      const vlimit = Math.min(Math.sqrt(rating) * Math.sqrt(resistance), vmax === null ? Infinity : vmax);
+      const ilimit = vlimit / resistance;
+      return { p: power / rating * 100, v: Math.abs(voltage) / vlimit * 100, i: Math.abs(current) / ilimit * 100, vlimit, ilimit };
+    }
+
+    function readInput(id, label, optional = false, positive = false, multiplier = 1) {
+      const input = byId(id);
+      const empty = input.value.trim() === "" && !input.validity.badInput;
+      const value = input.valueAsNumber * multiplier;
+      if (empty && optional) return null;
+      if (empty || !Number.isFinite(value) || (positive && value <= 0)) {
+        input.setAttribute("aria-invalid", "true");
+        throw new Error(`${label}: enter ${positive ? "a number greater than zero" : "a finite number"}.`);
+      }
+      return value;
+    }
+
+    function clearResults(message) {
+      for (const id of ["vout", "iin", "ptotal", "ratio"]) byId(id).textContent = "—";
+      byId("operatingRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate.</td></tr>';
+      byId("ratingRows").innerHTML = '<tr><td colspan="7">Enter valid circuit data to compare ratings.</td></tr>';
+      byId("stressCards").replaceChildren();
+      byId("loadSummary").textContent = "—";
+      byId("inputError").textContent = message;
+      byId("inputError").hidden = false;
+      byId("updateStatus").textContent = "Calculation unavailable. Check the circuit data.";
+    }
+
+    function stressCard(name, resistance, rating, values, vmax) {
+      const highest = Math.max(values.p, values.v, values.i);
+      const state = stressClass(highest);
+      const status = state === "bad" ? "Rating exceeded" : state === "warn" ? "At limit" : vmax === null ? "Within power limit" : "Within entered limits";
+      return `<article class="stress-card">
+        <div class="stress-heading"><h3>${name} · ${format(resistance, "Ω")}</h3><span class="badge ${state}">${status}</span></div>
+        <div class="stress-values">
+          <div><span>Pstress</span><output class="${stressClass(values.p)}">${percent(values.p)}</output></div>
+          <div><span>Vstress</span><output class="${stressClass(values.v)}">${percent(values.v)}</output></div>
+          <div><span>Istress</span><output class="${stressClass(values.i)}">${percent(values.i)}</output></div>
+        </div>
+        <div class="stress-bar" aria-hidden="true"><span class="${stressClass(values.p)}" style="width:${Math.min(100, values.p)}%"></span></div>
+        <p class="hint">Power utilization of ${format(rating, "W")} rating</p>
+        <p class="limits">Vlimit ${format(values.vlimit, "V")} · Ilimit ${format(values.ilimit, "A")}<br />${vmax === null ? "Power-derived limits; Vmax not specified." : `Vmax entered: ${format(vmax, "V")}.`}</p>
+      </article>`;
+    }
+
+    function update() {
+      for (const input of form.querySelectorAll("input")) input.removeAttribute("aria-invalid");
+      try {
+        const vin = readInput("vin", "Input voltage");
+        const r1 = readInput("r1", "R1 resistance", false, true, Number(byId("r1Unit").value));
+        const r2 = readInput("r2", "R2 resistance", false, true, Number(byId("r2Unit").value));
+        const rl = readInput("rl", "Load resistance", true, true, Number(byId("rlUnit").value));
+        const vmax1 = readInput("vmax1", "R1 maximum working voltage", true, true);
+        const vmax2 = readInput("vmax2", "R2 maximum working voltage", true, true);
+        const p1 = Number(byId("p1").value);
+        const p2 = Number(byId("p2").value);
+        const result = analyze(vin, r1, r2, rl);
+        const s1 = stress(r1, result.v1, result.i1, result.p1, p1, vmax1);
+        const s2 = stress(r2, result.vout, result.i2, result.p2, p2, vmax2);
+        const comparisons = RATINGS.map(rating => ({
+          rating,
+          r1: stress(r1, result.v1, result.i1, result.p1, rating.watts, vmax1),
+          r2: stress(r2, result.vout, result.i2, result.p2, rating.watts, vmax2)
+        }));
+        const numbers = [...Object.values(result), ...Object.values(s1), ...Object.values(s2), ...comparisons.flatMap(row => [...Object.values(row.r1), ...Object.values(row.r2)])];
+        if (numbers.some(value => !Number.isFinite(value))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
+
+        byId("inputError").hidden = true;
+        byId("vout").textContent = format(result.vout, "V");
+        byId("iin").textContent = format(result.i1, "A");
+        byId("ptotal").textContent = format(result.total, "W");
+        byId("ratio").textContent = percent(result.ratio * 100);
+        const rows = [["R1 · upper", result.v1, result.i1, result.p1], ["R2 · lower", result.vout, result.i2, result.p2]];
+        if (rl !== null) rows.push(["RL · load", result.vout, result.il, result.pl]);
+        byId("operatingRows").innerHTML = rows.map(([name, voltage, current, power]) => `<tr><th scope="row">${name}</th><td>${format(voltage, "V")}</td><td>${format(current, "A")}</td><td>${format(power, "W")}</td></tr>`).join("");
+        const loading = rl === null ? 0 : 100 / (1 + rl / result.rth);
+        byId("loadSummary").textContent = `Unloaded Vout: ${format(result.unloaded, "V")} · Rth: ${format(result.rth, "Ω")} · ${rl === null ? "Open load (IL = 0 A)." : `RL = ${format(rl, "Ω")}; output magnitude reduced by ${percent(Math.max(0, loading))}.`}`;
+        byId("stressCards").innerHTML = stressCard("R1", r1, p1, s1, vmax1) + stressCard("R2", r2, p2, s2, vmax2);
+        byId("ratingRows").innerHTML = comparisons.map(({ rating, r1: a, r2: b }) => {
+          const cells = [a.p, a.v, a.i, b.p, b.v, b.i].map((value, index) => {
+            const selected = rating.watts === (index < 3 ? p1 : p2);
+            return `<td class="${stressClass(value)}${selected ? " chosen" : ""}">${percent(value)}${selected ? '<span class="chosen-label" aria-label="selected rating"> *</span>' : ""}</td>`;
+          }).join("");
+          return `<tr><th scope="row">${rating.label}</th>${cells}</tr>`;
+        }).join("");
+        byId("updateStatus").textContent = `Results updated. Output ${format(result.vout, "V")}; input current ${format(result.i1, "A")}.`;
+      } catch (error) {
+        clearResults(error.message);
+      }
+    }
+
+    form.addEventListener("input", update);
+    form.addEventListener("change", update);
+    form.addEventListener("submit", event => { event.preventDefault(); update(); });
+    // The reset event precedes the browser restoring each control's default value.
+    form.addEventListener("reset", () => setTimeout(update, 0));
+    update();
+  </script>
+</body>
+</html>
