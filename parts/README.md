@@ -102,7 +102,20 @@ const matches = ResistorParts.suggest(catalog, part.familyId, {
   package: "0805", resistanceOhms: 2500, maxTolerancePct: 1,
   tcrCode: "E", packaging: "EA", mode: "general", temperatureC: 70
 });
+const allValues = ResistorParts.enumerate(catalog, part.familyId, {
+  package: "0805", tolerancePct: 1, minOhms: 1000, maxOhms: 100000,
+  tcrCode: "E", packaging: "EA", mode: "general", temperatureC: 70
+});
 ```
+
+`enumerate()` returns every supported preferred value in an inclusive resistance
+range at one exact catalog tolerance and ordering/operating configuration. It
+clips generation to the family's applicable electrical ranges, deduplicates
+overlapping preferred series, and validates every result through `evaluate()`.
+It has no nearest-value window or result-count limit. The divider's pair search
+uses this API for both arms, then filters combinations by target VMID bounds and
+worst-case stress/power. Pair-search UI, chart, and circuit criteria remain in the
+calculator HTML; the shared engine remains independent of circuit topology.
 
 `suggest()` defaults to ±5% resistance deviation and returns nearest supported
 values. The caller must recalculate its actual circuit before accepting a part;
@@ -117,6 +130,7 @@ From a local HTTP server rooted at the repository, open:
 
 - [Catalog, divider integration, and Radar checks](../calculators/tests/resistor_parts.html)
 - [Existing divider regression checks](../calculators/tests/voltage_divider.html)
+- [Complete resistor-pair search and chart checks](../calculators/tests/resistor_pairs.html)
 
 The first suite tests source examples, numbering round trips, package/TCR/range
 exclusions, derating, malformed data, candidate application, multi-part networks,

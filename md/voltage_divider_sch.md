@@ -72,26 +72,28 @@ At the defaults, VMID is 6 V, I1 and I2 are 0.6 mA, and R1 and R2 each dissipate
 
 RTOP is R1 and RBOT is R2. The calculator can solve for VMID, VTOP, RTOP, RBOT,
 or RL while the remaining nominal quantities are held at their entered values.
-Choose one of the six calculation buttons at the top of the page. Each focused
-view names the goal, explains its inputs, and shows a matching equation and
-Calculate action. Only known quantities appear as primary inputs; the calculated
-quantity appears in the result banner. Switching views preserves circuit data.
+Choose a calculation button at the top of the page. The sixth button,
+**Find real resistor pairs**, searches actual catalog parts for a target VMID.
+Each circuit-analysis view names the goal, explains its inputs, and shows a
+matching equation and Calculate action. Only known quantities appear as primary
+inputs; the calculated quantity appears in the result banner. Switching views
+preserves circuit data.
 
 The result area uses **Overview**, **Tolerances**, **Stress**,
-**Ratings**, **Parts**, **Parts (2)**, and **Method** tabs to show one focused
-panel at a time.
+**Ratings**, **Parts**, **Parts (2)**, **Resistor pairs**, and **Method** tabs to show
+one focused panel at a time.
 The solved value stays visible above the tabs; all results continue updating as
 you edit. Switching result tabs preserves circuit data and selected parts.
-Choosing tolerance solving opens **Tolerances**; other calculation choices open
+Pair searches open **Resistor pairs**; circuit calculation choices open
 **Overview**. The Calculate action opens the relevant result view, and Reset
 restores **Overview**. Use Left/Right Arrow, Home, or End to navigate the tabs
 with a keyboard. Printing includes all result panels.
 
-Output load and tolerance/rating settings are collapsible. In tolerance-solve
-mode, the output error budget and VTOP/RL variations move into the primary input
-view. An invalid setting automatically opens the containing sections so it can
-be corrected. The page styling and circuit-analysis logic remain in the one HTML
-file; shared part catalogs and their numbering engine are loaded separately.
+Output load and tolerance/rating settings are collapsible. Pair searches have
+their own target and tolerance form. An invalid setting automatically opens its
+containing sections so it can be corrected. The page styling and circuit-analysis
+logic remain in the one HTML file; shared part catalogs and their numbering
+engine are loaded separately.
 
 - VMID uses the loaded divider equation above.
 - `VTOP = VMID × (1 + RTOP / Rb)`.
@@ -152,7 +154,7 @@ VTOP = 12 V. Each upper part then drops 1.5 V, carries 0.6 mA, and dissipates
 an example input, not a rating assigned to all 0805 components. Four 40 kΩ parts
 in parallel give the same 10 kΩ arm, with 6 V and 0.15 mA per upper part.
 
-## Tolerance analysis and solving
+## Tolerance analysis
 
 Independent VTOP, R1, R2, and RL tolerances range from 0 to 99.999 percent. Each
 input varies over `nominal ± abs(nominal) × tolerance / 100`. Defaults are ±1%
@@ -164,17 +166,10 @@ worst-case VMID bounds for the ideal resistive model, including negative sources
 Largest deviation is the larger endpoint distance from nominal VMID, divided by
 `abs(nominal VMID)`. It is undefined for zero nominal output.
 
-The **R1/R2 tolerance** solve mode finds the largest common independent tolerance
-for both resistors that meets an entered VMID error budget. VTOP and RL tolerances
-remain fixed inputs. Bisection searches from 0 to 99.999%; the result is rounded
-down to six decimal places in percent. A nonzero nominal VMID is required. A
-budget already exceeded by VTOP/RL variation with exact R1/R2 is rejected.
-
 At the defaults, ±1% R1/R2 gives VMID from 5.94 to 6.06 V. A ±5% output error
-budget allows ±5% R1/R2 when VTOP is exact and the load is open. Adding ±1% VTOP
-tolerance reduces that shared resistor allowance to approximately ±3.960396%.
-These bounds apply to output voltage; displayed operating-point and stress
-results continue to use nominal values.
+band around a 6 V target therefore includes that divider. The pair search checks
+the full interval against the target band, including any nominal output mismatch.
+The other operating-point and stress tabs continue to use nominal values.
 
 For multiple-part arms, the minimum/maximum equivalent resistance is evaluated
 using every physical part's own lower/upper resistance limit. Series endpoints
@@ -186,10 +181,56 @@ both arm intervals and the individual part intervals.
 
 These are independent worst-case limits, not a statistical average: four equal
 1% parts still allow a 1% equivalent arm excursion when they all vary together
-in the same direction. The common-tolerance solve mode explicitly replaces
-every physical R1/R2 part's tolerance with the same solved value. Its nominal
-resistance and power rating remain unchanged. Stress calculations continue to
-use nominal per-part voltages and currents; worst-case stress is not calculated.
+in the same direction. Manual multi-part stress analysis uses nominal per-part
+voltages and currents; the two-resistor pair search additionally checks worst-case
+power and voltage across its selected source, resistor, and load intervals.
+
+## Finding real resistor pairs
+
+Choose **Given VTOP, VMID, tolerances → Find real resistor pairs**. Enter VTOP,
+its tolerance, target VMID, allowed target error, and the exact catalog tolerance
+for each resistor. The source and target must have the same sign, with
+`0 < abs(VMID) < abs(VTOP)`. The search uses one catalog resistor per arm.
+
+Optional settings choose the family and package independently for RTOP and RBOT,
+an inclusive resistance range for both arms, load/tolerance, ambient, TCR, maximum
+stress, and maximum total power. Defaults search both catalog families, 0805,
+1 kΩ–100 kΩ, ±1% resistors, 70 °C, and 25 ppm/°C, with an open load. Family default
+power modes, failure-rate levels, and package-compatible packing apply. These
+settings define the complete search space; unsupported or custom catalog values,
+other ordering variants, temperature drift, and multi-part networks are outside
+this pair search. The existing manual multi-part calculator remains available.
+
+**Find resistor pairs** enumerates every supported preferred value in the chosen
+range, validates real part numbers through the shared catalog engine, and checks
+same-family and mixed-family pairs. A combination qualifies only when its entire
+VMID interval lies within `target ± abs(target) × allowed error / 100`, and both
+parts meet the selected stress limit. This includes nominal ratio error, source
+tolerance, each resistor's actual tolerance, and finite-load tolerance.
+
+Worst-case power uses the maximum source magnitude and the resistor/load bounds.
+It also checks interior maximum-power points: RTOP matched to the minimum loaded
+bottom resistance, and RBOT matched to `RTOP_min || RL_max` (or RTOP_min with no
+load). Worst voltage uses the appropriate monotonic endpoints. V/I stress follows
+the existing power-derived limit capped by the part's working voltage; independent
+datasheet current limits are not modeled. Total-power limits include RL, whose
+rating is not checked. Catalog ambient derates allowable power; TCR filters codes.
+
+All matches appear on the interactive scatter chart. Choose power, input current,
+or unloaded output resistance Rth for the logarithmic X axis; compare worst target
+error, nominal error/VMID, or worst P/V/I stress on Y. Points can overlap when
+different part numbers have the same performance. Hover or select a point to
+inspect its pair, or use the keyboard-accessible table. Sorting applies to the
+entire result set; table pages show 50 combinations at a time. **Download all
+combinations CSV** includes every match, its conditions, source links, and nominal
+and worst-case performance. Supplier stock remains unverified.
+
+**Apply selected pair** sets both actual resistor values and ratings together,
+copies the search's source/load conditions, and switches to forward VMID analysis.
+It opens the Parts (2) BOM with both MPNs and updates the live SVG. Applying a pair
+selects single-resistor arms; retained manual network editors can be re-enabled.
+Changing search settings clears stale results, export, and application. **Cancel**
+discards incomplete results, and **Reset search** restores the search defaults.
 
 ## Selecting actual resistor part numbers
 

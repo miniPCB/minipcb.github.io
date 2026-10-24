@@ -1037,6 +1037,7 @@
       const mode = byId("solveFor").value;
       form.hidden = mode === "pairs";
       byId("pairForm").hidden = mode !== "pairs";
+      byId("schematicHeading").textContent = mode === "pairs" ? "Circuit reference · current circuit" : "Circuit reference";
       if (mode === "pairs") {
         for (const button of document.querySelectorAll("[data-solve-mode]")) button.setAttribute("aria-pressed", String(button.dataset.solveMode === mode));
         byId("inputError").hidden = true;
@@ -1260,6 +1261,7 @@
 
     function readPairSpec() {
       for (const input of byId("pairForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
+      const fail = (id, message) => { byId(id).setAttribute("aria-invalid", "true"); throw new Error(message); };
       const spec = {
         vin: readInput("pairVin", "VTOP"), target: readInput("pairVmid", "Target VMID"),
         sourceTolerance: readTolerance("pairSourceTol", "VTOP tolerance"), errorPct: readTolerance("pairErrorPct", "Allowed VMID error"),
@@ -1273,11 +1275,11 @@
       };
       spec.loadTolerance = spec.rl === null ? 0 : readTolerance("pairLoadTol", "RL tolerance");
       const gain = spec.target / spec.vin;
-      if (!Number.isFinite(gain) || gain <= 0 || gain >= 1) throw new Error("VTOP and VMID must have the same sign, with 0 < |VMID| < |VTOP|.");
-      if (!Number.isFinite(spec.vin * spec.vin) || spec.vin * spec.vin === 0) throw new Error("VTOP is outside the supported numeric range.");
-      if (spec.minOhms > spec.maxOhms) throw new Error("Minimum resistance must not exceed maximum resistance.");
-      if (spec.maxStress > 100) throw new Error("Maximum stress must be greater than zero and no more than 100%.");
-      if (spec.maxPower !== null && spec.maxPower < 0) throw new Error("Maximum total power must be zero or greater, or blank.");
+      if (!Number.isFinite(gain) || gain <= 0 || gain >= 1) fail("pairVmid", "VTOP and VMID must have the same sign, with 0 < |VMID| < |VTOP|.");
+      if (!Number.isFinite(spec.vin * spec.vin) || spec.vin * spec.vin === 0) fail("pairVin", "VTOP is outside the supported numeric range.");
+      if (spec.minOhms > spec.maxOhms) fail("pairMaxR", "Minimum resistance must not exceed maximum resistance.");
+      if (spec.maxStress > 100) fail("pairMaxStress", "Maximum stress must be greater than zero and no more than 100%.");
+      if (spec.maxPower !== null && spec.maxPower < 0) fail("pairMaxPower", "Maximum total power must be zero or greater, or blank.");
       return spec;
     }
 
@@ -1313,7 +1315,7 @@
       const circuit = { vin: spec.vin, r1: top.resistanceOhms, r2: bot.resistanceOhms, rl: spec.rl };
       const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl);
       const bounds = toleranceAnalysis(circuit, { vin: spec.sourceTolerance, r1: top.tolerancePct, r2: bot.tolerancePct, rl: spec.loadTolerance });
-      const error = 100 * Math.max(Math.abs(bounds.min - spec.target), Math.abs(bounds.max - spec.target)) / Math.abs(spec.target);
+      const error = Number((100 * Math.max(Math.abs(bounds.min - spec.target), Math.abs(bounds.max - spec.target)) / Math.abs(spec.target)).toPrecision(12));
       const worst = pairWorstStress(spec, top, bot);
       const pstress = Math.max(worst.top.p, worst.bot.p), vstress = Math.max(worst.top.v, worst.bot.v);
       const values = [error, pstress, vstress, worst.power, worst.current, ...Object.values(result), bounds.min, bounds.max];

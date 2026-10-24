@@ -39,6 +39,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   assert(items.length>50&&!get('pairResults').hidden,'Default search returns more than one page of real pairs');
   assert(items.some(p=>p.top.familyId!==p.bot.familyId)&&items.some(p=>p.top.familyId===tid&&p.bot.familyId===tid)&&items.some(p=>p.top.familyId===mid&&p.bot.familyId===mid),'Both same-family and mixed-family combinations are included');
   assert(items.every(p=>p.error<=5+1e-9&&p.pstress<=100+1e-9&&p.vstress<=100+1e-9),'Every result satisfies the full target band and worst-case stress limits');
+  assert(items[0].error===1&&items[0].top.resistanceOhms===100000&&items[0].bot.resistanceOhms===100000,'Equal-error combinations use power as a stable secondary ranking');
   assert(items.every(p=>api.decode(catalog,p.top.familyId,p.top.mpn).resistanceOhms===p.top.resistanceOhms&&api.decode(catalog,p.bot.familyId,p.bot.mpn).tolerancePct===1),'Every output pair contains decodable real-family part numbers');
   const csv=w.pairSearchCsv();
   assert(csv.trim().split('\r\n').length===items.length+1&&get('pairRows').rows.length===50,'CSV includes all combinations while the table paginates fifty rows');
@@ -95,6 +96,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   assert(negative.map(key).sort().join('|')===positive.map(key).sort().join('|')&&negative.every(p=>p.bounds.min<0&&p.bounds.max<0),'Negative sources produce the corresponding valid pair set and signed voltage bounds');
   for(const [id,value]of [['pairVin','0'],['pairVmid','12'],['pairSourceTol','100'],['pairMinR','0'],['pairMaxR','1'],['pairMaxStress','101'],['pairRl','-1'],['pairTemperature','']]){
    await reset();set(id,value);assert((await run()).length===0&&!get('pairError').hidden&&get('pairResults').hidden,`Invalid search ${id}=${value} clears results and shows an error`);
+   const invalid=[...get('pairForm').querySelectorAll('[aria-invalid="true"]')];assert(invalid.length>0&&invalid.every(input=>!input.closest('details')||input.closest('details').open),`Invalid search ${id} exposes its field for correction`);
   }
   await reset();set('pairTolTop','0.1');set('pairTolBot','0.1');set('pairMinR','100');set('pairMaxR','1000000');const pending=run();get('pairCancel').click();await pending;
   assert(get('pairStatus').textContent==='Search canceled.'&&get('pairResults').hidden&&get('pairFind').disabled===false,'Cancel discards incomplete search results');
