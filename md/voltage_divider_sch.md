@@ -6,8 +6,18 @@ This hand-authored reference describes the calculator's ideal DC circuit; it is
 not an EAGLE board export. The downloadable LTspice file contains the default
 values below. Calculator edits do not modify these reference files.
 
-The calculator shows the enlarged circuit reference above the calculation
-choices, with a full-size image link and the LTspice/Markdown downloads beside it.
+The calculator shows a live SVG above the calculation choices. It updates VTOP,
+VMID, the equivalent arm resistances, and the open/finite RL value as you edit.
+Each physical RTOP/RBOT resistor is annotated with its resistance, tolerance,
+power rating, Pstress, Vstress, and Istress. Multi-part arms list every resistor
+and identify the series/parallel connection; ratings are not combined. Stress
+values use the nominal operating point and include each part's working-voltage
+limit when entered. Invalid circuit data clears the live values and stresses.
+
+The SVG reflows for smaller screens. **Full-size schematic** and **Download SVG**
+capture the current annotations in a standalone SVG. The image below and the
+LTspice/Markdown downloads remain the default circuit references; the calculator
+keeps its live SVG, styling, and logic in the one HTML file.
 
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
 
