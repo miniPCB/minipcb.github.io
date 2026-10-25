@@ -1274,18 +1274,22 @@
       schematicRole(schematicText(drawing, 586, loadY - 12, "RL", 20), "rl", roles);
       const loadValue = schematicText(drawing, 586, loadY + 16, "Open", 17, "#a8bece"); loadValue.id = "schematicLoadValue";
       if (state?.circuit.rl !== null && state) schematicText(drawing, 495, loadY + 62, `Tol. ±${percent(state.tolerances.rl)}`, 16, "#a8bece");
-      schematicShape(drawing, "path", { d: `M260 ${mid}H632`, fill: "none", stroke: "#54d2ff", "stroke-width": 3 });
+      schematicShape(drawing, "path", { d: `M260 ${mid}H654`, fill: "none", stroke: "#54d2ff", "stroke-width": 3 });
       for (const x of [260, 560]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: "#54d2ff" });
-      schematicShape(drawing, "circle", { cx: 638, cy: mid, r: 6, fill: "#101823", stroke: "#54d2ff", "stroke-width": 3 });
-      schematicVoltage(drawing, "schematicVmid", 638, mid - 42, "VMID", state ? format(state.result.vout, "V") : "—", null, "end", 150);
-      schematicRole(schematicText(drawing, 638, mid + 24, SOLVE_ROLES[roles.vout].short, 12), "vout", roles).setAttribute("text-anchor", "end");
-      if (state?.pair) {
-        const pair = state.pair;
-        for (const [index, content] of [`Error ${percent(pair.error)}`, `Min ${format(pair.bounds.min, "V")}`, `Max ${format(pair.bounds.max, "V")}`].entries()) {
-          const line = schematicText(drawing, 638, mid - 105 + index * 20, content, Math.min(13, 150 / (content.length * 0.62)), "#c6e3ff", "vmidBounds");
-          line.setAttribute("text-anchor", "end");
-        }
+      schematicShape(drawing, "circle", { cx: 660, cy: mid, r: 6, fill: "#101823", stroke: "#54d2ff", "stroke-width": 3 });
+      const readout = schematicShape(drawing, "g", { "data-field": "vmidReadout" });
+      schematicShape(readout, "rect", { x: 490, y: mid - 166, width: 180, height: 156, rx: 10, fill: "#142535" });
+      const nominal = schematicText(readout, 502, mid - 140, "", 20); nominal.id = "schematicVmid";
+      schematicShape(nominal, "tspan", { x: 502, y: mid - 140 }).textContent = "VMID ";
+      for (const [index, [label, value, field]] of [["Nominal", state?.result.vout, "vmidNominal"], ["Min", state?.bounds.min, "vmidMin"], ["Max", state?.bounds.max, "vmidMax"]].entries()) {
+        const y = mid - 110 + index * 30, content = value === undefined ? "—" : format(value, "V");
+        schematicText(readout, 502, y, label, 16, "#a8bece");
+        const attributes = { x: 660, y, "font-size": Math.min(18, 82 / (content.length * 0.62)), "text-anchor": "end", "data-field": field };
+        const text = index === 0 ? schematicShape(nominal, "tspan", attributes) : schematicShape(readout, "text", { ...attributes, fill: "#c6e3ff" });
+        text.textContent = content;
       }
+      schematicRole(schematicText(readout, 502, mid - 22, SOLVE_ROLES[roles.vout].short, 12), "vout", roles);
+      if (state?.pair) schematicText(readout, 660, mid - 22, `Error ${percent(state.pair.error)}`, 12, "#c6e3ff", "vmidBounds").setAttribute("text-anchor", "end");
       return bottom + 80;
     }
 
@@ -1390,8 +1394,8 @@
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
       const descriptions = state ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
       const roleDescription = `${solveLabel}. Yellow means undefined or invalid input; green means defined; red identifies the solve target. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
-      const pairVoltageDescription = state?.pair ? `VMID range ${format(state.pair.bounds.min, "V")} to ${format(state.pair.bounds.max, "V")}; target error ${percent(state.pair.error)}. ` : "";
-      byId("liveSchematicDesc").textContent = roleDescription + " " + pairVoltageDescription + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.${previewLines.length ? " " + previewLines.join(". ") : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.");
+      const voltageDescription = state ? `Nominal VMID ${format(state.result.vout, "V")}; minimum ${format(state.bounds.min, "V")}; maximum ${format(state.bounds.max, "V")}.${state.pair ? ` Target error ${percent(state.pair.error)}.` : ""} ` : "";
+      byId("liveSchematicDesc").textContent = roleDescription + " " + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.${previewLines.length ? " " + previewLines.join(". ") : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.");
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       // The download is a self-contained snapshot of the live SVG.
@@ -2064,7 +2068,7 @@
         id: arm, name: arm === "r1" ? "R1" : "R2", resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV,
         mpn: chosen.mpn, catalog: chosen, alternatives: pairAlternativeParts(pair, side)
       }], "series", voltage, current);
-      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, pair };
+      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, bounds: pair.bounds, pair };
       renderSchematic();
     }
 
@@ -2721,7 +2725,7 @@
           return `<tr><th scope="row">${rating.label}</th>${cells}</tr>`;
         }).join("");
         byId("updateStatus").textContent = `Results updated. Output ${format(result.vout, "V")}; input current ${format(result.i1, "A")}.`;
-        schematicState = { circuit, tolerances, networks, physical, result };
+        schematicState = { circuit, tolerances, networks, physical, result, bounds };
         renderSchematic();
         renderCatalogMatches();
       } catch (error) {

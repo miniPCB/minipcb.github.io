@@ -10,8 +10,11 @@ The calculation choices appear above the live circuit SVG. The SVG updates VTOP,
 VMID, the equivalent arm resistances, and the open/finite RL value as you edit.
 Voltage readouts are part of the circuit drawing: VTOP and source tolerance sit
 beside the source, and VMID sits at the end of a blue output wire extending just
-past the RL branch. Pair-preview VMID minimum, maximum and target error appear
-beside that output readout. Both voltage readouts remain editable, retain their
+past the RL branch. A separate, spaced VMID readout lists **Nominal**, **Min** and
+**Max** voltages for both normal calculations and pair previews. Its minimum and
+maximum use the same entered tolerance limits as the analysis results; pair
+previews also show their target error. Invalid circuit data clears all three
+values. The nominal voltage remains editable, and the readouts retain their
 solve-role colors and appear in the standalone SVG download.
 Each physical RTOP/RBOT resistor is annotated with its resistance, tolerance,
 footprint size, power rating, Pstress, Vstress, and Istress. The drawing contains
