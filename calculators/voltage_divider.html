@@ -349,9 +349,7 @@
               <title id="liveSchematicTitle">Voltage divider · live circuit values</title>
               <desc id="liveSchematicDesc">VTOP supplies RTOP and RBOT; VMID is their junction. Values and nominal per-part stress update with the calculator.</desc>
               <rect width="100%" height="100%" fill="#101823" />
-              <text id="schematicVtop" x="16" y="27" font-size="15" fill="#eaf6ff">VTOP —</text>
-              <text id="schematicVmid" x="16" y="54" font-size="21" fill="#54d2ff">VMID —</text>
-              <text id="schematicSolveStatus" x="16" y="81" font-size="13" fill="#ff8e8e">Solving for VMID</text>
+              <text id="schematicSolveStatus" x="16" y="27" font-size="13" fill="#ff8e8e">Solving for VMID</text>
               <g id="schematicDrawing" />
               <g id="schematicParts" />
             </svg>
@@ -1226,6 +1224,17 @@
       return node;
     }
 
+    function schematicVoltage(parent, id, x, y, name, value, tolerance = null, anchor = "start", maxWidth = 60) {
+      const text = schematicText(parent, x, y, "", 18); text.id = id; text.setAttribute("text-anchor", anchor);
+      const lines = [[0, `${name} `, 18], [24, value, 20]];
+      if (tolerance !== null) lines.push([44, ` · ±${percent(tolerance)}`, 16]);
+      for (const [offset, content, size] of lines) {
+        const line = schematicShape(text, "tspan", { x, y: y + offset, "font-size": Math.min(size, maxWidth / (content.length * 0.62)) });
+        line.textContent = content;
+      }
+      return text;
+    }
+
     function renderSchematicDrawing(state, roles) {
       const drawing = byId("schematicDrawing"); drawing.replaceChildren();
       const count = arm => Math.max(1, state?.physical[arm].length || 0);
@@ -1235,8 +1244,8 @@
       schematicShape(wires, "path", { d: `M55 ${sourceY - 34}V${top - 24}H${state?.networks.r1?.connection === "parallel" ? 170 : 260}V${top}M55 ${sourceY + 34}V${bottom}H260M260 ${bottom}v28m-20 0h40m-32 10h24m-16 10h8` });
       schematicRole(schematicShape(wires, "circle", { cx: 55, cy: sourceY, r: 34 }), "vin", roles, "stroke");
       schematicRole(schematicShape(wires, "path", { d: `M44 ${sourceY - 12}h22m-11 -11v22m-11 14h22` }), "vin", roles, "stroke");
-      schematicRole(schematicText(drawing, 106, sourceY + 7, "VTOP", 20), "vin", roles);
-      schematicRole(schematicText(drawing, 106, sourceY + 28, SOLVE_ROLES[roles.vin].short, 12), "vin", roles);
+      schematicVoltage(drawing, "schematicVtop", 106, sourceY - 24, "VTOP", state ? format(state.circuit.vin, "V") : "—", state ? state.tolerances.vin : null);
+      schematicRole(schematicText(drawing, 106, sourceY + 44, SOLVE_ROLES[roles.vin].short, 12), "vin", roles);
       schematicText(drawing, 285, bottom + 55, "GND", 18, "#a8bece");
       for (const [arm, start, end] of [["r1", top, mid - 44], ["r2", botStart, bottom - 24]]) {
         const connection = state?.networks[arm]?.connection || "series", parts = state?.physical[arm] || [];
@@ -1265,11 +1274,18 @@
       schematicRole(schematicText(drawing, 586, loadY - 12, "RL", 20), "rl", roles);
       const loadValue = schematicText(drawing, 586, loadY + 16, "Open", 17, "#a8bece"); loadValue.id = "schematicLoadValue";
       if (state?.circuit.rl !== null && state) schematicText(drawing, 495, loadY + 62, `Tol. ±${percent(state.tolerances.rl)}`, 16, "#a8bece");
-      schematicRole(schematicShape(drawing, "path", { d: `M260 ${mid}H420`, fill: "none", "stroke-width": 3 }), "vout", roles, "stroke");
-      schematicRole(schematicShape(drawing, "circle", { cx: 260, cy: mid, r: 5 }), "vout", roles);
-      schematicRole(schematicShape(drawing, "circle", { cx: 426, cy: mid, r: 6, fill: "#101823", "stroke-width": 3 }), "vout", roles, "stroke");
-      schematicRole(schematicText(drawing, 310, mid - 16, "VMID", 20), "vout", roles);
-      schematicRole(schematicText(drawing, 310, mid + 22, SOLVE_ROLES[roles.vout].short, 12), "vout", roles);
+      schematicShape(drawing, "path", { d: `M260 ${mid}H632`, fill: "none", stroke: "#54d2ff", "stroke-width": 3 });
+      for (const x of [260, 560]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: "#54d2ff" });
+      schematicShape(drawing, "circle", { cx: 638, cy: mid, r: 6, fill: "#101823", stroke: "#54d2ff", "stroke-width": 3 });
+      schematicVoltage(drawing, "schematicVmid", 638, mid - 42, "VMID", state ? format(state.result.vout, "V") : "—", null, "end", 150);
+      schematicRole(schematicText(drawing, 638, mid + 24, SOLVE_ROLES[roles.vout].short, 12), "vout", roles).setAttribute("text-anchor", "end");
+      if (state?.pair) {
+        const pair = state.pair;
+        for (const [index, content] of [`Error ${percent(pair.error)}`, `Min ${format(pair.bounds.min, "V")}`, `Max ${format(pair.bounds.max, "V")}`].entries()) {
+          const line = schematicText(drawing, 638, mid - 105 + index * 20, content, Math.min(13, 150 / (content.length * 0.62)), "#c6e3ff", "vmidBounds");
+          line.setAttribute("text-anchor", "end");
+        }
+      }
       return bottom + 80;
     }
 
@@ -1288,13 +1304,13 @@
       const previewLines = [];
       if (state?.pair) {
         const pair = state.pair, maxCharacters = Math.floor((width - 32) / 6.9);
-        for (const text of ["Pair preview · nominal part stresses", `VMID ${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")} · error ${percent(pair.error)}`, `P ${format(pair.result.total, "W")} · I ${format(Math.abs(pair.result.i1), "A")} · Rth ${format(pair.result.rth, "Ω")}`, `Worst Pstress ${percent(pair.pstress)} · V/I ${percent(pair.vstress)}`]) {
+        for (const text of ["Pair preview · nominal part stresses", `P ${format(pair.result.total, "W")} · I ${format(Math.abs(pair.result.i1), "A")} · Rth ${format(pair.result.rth, "Ω")}`, `Worst Pstress ${percent(pair.pstress)} · V/I ${percent(pair.vstress)}`]) {
           let line = "";
           for (const word of text.split(" ")) { if (line && line.length + word.length + 1 > maxCharacters) { previewLines.push(line); line = ""; } line += (line ? " " : "") + word; }
           if (line) previewLines.push(line);
         }
       }
-      const drawingY = 116 + (previewLines.length ? previewLines.length * 18 + 16 : 0);
+      const drawingY = 62 + (previewLines.length ? previewLines.length * 18 + 16 : 0);
       const stacked = width < 1050;
       const drawingWidth = stacked ? Math.min(680, width - 32) : Math.min(560, width * 0.42);
       const drawingBottom = drawingY + drawingWidth * renderSchematicDrawing(state, roles) / 680;
@@ -1305,11 +1321,9 @@
       const columnWidth = (detailsWidth - (columns - 1) * 24) / columns;
       const partsGroup = byId("schematicParts");
       partsGroup.replaceChildren();
-      previewLines.forEach((line, index) => schematicText(partsGroup, 16, 103 + index * 18, line, 11, "#c6e3ff", "pairPerformance"));
+      previewLines.forEach((line, index) => schematicText(partsGroup, 16, 49 + index * 18, line, 11, "#c6e3ff", "pairPerformance"));
       const alternativeParts = new Map();
       byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY}) scale(${drawingWidth / 680})`);
-      byId("schematicVtop").textContent = state ? `VTOP ${format(state.circuit.vin, "V")} · ±${percent(state.tolerances.vin)}` : "VTOP —";
-      byId("schematicVmid").textContent = state ? `VMID ${format(state.result.vout, "V")}` : "VMID —";
       byId("schematicR1Value").textContent = state ? format(state.circuit.r1, "Ω") : "—";
       byId("schematicR2Value").textContent = state ? format(state.circuit.r2, "Ω") : "—";
       byId("schematicLoadValue").textContent = state ? state.circuit.rl === null ? "Open" : format(state.circuit.rl, "Ω") : "—";
@@ -1376,7 +1390,8 @@
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
       const descriptions = state ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
       const roleDescription = `${solveLabel}. Yellow means undefined or invalid input; green means defined; red identifies the solve target. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
-      byId("liveSchematicDesc").textContent = roleDescription + " " + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.${previewLines.length ? " " + previewLines.join(". ") : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.");
+      const pairVoltageDescription = state?.pair ? `VMID range ${format(state.pair.bounds.min, "V")} to ${format(state.pair.bounds.max, "V")}; target error ${percent(state.pair.error)}. ` : "";
+      byId("liveSchematicDesc").textContent = roleDescription + " " + pairVoltageDescription + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.${previewLines.length ? " " + previewLines.join(". ") : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.");
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       // The download is a self-contained snapshot of the live SVG.
