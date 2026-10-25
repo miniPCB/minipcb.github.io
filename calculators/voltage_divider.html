@@ -204,7 +204,7 @@
     .parts-bom { margin-top: 12px; }
     .parts-table-actions { margin-top: 14px; }
     .bom-copy-text { width: 100%; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #101823; color: var(--text); font: 0.78rem/1.5 var(--mono); }
-    .pair-chart { display: block; width: 100%; height: 340px; margin-top: 12px; border-radius: 10px; background: #101823; cursor: crosshair; }
+    .pair-chart { display: block; width: 100%; height: 340px; margin-top: 12px; border-radius: 10px; background: #101823; cursor: crosshair; touch-action: none; }
     .pair-controls { margin: 16px 0; }
     .pair-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0; }
     .pair-legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--point-color); }
@@ -704,9 +704,20 @@
                 <div class="field"><label for="pairAxisX">Chart X axis</label><select id="pairAxisX"><option value="power">Total power (mW)</option><option value="current">Input current (µA)</option><option value="rth">Output resistance Rth (kΩ)</option></select></div>
                 <div class="field"><label for="pairAxisY">Chart Y axis</label><select id="pairAxisY"><option value="error">Worst-case target error (%)</option><option value="nominalError">Nominal target error (%)</option><option value="vmid">Nominal VMID (V)</option><option value="pstress">Worst-case Pstress (%)</option><option value="vstress">Worst-case V/I stress (%)</option></select></div>
               </div>
-              <p class="hint">Every matching combination appears on the chart; identical performance can overlap. Hover to inspect; click a point or select a table row to compare the pair. X axes use a logarithmic scale.</p>
-              <canvas id="pairChart" class="pair-chart" width="900" height="340" aria-label="Resistor pair performance scatter chart. All plotted combinations are available in the table and CSV below."></canvas>
+              <p id="pairChartHelp" class="hint">Drag a rectangle to filter the table. Click a point or select a row to preview it in the top SVG. Dim points fall outside the filters; identical performance can overlap. X axes use a logarithmic scale. Escape cancels a drag or clears filters.</p>
+              <canvas id="pairChart" class="pair-chart" width="900" height="340" tabindex="0" aria-describedby="pairChartHelp" aria-label="Resistor pair performance scatter chart. Drag to filter, or use the numeric bounds below."></canvas>
               <div class="pair-legend hint"><span style="--point-color:#54d2ff">TNPW / TNPW</span><span style="--point-color:#ffba52">M55342 / M55342</span><span style="--point-color:#6ee7ac">Mixed families</span></div>
+              <details id="pairFilterOptions"><summary>Filter bounds and families</summary>
+                <div class="rating-fields">
+                  <div class="field"><label for="pairFilterXMin" id="pairFilterXMinLabel">Minimum X</label><input id="pairFilterXMin" type="number" step="any" placeholder="No minimum" /></div>
+                  <div class="field"><label for="pairFilterXMax" id="pairFilterXMaxLabel">Maximum X</label><input id="pairFilterXMax" type="number" step="any" placeholder="No maximum" /></div>
+                  <div class="field"><label for="pairFilterYMin" id="pairFilterYMinLabel">Minimum Y</label><input id="pairFilterYMin" type="number" step="any" placeholder="No minimum" /></div>
+                  <div class="field"><label for="pairFilterYMax" id="pairFilterYMaxLabel">Maximum Y</label><input id="pairFilterYMax" type="number" step="any" placeholder="No maximum" /></div>
+                  <div class="field"><label for="pairFilterFamily">Pair families</label><select id="pairFilterFamily"><option value="all">All families</option><option value="tnpw">TNPW / TNPW</option><option value="mil">M55342 / M55342</option><option value="mixed">Mixed families</option></select></div>
+                </div>
+              </details>
+              <div class="actions parts-table-actions"><button id="pairClearFilters" class="btn" type="button">Clear filters</button><button id="pairFilteredCsv" class="btn" type="button" disabled>Download filtered CSV ↓</button></div>
+              <p id="pairFilterStatus" class="note" role="status"></p>
               <p id="pairHover" class="hint" role="status">Select a combination to inspect its part numbers and performance.</p>
               <div id="pairInspector" class="pair-inspector" hidden></div>
               <div class="actions"><button id="pairApply" class="btn btn-accent" type="button" disabled>Apply selected pair</button><button id="pairCsv" class="btn" type="button" disabled>Download all combinations CSV ↓</button></div>
@@ -781,7 +792,8 @@
         byId(tab.getAttribute("aria-controls")).hidden = !active;
       }
       if (focus || focusedPanel?.hidden) selected.focus();
-      if (id === "pairTab") drawPairChart();
+      if (id === "pairTab") { previewSelectedPair(); drawPairChart(); }
+      else if (pairPreviewState) { pairPreviewState = null; renderSchematic(); }
     }
 
     for (const tab of resultTabs) {
@@ -1037,11 +1049,12 @@
       const mode = byId("solveFor").value;
       form.hidden = mode === "pairs";
       byId("pairForm").hidden = mode !== "pairs";
-      byId("schematicHeading").textContent = mode === "pairs" ? "Circuit reference · current circuit" : "Circuit reference";
+      if (mode !== "pairs") pairPreviewState = null;
       if (mode === "pairs") {
         for (const button of document.querySelectorAll("[data-solve-mode]")) button.setAttribute("aria-pressed", String(button.dataset.solveMode === mode));
         byId("inputError").hidden = true;
         updatePairSummary();
+        renderSchematic();
         return mode;
       }
       for (const arm of ARMS) prepareNetwork(arm);
@@ -1110,6 +1123,7 @@
     }
 
     let schematicState = null;
+    let pairPreviewState = null;
     let schematicUrl = null;
     let schematicMarkup = "";
 
@@ -1124,19 +1138,33 @@
 
     function renderSchematic() {
       const svg = byId("liveSchematic");
-      const state = schematicState;
+      const state = pairPreviewState || schematicState;
+      byId("schematicHeading").textContent = pairPreviewState ? "Circuit reference · selected pair preview" : byId("solveFor").value === "pairs" ? "Circuit reference · current circuit" : "Circuit reference";
+      byId("liveSchematicTitle").textContent = pairPreviewState ? "Voltage divider · selected resistor pair preview" : "Voltage divider · live circuit values";
       const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
+      const previewLines = [];
+      if (state?.pair) {
+        const pair = state.pair, maxCharacters = Math.floor((width - 32) / 6.9);
+        for (const text of ["Pair preview · nominal part stresses", `VMID ${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")} · error ${percent(pair.error)}`, `P ${format(pair.result.total, "W")} · I ${format(Math.abs(pair.result.i1), "A")} · Rth ${format(pair.result.rth, "Ω")}`, `Worst Pstress ${percent(pair.pstress)} · V/I ${percent(pair.vstress)}`]) {
+          let line = "";
+          for (const word of text.split(" ")) { if (line && line.length + word.length + 1 > maxCharacters) { previewLines.push(line); line = ""; } line += (line ? " " : "") + word; }
+          if (line) previewLines.push(line);
+        }
+      }
+      const drawingY = 64 + (previewLines.length ? previewLines.length * 18 + 12 : 0);
       const stacked = width < 760;
       const drawingWidth = stacked ? Math.min(560, width) : Math.min(480, width * 0.43);
-      const drawingBottom = 64 + drawingWidth * 370 / 640;
+      const drawingBottom = drawingY + drawingWidth * 370 / 640;
       const detailsX = stacked ? 16 : drawingWidth + 24;
-      const detailsY = stacked ? drawingBottom + 22 : 30;
+      const detailsY = stacked ? drawingBottom + 22 : 30 + drawingY - 64;
       const detailsWidth = width - detailsX - 16;
       const columns = detailsWidth >= 600 ? 2 : 1;
       const columnWidth = (detailsWidth - (columns - 1) * 24) / columns;
       const partsGroup = byId("schematicParts");
       partsGroup.replaceChildren();
-      byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 0} 64) scale(${drawingWidth / 640})`);
+      previewLines.forEach((line, index) => schematicText(partsGroup, 16, 79 + index * 18, line, 11, "#c6e3ff", "pairPerformance"));
+      const alternativeParts = new Map();
+      byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 0} ${drawingY}) scale(${drawingWidth / 640})`);
       byId("schematicVtop").textContent = state ? `VTOP ${format(state.circuit.vin, "V")} · ±${percent(state.tolerances.vin)}` : "VTOP —";
       byId("schematicVmid").textContent = state ? `VMID ${format(state.result.vout, "V")}` : "VMID —";
       byId("schematicR1Value").textContent = state ? format(state.circuit.r1, "Ω") : "—";
@@ -1174,9 +1202,17 @@
               schematicText(row, metricX, 44, label, 11, "#a8bece");
               schematicText(row, metricX, 64, percent(value), 15, colors[stressClass(value)], key);
             }
-            if (part.mpn) { schematicText(row, 0, 86, part.mpn, 11, "#54d2ff", "mpn"); partY += 20; }
-            if (part.catalog) { schematicText(row, 0, 104, `${part.catalog.temperatureC} °C · ${part.catalog.mode} · P70 ${format(part.catalog.ratedPowerW, "W")}`, 11, "#a8bece", "condition"); partY += 18; }
-            partY += 94;
+            let extraY = 86;
+            if (part.mpn) { schematicText(row, 0, extraY, part.mpn, 11, "#54d2ff", "mpn"); extraY += 20; }
+            if (part.catalog) { schematicText(row, 0, extraY - 2, `${part.catalog.temperatureC} °C · ${part.catalog.mode} · P70 ${format(part.catalog.ratedPowerW, "W")}`, 11, "#a8bece", "condition"); extraY += 18; }
+            const alternatives = part.alternatives || schematicPartAlternatives(part);
+            alternativeParts.set(part.id, alternatives);
+            for (const alt of alternatives) {
+              schematicText(row, 0, extraY, `Alt ${alt.familyId.includes("m55342") ? "M55342" : "TNPW"}: ${alt.mpn}`, 11, "#ffba52", "mpnAlternative");
+              schematicText(row, 0, extraY + 18, `${format(alt.powerW, "W")} allowed · ${alt.workingVoltageV} V · ${alt.temperatureC} °C · ${alt.mode}`, 11, "#a8bece", "alternativeLimits");
+              extraY += 38;
+            }
+            partY += Math.max(94, extraY + 8);
           }
           bottom = Math.max(bottom, y + partY + 16);
         }
@@ -1189,8 +1225,8 @@
       svg.setAttribute("width", width);
       svg.setAttribute("height", height);
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      const descriptions = state ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.`)) : [];
-      byId("liveSchematicDesc").textContent = state ? `${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. RTOP and RBOT are equivalent arms. ${descriptions.join(" ")} Stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.";
+      const descriptions = state ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
+      byId("liveSchematicDesc").textContent = state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. RTOP and RBOT are equivalent arms. ${descriptions.join(" ")} Selected-part stresses use nominal circuit values.${previewLines.length ? " " + previewLines.join(". ") : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.";
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       // The download is a self-contained snapshot of the live SVG.
@@ -1209,7 +1245,8 @@
     const appliedCatalogParts = new Map();
     const parts2Families = [{ key: "tnpw", id: "vishay-tnpw-e3", label: "TNPW" }, { key: "mil", id: "vishay-eh-m55342", label: "M55342 / D55342" }];
     let parts2Values = [], parts2BomData = [], parts2Selection = null, parts2Target = null;
-    let pairGeneration = 0, pairItems = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
+    let pairGeneration = 0, pairItems = [], pairView = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
+    let pairPlot = null, pairBrush = null, pairIgnoreClick = false;
     const PAIR_PAGE_SIZE = 50;
     const catalogSame = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1e-12, Math.abs(a), Math.abs(b));
 
@@ -1239,6 +1276,7 @@
       }
       catalogOptions("pairTcr", tcrs.map(value => ({ value, label: `±${value} ppm/°C` })), "25");
       for (const select of byId("pairForm").querySelectorAll("select")) for (const option of select.options) option.defaultSelected = option.selected;
+      updatePairFilterLabels();
       byId("pairFind").disabled = false;
       byId("pairCatalogStatus").textContent = `${resistorCatalog.families.length} shared resistor families loaded. Numbers follow the supported catalog rules; supplier stock is not checked.`;
     }
@@ -1246,17 +1284,75 @@
     function updatePairSummary() {
       if (byId("solveFor").value !== "pairs") return;
       byId("solutionLabel").textContent = "3. Matching resistor pairs";
-      byId("solutionValue").textContent = pairSpec ? `${pairItems.length.toLocaleString()} combinations` : "Set targets and search";
+      byId("solutionValue").textContent = pairSpec ? `${pairView.length.toLocaleString()}${pairFilterActive() ? ` / ${pairItems.length.toLocaleString()}` : ""} combinations` : "Set targets and search";
     }
 
     function invalidatePairSearch(message = "Search settings changed. Run the search to update combinations.") {
-      pairGeneration++; pairItems = []; pairSpec = null; pairSelected = null; pairPoints = []; pairPage = 0;
+      pairGeneration++; pairItems = []; pairView = []; pairSpec = null; pairSelected = null; pairPoints = []; pairPage = 0; pairPlot = null; pairBrush = null;
+      resetPairFilterInputs();
+      pairPreviewState = null; renderSchematic();
       byId("pairResults").hidden = true; byId("pairRows").replaceChildren();
       byId("pairApply").disabled = true; byId("pairCsv").disabled = true;
+      byId("pairFilteredCsv").disabled = true;
       byId("pairCancel").hidden = true; byId("pairFind").disabled = !resistorCatalog;
       byId("pairStatus").textContent = message;
       byId("pairError").hidden = true;
       updatePairSummary();
+    }
+
+    function pairFamilyKey(pair) {
+      const top = pair.top.familyId.includes("m55342"), bot = pair.bot.familyId.includes("m55342");
+      return top && bot ? "mil" : !top && !bot ? "tnpw" : "mixed";
+    }
+
+    function updatePairFilterLabels() {
+      for (const axis of ["X", "Y"]) for (const bound of ["Min", "Max"]) byId(`pairFilter${axis}${bound}Label`).textContent = `${bound === "Min" ? "Minimum" : "Maximum"} ${byId(`pairAxis${axis}`).selectedOptions[0].textContent}`;
+    }
+
+    function resetPairFilterInputs(rangesOnly = false) {
+      for (const id of ["pairFilterXMin", "pairFilterXMax", "pairFilterYMin", "pairFilterYMax"]) { byId(id).value = ""; byId(id).removeAttribute("aria-invalid"); }
+      if (!rangesOnly) byId("pairFilterFamily").value = "all";
+      byId("pairFilterStatus").textContent = "";
+      pairBrush = null;
+      updatePairFilterLabels();
+    }
+
+    function pairFilterActive() {
+      return byId("pairFilterFamily").value !== "all" || ["pairFilterXMin", "pairFilterXMax", "pairFilterYMin", "pairFilterYMax"].some(id => byId(id).value !== "" || byId(id).validity.badInput);
+    }
+
+    function readPairFilters() {
+      const values = {};
+      for (const axis of ["X", "Y"]) for (const bound of ["Min", "Max"]) {
+        const input = byId(`pairFilter${axis}${bound}`); input.removeAttribute("aria-invalid");
+        const value = input.value === "" && !input.validity.badInput ? null : input.valueAsNumber;
+        if (value !== null && !Number.isFinite(value)) { input.setAttribute("aria-invalid", "true"); return { error: "Enter finite filter bounds or leave them blank." }; }
+        values[axis + bound] = value;
+      }
+      for (const axis of ["X", "Y"]) if (values[axis + "Min"] !== null && values[axis + "Max"] !== null && values[axis + "Min"] > values[axis + "Max"]) {
+        byId(`pairFilter${axis}Max`).setAttribute("aria-invalid", "true"); return { error: "Minimum filter bounds must not exceed maximum bounds." };
+      }
+      return values;
+    }
+
+    function filterPairItems() {
+      const filters = readPairFilters(), family = byId("pairFilterFamily").value;
+      const within = (value, min, max) => (min === null || value >= min - 1e-10 * Math.max(1, Math.abs(min))) && (max === null || value <= max + 1e-10 * Math.max(1, Math.abs(max)));
+      pairView = filters.error ? [] : pairItems.filter(pair => (family === "all" || pairFamilyKey(pair) === family) && within(pairMetric(pair, byId("pairAxisX").value), filters.XMin, filters.XMax) && within(pairMetric(pair, byId("pairAxisY").value), filters.YMin, filters.YMax));
+      byId("pairFilterStatus").textContent = filters.error || `${pairView.length.toLocaleString()} of ${pairItems.length.toLocaleString()} combinations shown${pairFilterActive() ? " · filters active" : ""}.${pairView.length ? "" : " Clear filters or expand the bounds to see more pairs."}`;
+      if (filters.error) byId("pairFilterOptions").open = true;
+      pairPage = pairSelected && pairView.includes(pairSelected) ? Math.floor(pairView.indexOf(pairSelected) / PAIR_PAGE_SIZE) : 0;
+      if (!pairView.includes(pairSelected)) pairSelected = pairView[0] || null;
+      renderPairTable();
+      byId("pairFilteredCsv").disabled = !pairView.length;
+      if (pairSelected) selectPair(pairItems.indexOf(pairSelected));
+      else {
+        byId("pairInspector").replaceChildren(); byId("pairInspector").hidden = true;
+        byId("pairApply").disabled = true; byId("pairHover").textContent = "No pair selected.";
+        pairPreviewState = null; renderSchematic(); drawPairChart();
+      }
+      updatePairSummary();
+      return pairView;
     }
 
     function readPairSpec() {
@@ -1377,19 +1473,18 @@
     function sortPairItems() {
       const key = byId("pairSort").value;
       pairItems.sort((a, b) => pairMetric(a, key) - pairMetric(b, key) || a.error - b.error || a.result.total - b.result.total || a.top.mpn.localeCompare(b.top.mpn) || a.bot.mpn.localeCompare(b.bot.mpn));
-      pairPage = pairSelected ? Math.floor(pairItems.indexOf(pairSelected) / PAIR_PAGE_SIZE) : 0;
-      renderPairTable(); drawPairChart();
+      filterPairItems();
     }
 
     function renderPairTable() {
       const host = byId("pairRows"); host.replaceChildren();
-      const start = pairPage * PAIR_PAGE_SIZE, end = Math.min(pairItems.length, start + PAIR_PAGE_SIZE);
+      const start = pairPage * PAIR_PAGE_SIZE, end = Math.min(pairView.length, start + PAIR_PAGE_SIZE);
       for (let index = start; index < end; index++) {
-        const pair = pairItems[index], row = document.createElement("tr"), cell = parts2Cell(row, ""), radio = document.createElement("input");
-        row.dataset.valueRow = String(index); row.dataset.selected = String(pair === pairSelected);
+        const pair = pairView[index], fullIndex = pairItems.indexOf(pair), row = document.createElement("tr"), cell = parts2Cell(row, ""), radio = document.createElement("input");
+        row.dataset.valueRow = String(fullIndex); row.dataset.selected = String(pair === pairSelected);
         radio.type = "radio"; radio.name = "pairChoice"; radio.checked = pair === pairSelected; radio.setAttribute("aria-label", `Select ${pair.top.mpn} and ${pair.bot.mpn}`);
-        radio.addEventListener("change", () => selectPair(index));
-        row.addEventListener("click", event => { if (event.target !== radio) { radio.focus(); selectPair(index); } });
+        radio.addEventListener("change", () => selectPair(fullIndex));
+        row.addEventListener("click", event => { if (event.target !== radio) { radio.focus(); selectPair(fullIndex); } });
         cell.append(radio);
         for (const part of [pair.top, pair.bot]) {
           const partCell = parts2Cell(row, part.mpn); partCell.className = "part-number";
@@ -1398,15 +1493,15 @@
         for (const value of [format(pair.result.vout, "V"), `${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")}`, percent(pair.error), format(pair.result.total, "W"), format(Math.abs(pair.result.i1), "A"), format(pair.result.rth, "Ω"), percent(pair.pstress), percent(pair.vstress)]) parts2Cell(row, value);
         host.append(row);
       }
-      byId("pairPage").textContent = pairItems.length ? `${start + 1}–${end} of ${pairItems.length.toLocaleString()} combinations` : "No combinations";
-      byId("pairPrevious").disabled = pairPage === 0; byId("pairNext").disabled = end >= pairItems.length;
-      byId("pairTableCaption").textContent = `Nominal VMID, power, current and Rth; error and P/V/I stress use worst-case intervals. Showing ${PAIR_PAGE_SIZE} per page; CSV includes all ${pairItems.length.toLocaleString()} combinations.`;
+      byId("pairPage").textContent = pairView.length ? `${start + 1}–${end} of ${pairView.length.toLocaleString()} combinations${pairFilterActive() ? ` (${pairItems.length.toLocaleString()} total)` : ""}` : "No combinations in this selection";
+      byId("pairPrevious").disabled = pairPage === 0; byId("pairNext").disabled = end >= pairView.length;
+      byId("pairTableCaption").textContent = `Nominal VMID, power, current and Rth; error and P/V/I stress use worst-case intervals. Showing ${PAIR_PAGE_SIZE} per page from ${pairView.length.toLocaleString()} visible combinations. Filtered CSV matches this table; all-combinations CSV retains all ${pairItems.length.toLocaleString()} matches.`;
     }
 
     function selectPair(index) {
-      const pair = pairItems[index]; if (!pair) return;
+      const pair = pairItems[index]; if (!pair || !pairView.includes(pair)) return;
       pairSelected = pair;
-      const page = Math.floor(index / PAIR_PAGE_SIZE);
+      const viewIndex = pairView.indexOf(pair), page = Math.floor(viewIndex / PAIR_PAGE_SIZE);
       if (page !== pairPage) { pairPage = page; renderPairTable(); }
       for (const row of byId("pairRows").children) { const selected = Number(row.dataset.valueRow) === index; row.dataset.selected = String(selected); row.querySelector("input").checked = selected; }
       const inspector = byId("pairInspector"); inspector.replaceChildren(); inspector.hidden = false;
@@ -1418,8 +1513,53 @@
         const line = document.createElement("p"); line.className = "hint"; line.textContent = text; inspector.append(line);
       }
       byId("pairApply").disabled = false;
-      byId("pairHover").textContent = `Selected combination ${index + 1} of ${pairItems.length.toLocaleString()}.`;
+      byId("pairHover").textContent = `Selected combination ${viewIndex + 1} of ${pairView.length.toLocaleString()} shown. The top SVG previews this pair; Apply updates the circuit and BOM.`;
+      previewSelectedPair();
       drawPairChart();
+    }
+
+    function pairAlternativeParts(pair, side) {
+      pair.alternatives ||= {};
+      if (pair.alternatives[side]) return pair.alternatives[side];
+      const chosen = side === "Top" ? pair.top : pair.bot, alternatives = [];
+      for (const entry of parts2Families) {
+        if (entry.id === chosen.familyId) continue;
+        try {
+          const family = ResistorParts.family(resistorCatalog, entry.id), options = parts2Options(family, chosen.case, chosen.temperatureC, chosen.tcrPpm);
+          if (!options) continue;
+          const candidate = ResistorParts.evaluate(resistorCatalog, entry.id, { ...options, resistanceOhms: chosen.resistanceOhms, tolerancePct: chosen.tolerancePct });
+          if (evaluateResistorPair(pairSpec, side === "Top" ? candidate : pair.top, side === "Bot" ? candidate : pair.bot)) alternatives.push(candidate);
+        } catch (_) { /* This family has no qualifying exact-value alternative. */ }
+      }
+      pair.alternatives[side] = alternatives;
+      return alternatives;
+    }
+
+    function previewSelectedPair() {
+      if (!pairSelected || !pairSpec || byId("pairTab").getAttribute("aria-selected") !== "true") { pairPreviewState = null; renderSchematic(); return; }
+      const pair = pairSelected, spec = pairSpec;
+      const physical = {};
+      for (const [arm, side, chosen, voltage, current] of [["r1", "Top", pair.top, pair.result.v1, pair.result.i1], ["r2", "Bot", pair.bot, pair.result.vout, pair.result.i2]]) physical[arm] = analyzeParts([{
+        id: arm, name: arm === "r1" ? "R1" : "R2", resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV,
+        mpn: chosen.mpn, catalog: chosen, alternatives: pairAlternativeParts(pair, side)
+      }], "series", voltage, current);
+      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, pair };
+      renderSchematic();
+    }
+
+    function schematicPartAlternatives(part) {
+      if (!part.catalog || !resistorCatalog || !schematicState) return [];
+      const alternatives = [];
+      for (const entry of parts2Families) {
+        if (entry.id === part.catalog.familyId) continue;
+        try {
+          const family = ResistorParts.family(resistorCatalog, entry.id), options = parts2Options(family, part.catalog.case, part.catalog.temperatureC, part.catalog.tcrPpm);
+          if (!options) continue;
+          const candidate = ResistorParts.evaluate(resistorCatalog, entry.id, { ...options, resistanceOhms: part.resistance, tolerancePct: part.tolerance });
+          if (previewCatalogPart(candidate, part.id).highest <= 100 + 1e-9) alternatives.push(candidate);
+        } catch (_) { /* Unsupported or electrically unsuitable alternate part. */ }
+      }
+      return alternatives;
     }
 
     function drawPairChart() {
@@ -1433,6 +1573,7 @@
       const xPad = Math.max(0.05, (xMax - xMin) * 0.04), yPad = Math.max(0.000001, (yMax - yMin) * 0.08, Math.abs(yMin) * 0.01);
       xMin -= xPad; xMax += xPad; yMin = yKey === "vmid" ? yMin - yPad : Math.max(0, yMin - yPad); yMax += yPad;
       const left = 62, right = width - 18, top = 27, bottom = height - 53;
+      pairPlot = { left, right, top, bottom, xMin, xMax, yMin, yMax };
       const xPos = value => left + (Math.log10(value) - xMin) / (xMax - xMin) * (right - left), yPos = value => bottom - (value - yMin) / (yMax - yMin) * (bottom - top);
       ctx.font = "11px Consolas, monospace"; ctx.lineWidth = 1;
       for (let tick = 0; tick <= 4; tick++) {
@@ -1444,11 +1585,26 @@
       ctx.fillStyle = "#d3e6f4"; ctx.textAlign = "left"; ctx.fillText(byId("pairAxisY").selectedOptions[0].textContent, 10, 15);
       ctx.textAlign = "center"; ctx.fillText(byId("pairAxisX").selectedOptions[0].textContent + " · log scale", width / 2, height - 9);
       pairPoints = [];
+      const visible = new Set(pairView);
       for (const [index, pair] of pairItems.entries()) {
         const x = xPos(pairMetric(pair, xKey)), y = yPos(pairMetric(pair, yKey));
-        const milTop = pair.top.familyId.includes("m55342"), milBot = pair.bot.familyId.includes("m55342");
-        ctx.fillStyle = milTop && milBot ? "#ffba52" : !milTop && !milBot ? "#54d2ff" : "#6ee7ac";
-        ctx.fillRect(x - 2, y - 2, 4, 4); pairPoints.push({ x, y, index });
+        ctx.fillStyle = { mil: "#ffba52", tnpw: "#54d2ff", mixed: "#6ee7ac" }[pairFamilyKey(pair)];
+        ctx.globalAlpha = visible.has(pair) ? 1 : 0.12;
+        ctx.fillRect(x - 2, y - 2, 4, 4); pairPoints.push({ x, y, index, visible: visible.has(pair) });
+      }
+      ctx.globalAlpha = 1;
+      const filters = readPairFilters();
+      let rectangle = null;
+      if (pairBrush?.dragged) rectangle = { x1: pairBrush.startX, y1: pairBrush.startY, x2: pairBrush.x, y2: pairBrush.y };
+      else if (!filters.error && [filters.XMin, filters.XMax, filters.YMin, filters.YMax].some(value => value !== null)) rectangle = {
+        x1: filters.XMin === null || filters.XMin <= 0 ? left : xPos(filters.XMin), x2: filters.XMax === null ? right : filters.XMax <= 0 ? left : xPos(filters.XMax),
+        y1: filters.YMax === null ? top : yPos(filters.YMax), y2: filters.YMin === null ? bottom : yPos(filters.YMin)
+      };
+      if (rectangle) {
+        const clampX = x => Math.max(left, Math.min(right, x)), clampY = y => Math.max(top, Math.min(bottom, y));
+        const x1 = clampX(Math.min(rectangle.x1, rectangle.x2)), x2 = clampX(Math.max(rectangle.x1, rectangle.x2)), y1 = clampY(Math.min(rectangle.y1, rectangle.y2)), y2 = clampY(Math.max(rectangle.y1, rectangle.y2));
+        ctx.fillStyle = "rgba(84,210,255,.08)"; ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+        ctx.strokeStyle = "#eaf6ff"; ctx.lineWidth = 1; ctx.setLineDash([5, 4]); ctx.strokeRect(x1, y1, x2 - x1, y2 - y1); ctx.setLineDash([]);
       }
       const selected = pairPoints.find(point => pairItems[point.index] === pairSelected);
       if (selected) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(selected.x, selected.y, 6, 0, 2 * Math.PI); ctx.stroke(); }
@@ -1456,14 +1612,58 @@
 
     function nearestPairPoint(event) {
       const bounds = byId("pairChart").getBoundingClientRect(); let nearest = null, distance = 144;
-      for (const point of pairPoints) { const delta = (point.x - (event.clientX - bounds.left)) ** 2 + (point.y - (event.clientY - bounds.top)) ** 2; if (delta < distance) { nearest = point; distance = delta; } }
+      for (const point of pairPoints) { if (!point.visible) continue; const delta = (point.x - (event.clientX - bounds.left)) ** 2 + (point.y - (event.clientY - bounds.top)) ** 2; if (delta < distance) { nearest = point; distance = delta; } }
       return nearest;
     }
 
-    function pairSearchCsv() {
-      if (!pairSpec || !pairItems.length) return "";
+    function pairPointerPosition(event) {
+      if (!pairPlot) return null;
+      const bounds = byId("pairChart").getBoundingClientRect();
+      return { x: Math.max(pairPlot.left, Math.min(pairPlot.right, event.clientX - bounds.left)), y: Math.max(pairPlot.top, Math.min(pairPlot.bottom, event.clientY - bounds.top)) };
+    }
+
+    function beginPairBrush(event) {
+      if (event.button !== 0 || !pairPlot || !pairItems.length) return;
+      const bounds = byId("pairChart").getBoundingClientRect(), x = event.clientX - bounds.left, y = event.clientY - bounds.top;
+      if (x < pairPlot.left || x > pairPlot.right || y < pairPlot.top || y > pairPlot.bottom) return;
+      pairIgnoreClick = false; pairBrush = { pointerId: event.pointerId, startX: x, startY: y, x, y, dragged: false };
+      byId("pairChart").focus({ preventScroll: true });
+      try { byId("pairChart").setPointerCapture(event.pointerId); } catch (_) { /* Synthetic test events have no native pointer capture. */ }
+      event.preventDefault();
+    }
+
+    function movePairBrush(event) {
+      if (!pairBrush || event.pointerId !== pairBrush.pointerId) return false;
+      const position = pairPointerPosition(event); pairBrush.x = position.x; pairBrush.y = position.y;
+      pairBrush.dragged ||= Math.hypot(pairBrush.x - pairBrush.startX, pairBrush.y - pairBrush.startY) >= 5;
+      if (pairBrush.dragged) drawPairChart();
+      return true;
+    }
+
+    function finishPairBrush(event) {
+      if (!pairBrush || event.pointerId !== pairBrush.pointerId) return;
+      movePairBrush(event);
+      const brush = pairBrush; pairBrush = null; pairIgnoreClick = true;
+      if (byId("pairChart").hasPointerCapture(event.pointerId)) byId("pairChart").releasePointerCapture(event.pointerId);
+      if (!brush.dragged) { const point = nearestPairPoint(event); if (point) selectPair(point.index); return; }
+      const xValue = x => Math.pow(10, pairPlot.xMin + (x - pairPlot.left) / (pairPlot.right - pairPlot.left) * (pairPlot.xMax - pairPlot.xMin));
+      const yValue = y => pairPlot.yMax - (y - pairPlot.top) / (pairPlot.bottom - pairPlot.top) * (pairPlot.yMax - pairPlot.yMin);
+      for (const [id, value] of [["pairFilterXMin", xValue(Math.min(brush.startX, brush.x))], ["pairFilterXMax", xValue(Math.max(brush.startX, brush.x))], ["pairFilterYMin", yValue(Math.max(brush.startY, brush.y))], ["pairFilterYMax", yValue(Math.min(brush.startY, brush.y))]]) byId(id).value = Number(value.toPrecision(12));
+      filterPairItems();
+    }
+
+    function cancelPairBrush() {
+      if (!pairBrush) return false;
+      const pointerId = pairBrush.pointerId; pairBrush = null; pairIgnoreClick = true;
+      if (byId("pairChart").hasPointerCapture(pointerId)) byId("pairChart").releasePointerCapture(pointerId);
+      drawPairChart(); return true;
+    }
+
+    function pairSearchCsv(filtered = false) {
+      const items = filtered ? pairView : pairItems;
+      if (!pairSpec || !items.length) return "";
       const rows = [["RTOP part", "RBOT part", "RTOP (ohm)", "RBOT (ohm)", "RTOP tolerance (%)", "RBOT tolerance (%)", "VTOP (V)", "VTOP tolerance (%)", "Target VMID (V)", "Allowed error (%)", "RL (ohm)", "RL tolerance (%)", "Nominal VMID (V)", "Minimum VMID (V)", "Maximum VMID (V)", "Worst target error (%)", "Nominal power (W)", "Worst power (W)", "Nominal input current (A)", "Worst input current (A)", "Rth (ohm)", "Worst RTOP Pstress (%)", "Worst RBOT Pstress (%)", "Worst RTOP V/I stress (%)", "Worst RBOT V/I stress (%)", "RTOP allowed power (W)", "RBOT allowed power (W)", "Ambient (C)", "TCR (ppm/C)", "RTOP mode", "RBOT mode", "RTOP source", "RBOT source", "Stock"]];
-      for (const pair of pairItems) rows.push([pair.top.mpn, pair.bot.mpn, pair.top.resistanceOhms, pair.bot.resistanceOhms, pair.top.tolerancePct, pair.bot.tolerancePct, pairSpec.vin, pairSpec.sourceTolerance, pairSpec.target, pairSpec.errorPct, pairSpec.rl ?? "Open", pairSpec.loadTolerance, pair.result.vout, pair.bounds.min, pair.bounds.max, pair.error, pair.result.total, pair.worst.power, Math.abs(pair.result.i1), pair.worst.current, pair.result.rth, pair.worst.top.p, pair.worst.bot.p, pair.worst.top.v, pair.worst.bot.v, pair.top.powerW, pair.bot.powerW, pairSpec.temperatureC, pairSpec.tcrPpm, pair.top.mode, pair.bot.mode, pair.top.sourceUrl, pair.bot.sourceUrl, "Not checked"]);
+      for (const pair of items) rows.push([pair.top.mpn, pair.bot.mpn, pair.top.resistanceOhms, pair.bot.resistanceOhms, pair.top.tolerancePct, pair.bot.tolerancePct, pairSpec.vin, pairSpec.sourceTolerance, pairSpec.target, pairSpec.errorPct, pairSpec.rl ?? "Open", pairSpec.loadTolerance, pair.result.vout, pair.bounds.min, pair.bounds.max, pair.error, pair.result.total, pair.worst.power, Math.abs(pair.result.i1), pair.worst.current, pair.result.rth, pair.worst.top.p, pair.worst.bot.p, pair.worst.top.v, pair.worst.bot.v, pair.top.powerW, pair.bot.powerW, pairSpec.temperatureC, pairSpec.tcrPpm, pair.top.mode, pair.bot.mode, pair.top.sourceUrl, pair.bot.sourceUrl, "Not checked"]);
       return rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(",")).join("\r\n") + "\r\n";
     }
 
@@ -2050,20 +2250,28 @@
       for (const input of byId("pairForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
     }, 0));
     byId("pairCancel").addEventListener("click", () => invalidatePairSearch("Search canceled."));
-    for (const id of ["pairAxisX", "pairAxisY"]) byId(id).addEventListener("change", drawPairChart);
-    byId("pairSort").addEventListener("change", () => { sortPairItems(); if (pairSelected) selectPair(pairItems.indexOf(pairSelected)); });
+    for (const id of ["pairAxisX", "pairAxisY"]) byId(id).addEventListener("change", () => { resetPairFilterInputs(true); filterPairItems(); });
+    for (const id of ["pairFilterXMin", "pairFilterXMax", "pairFilterYMin", "pairFilterYMax"]) byId(id).addEventListener("input", filterPairItems);
+    byId("pairFilterFamily").addEventListener("change", filterPairItems);
+    byId("pairClearFilters").addEventListener("click", () => { resetPairFilterInputs(); filterPairItems(); });
+    byId("pairSort").addEventListener("change", sortPairItems);
     byId("pairPrevious").addEventListener("click", () => { if (pairPage > 0) { pairPage--; renderPairTable(); } });
-    byId("pairNext").addEventListener("click", () => { if ((pairPage + 1) * PAIR_PAGE_SIZE < pairItems.length) { pairPage++; renderPairTable(); } });
+    byId("pairNext").addEventListener("click", () => { if ((pairPage + 1) * PAIR_PAGE_SIZE < pairView.length) { pairPage++; renderPairTable(); } });
+    byId("pairChart").addEventListener("pointerdown", beginPairBrush);
+    byId("pairChart").addEventListener("pointerup", finishPairBrush);
     byId("pairChart").addEventListener("pointermove", event => {
+      if (movePairBrush(event)) return;
       const point = nearestPairPoint(event); if (!point) return;
       const pair = pairItems[point.index]; byId("pairHover").textContent = `${pair.top.mpn} / ${pair.bot.mpn}: VMID ${format(pair.result.vout, "V")}; worst error ${percent(pair.error)}; power ${format(pair.result.total, "W")}.`;
     });
-    byId("pairChart").addEventListener("click", event => { const point = nearestPairPoint(event); if (point) selectPair(point.index); });
+    for (const eventName of ["pointercancel", "lostpointercapture"]) byId("pairChart").addEventListener(eventName, cancelPairBrush);
+    byId("pairChart").addEventListener("keydown", event => { if (event.key !== "Escape") return; event.preventDefault(); if (!cancelPairBrush()) { resetPairFilterInputs(); filterPairItems(); } });
+    byId("pairChart").addEventListener("click", event => { if (pairIgnoreClick) { pairIgnoreClick = false; return; } const point = nearestPairPoint(event); if (point) selectPair(point.index); });
     byId("pairApply").addEventListener("click", applySelectedPair);
-    byId("pairCsv").addEventListener("click", () => {
-      const text = pairSearchCsv(); if (!text) return;
+    for (const [id, filtered] of [["pairCsv", false], ["pairFilteredCsv", true]]) byId(id).addEventListener("click", () => {
+      const text = pairSearchCsv(filtered); if (!text) return;
       const link = document.createElement("a"), url = URL.createObjectURL(new Blob(["\ufeff", text], { type: "text/csv;charset=utf-8" }));
-      link.href = url; link.download = "voltage_divider_pairs.csv"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      link.href = url; link.download = filtered ? "voltage_divider_pairs_filtered.csv" : "voltage_divider_pairs.csv"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     byId("catalogBom").addEventListener("click", () => {
       const link = document.createElement("a");
@@ -2072,7 +2280,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     window.addEventListener("resize", renderSchematic);
-    window.addEventListener("resize", drawPairChart);
+    window.addEventListener("resize", () => { if (!cancelPairBrush()) drawPairChart(); });
     form.addEventListener("submit", event => {
       event.preventDefault();
       update();

@@ -19,6 +19,16 @@ The SVG reflows for smaller screens and stays on the calculator page.
 below and the LTspice/Markdown downloads remain the default circuit references;
 the calculator keeps its live SVG, styling, and logic in the one HTML file.
 
+In the resistor-pair visualization, selecting a point or table row previews that
+pair in the top SVG, including VMID bounds, error, power, current, Rth and worst
+stress. The per-part fields show the selected MPN's nominal stress. Matching
+TNPW or M55342/D55342 alternatives appear alongside it with their own power and
+voltage limits. Preview alternatives must also satisfy the pair search criteria;
+other calculator views check alternatives at the nominal operating point.
+Selecting a candidate preserves the applied circuit inputs and BOM. The heading
+identifies the preview, and Download SVG captures it. Leaving the visualization
+or selecting an empty region restores the current circuit display.
+
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
 
 [Calculator](../calculators/voltage_divider.html) ·
@@ -219,11 +229,29 @@ rating is not checked. Catalog ambient derates allowable power; TCR filters code
 All matches appear on the interactive scatter chart. Choose power, input current,
 or unloaded output resistance Rth for the logarithmic X axis; compare worst target
 error, nominal error/VMID, or worst P/V/I stress on Y. Points can overlap when
-different part numbers have the same performance. Hover or select a point to
-inspect its pair, or use the keyboard-accessible table. Sorting applies to the
-entire result set; table pages show 50 combinations at a time. **Download all
+different part numbers have the same performance. Hover to inspect a point,
+or select a point/table row to preview its pair in the top SVG. Sorting applies
+to all matching results; table pages show 50 visible combinations at a time. **Download all
 combinations CSV** includes every match, its conditions, source links, and nominal
 and worst-case performance. Supplier stock remains unverified.
+
+Click and drag a rectangle over the chart to show only pairs inside that area in
+the table. Dragging in any direction replaces the previous area. Excluded points
+remain dimmed so the full search stays visible as context. **Filter bounds and
+families** offers equivalent numeric limits in the displayed axis units, plus a
+same-family/mixed-family selector. Numeric bounds and the family filter intersect.
+Axis changes clear coordinate bounds and retain the family filter; resizing keeps
+the selected data range. **Clear filters** restores all matches. With the chart
+focused, Escape cancels an unfinished drag, or clears all filters when no drag
+is active.
+
+Counts, table sorting and pagination follow the visible subset. If the current
+pair is excluded, the first remaining pair is previewed; an empty selection
+clears the preview and disables applying or exporting a filtered pair set.
+**Download filtered CSV** includes exactly the visible pairs, while **Download
+all combinations CSV** preserves the full search. Filters do not rerun the
+catalog search. Editing search inputs or resetting the search clears filters
+and stale results together.
 
 **Apply selected pair** sets both actual resistor values and ratings together,
 copies the search's source/load conditions, and switches to forward VMID analysis.

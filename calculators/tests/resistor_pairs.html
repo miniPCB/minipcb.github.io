@@ -55,6 +55,59 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   if(point){get('pairChart').dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:rect.left+point.x,clientY:rect.top+point.y}));assert(get('pairInspector').textContent.includes(items[point.index].top.mpn),'Clicking a chart point selects the corresponding real pair');}
   set('pairSort','power');
   assert(items.every((p,i)=>i===0||items[i-1].result.total<=p.result.total+1e-15),'Sorting orders the full result set by performance');
+  const shown=()=>w.filterPairItems(),samePairs=(a,b)=>a.map(key).sort().join('|')===b.map(key).sort().join('|');
+  const primary=(arm)=>d.querySelector(`[data-schematic-part="${arm}"] [data-field="mpn"]`)?.textContent;
+  const actualInputs=['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|'),actualBom=w.catalogBomCsv();
+  const different=items.findIndex(p=>Math.abs(p.result.vout-6)>0.001);w.selectPair(different);
+  assert(get('schematicVmid').textContent==='VMID '+w.format(items[different].result.vout,'V')&&primary('r1')===items[different].top.mpn&&primary('r2')===items[different].bot.mpn,'Selecting a pair previews its VMID and both actual MPNs in the top SVG');
+  assert(get('schematicHeading').textContent.includes('preview')&&get('liveSchematic').querySelector('[data-field="pairPerformance"]').textContent.includes('preview'),'The SVG identifies candidate preview separately from the applied circuit');
+  assert(['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|')===actualInputs&&w.catalogBomCsv()===actualBom,'Selecting a chart/table pair leaves actual inputs and BOM intact');
+  set('pairAxisX','power');set('pairAxisY','error');set('pairFilterFamily','tnpw');
+  assert(shown().length>0&&shown().every(p=>p.top.familyId===tid&&p.bot.familyId===tid),'Family filtering restricts table pairs to the selected family combination');
+  assert(primary('r1').startsWith('TNPW')&&d.querySelector('[data-schematic-part="r1"] [data-field="mpnAlternative"]').textContent.includes('M55342'),'A TNPW preview also displays the qualifying exact-value M55342 alternative');
+  assert(d.querySelector('[data-schematic-part="r1"] [data-field="alternativeLimits"]').textContent.includes('150 mW'),'SVG alternatives retain their own power rating rather than the selected family rating');
+  const svgSnapshot=await(await fetch(get('schematicDownload').href)).text();
+  assert(svgSnapshot.includes('TNPW')&&svgSnapshot.includes('M55342')&&svgSnapshot.includes('pairPerformance')&&!new DOMParser().parseFromString(svgSnapshot,'image/svg+xml').querySelector('parsererror'),'Downloaded SVG captures both family numbers and selected-pair performance');
+  get('overviewTab').click();assert(!get('schematicHeading').textContent.includes('preview')&&!primary('r1'),'Leaving the visualization restores the current circuit SVG');
+  get('pairTab').click();assert(primary('r1').startsWith('TNPW'),'Returning to the visualization restores its selected pair preview');
+  set('pairFilterXMin','1');set('pairFilterXMax','10');set('pairFilterYMin','1.5');set('pairFilterYMax','3.5');
+  let visible=shown(),expected=items.filter(p=>p.top.familyId===tid&&p.bot.familyId===tid&&p.result.total*1000>=1-1e-10&&p.result.total*1000<=10+1e-10&&p.error>=1.5-1e-10&&p.error<=3.5+1e-10);
+  assert(visible.length>0&&visible.length<items.length&&samePairs(visible,expected),'Numeric bounds intersect both chart axes and the family filter exactly');
+  assert(get('pairFilterXMinLabel').textContent.includes('mW')&&get('pairFilterYMaxLabel').textContent.includes('error'),'Manual filter labels track the selected axis units');
+  assert(w.pairSearchCsv(true).trim().split('\r\n').length===visible.length+1&&w.pairSearchCsv().trim().split('\r\n').length===items.length+1,'Filtered CSV contains exactly visible pairs while all-combinations CSV retains the full search');
+  assert([...get('pairRows').rows].every(row=>visible.includes(items[Number(row.dataset.valueRow)])),'Every table row belongs to the filtered result set');
+  const selectedBeforeSort=primary('r1')+'|'+primary('r2');set('pairSort','rth');
+  assert(primary('r1')+'|'+primary('r2')===selectedBeforeSort&&samePairs(shown(),expected),'Sorting preserves filters and the selected SVG preview');
+  visible=shown();w.selectPair(items.indexOf(visible[0]));
+  if(visible.length>50){get('pairNext').click();assert(items[Number(get('pairRows').rows[0].dataset.valueRow)]===visible[50],'Filtered pagination uses filtered rows rather than full-search indexes');get('pairPrevious').click();}
+  set('pairFilterXMin','20');set('pairFilterXMax','1');
+  assert(shown().length===0&&get('pairFilterXMax').getAttribute('aria-invalid')==='true'&&get('pairApply').disabled,'Reversed numeric bounds expose the error and disable stale application');
+  get('pairClearFilters').click();assert(shown().length===items.length&&!get('pairFilterXMax').hasAttribute('aria-invalid'),'Clear filters restores every matching pair and clears validation state');
+  set('pairFilterXMin','1000000');
+  assert(shown().length===0&&get('pairRows').rows.length===0&&get('pairFilteredCsv').disabled&&w.pairSearchCsv(true)===''&&!get('schematicHeading').textContent.includes('preview'),'An empty selection clears table, preview, filtered export and application');
+  assert(w.pairSearchCsv().trim().split('\r\n').length===items.length+1,'An empty visualization selection preserves the full search for clearing/export');
+  get('pairClearFilters').click();set('pairSort','power');
+  const pointer=(type,x,y,pointerId=61)=>{const bounds=get('pairChart').getBoundingClientRect();get('pairChart').dispatchEvent(new w.PointerEvent(type,{bubbles:true,cancelable:true,pointerId,pointerType:'mouse',isPrimary:true,button:0,buttons:type==='pointerup'?0:1,clientX:bounds.left+x,clientY:bounds.top+y}));};
+  const drag=(x1,y1,x2,y2)=>{pointer('pointerdown',x1,y1);pointer('pointermove',x2,y2);pointer('pointerup',x2,y2);const before=get('pairInspector').textContent,bounds=get('pairChart').getBoundingClientRect();get('pairChart').dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:bounds.left+x2,clientY:bounds.top+y2}));assert(get('pairInspector').textContent===before,'The compatibility click after dragging does not override the filtered selection');};
+  let chartWidth=get('pairChart').getBoundingClientRect().width;
+  const x1=62+(chartWidth-80)*0.2,x2=62+(chartWidth-80)*0.65,y1=27+260*0.25,y2=27+260*0.7;
+  drag(x1,y1,x2,y2);
+  const bounds=['pairFilterXMin','pairFilterXMax','pairFilterYMin','pairFilterYMax'].map(id=>get(id).valueAsNumber);
+  expected=items.filter(p=>p.result.total*1000>=bounds[0]-1e-10&&p.result.total*1000<=bounds[1]+1e-10&&p.error>=bounds[2]-1e-10&&p.error<=bounds[3]+1e-10);
+  assert(expected.length>0&&expected.length<items.length&&samePairs(shown(),expected),'Dragging a chart region filters table rows to its data-space rectangle');
+  const logValues=items.map(p=>Math.log10(p.result.total*1000)),logMin=Math.min(...logValues),logMax=Math.max(...logValues),logPad=Math.max(0.05,(logMax-logMin)*0.04);
+  near(bounds[0],10**(logMin-logPad+(logMax-logMin+2*logPad)*0.2),'Drag X minimum respects logarithmic axis conversion');
+  near(bounds[1],10**(logMin-logPad+(logMax-logMin+2*logPad)*0.65),'Drag X maximum respects logarithmic axis conversion');
+  drag(x2,y2,x1,y1);assert(samePairs(shown(),expected),'Dragging in reverse selects the same region');
+  const priorBounds=['pairFilterXMin','pairFilterXMax','pairFilterYMin','pairFilterYMax'].map(id=>get(id).value).join('|'),priorPreview=get('pairInspector').textContent;
+  pointer('pointerdown',x1,y1);pointer('pointermove',x2,y1+10);get('pairChart').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));pointer('pointerup',x2,y1+10);
+  get('pairChart').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  assert(['pairFilterXMin','pairFilterXMax','pairFilterYMin','pairFilterYMax'].map(id=>get(id).value).join('|')===priorBounds&&get('pairInspector').textContent===priorPreview,'Escape during dragging cancels the gesture without changing filters or preview');
+  pointer('pointerdown',x1,y1);pointer('pointermove',x2,y2);pointer('pointercancel',x2,y2);assert(samePairs(shown(),expected),'Pointer cancellation preserves the previously committed region');
+  frame.style.width='390px';await pause();assert(samePairs(shown(),expected),'Resize preserves drag filters in data coordinates');frame.style.width='1440px';await pause();
+  set('pairAxisX','current');assert(get('pairFilterXMin').value===''&&get('pairFilterYMin').value===''&&shown().length===items.length&&get('pairFilterXMaxLabel').textContent.includes('µA'),'Axis changes clear old coordinate bounds and relabel their units');
+  set('pairFilterFamily','mixed');set('pairFilterXMin','1');get('pairChart').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert(shown().length===items.length&&get('pairFilterFamily').value==='all','Escape outside a gesture clears the active visualization filters');
+  get('pairClearFilters').click();
   await reset();set('pairMinR','1000');set('pairMaxR','3000');set('pairVmid','4');set('pairRl','10000');set('pairSourceTol','1');set('pairLoadTol','3');
   items=await run();const spec=w.readPairSpec(),tops=w.catalogPairParts(spec,'Top'),bots=w.catalogPairParts(spec,'Bot'),brute=[];
   for(const top of tops)for(const bot of bots){const match=w.evaluateResistorPair(spec,top,bot);if(match)brute.push(key(match));}
@@ -92,6 +145,8 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   await reset();set('pairTemperature','125');items=await run();
   assert(items.length>0&&items.every(p=>p.top.familyId===mid&&p.bot.familyId===mid),'Family-specific ambient limits remove affected catalog parts only');
   set('pairFamilyTop',tid);assert((await run()).length===0,'A selected family outside its thermal range produces no invalid matches');
+  await reset();set('pairVin','110');set('pairVmid','55');set('pairMinR','100000');set('pairMaxR','100000');items=await run();
+  assert(items.length===1&&items[0].top.familyId===tid&&!get('liveSchematic').querySelector('[data-field="mpnAlternative"]'),'SVG omits same-value alternate numbers that fail the selected pair working-voltage limits');
   await reset();set('pairVin','-12');set('pairVmid','-6');const negative=await run();set('pairVin','12');set('pairVmid','6');const positive=await run();
   assert(negative.map(key).sort().join('|')===positive.map(key).sort().join('|')&&negative.every(p=>p.bounds.min<0&&p.bounds.max<0),'Negative sources produce the corresponding valid pair set and signed voltage bounds');
   for(const [id,value]of [['pairVin','0'],['pairVmid','12'],['pairSourceTol','100'],['pairMinR','0'],['pairMaxR','1'],['pairMaxStress','101'],['pairRl','-1'],['pairTemperature','']]){
@@ -101,7 +156,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   await reset();set('pairTolTop','0.1');set('pairTolBot','0.1');set('pairMinR','100');set('pairMaxR','1000000');const pending=run();get('pairCancel').click();await pending;
   assert(get('pairStatus').textContent==='Search canceled.'&&get('pairResults').hidden&&get('pairFind').disabled===false,'Cancel discards incomplete search results');
   await reset();await run();
-  for(const width of [320,390,768,900,1440]){frame.style.width=width+'px';await pause();assert(d.documentElement.scrollWidth<=width&&get('pairChart').getBoundingClientRect().width<=get('pairPanel').getBoundingClientRect().width,`Focused search and chart fit at ${width}px`);}
+  for(const width of [320,390,768,900,1440]){frame.style.width=width+'px';await pause();assert(d.documentElement.scrollWidth<=width&&get('pairChart').getBoundingClientRect().width<=get('pairPanel').getBoundingClientRect().width,`Focused search and chart fit at ${width}px`);const svgBounds=get('liveSchematic').getBoundingClientRect();assert([...get('liveSchematic').querySelectorAll('text')].every(node=>{const box=node.getBoundingClientRect();return box.left>=svgBounds.left-1&&box.right<=svgBounds.right+1&&box.top>=svgBounds.top-1&&box.bottom<=svgBounds.bottom+1;}),`Selected-pair SVG and both family numbers fit at ${width}px`);}
   assert(errors.length===0,'No browser runtime errors during chart/search interactions: '+errors.join('; '));
   await reset();assert(get('pairPackageTop').value==='0805'&&get('pairTolTop').value==='1'&&get('pairTcr').value==='25'&&get('pairResults').hidden,'Search reset restores catalog defaults and clears prior results');
  }catch(error){failures.push(error.stack);}
