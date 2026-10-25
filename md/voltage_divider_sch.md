@@ -291,6 +291,25 @@ all combinations CSV** preserves the full search. Filters do not rerun the
 catalog search. Editing search inputs or resetting the search clears filters
 and stale results together.
 
+Use a result row's **Compare** checkbox to select multiple pairs for the
+**Compare resistor pairs** table below the results. **Add preview to comparison**
+also adds the currently previewed chart/table pair. **Preview** continues to
+choose the pair displayed in the top SVG; adding a comparison leaves the applied
+circuit and BOM unchanged. Pairs are kept in selection order without duplicates
+across pages, sorting, axis changes and chart/family filters. The count identifies
+selected pairs outside the current chart filters. Uncheck a pair, use its
+**Remove** button, or **Clear comparison** to remove selections. Starting a new
+search, editing its inputs or resetting/canceling it clears stale comparisons.
+
+Each comparison row includes both MPNs and independent resistance, tolerance,
+footprint, TCR, reliability, power, voltage and operating conditions. Performance
+columns show nominal VMID and its interval, worst target error, nominal/worst
+total power and input current, Rth, and worst per-arm Pstress and V/I stress.
+**Copy table** copies exactly the selected pairs, their part details and search
+conditions as tab-separated text for a spreadsheet or document. If clipboard
+access is unavailable, the page selects the complete text for manual copying.
+Changing the selected comparison clears outdated copy text.
+
 **Apply selected pair** sets both actual resistor values and ratings together,
 copies the search's source/load conditions, and switches to forward VMID analysis.
 It opens the Parts (2) BOM with both MPNs and updates the live SVG. Applying a pair

@@ -199,7 +199,7 @@
     .parts-table th, .parts-table td { text-align: left; vertical-align: top; }
     .parts-table small { display: block; margin-top: 5px; font: 0.7rem/1.5 var(--sans); color: var(--muted); white-space: normal; min-width: 125px; }
     .parts-table .part-number { font-size: 0.77rem; white-space: nowrap; }
-    .parts-table input[type="radio"] { width: 17px; min-height: auto; margin: 2px 0; accent-color: var(--accent); }
+    .parts-table input[type="radio"], .parts-table input[type="checkbox"] { width: 17px; min-height: auto; margin: 2px 0; accent-color: var(--accent); }
     .parts-table tr[data-value-row] { cursor: pointer; }
     .parts-table tr[data-value-row]:hover > * { background: #1b3040; }
     .parts-table tr[data-selected="true"] > * { background: #1c394a; }
@@ -219,6 +219,7 @@
     .pair-table { margin-top: 14px; max-height: 430px; }
     .pair-inspector { margin: 16px 0; padding: 14px; border-radius: 10px; background: #101823; }
     .pair-inspector p { margin: 8px 0 0; }
+    .pair-comparison-conditions { min-width: 240px; max-width: 320px; white-space: normal; }
     fieldset { margin: 2px 0 0; padding: 10px 0 0; border: 0; }
     legend { padding: 0 8px 0 0; }
     details { border: 0; padding-top: 0; }
@@ -757,12 +758,22 @@
               <p id="pairFilterStatus" class="note" role="status"></p>
               <p id="pairHover" class="hint" role="status">Select a combination to inspect its part numbers and performance.</p>
               <div id="pairInspector" class="pair-inspector" hidden></div>
-              <div class="actions"><button id="pairApply" class="btn btn-accent" type="button" disabled>Apply selected pair</button><button id="pairCsv" class="btn" type="button" disabled>Download all combinations CSV ↓</button></div>
+              <div class="actions"><button id="pairApply" class="btn btn-accent" type="button" disabled>Apply selected pair</button><button id="pairCompareAdd" class="btn" type="button" disabled>Add preview to comparison</button><button id="pairCsv" class="btn" type="button" disabled>Download all combinations CSV ↓</button></div>
               <div class="field pair-controls"><label for="pairSort">Sort combinations</label><select id="pairSort"><option value="error">Worst-case target error</option><option value="power">Total power</option><option value="current">Input current</option><option value="rth">Output resistance Rth</option><option value="pstress">Worst-case Pstress</option></select></div>
+              <p class="hint">Check Compare to keep multiple pairs in the table below. Preview selects the pair shown in the top SVG.</p>
               <div class="table-wrap parts-values pair-table" tabindex="0" role="region" aria-label="Matching resistor combinations, scroll for all performance columns">
-                <table class="parts-table"><caption id="pairTableCaption">Matching combinations · all results are included in the CSV.</caption><thead><tr><th scope="col">Select</th><th scope="col">RTOP part</th><th scope="col">RBOT part</th><th scope="col">VMID</th><th scope="col">VMID range</th><th scope="col">Worst error</th><th scope="col">Power</th><th scope="col">Input I</th><th scope="col">Rth</th><th scope="col">Pstress</th><th scope="col">V/I stress</th></tr></thead><tbody id="pairRows"></tbody></table>
+                <table class="parts-table"><caption id="pairTableCaption">Matching combinations · all results are included in the CSV.</caption><thead><tr><th scope="col">Preview</th><th scope="col">Compare</th><th scope="col">RTOP part</th><th scope="col">RBOT part</th><th scope="col">VMID</th><th scope="col">VMID range</th><th scope="col">Worst error</th><th scope="col">Power</th><th scope="col">Input I</th><th scope="col">Rth</th><th scope="col">Pstress</th><th scope="col">V/I stress</th></tr></thead><tbody id="pairRows"></tbody></table>
               </div>
               <div class="pair-pagination"><button id="pairPrevious" class="btn" type="button">Previous</button><span id="pairPage" class="hint"></span><button id="pairNext" class="btn" type="button">Next</button></div>
+              <section aria-labelledby="pairComparisonHeading">
+                <div class="parts-table-title"><h3 id="pairComparisonHeading" tabindex="-1">Compare resistor pairs</h3><div class="actions"><button id="pairComparisonCopy" class="btn" type="button" disabled>Copy table</button><button id="pairComparisonClear" class="btn" type="button" disabled>Clear comparison</button></div></div>
+                <p id="pairComparisonStatus" class="hint" role="status">Check pairs above or add the current preview to compare them here.</p>
+                <div class="table-wrap parts-values pair-table" tabindex="0" role="region" aria-label="Selected resistor pairs comparison, scroll for all performance columns">
+                  <table id="pairComparisonTable" class="parts-table" aria-describedby="pairComparisonStatus"><caption>Nominal and worst-case performance at the search conditions. Each part retains its own ratings.</caption><thead id="pairComparisonHead"></thead><tbody id="pairComparisonRows"></tbody></table>
+                </div>
+                <p id="pairComparisonCopyStatus" class="hint" role="status"></p>
+                <div id="pairComparisonCopyFallback" hidden><label for="pairComparisonCopyText">Comparison text · copy into a spreadsheet</label><textarea id="pairComparisonCopyText" class="bom-copy-text" rows="6" readonly spellcheck="false"></textarea></div>
+              </section>
             </div>
           </div>
         </section>
@@ -1495,6 +1506,9 @@
     let parts2Values = [], parts2BomData = [], parts2Selection = null, parts2Target = null;
     let pairGeneration = 0, pairItems = [], pairView = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
     let pairPlot = null, pairBrush = null, pairIgnoreClick = false;
+    const pairComparisons = new Set();
+    let pairComparisonRevision = 0;
+    const PAIR_COMPARISON_HEADERS = ["RTOP part", "RBOT part", "VMID", "VMID range", "Worst target error", "Nominal power", "Worst power", "Nominal input I", "Worst input I", "Rth", "RTOP Pstress", "RBOT Pstress", "RTOP V/I stress", "RBOT V/I stress", "Search conditions"];
     const PAIR_PAGE_SIZE = 50;
     const pairFamilyToggles = Array.from(document.querySelectorAll("[data-pair-family]"));
     const catalogSame = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1e-12, Math.abs(a), Math.abs(b));
@@ -1538,6 +1552,7 @@
 
     function invalidatePairSearch(message = "Search settings changed. Run the search to update combinations.") {
       pairGeneration++; pairItems = []; pairView = []; pairSpec = null; pairSelected = null; pairPoints = []; pairPage = 0; pairPlot = null; pairBrush = null;
+      clearPairComparison();
       resetPairFilterInputs();
       pairPreviewState = null; renderSchematic();
       byId("pairResults").hidden = true; byId("pairRows").replaceChildren();
@@ -1605,6 +1620,7 @@
         pairPreviewState = null; renderSchematic(); drawPairChart();
       }
       updatePairSummary();
+      renderPairComparison();
       return pairView;
     }
 
@@ -1739,6 +1755,11 @@
         radio.addEventListener("change", () => selectPair(fullIndex));
         row.addEventListener("click", event => { if (event.target !== radio) { radio.focus(); selectPair(fullIndex); } });
         cell.append(radio);
+        const compareCell = parts2Cell(row, ""), compare = document.createElement("input");
+        compare.type = "checkbox"; compare.dataset.pairCompare = String(fullIndex); compare.checked = pairComparisons.has(pair);
+        compare.setAttribute("aria-label", `Compare ${pair.top.mpn} and ${pair.bot.mpn}`);
+        compareCell.addEventListener("click", event => event.stopPropagation());
+        compare.addEventListener("change", () => setPairCompared(pair, compare.checked)); compareCell.append(compare);
         for (const part of [pair.top, pair.bot]) {
           const partCell = parts2Cell(row, part.mpn); partCell.className = "part-number";
           const detail = document.createElement("small"); detail.textContent = `${format(part.resistanceOhms, "Ω")} · ±${part.tolerancePct}% · ${part.case}`; partCell.append(detail);
@@ -1766,9 +1787,91 @@
         const line = document.createElement("p"); line.className = "hint"; line.textContent = text; inspector.append(line);
       }
       byId("pairApply").disabled = false;
+      updatePairComparisonControls();
       byId("pairHover").textContent = `Selected combination ${viewIndex + 1} of ${pairView.length.toLocaleString()} shown. The top SVG previews this pair; Apply updates the circuit and BOM.`;
       previewSelectedPair();
       drawPairChart();
+    }
+
+    function updatePairComparisonControls() {
+      for (const input of byId("pairRows").querySelectorAll("[data-pair-compare]")) input.checked = pairComparisons.has(pairItems[Number(input.dataset.pairCompare)]);
+      const added = pairSelected && pairComparisons.has(pairSelected);
+      byId("pairCompareAdd").disabled = !pairSelected || added;
+      byId("pairCompareAdd").textContent = added ? "Added to comparison" : "Add preview to comparison";
+    }
+
+    function pairComparisonPartDetails(part) {
+      return `${format(part.resistanceOhms, "Ω")} · ±${part.tolerancePct}% · ${part.case} · ±${part.tcrPpm} ppm/°C · reliability ${part.failureRate || "N/A"} · ${format(part.powerW, "W")} allowed · ${part.workingVoltageV} V max · ${part.temperatureC} °C · ${part.mode}`;
+    }
+
+    function pairComparisonData() {
+      const rows = [PAIR_COMPARISON_HEADERS];
+      if (!pairSpec) return rows;
+      const spec = pairSpec;
+      const conditions = `VTOP ${format(spec.vin, "V")} ±${percent(spec.sourceTolerance)}; target VMID ${format(spec.target, "V")} ±${percent(spec.errorPct)}; RL ${spec.rl === null ? "Open" : `${format(spec.rl, "Ω")} ±${percent(spec.loadTolerance)}`}; ambient ${spec.temperatureC} °C; stress ≤ ${percent(spec.maxStress)}${spec.maxPower === null ? "" : `; total power ≤ ${format(spec.maxPower, "W")}`}`;
+      for (const pair of pairComparisons) rows.push([
+        ...[pair.top, pair.bot].map(part => `${part.mpn}\n${pairComparisonPartDetails(part)}`),
+        format(pair.result.vout, "V"), `${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")}`, percent(pair.error),
+        format(pair.result.total, "W"), format(pair.worst.power, "W"), format(Math.abs(pair.result.i1), "A"), format(pair.worst.current, "A"), format(pair.result.rth, "Ω"),
+        percent(pair.worst.top.p), percent(pair.worst.bot.p), percent(pair.worst.top.v), percent(pair.worst.bot.v), conditions
+      ]);
+      return rows;
+    }
+
+    function renderPairComparison(resetCopy = false) {
+      const head = byId("pairComparisonHead"), host = byId("pairComparisonRows"); head.replaceChildren(); host.replaceChildren();
+      const headings = document.createElement("tr");
+      for (const label of ["Remove", ...PAIR_COMPARISON_HEADERS]) { const cell = parts2Cell(headings, label, "th"); cell.scope = "col"; }
+      head.append(headings);
+      const pairs = [...pairComparisons], data = pairComparisonData();
+      pairs.forEach((pair, index) => {
+        const row = document.createElement("tr"), action = parts2Cell(row, ""), remove = document.createElement("button");
+        row.dataset.pairComparison = String(pairItems.indexOf(pair));
+        remove.type = "button"; remove.className = "btn"; remove.textContent = "Remove"; remove.setAttribute("aria-label", `Remove ${pair.top.mpn} and ${pair.bot.mpn} from comparison`);
+        remove.addEventListener("click", () => { setPairCompared(pair, false); byId(pairComparisons.size ? "pairComparisonClear" : "pairComparisonHeading").focus({ preventScroll: true }); }); action.append(remove);
+        for (const [column, value] of data[index + 1].entries()) {
+          const [first, detail] = value.split("\n"), cell = parts2Cell(row, first);
+          if (column < 2) { cell.className = "part-number"; const small = document.createElement("small"); small.textContent = detail; cell.append(small); }
+          if (column === PAIR_COMPARISON_HEADERS.length - 1) cell.className = "pair-comparison-conditions";
+        }
+        host.append(row);
+      });
+      const outside = pairs.filter(pair => !pairView.includes(pair)).length;
+      byId("pairComparisonStatus").textContent = pairs.length ? `${pairs.length} pair${pairs.length === 1 ? "" : "s"} selected${outside ? ` · ${outside} outside the current chart filters` : ""}. Comparisons stay selected across pages, sorting and filters.` : "Check pairs above or add the current preview to compare them here.";
+      byId("pairComparisonCopy").disabled = !pairs.length; byId("pairComparisonClear").disabled = !pairs.length;
+      if (resetCopy) { byId("pairComparisonCopyStatus").textContent = ""; byId("pairComparisonCopyFallback").hidden = true; byId("pairComparisonCopyText").value = ""; }
+      updatePairComparisonControls();
+    }
+
+    function setPairCompared(pair, checked) {
+      if (!pair || (checked && !pairItems.includes(pair)) || pairComparisons.has(pair) === checked) return;
+      if (checked) pairComparisons.add(pair); else pairComparisons.delete(pair);
+      pairComparisonRevision++; renderPairComparison(true);
+    }
+
+    function clearPairComparison() {
+      pairComparisons.clear(); pairComparisonRevision++; renderPairComparison(true);
+    }
+
+    function pairComparisonTsv() {
+      const rows = pairComparisonData();
+      return rows.length > 1 ? rows.map(row => row.map(value => String(value).replace(/[\t\r\n]+/g, " ")).join("\t")).join("\r\n") + "\r\n" : "";
+    }
+
+    async function copyPairComparison() {
+      const text = pairComparisonTsv(), revision = pairComparisonRevision; if (!text) return;
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(text);
+        if (revision !== pairComparisonRevision) return;
+        byId("pairComparisonCopyStatus").textContent = "Comparison copied. Paste into a spreadsheet or document.";
+        byId("pairComparisonCopyFallback").hidden = true; byId("pairComparisonCopyText").value = "";
+      } catch (_) {
+        if (revision !== pairComparisonRevision) return;
+        byId("pairComparisonCopyFallback").hidden = false; byId("pairComparisonCopyText").value = text;
+        byId("pairComparisonCopyText").focus(); byId("pairComparisonCopyText").select();
+        byId("pairComparisonCopyStatus").textContent = "Select and copy the comparison below (Ctrl+C or Command+C), then paste into a spreadsheet.";
+      }
     }
 
     function pairAlternativeParts(pair, side) {
@@ -2522,6 +2625,9 @@
     byId("pairChart").addEventListener("keydown", event => { if (event.key !== "Escape") return; event.preventDefault(); if (!cancelPairBrush()) { resetPairFilterInputs(); filterPairItems(); } });
     byId("pairChart").addEventListener("click", event => { if (pairIgnoreClick) { pairIgnoreClick = false; return; } const point = nearestPairPoint(event); if (point) selectPair(point.index); });
     byId("pairApply").addEventListener("click", applySelectedPair);
+    byId("pairCompareAdd").addEventListener("click", () => setPairCompared(pairSelected, true));
+    byId("pairComparisonClear").addEventListener("click", clearPairComparison);
+    byId("pairComparisonCopy").addEventListener("click", copyPairComparison);
     for (const [id, filtered] of [["pairCsv", false], ["pairFilteredCsv", true]]) byId(id).addEventListener("click", () => {
       const text = pairSearchCsv(filtered); if (!text) return;
       const link = document.createElement("a"), url = URL.createObjectURL(new Blob(["\ufeff", text], { type: "text/csv;charset=utf-8" }));
@@ -2569,6 +2675,7 @@
       update();
       selectResultTab("overviewTab");
     }, 0));
+    renderPairComparison();
     update();
     window.resistorCatalogReady = initializeCatalog();
   </script>

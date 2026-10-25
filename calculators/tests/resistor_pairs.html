@@ -48,7 +48,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   assert(csv.includes('Worst target error (%)')&&csv.includes('Worst RTOP Pstress (%)')&&csv.includes('Not checked'),'CSV includes performance parameters and unknown stock');
   get('pairNext').click();assert(get('pairPage').textContent.startsWith('51–'),'Next page exposes subsequent combinations');
   get('pairPrevious').click();assert(get('pairPage').textContent.startsWith('1–'),'Previous page returns to the first combinations');
-  get('pairRows').rows[2].cells[1].click();
+  get('pairRows').rows[2].cells[2].click();
   assert(get('pairRows').rows[2].dataset.selected==='true'&&d.activeElement===get('pairRows').rows[2].querySelector('input'),'Selecting a row updates the inspector and preserves radio focus');
   for(const x of ['power','current','rth'])for(const y of ['error','nominalError','vmid','pstress','vstress']){set('pairAxisX',x);set('pairAxisY',y);assert(get('pairChart').width>0&&!get('pairInspector').hidden,`Chart supports ${x} versus ${y}`);}
   const rect=get('pairChart').getBoundingClientRect();let point=null;
@@ -57,6 +57,42 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   if(point){get('pairChart').dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:rect.left+point.x,clientY:rect.top+point.y}));assert(get('pairInspector').textContent.includes(items[point.index].top.mpn),'Clicking a chart point selects the corresponding real pair');}
   set('pairSort','power');
   assert(items.every((p,i)=>i===0||items[i-1].result.total<=p.result.total+1e-15),'Sorting orders the full result set by performance');
+  const comparisonRows=()=>[...get('pairComparisonRows').rows],comparisonKeys=()=>comparisonRows().map(row=>row.cells[1].firstChild.textContent+'|'+row.cells[2].firstChild.textContent);
+  const comparisonCheck=pair=>get('pairRows').querySelector(`[data-pair-compare="${items.indexOf(pair)}"]`);
+  assert(comparisonRows().length===0&&get('pairComparisonCopy').disabled&&w.pairComparisonTsv()==='','Comparison starts empty with copying disabled');
+  w.selectPair(0);
+  const circuitBeforeComparison=['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|'),bomBeforeComparison=w.catalogBomCsv(),svgBeforeComparison=get('liveSchematic').textContent;
+  const compareA=items[Number(get('pairRows').rows[0].dataset.valueRow)];comparisonCheck(compareA).focus();comparisonCheck(compareA).click();
+  assert(comparisonKeys().join('|')===key(compareA)&&d.activeElement===comparisonCheck(compareA),'A Compare checkbox adds a row and preserves keyboard focus');
+  assert(get('liveSchematic').textContent===svgBeforeComparison,'Checking Compare preserves the separate SVG preview selection');
+  get('pairNext').click();const compareB=items[Number(get('pairRows').rows[0].dataset.valueRow)];comparisonCheck(compareB).click();
+  assert(comparisonRows().length===2&&comparisonKeys()[0]===key(compareA)&&comparisonKeys()[1]===key(compareB),'Pairs selected on different pages remain in insertion order');
+  const compareC=items.find(pair=>pair.top.familyId!==pair.bot.familyId&&pair!==compareA&&pair!==compareB);w.selectPair(items.indexOf(compareC));get('pairCompareAdd').click();get('pairCompareAdd').click();
+  assert(comparisonRows().length===3&&comparisonCheck(compareC).checked&&get('pairCompareAdd').disabled,'A chart/table preview can be added once and synchronizes the result checkbox');
+  const comparisonTsv=w.pairComparisonTsv(),grid=comparisonTsv.trim().split('\r\n').map(line=>line.split('\t')),column=name=>grid[0].indexOf(name);
+  assert(grid.length===4&&grid.every(row=>row.length===15)&&grid[1][0].startsWith(compareA.top.mpn)&&grid[3][1].startsWith(compareC.bot.mpn),'Copy data contains one rectangular row per pair, both exact MPNs and no button labels');
+  assert(grid[1][0].includes('ppm/°C')&&grid[1][0].includes('reliability')&&grid[1][0].includes(compareA.top.case)&&grid[1][0].includes('allowed')&&grid[1][0].includes('V max'),'Comparison includes each part footprint, tolerance, TCR, reliability and independent limits');
+  const sumR=compareA.top.resistanceOhms+compareA.bot.resistanceOhms;
+  assert(grid[1][column('VMID')]===w.format(12*compareA.bot.resistanceOhms/sumR,'V')&&grid[1][column('Nominal power')]===w.format(144/sumR,'W')&&grid[1][column('Nominal input I')]===w.format(12/sumR,'A'),'Copied nominal voltage, power and current agree with independent unloaded-divider calculations');
+  assert(grid[1][column('Worst power')]===w.format(144/(0.99*sumR),'W')&&grid[1][column('Worst input I')]===w.format(12/(0.99*sumR),'A')&&grid[1][column('RTOP Pstress')]===w.percent(compareA.worst.top.p)&&grid[1][column('RBOT V/I stress')]===w.percent(compareA.worst.bot.v),'Comparison retains worst-case power/current and individual-arm stress metrics');
+  assert(grid[1][column('Search conditions')].includes('VTOP 12 V')&&grid[1][column('Search conditions')].includes('target VMID 6 V')&&grid[1][column('Search conditions')].includes('RL Open'),'Copied table carries source, target, load and search conditions');
+  const clipboardDescriptor=Object.getOwnPropertyDescriptor(w.navigator,'clipboard');let copied='';
+  Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async value=>{copied=value;}}});get('pairComparisonCopy').click();await pause();
+  assert(copied===comparisonTsv&&get('pairComparisonCopyStatus').textContent.startsWith('Comparison copied')&&get('pairComparisonCopyFallback').hidden,'Copy table writes the complete comparison TSV and reports success');
+  Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('Clipboard denied');}}});get('pairComparisonCopy').click();await pause();
+  assert(!get('pairComparisonCopyFallback').hidden&&get('pairComparisonCopyText').value===comparisonTsv.replaceAll('\r\n','\n')&&get('pairComparisonCopyText').selectionEnd===get('pairComparisonCopyText').value.length&&d.activeElement===get('pairComparisonCopyText'),'Clipboard denial reveals and selects all comparison text for manual copying');
+  set('pairSort','rth');assert(w.pairComparisonTsv()===comparisonTsv&&comparisonKeys().join(';')===[compareA,compareB,compareC].map(key).join(';'),'Sorting all results preserves comparison membership and insertion order');
+  setFamilies();assert(get('pairRows').rows.length===0&&comparisonRows().length===3&&!get('pairComparisonCopy').disabled&&get('pairComparisonStatus').textContent.includes('3 outside')&&w.pairComparisonTsv()===comparisonTsv,'Family filters preserve selected comparisons and identify pairs outside the chart filters');
+  get('pairClearFilters').click();w.selectPair(items.indexOf(compareA));assert(comparisonCheck(compareA).checked&&comparisonRows().length===3,'Clearing chart filters restores matching checked states without clearing comparison');
+  comparisonRows()[1].querySelector('button').click();assert(comparisonKeys().join(';')===[compareA,compareC].map(key).join(';')&&get('pairComparisonCopyFallback').hidden&&get('pairComparisonCopyText').value==='','Removing a comparison deletes only that pair and clears stale copy text');
+  comparisonCheck(compareA).click();assert(comparisonKeys().join(';')===key(compareC)&&get('pairCompareAdd').disabled===false,'Unchecking a result removes it from comparison while keeping its preview');
+  get('pairCompareAdd').click();assert(comparisonKeys().join(';')===[compareC,compareA].map(key).join(';'),'Re-added pairs appear at the end of the comparison');
+  assert(['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|')===circuitBeforeComparison&&w.catalogBomCsv()===bomBeforeComparison,'Selecting, sorting, filtering and removing comparisons never changes applied circuit inputs or BOM');
+  let rejectPendingCopy;Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:()=>new Promise((resolve,reject)=>{rejectPendingCopy=reject;})}});
+  const pendingComparisonCopy=w.copyPairComparison();get('pairComparisonClear').click();rejectPendingCopy(new Error('Clipboard denied later'));await pendingComparisonCopy;
+  assert(comparisonRows().length===0&&get('pairComparisonCopy').disabled&&get('pairComparisonClear').disabled&&get('pairComparisonCopyFallback').hidden&&get('pairComparisonCopyText').value===''&&get('pairComparisonCopyStatus').textContent==='','Clearing while clipboard work is pending cannot resurrect stale comparison output');
+  if(clipboardDescriptor)Object.defineProperty(w.navigator,'clipboard',clipboardDescriptor);else delete w.navigator.clipboard;
+  get('pairCompareAdd').click();items=await run();assert(comparisonRows().length===0&&w.pairComparisonTsv()===''&&get('pairComparisonCopy').disabled,'A new search clears comparison membership and copy state');set('pairSort','power');
   const shown=()=>w.filterPairItems(),samePairs=(a,b)=>a.map(key).sort().join('|')===b.map(key).sort().join('|');
   const familyKey=p=>p.top.familyId===tid&&p.bot.familyId===tid?'tnpw':p.top.familyId===mid&&p.bot.familyId===mid?'mil':'mixed';
   assert(familyToggles.length===3&&familyToggles.every(input=>input.checked),'All three independently selectable legend families are enabled by default');
@@ -156,7 +192,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   near(get('targetVout').valueAsNumber,applied.result.vout,'Applying both parts reproduces the searched VMID');
   assert(get('tolVin').valueAsNumber===1&&get('tolRl').valueAsNumber===2&&get('rl').valueAsNumber*Number(get('rlUnit').value)===100000,'Applied circuit includes source and load conditions');
   assert(w.catalogBomCsv().includes(applied.top.mpn)&&w.catalogBomCsv().includes(applied.bot.mpn)&&get('liveSchematic').textContent.includes(applied.top.mpn),'Both applied part numbers reach the BOM and live schematic');
-  pick();set('pairVin','24');assert(get('pairResults').hidden&&get('pairApply').disabled&&w.pairSearchCsv()==='','Editing a search input invalidates stale matches, export, and application');
+  pick();get('pairCompareAdd').click();set('pairVin','24');assert(get('pairResults').hidden&&get('pairApply').disabled&&w.pairSearchCsv()===''&&comparisonRows().length===0&&w.pairComparisonTsv()===''&&get('pairComparisonCopy').disabled,'Editing a search input invalidates stale matches, comparison, export, and application');
   await reset();set('pairMaxStress','25');set('pairMaxPower','1');items=await run();
   assert(items.length>0&&items.every(p=>Math.max(p.pstress,p.vstress)<=25+1e-9&&p.worst.power<=0.001+1e-12),'Optional derating and total-power limits apply to worst-case results');
   await reset();set('pairTemperature','125');items=await run();
@@ -172,10 +208,10 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   }
   await reset();set('pairTolTop','0.1');set('pairTolBot','0.1');set('pairMinR','100');set('pairMaxR','1000000');const pending=run();get('pairCancel').click();await pending;
   assert(get('pairStatus').textContent==='Search canceled.'&&get('pairResults').hidden&&get('pairFind').disabled===false,'Cancel discards incomplete search results');
-  await reset();await run();
-  for(const width of [320,390,768,900,1440]){frame.style.width=width+'px';await pause();assert(d.documentElement.scrollWidth<=width&&get('pairChart').getBoundingClientRect().width<=get('pairPanel').getBoundingClientRect().width,`Focused search and chart fit at ${width}px`);const svgBounds=get('liveSchematic').getBoundingClientRect();assert([...get('liveSchematic').querySelectorAll('text')].every(node=>{const box=node.getBoundingClientRect();return box.left>=svgBounds.left-1&&box.right<=svgBounds.right+1&&box.top>=svgBounds.top-1&&box.bottom<=svgBounds.bottom+1;}),`Selected-pair SVG and both family numbers fit at ${width}px`);}
+  await reset();items=await run();get('pairCompareAdd').click();w.selectPair(1);get('pairCompareAdd').click();
+  for(const width of [320,390,768,900,1440]){frame.style.width=width+'px';await pause();assert(d.documentElement.scrollWidth<=width&&get('pairChart').getBoundingClientRect().width<=get('pairPanel').getBoundingClientRect().width&&get('pairComparisonTable').closest('.table-wrap').clientWidth<=get('pairPanel').clientWidth,`Focused search, chart and populated comparison fit at ${width}px`);const svgBounds=get('liveSchematic').getBoundingClientRect();assert([...get('liveSchematic').querySelectorAll('text')].every(node=>{const box=node.getBoundingClientRect();return box.left>=svgBounds.left-1&&box.right<=svgBounds.right+1&&box.top>=svgBounds.top-1&&box.bottom<=svgBounds.bottom+1;}),`Selected-pair SVG and both family numbers fit at ${width}px`);}
   assert(errors.length===0,'No browser runtime errors during chart/search interactions: '+errors.join('; '));
-  await reset();assert(get('pairPackageTop').value==='0805'&&get('pairTolTop').value==='1'&&get('pairTcr').value==='25'&&get('pairResults').hidden,'Search reset restores catalog defaults and clears prior results');
+  await reset();assert(get('pairPackageTop').value==='0805'&&get('pairTolTop').value==='1'&&get('pairTcr').value==='25'&&get('pairResults').hidden&&comparisonRows().length===0&&w.pairComparisonTsv()==='','Search reset restores catalog defaults and clears results and comparison');
  }catch(error){failures.push(error.stack);}
  document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);document.body.dataset.status=failures.length?'FAIL':'PASS';
 });
