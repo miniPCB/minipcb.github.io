@@ -117,6 +117,11 @@
     .panel-body { padding: 16px; }
     figure { margin: 0; }
     .schematic { display: block; width: 100%; height: auto; background: #101823; }
+    .schematic-editable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 4px; }
+    .schematic-editable:hover, .schematic-editable:focus-visible { fill: #fff; }
+    .schematic-editor { width: min(440px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; padding: 22px; border: 0; border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+    .schematic-editor::backdrop { background: rgba(3, 10, 16, 0.75); }
+    .schematic-editor h3 { margin: 0; font-size: 1.1rem; }
     .circuit-reference { margin: 20px 0 24px; }
     .circuit-reference h2 { font-size: 1.15rem; }
     .circuit-reference-body { display: grid; gap: 16px; padding: 0 20px 20px; }
@@ -311,7 +316,7 @@
         <div id="schematicViewport">
           <div>
             <img id="schematicFallback" class="schematic" src="../images/voltage_divider.svg" width="640" height="370" alt="DC source VTOP supplies R1 in series with R2 to ground. VMID is the junction of R1 and R2. Optional load RL connects from VMID to ground, in parallel with R2." />
-            <svg id="liveSchematic" class="schematic" xmlns="http://www.w3.org/2000/svg" width="1120" height="370" viewBox="0 0 1120 370" role="img" aria-labelledby="liveSchematicTitle liveSchematicDesc" font-family="Consolas, 'Courier New', monospace" hidden="">
+            <svg id="liveSchematic" class="schematic" xmlns="http://www.w3.org/2000/svg" width="1120" height="370" viewBox="0 0 1120 370" role="group" aria-labelledby="liveSchematicTitle liveSchematicDesc" font-family="Consolas, 'Courier New', monospace" hidden="">
               <title id="liveSchematicTitle">Voltage divider · live circuit values</title>
               <desc id="liveSchematicDesc">VTOP supplies RTOP and RBOT; VMID is their junction. Values and nominal per-part stress update with the calculator.</desc>
               <rect width="100%" height="100%" fill="#101823" />
@@ -353,7 +358,7 @@
           </div>
         </div>
         <figcaption>
-          <p>Live values and nominal stresses update as you edit. R1/RTOP and R2/RBOT show equivalent arm values; each physical resistor has its own tolerance, power rating, and stress. Optional RL loads VMID in parallel with RBOT.</p>
+          <p>Click an underlined SVG value to edit VTOP, VMID, RL, or a resistor's value, tolerance and power rating. R1/RTOP and R2/RBOT show equivalent arm values; each physical resistor has its own settings and nominal stress. Optional RL loads VMID in parallel with RBOT.</p>
           <div class="resource-links">
             <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
             <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
@@ -362,6 +367,23 @@
         </figcaption>
       </figure>
     </section>
+    <dialog id="schematicEditor" class="schematic-editor" aria-labelledby="schematicEditHeading" aria-describedby="schematicEditHelp">
+      <form id="schematicEditForm" class="form-grid" novalidate>
+        <h3 id="schematicEditHeading">Edit circuit value</h3>
+        <p id="schematicEditHelp" class="hint"></p>
+        <div class="field">
+          <label id="schematicEditValueLabel" for="schematicEditValue">Value</label>
+          <div class="input-unit"><input id="schematicEditValue" type="number" step="any" required /><select id="schematicEditUnit" aria-label="Resistance unit"><option value="1">Ω</option><option value="1000">kΩ</option><option value="1000000">MΩ</option></select><span id="schematicEditVolts" class="unit">V</span></div>
+        </div>
+        <div id="schematicEditSolveField" class="field" hidden><label for="schematicEditSolve">Adjust to reach VMID</label><select id="schematicEditSolve"><option value="r1">RTOP</option><option value="r2">RBOT</option><option value="vin">VTOP</option><option value="rl">RL</option></select></div>
+        <div id="schematicEditConnectionField" class="field" hidden><label for="schematicEditConnection">Arm connection</label><select id="schematicEditConnection"><option value="series">Series chain</option><option value="parallel">Parallel bank</option></select></div>
+        <div id="schematicEditToleranceField" class="field"><label for="schematicEditTolerance">Tolerance · ± (%)</label><input id="schematicEditTolerance" type="number" min="0" max="99.999" step="any" required /></div>
+        <div id="schematicEditPowerField" class="field" hidden><label id="schematicEditPowerLabel" for="schematicEditPower">Power rating (W)</label><input id="schematicEditPower" type="number" min="0" step="any" required /></div>
+        <div id="schematicEditVmaxField" class="field" hidden><label for="schematicEditVmax">Max working voltage (V, optional)</label><input id="schematicEditVmax" type="number" min="0" step="any" placeholder="Power-based" /></div>
+        <p id="schematicEditError" class="note" role="alert" hidden></p>
+        <div class="actions"><button id="schematicEditSave" class="btn btn-accent" type="submit">Save changes</button><button id="schematicEditCancel" class="btn" type="button">Cancel</button></div>
+      </form>
+    </dialog>
     <section class="mode-picker" aria-labelledby="modePickerHeading">
       <h2 id="modePickerHeading">1. What would you like to calculate?</h2>
       <div class="mode-choices" role="group" aria-label="Calculation to perform">
@@ -1131,6 +1153,19 @@
     let pairPreviewState = null;
     let schematicUrl = null;
     let schematicMarkup = "";
+    let schematicEditContext = null;
+
+    function schematicEditable(node, key, label, focus = "value") {
+      node.dataset.schematicEdit = key; node.dataset.editFocus = focus;
+      node.classList.add("schematic-editable");
+      node.setAttribute("role", "button"); node.setAttribute("tabindex", "0");
+      node.setAttribute("aria-label", `Edit ${label}`);
+    }
+
+    function clearSchematicEditorAttributes(node) {
+      node.classList.remove("schematic-editable");
+      for (const attribute of ["role", "tabindex", "aria-label", "data-schematic-edit", "data-edit-focus"]) node.removeAttribute(attribute);
+    }
 
     function schematicText(parent, x, y, content, size = 14, color = "#eaf6ff", field = null) {
       const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -1144,6 +1179,7 @@
     function renderSchematic() {
       const svg = byId("liveSchematic");
       const state = pairPreviewState || schematicState;
+      for (const node of svg.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
       byId("schematicHeading").textContent = pairPreviewState ? "Circuit reference · selected pair preview" : byId("solveFor").value === "pairs" ? "Circuit reference · current circuit" : "Circuit reference";
       byId("liveSchematicTitle").textContent = pairPreviewState ? "Voltage divider · selected resistor pair preview" : "Voltage divider · live circuit values";
       const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
@@ -1176,6 +1212,7 @@
       byId("schematicR2Value").textContent = state ? format(state.circuit.r2, "Ω") : "—";
       byId("schematicLoadValue").textContent = state ? state.circuit.rl === null ? "Open" : format(state.circuit.rl, "Ω") : "—";
       byId("schematicLoad").setAttribute("opacity", state && state.circuit.rl !== null ? "1" : "0.35");
+      if (state) for (const [id, key, label] of [["schematicVtop", "source", "VTOP and source tolerance"], ["schematicVmid", "target", "VMID target"], ["schematicR1Value", "r1", "RTOP"], ["schematicR2Value", "r2", "RBOT"], ["schematicLoadValue", "load", "RL and load tolerance"]]) schematicEditable(byId(id), key, label);
       let bottom = detailsY;
       if (state) {
         for (const [index, arm] of ARMS.entries()) {
@@ -1188,7 +1225,8 @@
           schematicText(group, 0, 16, arm === "r1" ? "R1 · RTOP" : "R2 · RBOT", 16, "#54d2ff");
           const network = state.networks[arm];
           const summary = network ? `${network.parts.length} ${network.connection} · ${format(state.circuit[arm], "Ω")} eq · ±${percent(state.tolerances[arm])}` : "Single resistor";
-          schematicText(group, 0, 37, summary, 12, "#a8bece");
+          const summaryNode = schematicText(group, 0, 37, summary, 12, "#a8bece");
+          if (network) schematicEditable(summaryNode, arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
           let partY = 62;
           for (const part of state.physical[arm]) {
             const row = document.createElementNS(svg.namespaceURI, "g");
@@ -1196,10 +1234,10 @@
             row.setAttribute("transform", `translate(0 ${partY})`);
             group.append(row);
             schematicText(row, 0, 0, part.name, 15);
-            schematicText(row, columnWidth * 0.35, 0, format(part.resistance, "Ω"), 15, "#eaf6ff", "resistance");
-            schematicText(row, 0, 21, `±${percent(part.tolerance)}`, 13, "#a8bece", "tolerance");
+            schematicEditable(schematicText(row, columnWidth * 0.35, 0, format(part.resistance, "Ω"), 15, "#eaf6ff", "resistance"), part.id, `${part.name} resistance`);
+            schematicEditable(schematicText(row, 0, 21, `±${percent(part.tolerance)}`, 13, "#a8bece", "tolerance"), part.id, `${part.name} tolerance`, "tolerance");
             const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
-            schematicText(row, columnWidth * 0.35, 21, `${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`, 13, "#a8bece", "rating");
+            schematicEditable(schematicText(row, columnWidth * 0.35, 21, `${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`, 13, "#a8bece", "rating"), part.id, `${part.name} power rating and voltage limit`, "power");
             for (const [metricIndex, [key, label]] of [["p", "Pstress"], ["v", "Vstress"], ["i", "Istress"]].entries()) {
               const metricX = metricIndex * columnWidth / 3;
               const value = part.stress[key];
@@ -1235,13 +1273,131 @@
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       // The download is a self-contained snapshot of the live SVG.
-      const markup = new XMLSerializer().serializeToString(svg);
+      const snapshot = svg.cloneNode(true); snapshot.setAttribute("role", "img");
+      for (const node of snapshot.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
+      const markup = new XMLSerializer().serializeToString(snapshot);
       if (markup !== schematicMarkup) {
         const previousUrl = schematicUrl;
         schematicUrl = URL.createObjectURL(new Blob([markup], { type: "image/svg+xml" }));
         schematicMarkup = markup;
         byId("schematicDownload").href = schematicUrl;
         if (previousUrl) URL.revokeObjectURL(previousUrl);
+      }
+    }
+
+    function openSchematicEditor(node) {
+      const state = pairPreviewState || schematicState;
+      if (!state || byId("schematicEditor").open) return;
+      const key = node.dataset.schematicEdit, focus = node.dataset.editFocus;
+      const arm = ARMS.find(arm => state.physical[arm].some(part => part.id === key));
+      const part = arm && state.physical[arm].find(part => part.id === key);
+      const kind = ["source", "target", "load"].includes(key) ? key : ARMS.includes(key) && state.networks[key] ? "arm" : "part";
+      if (kind === "part" && !part) return;
+      schematicEditContext = { state, key, focus, arm: kind === "arm" ? key : arm, part, kind, preview: !!pairPreviewState };
+      const name = kind === "part" ? part.name : kind === "arm" ? key === "r1" ? "RTOP equivalent" : "RBOT equivalent" : { source: "VTOP", target: "VMID target", load: "RL" }[kind];
+      const resistance = ["part", "arm", "load"].includes(kind);
+      const value = kind === "part" ? part.resistance : kind === "arm" ? state.circuit[key] : kind === "source" ? state.circuit.vin : kind === "target" ? state.result.vout : state.circuit.rl;
+      const unit = resistance ? value >= 1e6 ? 1e6 : value >= 1000 ? 1000 : 1 : 1;
+      byId("schematicEditHeading").textContent = `Edit ${name}`;
+      byId("schematicEditValueLabel").textContent = resistance ? `${name} resistance${kind === "load" ? " (blank = open)" : ""}` : `${name} (V)`;
+      byId("schematicEditValue").value = value === null ? "" : value / unit;
+      byId("schematicEditValue").required = kind !== "load";
+      byId("schematicEditUnit").value = unit; byId("schematicEditUnit").hidden = !resistance;
+      byId("schematicEditVolts").hidden = resistance;
+      byId("schematicEditSolveField").hidden = kind !== "target";
+      byId("schematicEditSolve").value = ["vin", "r1", "r2", "rl"].includes(byId("solveFor").value) ? byId("solveFor").value : "r1";
+      byId("schematicEditConnectionField").hidden = kind !== "arm";
+      if (kind === "arm") byId("schematicEditConnection").value = state.networks[key].connection;
+      byId("schematicEditToleranceField").hidden = ["arm", "target"].includes(kind);
+      byId("schematicEditTolerance").value = kind === "part" ? part.tolerance : kind === "source" ? state.tolerances.vin : state.tolerances.rl;
+      byId("schematicEditPowerField").hidden = kind !== "part"; byId("schematicEditVmaxField").hidden = kind !== "part";
+      byId("schematicEditPowerLabel").textContent = part?.catalog ? `Allowed power at ${part.catalog.temperatureC} °C (W)` : "Power rating (W)";
+      byId("schematicEditPower").value = part?.rating ?? ""; byId("schematicEditVmax").value = part?.vmax ?? "";
+      const help = kind === "target" ? "Choose which parameter to adjust to reach the requested VMID." : kind === "arm" ? "All resistances in this arm scale together to reach the equivalent value and connection. Edit individual SVG rows for independent part settings." : "Saving recalculates VMID and all stresses from the edited circuit.";
+      byId("schematicEditHelp").textContent = help + (part?.catalog ? " Changing a catalog part's specifications clears its part-number assignment." : "") + (pairPreviewState ? " Saving applies this preview pair to the circuit and BOM first; catalog search results stay unchanged." : "");
+      byId("schematicEditSave").textContent = pairPreviewState ? "Apply pair and save" : "Save changes";
+      byId("schematicEditError").hidden = true;
+      for (const input of byId("schematicEditForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
+      byId("schematicEditor").showModal();
+      const field = { tolerance: "Tolerance", power: "Power", connection: "Connection" }[focus] || "Value";
+      byId(`schematicEdit${field}`).focus();
+      if (field !== "Connection") byId(`schematicEdit${field}`).select();
+    }
+
+    function closeSchematicEditor() {
+      const context = schematicEditContext;
+      byId("schematicEditor").close(); schematicEditContext = null;
+      const target = context && [...byId("liveSchematic").querySelectorAll("[data-schematic-edit]")].find(node => node.dataset.schematicEdit === context.key && node.dataset.editFocus === context.focus);
+      target?.focus({ preventScroll: true });
+    }
+
+    function schematicEditDraft(context) {
+      const { state, kind, arm, part } = context;
+      const circuit = { ...state.circuit }, tolerances = { ...state.tolerances };
+      const physical = Object.fromEntries(ARMS.map(arm => [arm, state.physical[arm].map(part => ({ ...part }))]));
+      const networks = Object.fromEntries(ARMS.map(arm => [arm, state.networks[arm] ? { ...state.networks[arm], parts: physical[arm] } : null]));
+      const resistance = ["part", "arm", "load"].includes(kind);
+      const value = readInput("schematicEditValue", byId("schematicEditValueLabel").textContent, kind === "load", resistance, resistance ? Number(byId("schematicEditUnit").value) : 1);
+      let mode = "vout";
+      if (kind === "source") { circuit.vin = value; tolerances.vin = readTolerance("schematicEditTolerance", "VTOP tolerance"); }
+      else if (kind === "load") { circuit.rl = value; tolerances.rl = readTolerance("schematicEditTolerance", "RL tolerance"); }
+      else if (kind === "part") {
+        Object.assign(physical[arm].find(item => item.id === part.id), { resistance: value, tolerance: readTolerance("schematicEditTolerance", "Resistor tolerance"), rating: readInput("schematicEditPower", "Power rating", false, true), vmax: readInput("schematicEditVmax", "Working voltage", true, true) });
+      } else if (kind === "arm") {
+        networks[arm].connection = byId("schematicEditConnection").value;
+        const scale = value / networkEquivalent(physical[arm], networks[arm].connection).resistance;
+        for (const item of physical[arm]) item.resistance *= scale;
+      } else mode = byId("schematicEditSolve").value;
+      for (const arm of ARMS) {
+        const equivalent = networkEquivalent(physical[arm], networks[arm]?.connection || "series");
+        circuit[arm] = equivalent.resistance; tolerances[arm] = equivalent.tolerance;
+      }
+      const solved = solveCircuit(mode, circuit, kind === "target" ? value : null);
+      if (ARMS.includes(mode)) {
+        const scale = solved[mode] / circuit[mode];
+        for (const item of physical[mode]) item.resistance *= scale;
+      }
+      const result = analyze(solved.vin, solved.r1, solved.r2, solved.rl);
+      const ranges = Object.fromEntries(ARMS.filter(arm => networks[arm]).map(arm => { const eq = networkEquivalent(physical[arm], networks[arm].connection); tolerances[arm] = eq.tolerance; return [arm, [eq.min, eq.max]]; }));
+      const bounds = toleranceAnalysis(solved, tolerances, ranges);
+      const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null)];
+      for (const arm of ARMS) for (const item of analyzeParts(physical[arm], networks[arm]?.connection || "series", arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2)) {
+        numbers.push(item.resistance, item.voltage, item.current, item.power, ...Object.values(item.stress));
+        for (const rating of RATINGS) numbers.push(...Object.values(stress(item.resistance, item.voltage, item.current, item.power, rating.watts, item.vmax)));
+      }
+      if (numbers.some(number => !Number.isFinite(number))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
+      return { circuit: solved, tolerances, physical, networks, mode, target: value };
+    }
+
+    function saveSchematicEditor(event) {
+      event.preventDefault();
+      const context = schematicEditContext; if (!context) return;
+      for (const input of byId("schematicEditForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
+      try {
+        if (context.state !== (pairPreviewState || schematicState)) throw new Error("The circuit changed while this editor was open. Cancel and reopen it.");
+        const draft = schematicEditDraft(context);
+        if (context.preview) applySelectedPair();
+        byId("vin").value = draft.circuit.vin; byId("tolVin").value = draft.tolerances.vin;
+        byId("rl").value = draft.circuit.rl === null ? "" : draft.circuit.rl / Number(byId("rlUnit").value); byId("tolRl").value = draft.tolerances.rl;
+        for (const [index, arm] of ARMS.entries()) {
+          byId(arm).value = draft.circuit[arm] / Number(byId(`${arm}Unit`).value);
+          if (draft.networks[arm]) byId(`${arm}Connection`).value = draft.networks[arm].connection;
+          for (const part of draft.physical[arm]) {
+            const multiple = !!draft.networks[arm];
+            if (multiple) byId(`${part.id}R`).value = part.resistance / Number(byId(`${part.id}Unit`).value);
+            byId(multiple ? `${part.id}Tol` : `tolR${index + 1}`).value = part.tolerance;
+            byId(multiple ? `${part.id}Vmax` : `vmax${index + 1}`).value = part.vmax ?? "";
+            const power = byId(multiple ? `${part.id}Power` : `p${index + 1}`);
+            if (!multiple && ![...power.options].some(option => Number(option.value) === part.rating)) power.add(new Option(`${format(part.rating, "W")} · custom`, part.rating));
+            power.value = part.rating;
+          }
+        }
+        byId("solveFor").value = draft.mode;
+        if (context.kind === "target") byId("targetVout").value = draft.target;
+        catalogDesignVmid = null; update(); selectResultTab("overviewTab"); closeSchematicEditor();
+      } catch (error) {
+        byId("schematicEditError").textContent = error.message; byId("schematicEditError").hidden = false;
+        (byId("schematicEditForm").querySelector('[aria-invalid="true"]') || byId("schematicEditValue")).focus();
       }
     }
 
@@ -2290,6 +2446,17 @@
       link.href = url; link.download = "voltage_divider_bom.csv"; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
+    byId("liveSchematic").addEventListener("click", event => {
+      const node = event.target.closest("[data-schematic-edit]"); if (node) openSchematicEditor(node);
+    });
+    byId("liveSchematic").addEventListener("keydown", event => {
+      if (!["Enter", " "].includes(event.key)) return;
+      const node = event.target.closest("[data-schematic-edit]"); if (!node) return;
+      event.preventDefault(); openSchematicEditor(node);
+    });
+    byId("schematicEditForm").addEventListener("submit", saveSchematicEditor);
+    byId("schematicEditCancel").addEventListener("click", closeSchematicEditor);
+    byId("schematicEditor").addEventListener("cancel", event => { event.preventDefault(); closeSchematicEditor(); });
     window.addEventListener("resize", renderSchematic);
     window.addEventListener("resize", () => { if (!cancelPairBrush()) drawPairChart(); });
     form.addEventListener("submit", event => {

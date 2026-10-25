@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Editable divider SVG checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui,sans-serif}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:1800px;border:0;margin-top:16px}</style></head>
+<body><h1>Editable divider SVG checks</h1><p>Serve the repository root over HTTP to exercise SVG edits against the real calculator, catalogs, forms and BOM.</p><pre id="results" role="status">RUNNING</pre>
+<iframe id="calculator" title="Voltage divider under test" src="../voltage_divider.html?schematic-edit-test=1"></iframe>
+<script>
+"use strict";
+const checks=[],failures=[];
+const assert=(condition,label)=>{checks.push(label);if(!condition)failures.push(label);};
+const near=(actual,expected,label)=>assert(Number.isFinite(actual)&&Math.abs(actual-expected)<=1e-9*Math.max(1,Math.abs(expected)),`${label}: ${actual} ≈ ${expected}`);
+const pause=()=>new Promise(resolve=>setTimeout(resolve,10));
+document.getElementById('calculator').addEventListener('load',async event=>{
+ try{
+  const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),text=id=>get(id).textContent;
+  assert(await w.resistorCatalogReady,'Shared catalogs load');
+  const errors=[];w.addEventListener('error',event=>errors.push(event.message));
+  const set=(id,value)=>{get(id).value=value;};
+  const actual=()=>JSON.stringify([...get('dividerForm').querySelectorAll('input,select')].map(node=>[node.id,node.value,node.checked]))+'|'+w.catalogBomCsv();
+  const reset=async()=>{get('dividerForm').reset();await pause();};
+  const node=(key,focus='value')=>get('liveSchematic').querySelector(`[data-schematic-edit="${key}"][data-edit-focus="${focus}"]`);
+  const open=(key,focus='value',keyboard=null)=>{const target=node(key,focus);if(keyboard){target.focus();target.dispatchEvent(new w.KeyboardEvent('keydown',{key:keyboard,bubbles:true,cancelable:true}));}else target.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(get('schematicEditor').open,`${key}/${focus} opens an editor${keyboard?' by keyboard':''}`);};
+  const save=()=>get('schematicEditForm').requestSubmit();
+  const cancel=()=>get('schematicEditCancel').click();
+  const field=(id,name)=>d.querySelector(`[data-schematic-part="${id}"] [data-field="${name}"]`);
+  assert(get('liveSchematic').getAttribute('role')==='group'&&get('liveSchematic').querySelectorAll('[role="button"][tabindex="0"]').length===11,'The SVG exposes labeled keyboard-editable inputs');
+  assert(!get('liveSchematic').querySelector('[data-field="p"][role="button"], [data-field="v"][role="button"], [data-field="i"][role="button"]'),'Calculated stresses remain results');
+  open('source','value','Enter');assert(d.activeElement===get('schematicEditValue'),'Keyboard activation focuses the voltage field');
+  set('schematicEditValue','24');set('schematicEditTolerance','2');save();
+  assert(!get('schematicEditor').open&&get('vin').valueAsNumber===24&&get('tolVin').valueAsNumber===2&&text('vout')==='12 V','Source edits update actual inputs and midpoint');
+  assert(text('schematicVtop')==='VTOP 24 V · ±2%'&&d.activeElement===node('source'),'Saving refreshes the SVG and restores SVG focus');
+  const beforeCancel=actual();open('source');set('schematicEditValue','5');cancel();assert(actual()===beforeCancel,'Cancel leaves inputs and BOM unchanged');
+  open('source','value',' ');set('schematicEditValue','5');get('schematicEditor').dispatchEvent(new w.Event('cancel',{cancelable:true}));assert(!get('schematicEditor').open&&actual()===beforeCancel&&d.activeElement===node('source'),'Escape cancellation leaves the circuit unchanged and returns focus');
+  await reset();open('r1');set('schematicEditValue','20');set('schematicEditTolerance','0.5');set('schematicEditPower','0.123');set('schematicEditVmax','7');save();
+  assert(get('r1').valueAsNumber===20&&get('tolR1').valueAsNumber===0.5&&get('p1').value==='0.123'&&get('vmax1').valueAsNumber===7&&text('vout')==='4 V','A physical resistor edit writes resistance, tolerance, custom power and voltage limit together');
+  assert(field('r1','resistance').textContent==='20 kΩ'&&field('r1','rating').textContent==='Rated 123 mW'&&field('r1','v').textContent==='114.29%','SVG resistance, custom rating and limited stress recalculate');
+  open('r1','tolerance');assert(d.activeElement===get('schematicEditTolerance'),'Tolerance text opens directly at its matching field');cancel();
+  open('r1','power');assert(d.activeElement===get('schematicEditPower'),'Power text opens directly at its matching field');cancel();
+  for(const [key,id,value]of [['source','schematicEditValue',''],['source','schematicEditTolerance','100'],['source','schematicEditValue','1e308'],['r1','schematicEditValue','0'],['r1','schematicEditPower','0'],['r1','schematicEditVmax','-1'],['r1','schematicEditTolerance','-1']]){
+   const before=actual();open(key);set(id,value);save();assert(get('schematicEditor').open&&!get('schematicEditError').hidden&&actual()===before&&get('inputError').hidden,`${id}=${value}: invalid edit stays local and preserves circuit/BOM`);cancel();
+  }
+  await reset();open('load');set('schematicEditValue','100');set('schematicEditUnit','1000');set('schematicEditTolerance','3');save();
+  assert(get('rl').valueAsNumber===100&&get('tolRl').valueAsNumber===3&&text('schematicLoadValue')==='100 kΩ','Finite RL and its tolerance are editable from the SVG');
+  open('load');set('schematicEditValue','');save();assert(get('rl').value===''&&text('schematicLoadValue')==='Open','Blank load resistance restores an open circuit');
+  for(const [mode,expected,id]of [['r1',20,'r1'],['r2',5,'r2'],['vin',8,'vin'],['rl',10,'rl']]){
+   await reset();open('target');set('schematicEditValue','4');set('schematicEditSolve',mode);save();
+   assert(!get('schematicEditor').open&&get('solveFor').value===mode&&text('vout')==='4 V',`Editing VMID solves ${mode}`);near(get(id).valueAsNumber,expected,`${mode} reaches the independently known 4 V operating point`);
+  }
+  await reset();open('target');set('schematicEditValue','15');set('schematicEditSolve','r2');const beforeInfeasible=actual();save();assert(get('schematicEditor').open&&!get('schematicEditError').hidden&&actual()===beforeInfeasible,'An infeasible target never mutates the applied circuit');cancel();
+  open('target');set('schematicEditValue','4');set('schematicEditSolve','r1');save();open('source');set('schematicEditValue','24');save();assert(get('solveFor').value==='vout'&&text('vout')==='8 V','Direct SVG edits use forward analysis rather than being overwritten by the previous inverse solve');near(get('r1').valueAsNumber,20,'A subsequent source edit preserves the solved RTOP');
+  await reset();get('r1Multiple').checked=true;get('r1Multiple').dispatchEvent(new w.Event('input',{bubbles:true}));get('r1Split').click();
+  const ids=[...get('r1Parts').children].map(row=>row.dataset.part),first=ids[0];
+  open(first);set('schematicEditValue','5');set('schematicEditTolerance','2');set('schematicEditPower','0.125');set('schematicEditVmax','3');save();
+  assert(get(`${first}R`).valueAsNumber===5&&get(`${first}Tol`).valueAsNumber===2&&get(`${first}Power`).valueAsNumber===0.125&&ids.slice(1).every(id=>get(`${id}R`).valueAsNumber===2.5),'Editing one of four physical parts preserves its siblings and unique settings');
+  near(get('r1').valueAsNumber,12.5,'Independent physical edits update the arm equivalent');
+  open('r1');set('schematicEditValue','20');save();near(get('r1').valueAsNumber,20,'Editing the arm equivalent reaches the requested resistance');
+  assert(get(`${first}R`).valueAsNumber===8&&ids.slice(1).every(id=>get(`${id}R`).valueAsNumber===4)&&get(`${first}Tol`).valueAsNumber===2&&get(`${first}Power`).valueAsNumber===0.125&&get(`${first}Vmax`).valueAsNumber===3,'Equivalent scaling preserves part proportions, tolerances, ratings and limits');
+  open('r1','connection');assert(d.activeElement===get('schematicEditConnection'),'The network summary opens its connection selector');set('schematicEditValue','10');set('schematicEditConnection','parallel');save();
+  near(w.readNetwork('r1','vout').equivalent.resistance,10000,'Topology edits scale the same parts to the requested parallel equivalent');
+  assert(get('r1Connection').value==='parallel'&&get(`${first}R`).valueAsNumber===70&&ids.slice(1).every(id=>get(`${id}R`).valueAsNumber===35),'Parallel construction preserves the original resistance proportions');
+  open('target');set('schematicEditValue','4');set('schematicEditSolve','r1');save();near(get('r1').valueAsNumber,20,'VMID editing scales a multi-part solved arm');
+  assert(get('r1Connection').value==='parallel'&&get(`${first}Power`).valueAsNumber===0.125,'VMID inverse solving preserves multi-part topology and ratings');
+  open(first);set('schematicEditValue','100');w.renderSchematic();save();assert(get(`${first}R`).valueAsNumber===100&&!get('schematicEditor').open,'Redrawing the SVG while editing preserves the pending form and target');
+  await reset();const catalog=await w.ResistorParts.load(),candidate=w.ResistorParts.evaluate(catalog,'vishay-tnpw-e3',{resistanceOhms:10000,tolerancePct:1});
+  w.applyCatalogPart(candidate,'r1');w.applyCatalogPart(candidate,'r2');open('r1');save();assert(field('r1','mpn')?.textContent===candidate.mpn,'Saving unchanged catalog specifications preserves the real MPN');
+  open('r1','power');set('schematicEditPower','0.25');save();assert(!field('r1','mpn')&&field('r2','mpn')?.textContent===candidate.mpn&&w.catalogBomCsv().includes('Unassigned'),'Changing one catalog specification clears only its obsolete MPN and refreshes the BOM');
+  await reset();d.querySelector('[data-solve-mode="pairs"]').click();get('pairForm').requestSubmit();const pairs=await w.pairSearchReady;
+  assert(pairs.length>0&&text('schematicHeading').includes('preview'),'Search pair preview is available for editing');
+  const actualBeforePreview=actual(),csvBefore=w.pairSearchCsv();open('r1');assert(text('schematicEditSave')==='Apply pair and save'&&text('schematicEditHelp').includes('applies this preview'),'Preview editor labels its circuit/BOM application explicitly');cancel();assert(actual()===actualBeforePreview&&text('schematicHeading').includes('preview'),'Canceling a preview edit preserves both actual inputs and preview');
+  open('target');set('schematicEditValue','99');set('schematicEditSolve','r2');save();assert(get('schematicEditor').open&&actual()===actualBeforePreview,'Invalid preview edits never apply the candidate first');cancel();
+  open('r1');set('schematicEditValue','120');set('schematicEditUnit','1000');save();
+  assert(get('solveFor').value==='vout'&&get('r1').valueAsNumber===120&&get('r2').valueAsNumber===100&&!text('schematicHeading').includes('preview'),'Saving a preview edit applies both candidate arms then the edited value');
+  assert(!field('r1','mpn')&&field('r2','mpn')&&w.catalogBomCsv().includes('Unassigned'),'Preview editing keeps the unmodified arm MPN and removes the changed arm assignment');
+  assert(w.pairSearchCsv()===csvBefore&&pairs[0].top.resistanceOhms===100000,'Editing an applied preview never rewrites validated catalog search pairs');
+  const svgText=await(await fetch(get('schematicDownload').href)).text(),snapshot=new DOMParser().parseFromString(svgText,'image/svg+xml');
+  assert(!snapshot.querySelector('parsererror')&&snapshot.documentElement.getAttribute('role')==='img'&&!snapshot.querySelector('[data-schematic-edit], [tabindex], [role="button"], input, foreignObject, script'),'Downloaded SVG is valid static XML without live editing controls');
+  assert(snapshot.getElementById('schematicVmid').textContent===text('schematicVmid')&&snapshot.querySelector('[data-field="mpn"]'),'SVG export includes edited circuit performance and remaining valid part numbers');
+  for(const width of [320,390,768,900,1440]){frame.style.width=width+'px';await pause();open('r1');const box=get('schematicEditor').getBoundingClientRect();assert(box.left>=0&&box.right<=width&&get('schematicEditor').scrollWidth<=box.width+1,`Editor fits at ${width}px`);cancel();}
+  await reset();set('r1','0');get('r1').dispatchEvent(new w.Event('input',{bubbles:true}));assert(!get('liveSchematic').querySelector('[data-schematic-edit], [role="button"]'),'Invalid main-form circuits disable stale SVG editing targets');
+  await reset();open('source');get('vin').value='18';get('vin').dispatchEvent(new w.Event('input',{bubbles:true}));const changed=actual();save();assert(get('schematicEditor').open&&text('schematicEditError').includes('circuit changed')&&actual()===changed,'A stale editor cannot overwrite a newer circuit');cancel();
+  assert(errors.length===0,'No browser runtime errors: '+errors.join('; '));await reset();
+ }catch(error){failures.push(error.stack);}
+ document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);document.body.dataset.status=failures.length?'FAIL':'PASS';
+});
+</script></body></html>

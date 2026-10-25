@@ -14,10 +14,26 @@ and identify the series/parallel connection; ratings are not combined. Stress
 values use the nominal operating point and include each part's working-voltage
 limit when entered. Invalid circuit data clears the live values and stresses.
 
+Click an underlined SVG value, or focus it and press Enter/Space, to edit the
+circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
+tolerance (blank resistance means open circuit). Each physical resistor opens
+its resistance, tolerance, power/allowed-power rating and optional working-voltage
+limit. Saving updates the existing forms and recalculates VMID and stress using
+forward analysis; changing a catalog part's specifications removes its old MPN
+assignment. Cancel or Escape leaves the circuit unchanged.
+
+Click VMID to enter a target and choose whether VTOP, RTOP, RBOT or RL should be
+solved. For a multi-resistor arm, clicking its equivalent value or connection
+opens an editor that scales all part resistances together for the requested
+equivalent and series/parallel connection, preserving independent ratings and
+tolerances. Individual SVG rows edit just that physical resistor. Invalid edits
+remain in the editor with an error and leave the applied circuit unchanged.
+
 The SVG reflows for smaller screens and stays on the calculator page.
 **Download SVG** captures the current annotations in a standalone SVG. The image
 below and the LTspice/Markdown downloads remain the default circuit references;
-the calculator keeps its live SVG, styling, and logic in the one HTML file.
+the calculator keeps its live SVG, editor, styling, and logic in the one HTML
+file. Downloads are static annotated images without calculator editing controls.
 
 In the resistor-pair visualization, selecting a point or table row previews that
 pair in the top SVG, including VMID bounds, error, power, current, Rth and worst
@@ -28,6 +44,10 @@ other calculator views check alternatives at the nominal operating point.
 Selecting a candidate preserves the applied circuit inputs and BOM. The heading
 identifies the preview, and Download SVG captures it. Leaving the visualization
 or selecting an empty region restores the current circuit display.
+The same value editors work on a selected pair preview. Their **Apply pair and
+save** action explicitly applies that pair before saving edits to the circuit;
+canceling preserves both the preview and the applied circuit. Catalog search
+results retain their original validated specifications.
 
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
 
