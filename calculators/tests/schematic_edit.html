@@ -22,7 +22,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{
   const save=()=>get('schematicEditForm').requestSubmit();
   const cancel=()=>get('schematicEditCancel').click();
   const field=(id,name)=>d.querySelector(`[data-schematic-part="${id}"] [data-field="${name}"]`)||d.querySelector(`[data-schematic-symbol="${id}"] [data-field="${name}"]`);
-  assert(get('liveSchematic').getAttribute('role')==='group'&&get('liveSchematic').querySelectorAll('[role="button"][tabindex="0"]').length===12&&!node('target'),'The SVG exposes editable inputs and specifications while calculated VMID has no edit link');
+  assert(get('liveSchematic').getAttribute('role')==='group'&&get('liveSchematic').querySelectorAll('[data-schematic-edit][role="button"][tabindex="0"]').length===12&&!node('target'),'The SVG exposes editable inputs and specifications while calculated VMID has no edit link');
   assert(!get('liveSchematic').querySelector('[data-field="p"][role="button"], [data-field="v"][role="button"], [data-field="i"][role="button"]'),'Calculated stresses remain results');
   open('source','value','Enter');assert(d.activeElement===get('schematicEditValue'),'Keyboard activation focuses the voltage field');
   set('schematicEditValue','24');set('schematicEditTolerance','2');save();
@@ -68,6 +68,8 @@ document.getElementById('calculator').addEventListener('load',async event=>{
   open(first);set('schematicEditValue','5');set('schematicEditPartTolerance','2');set('schematicEditVmax','3');save();
   assert(get(`${first}R`).valueAsNumber===5&&get(`${first}Tol`).valueAsNumber===2&&get(`${first}Power`).valueAsNumber===0.125&&ids.slice(1).every(id=>get(`${id}R`).valueAsNumber===2.5),'Editing one of four physical parts preserves its siblings and unique settings');
   near(get('r1').valueAsNumber,12.5,'Independent physical edits update the arm equivalent');
+  const multiBom=w.schematicBomTsv().trim().split('\r\n').map(row=>row.split('\t'));
+  assert(multiBom.length===ids.length+2&&multiBom[1][2]==='5 kΩ'&&multiBom[1][3]==='±2%'&&multiBom.slice(2,-1).every(row=>row[2]==='2.5 kΩ'&&row[3]==='±1%'),'The schematic BOM keeps every physical resistor and its unique value and tolerance');
   open('r1');set('schematicEditValue','20');save();near(get('r1').valueAsNumber,20,'Editing the arm equivalent reaches the requested resistance');
   assert(get(`${first}R`).valueAsNumber===8&&ids.slice(1).every(id=>get(`${id}R`).valueAsNumber===4)&&get(`${first}Tol`).valueAsNumber===2&&get(`${first}Power`).valueAsNumber===0.125&&get(`${first}Vmax`).valueAsNumber===3,'Equivalent scaling preserves part proportions, tolerances, ratings and limits');
   open('r1','connection');assert(d.activeElement===get('schematicEditConnection'),'The network summary opens its connection selector');set('schematicEditValue','10');set('schematicEditConnection','parallel');save();

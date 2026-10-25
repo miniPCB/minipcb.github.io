@@ -46,10 +46,9 @@ Ratings are not combined. Stress
 values use the nominal operating point and include each part's working-voltage
 limit when entered. Invalid circuit data clears the live values and stresses.
 
-The component legend uses **yellow** for missing/invalid inputs or an unspecified
+The components use **yellow** for missing/invalid inputs or an unspecified
 footprint, **green** for known information, and **red** for the value to find.
-The legend reads **Missing / check input**, **Known** and **Find**. A **Find**
-heading and target labels identify the active calculation without relying on
+A **Find** heading and target labels identify the active calculation without relying on
 color; known components omit repeated status labels. The selected calculation,
 form inputs and result use the same cues; a calculated value stays red to identify
 its role. A blank optional RL is a known open circuit. Multi-part arms highlight
@@ -57,6 +56,14 @@ all resistors being scaled. Pair previews highlight the candidate RTOP/RBOT in
 red. Without a selected pair, the diagram shows pair-search inputs and unknown
 resistor values instead of the applied circuit.
 Stress colors continue to describe rating limits independently of input roles.
+
+Part-number tooltips include resistance alongside the part's operating limits;
+both graph hover readouts also show the resistance of each part. The **Copy BOM**
+pill below the SVG parts table copies the displayed physical resistors as a
+spreadsheet-ready table, including quantity, resistance, tolerance, footprint,
+selected part number, both family part numbers and nominal P/V/I stress. In pair
+mode it copies the preview without applying it to the circuit. If clipboard
+access is unavailable, the text is selected below the diagram for manual copying.
 
 Click an underlined SVG value or a pill, or focus it and press Enter/Space, to
 edit the circuit. VTOP opens voltage and source tolerance; RL opens resistance and load

@@ -24,12 +24,41 @@ document.getElementById('calculator').addEventListener('load',async event=>{
   };
   const pointClick=(index,point)=>{const client=new w.DOMPoint(point.x,point.y).matrixTransform(svg().getScreenCTM());plot(index).dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:client.x,clientY:client.y}));};
   const drag=(index,x1,y1,x2,y2)=>{pointer(plot(index),'pointerdown',x1,y1);pointer(svg(),'pointermove',x2,y2);pointer(svg(),'pointerup',x2,y2);svg().dispatchEvent(new w.MouseEvent('click',{bubbles:true}));};
+  assert(!d.querySelector('.solve-legend')&&!d.querySelector('.mode-picker').textContent.includes('Optional RL loads')&&!svg().textContent.includes('Selected PN; stress uses')&&!svg().textContent.includes('Click Ref Des to edit'),'The redundant legend, loading hint and SVG table footnotes are removed');
+  {
+   const descriptor=Object.getOwnPropertyDescriptor(w.navigator,'clipboard'),tab=d.querySelector('[role="tab"][aria-selected="true"]').id,original=actual();let copied='';
+   Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copied=text;}}});
+   assert(action('copy-bom')?.classList.contains('schematic-pill')&&action('copy-bom').getAttribute('role')==='button','The diagram offers a keyboard-accessible Copy BOM pill');
+   key(action('copy-bom'),'Enter');await pause();const rows=copied.trim().split('\r\n').map(row=>row.split('\t'));
+   assert(rows.length===3&&rows[0].includes('Value')&&rows[1][0]==='R1'&&rows[1][1]==='1'&&rows[1][2]===w.format(get('r1').valueAsNumber*Number(get('r1Unit').value),'Ω'),'Copy BOM produces spreadsheet-ready physical resistor rows with resistance and quantity');
+   assert(actual()===original&&d.querySelector('[role="tab"][aria-selected="true"]').id===tab&&get('schematicBomCopyStatus').textContent==='BOM copied.'&&action('copy-bom').textContent==='Copied','Copying a normal circuit preserves its inputs and active tab and confirms completion on the pill');
+   if(descriptor)Object.defineProperty(w.navigator,'clipboard',descriptor);else delete w.navigator.clipboard;
+  }
   d.querySelector('[data-solve-mode="pairs"]').click();assert(svg().querySelector('[data-pair-explorer]')&&!slider('power'),'Before search, the SVG describes how to enable performance exploration');
+  assert(!action('copy-bom')&&w.schematicBomTsv()===''&&get('schematicBomCopyStatus').hidden,'A search without a preview clears the old BOM and its copy feedback');
   get('pairForm').requestSubmit();await w.pairSearchReady;const all=items(),before=actual();
   assert(all.length>100&&svg().querySelectorAll('[role="slider"]').length===12&&plots().length===2,'A real search exposes six two-ended SVG sliders and two linked plots');
   assert(plots().every(chart=>chart.points.length===all.length),'Both plots represent every validated part-number combination');
   assert(['family:tnpw','family:mil','family:mixed','axes','clear','table','compare','copy','apply'].every(name=>action(name)),'The circuit includes family, axes, filtering, table, comparison and application controls');
   assert(get('schematicPairTopNumber').textContent.includes(selected().top.mpn)&&get('schematicPairBotNumber').textContent.includes(selected().bot.mpn),'Full selected RTOP and RBOT part numbers are visible beside the plots');
+  const hoverPoint=plots()[0].points.find(point=>all[point.index]!==selected());pointer(plot(0),'pointermove',hoverPoint.x,hoverPoint.y);
+  const hovered=w.nearestSchematicPair(plots()[0],hoverPoint),hoverPair=all[hovered.index];
+  assert(['top','bot'].every(side=>get(`schematicPair${side==='top'?'Top':'Bot'}Number`).textContent.includes(hoverPair[side].mpn)&&get(`schematicPair${side==='top'?'Top':'Bot'}Number`).textContent.includes(w.format(hoverPair[side].resistanceOhms,'Ω'))),'SVG graph hover shows both full part numbers and resistance values');svg().dispatchEvent(new w.PointerEvent('pointerleave'));
+  assert([...svg().querySelectorAll('[data-schematic-part]')].every((row,index)=>{const resistance=w.format(selected()[index?'bot':'top'].resistanceOhms,'Ω'),titles=[...row.querySelectorAll('[data-family] title')];return titles.length>0&&titles.every(title=>title.textContent.includes(resistance));}),'Selected and alternate part-number tooltips include the corresponding resistance');
+  const legacyPoint=w.eval('pairPoints').find(point=>point.visible),legacyBounds=get('pairChart').getBoundingClientRect(),legacyEvent=new w.PointerEvent('pointermove',{clientX:legacyBounds.left+legacyPoint.x,clientY:legacyBounds.top+legacyPoint.y});get('pairChart').dispatchEvent(legacyEvent);
+  const legacyPair=all[w.nearestPairPoint(legacyEvent).index];assert(['top','bot'].every(side=>get('pairHover').textContent.includes(`${legacyPair[side].mpn} (${w.format(legacyPair[side].resistanceOhms,'Ω')})`)),'The detailed canvas chart hover also includes each part number and resistance');
+  {
+   const descriptor=Object.getOwnPropertyDescriptor(w.navigator,'clipboard');let copied='';Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copied=text;}}});
+   click('copy-bom');await pause();const pns=[...svg().querySelectorAll('[data-field="mpn"], [data-field="mpnAlternative"]')].map(node=>node.textContent);
+   assert(copied===w.schematicBomTsv()&&copied.includes(selected().top.mpn)&&copied.includes(selected().bot.mpn)&&pns.every(pn=>copied.includes(pn))&&copied.includes('TNPW PN\tM55342 PN\tPstress\tVstress\tIstress'),'The preview BOM copies selected and alternate family numbers with nominal stresses');
+   assert(actual()===before,'Copying the preview never applies it to the circuit BOM');
+   Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('Clipboard denied');}}});key(action('copy-bom'),' ');await pause();
+   assert(!get('schematicBomCopyFallback').hidden&&get('schematicBomCopyText').value===copied.replaceAll('\r\n','\n')&&d.activeElement===get('schematicBomCopyText')&&get('schematicBomCopyText').selectionEnd===get('schematicBomCopyText').value.length,'Clipboard denial selects the complete preview BOM below the SVG for manual copying');
+   key(plot(0),'ArrowRight');assert(get('schematicBomCopyFallback').hidden&&get('schematicBomCopyText').value===''&&get('schematicBomCopyStatus').hidden,'Changing the preview clears stale manual-copy text');
+   let rejectCopy;Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:()=>new Promise((resolve,reject)=>{rejectCopy=reject;})}});click('copy-bom');key(plot(0),'ArrowRight');rejectCopy(new Error('Clipboard denied'));await pause();
+   assert(get('schematicBomCopyFallback').hidden&&get('schematicBomCopyText').value===''&&get('schematicBomCopyStatus').hidden,'A delayed clipboard failure cannot restore a previous pair BOM');
+   if(descriptor)Object.defineProperty(w.navigator,'clipboard',descriptor);else delete w.navigator.clipboard;
+  }
   const domainPower=w.pairSvgDomain('power'),originalSpan=plots()[0].xMax-plots()[0].xMin;
   range('power','max',0.42);let bounds=w.pairMetricBounds('power'),expected=all.filter(pair=>pair.result.total*1000<=bounds.max+1e-10);
   assert(expected.length>0&&expected.length<all.length&&same(shown(),expected),'Dragging a power maximum shows exactly the combinations inside the actual electrical limit');

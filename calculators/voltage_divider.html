@@ -92,9 +92,6 @@
     .mode-choice[aria-pressed="true"] { background: rgba(255, 142, 142, 0.1); border-bottom-color: var(--bad); }
     .mode-choice[aria-pressed="true"] strong { color: var(--bad); }
     .solve-target { margin: 0 0 10px; color: var(--bad); font: 700 0.9rem var(--mono); }
-    .solve-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 0.8rem; }
-    .solve-legend span { display: inline-flex; align-items: center; gap: 7px; }
-    .solve-legend i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
     .mode-context h3 { margin: 0 0 8px; font-size: 1.08rem; }
     .mode-equation { margin: 12px 0 2px; font: 0.79rem var(--mono); line-height: 1.6; color: #c6e3ff; overflow-wrap: anywhere; }
     .known-inputs { display: grid; gap: 16px; }
@@ -347,16 +344,10 @@
         <button class="mode-choice" type="button" data-solve-mode="rl" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP, RBOT</span><strong>Find RL</strong></button>
         <button class="mode-choice" type="button" data-solve-mode="pairs" aria-pressed="false" aria-controls="pairForm pairPanel"><span>Given VTOP, VMID, tolerances</span><strong>Find real resistor pairs</strong></button>
       </div>
-      <p class="hint">Optional RL loads the divider. Pair searches include the selected source, load, and resistor tolerances.</p>
     </section>
     <section id="circuitReference" class="panel circuit-reference" aria-labelledby="schematicHeading">
       <h2 id="schematicHeading">Circuit reference</h2>
       <figure class="circuit-reference-body">
-        <div class="solve-legend" aria-label="Component information colors">
-          <span style="color: #f6d365"><i aria-hidden="true"></i>Missing / check input</span>
-          <span style="color: #6ee7ac"><i aria-hidden="true"></i>Known</span>
-          <span style="color: #ff8e8e"><i aria-hidden="true"></i>Find</span>
-        </div>
         <div id="schematicViewport">
           <div>
             <img id="schematicFallback" class="schematic" src="../images/voltage_divider.svg" width="640" height="370" alt="DC source VTOP supplies R1 in series with R2 to ground. VMID is the junction of R1 and R2. Optional load RL connects from VMID to ground, in parallel with R2." />
@@ -371,6 +362,8 @@
           </div>
         </div>
         <figcaption>
+          <p id="schematicBomCopyStatus" class="hint" role="status" hidden></p>
+          <div id="schematicBomCopyFallback" hidden><label for="schematicBomCopyText">BOM text · copy into a spreadsheet</label><textarea id="schematicBomCopyText" class="bom-copy-text" rows="6" readonly spellcheck="false"></textarea></div>
           <p>Click an input or pill to edit; values being found are read-only. In pair mode, edit VTOP, the VMID target, RL or resistor constraints, then Find pairs. Pills show tolerance (±%) and package size (for example, 0805). The table lists part numbers and nominal stress; hover a part number for its limits.</p>
           <div class="resource-links">
             <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
@@ -1182,6 +1175,8 @@
     let schematicUrl = null;
     let schematicMarkup = "";
     let schematicEditContext = null;
+    let schematicBomData = [];
+    let schematicBomCopyGeneration = 0;
 
     function schematicEditLocks(key) {
       const mode = byId("solveFor").value, state = pairPreviewState || schematicState;
@@ -1381,6 +1376,7 @@
       const labels = ["Ref Des", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress"], offsets = [0];
       for (const size of widths) offsets.push(offsets.at(-1) + size);
       const entries = state ? ARMS.flatMap(arm => state.physical[arm].map(part => ({ arm, part }))) : [];
+      const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress"]];
       const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor part numbers and nominal stresses", "aria-colcount": 6, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
       schematicText(table, 0, 16, "Resistor parts · nominal stress", 14, "#eaf6ff");
       const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = narrow ? 44 : 32;
@@ -1402,6 +1398,9 @@
         schematicEditable(schematicRole(ref, arm, roles), part.id, `${description}; catalog specifications`, "specifications");
         const alternatives = part.alternatives || schematicPartAlternatives(part); alternativesByPart.set(part.id, alternatives);
         const candidates = [part.catalog, ...alternatives].filter(Boolean);
+        const familyNumbers = { tnpw: candidates.find(item => item.familyId.includes("tnpw"))?.mpn, mil: candidates.find(item => item.familyId.includes("m55342"))?.mpn };
+        const cells = bomPartCells(part, part.catalog, familyNumbers);
+        bom.push(["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil", "pstress", "vstress", "istress"].map(key => cells[key]));
         let lineCount = reference.lines;
         for (const [column, family] of [[1, "tnpw"], [2, "m55342"]]) {
           const candidate = candidates.find(item => item.familyId.includes(family)), selected = candidate && candidate.mpn === part.mpn;
@@ -1410,7 +1409,7 @@
           const wrapped = schematicTableText(cell, offsets[column] + (selected ? 14 : 4), 21, content, pnWidth - (selected ? 18 : 8), fontSize, candidate ? selected ? "#54d2ff" : "#ffba52" : "#a8bece", field);
           lineCount = Math.max(lineCount, wrapped.lines);
           if (selected) schematicText(cell, offsets[column] + 4, 21, "*", fontSize, "#54d2ff");
-          if (candidate) schematicShape(cell, "title", selected ? {} : { "data-field": "alternativeLimits" }).textContent = `${selected ? "Selected" : "Alternative"} ${candidate.mpn}; ${format(candidate.powerW, "W")} allowed; ${candidate.workingVoltageV} V; ${candidate.temperatureC} °C; ${candidate.mode}; ±${candidate.tcrPpm} ppm/°C; reliability ${candidate.failureRate || "N/A"}`;
+          if (candidate) schematicShape(cell, "title", selected ? {} : { "data-field": "alternativeLimits" }).textContent = `${selected ? "Selected" : "Alternative"} ${candidate.mpn}; ${format(candidate.resistanceOhms, "Ω")}; ${format(candidate.powerW, "W")} allowed; ${candidate.workingVoltageV} V; ${candidate.temperatureC} °C; ${candidate.mode}; ±${candidate.tcrPpm} ppm/°C; reliability ${candidate.failureRate || "N/A"}`;
         }
         for (const [metricIndex, key] of ["p", "v", "i"].entries()) {
           const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 4 }), value = part.stress[key], content = percent(value);
@@ -1420,10 +1419,38 @@
         const height = Math.max(36, lineCount * 15 + 15); background.setAttribute("height", height); top += height + 6;
       }
       if (!entries.length) { const note = schematicTableText(table, 4, top + 20, state?.pairSetup ? "Set inputs in the diagram, then Find pairs." : "Enter valid circuit data.", width - 8, 12, "#ffba52"); top += Math.max(38, note.lines * 15 + 18); }
-      for (const content of ["* Selected PN; stress uses current/preview part ratings.", "Click Ref Des to edit. Hover a PN for its limits."]) {
-        const note = schematicTableText(table, 0, top + 15, content, width, 10, "#a8bece"); top += note.lines * 15 + 6;
+      const previousBom = schematicBomTsv(); schematicBomData = bom;
+      if (previousBom !== schematicBomTsv()) {
+        schematicBomCopyGeneration++;
+        byId("schematicBomCopyStatus").textContent = ""; byId("schematicBomCopyStatus").hidden = true;
+        byId("schematicBomCopyFallback").hidden = true; byId("schematicBomCopyText").value = "";
       }
+      if (entries.length) { pairSvgAction(host, x, y + top + 6, "Copy BOM", "copy-bom", { maxWidth: width }); top += 40; }
       return y + top + 12;
+    }
+
+    function schematicBomTsv() {
+      return schematicBomData.length > 1 ? schematicBomData.map(row => row.map(value => String(value).replace(/[\t\r\n]+/g, " ")).join("\t")).join("\r\n") + "\r\n" : "";
+    }
+
+    async function copySchematicBom() {
+      const text = schematicBomTsv(), generation = ++schematicBomCopyGeneration;
+      if (!text) return;
+      const status = byId("schematicBomCopyStatus"), fallback = byId("schematicBomCopyFallback"), input = byId("schematicBomCopyText");
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(text);
+        if (generation !== schematicBomCopyGeneration) return;
+        fallback.hidden = true; input.value = "";
+        status.textContent = "BOM copied.";
+        const button = byId("liveSchematic").querySelector('[data-pair-action="copy-bom"]');
+        if (button) { button.querySelector("text").textContent = "Copied"; button.setAttribute("aria-label", "Copy BOM (copied)"); }
+      } catch (_) {
+        if (generation !== schematicBomCopyGeneration) return;
+        fallback.hidden = false; input.value = text; input.focus(); input.select();
+        status.textContent = "Copy the selected BOM text (Ctrl+C or Command+C).";
+      }
+      status.hidden = false;
     }
 
     function renderSchematic() {
@@ -2425,7 +2452,7 @@
       const label = byId("schematicPairReadoutLabel"); if (label) label.textContent = pair && pair !== pairSelected ? "Hover · click to preview" : "Selected combination";
       for (const side of ["top", "bot"]) {
         const text = byId(`schematicPair${side === "top" ? "Top" : "Bot"}Number`); if (!text) continue;
-        text.textContent = pair ? `${side === "top" ? "RTOP" : "RBOT"}: ${pair[side].mpn}` : side === "top" ? "No pair selected." : "Widen a range or Clear filters to restore pairs.";
+        text.textContent = pair ? `${side === "top" ? "RTOP" : "RBOT"}: ${pair[side].mpn} · ${format(pair[side].resistanceOhms, "Ω")}` : side === "top" ? "No pair selected." : "Widen a range or Clear filters to restore pairs.";
         text.setAttribute("font-size", Math.min(12, Number(text.dataset.maxWidth) / (text.textContent.length * 0.62)));
       }
     }
@@ -2527,6 +2554,7 @@
     }
 
     function runSchematicPairAction(action) {
+      if (action === "copy-bom") { copySchematicBom(); return; }
       activateSchematicPairResults();
       if (action.startsWith("family:")) pairFamilyToggles.find(input => input.dataset.pairFamily === action.split(":")[1])?.click();
       else if (action === "clear") byId("pairClearFilters").click();
@@ -3268,7 +3296,7 @@
     byId("pairChart").addEventListener("pointermove", event => {
       if (movePairBrush(event)) return;
       const point = nearestPairPoint(event); if (!point) return;
-      const pair = pairItems[point.index]; byId("pairHover").textContent = `${pair.top.mpn} / ${pair.bot.mpn}: VMID ${format(pair.result.vout, "V")}; worst error ${percent(pair.error)}; power ${format(pair.result.total, "W")}.`;
+      const pair = pairItems[point.index]; byId("pairHover").textContent = `${pair.top.mpn} (${format(pair.top.resistanceOhms, "Ω")}) / ${pair.bot.mpn} (${format(pair.bot.resistanceOhms, "Ω")}): VMID ${format(pair.result.vout, "V")}; worst error ${percent(pair.error)}; power ${format(pair.result.total, "W")}.`;
     });
     for (const eventName of ["pointercancel", "lostpointercapture"]) byId("pairChart").addEventListener(eventName, cancelPairBrush);
     byId("pairChart").addEventListener("keydown", event => { if (event.key !== "Escape") return; event.preventDefault(); if (!cancelPairBrush()) { resetPairFilterInputs(); filterPairItems(); } });
