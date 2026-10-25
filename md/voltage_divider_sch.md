@@ -23,8 +23,12 @@ chain or a parallel bank. A finite RL adds its load symbol; an open RL has no
 resistor symbol. Each drawn part shows its value, tolerance and footprint;
 manual footprints read **Not set**, since package size cannot be inferred from
 power. Equivalent arm labels stay available for editing the total resistance.
-Roomier detail rows list every physical part and retain both valid family MPNs
-with their independent ratings. Ratings are not combined. Stress
+VTOP, RL and every physical resistor have rounded, borderless information boxes
+matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
+connections visible. Each physical part's detailed values, ratings, stresses
+and part numbers also share one padded box, which expands for alternate MPNs.
+The detail boxes retain both valid family MPNs with their independent ratings.
+Ratings are not combined. Stress
 values use the nominal operating point and include each part's working-voltage
 limit when entered. Invalid circuit data clears the live values and stresses.
 

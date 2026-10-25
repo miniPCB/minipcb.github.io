@@ -1192,6 +1192,10 @@
       parent.append(node); return node;
     }
 
+    function schematicInfoBox(parent, x, y, width, height) {
+      return schematicShape(parent, "rect", { x, y, width, height, rx: 10, fill: "#142535", stroke: "none", "pointer-events": "none", "data-schematic-info-box": "" });
+    }
+
     const SOLVE_ROLES = {
       undefined: { color: "#f6d365", label: "Undefined", short: "Missing" },
       defined: { color: "#6ee7ac", label: "Defined", short: "Given" },
@@ -1244,8 +1248,10 @@
       schematicShape(wires, "path", { d: `M55 ${sourceY - 34}V${top - 24}H${state?.networks.r1?.connection === "parallel" ? 170 : 260}V${top}M55 ${sourceY + 34}V${bottom}H260M260 ${bottom}v28m-20 0h40m-32 10h24m-16 10h8` });
       schematicRole(schematicShape(wires, "circle", { cx: 55, cy: sourceY, r: 34 }), "vin", roles, "stroke");
       schematicRole(schematicShape(wires, "path", { d: `M44 ${sourceY - 12}h22m-11 -11v22m-11 14h22` }), "vin", roles, "stroke");
-      schematicVoltage(drawing, "schematicVtop", 106, sourceY - 24, "VTOP", state ? format(state.circuit.vin, "V") : "—", state ? state.tolerances.vin : null);
-      schematicRole(schematicText(drawing, 106, sourceY + 44, SOLVE_ROLES[roles.vin].short, 12), "vin", roles);
+      const sourceInfo = schematicShape(drawing, "g", { "data-schematic-info": "source" });
+      schematicInfoBox(sourceInfo, 96, sourceY - 48, 70, 104);
+      schematicVoltage(sourceInfo, "schematicVtop", 104, sourceY - 24, "VTOP", state ? format(state.circuit.vin, "V") : "—", state ? state.tolerances.vin : null, "start", 54);
+      schematicRole(schematicText(sourceInfo, 104, sourceY + 44, SOLVE_ROLES[roles.vin].short, 12), "vin", roles);
       schematicText(drawing, 285, bottom + 55, "GND", 18, "#a8bece");
       for (const [arm, start, end] of [["r1", top, mid - 44], ["r2", botStart, bottom - 24]]) {
         const connection = state?.networks[arm]?.connection || "series", parts = state?.physical[arm] || [];
@@ -1254,14 +1260,17 @@
         if (connection === "parallel") schematicShape(wires, "path", { d: `${arm === "r1" ? `M170 ${start}` : `M260 ${start}H170`}V${end - 30}M480 ${start + 48}V${end}H260` });
         for (const [index, part] of parts.entries()) {
           const symbol = schematicShape(drawing, "g"); symbol.dataset.schematicSymbol = part.id; symbol.dataset.connection = connection; symbol.dataset.arm = arm;
-          const line = schematicRole(schematicShape(symbol, "g", { fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" }), arm, roles, "stroke");
           const y = start + index * 110, parallelArm = connection === "parallel";
+          const info = schematicShape(symbol, "g", { "data-schematic-info": part.id });
+          schematicInfoBox(info, parallelArm ? 192 : 290, y + (parallelArm ? 6 : 8), parallelArm ? 282 : 190, parallelArm ? 88 : 100);
+          const line = schematicRole(schematicShape(symbol, "g", { fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" }), arm, roles, "stroke");
           if (parallelArm) schematicShape(line, "path", { d: `M170 ${y + 48}H270l5 -10 10 20 10 -20 10 20 10 -20 10 20 5 -10H480` });
           else schematicShape(line, "path", { d: `M260 ${y}v20l-10 5 20 10 -20 10 20 10 -20 10 10 7V${y + 110}` });
-          schematicRole(schematicText(symbol, parallelArm ? 205 : 300, y + 28, part.name, 18), arm, roles);
-          schematicEditable(schematicRole(schematicText(symbol, parallelArm ? 340 : 300, y + (parallelArm ? 28 : 51), format(part.resistance, "Ω"), 18), arm, roles), part.id, `${part.name} resistance`);
-          schematicEditable(schematicText(symbol, parallelArm ? 205 : 300, y + (parallelArm ? 78 : 74), `Tol. ±${percent(part.tolerance)}`, 16, "#a8bece"), part.id, `${part.name} tolerance`, "tolerance");
-          schematicEditable(schematicText(symbol, parallelArm ? 320 : 300, y + (parallelArm ? 78 : 97), `Footprint ${part.catalog?.case || "Not set"}`, 16, SOLVE_ROLES[part.catalog ? "defined" : "undefined"].color), part.id, `${part.name} footprint`, "power");
+          const value = format(part.resistance, "Ω"), tolerance = `Tol. ±${percent(part.tolerance)}`, footprint = `Footprint ${part.catalog?.case || "Not set"}`;
+          schematicRole(schematicText(info, parallelArm ? 205 : 300, y + 28, part.name, 18), arm, roles);
+          schematicEditable(schematicRole(schematicText(info, parallelArm ? 340 : 300, y + (parallelArm ? 28 : 51), value, Math.min(18, (parallelArm ? 124 : 170) / (value.length * 0.62))), arm, roles), part.id, `${part.name} resistance`);
+          schematicEditable(schematicText(info, parallelArm ? 205 : 300, y + (parallelArm ? 78 : 74), tolerance, Math.min(parallelArm ? 14 : 16, (parallelArm ? 98 : 170) / (tolerance.length * 0.62)), "#a8bece"), part.id, `${part.name} tolerance`, "tolerance");
+          schematicEditable(schematicText(info, parallelArm ? 310 : 300, y + (parallelArm ? 78 : 97), footprint, Math.min(parallelArm ? 14 : 16, (parallelArm ? 154 : 170) / (footprint.length * 0.62)), SOLVE_ROLES[part.catalog ? "defined" : "undefined"].color), part.id, `${part.name} footprint`, "power");
         }
         schematicShape(wires, "path", { d: arm === "r1" ? `M260 ${end}V${mid}` : `M260 ${mid}V${start}M260 ${end}V${bottom}` });
       }
@@ -1270,15 +1279,21 @@
       schematicShape(load, "path", { d: `M560 ${bottom}v28m-20 0h40m-32 10h24m-16 10h8`, "stroke-dasharray": "none" });
       schematicText(load, 585, bottom + 55, "GND", 18, "#a8bece").setAttribute("stroke", "none");
       if (state?.circuit.rl !== null && state) { schematicRole(schematicShape(load, "rect", { x: 549, y: loadY - 26, width: 22, height: 52, rx: 2 }), "rl", roles, "stroke"); load.dataset.schematicLoadSymbol = "rl"; }
-      schematicRole(schematicText(drawing, 586, loadY - 34, SOLVE_ROLES[roles.rl].short, 12), "rl", roles);
-      schematicRole(schematicText(drawing, 586, loadY - 12, "RL", 20), "rl", roles);
-      const loadValue = schematicText(drawing, 586, loadY + 16, "Open", 17, "#a8bece"); loadValue.id = "schematicLoadValue";
-      if (state?.circuit.rl !== null && state) schematicText(drawing, 495, loadY + 62, `Tol. ±${percent(state.tolerances.rl)}`, 16, "#a8bece");
+      const loadInfo = schematicShape(drawing, "g", { "data-schematic-info": "load" }), hasLoad = state && state.circuit.rl !== null;
+      schematicInfoBox(loadInfo, 578, loadY - 52, 92, hasLoad ? 118 : 86);
+      schematicRole(schematicText(loadInfo, 586, loadY - 34, SOLVE_ROLES[roles.rl].short, 12), "rl", roles);
+      schematicRole(schematicText(loadInfo, 586, loadY - 12, "RL", 20), "rl", roles);
+      const loadContent = state ? hasLoad ? format(state.circuit.rl, "Ω") : "Open" : "—";
+      const loadValue = schematicText(loadInfo, 586, loadY + 16, loadContent, Math.min(17, 76 / (loadContent.length * 0.62)), "#a8bece"); loadValue.id = "schematicLoadValue";
+      if (hasLoad) {
+        const tolerance = `Tol. ±${percent(state.tolerances.rl)}`;
+        schematicText(loadInfo, 586, loadY + 48, tolerance, Math.min(14, 76 / (tolerance.length * 0.62)), "#a8bece");
+      }
       schematicShape(drawing, "path", { d: `M260 ${mid}H654`, fill: "none", stroke: "#54d2ff", "stroke-width": 3 });
       for (const x of [260, 560]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: "#54d2ff" });
       schematicShape(drawing, "circle", { cx: 660, cy: mid, r: 6, fill: "#101823", stroke: "#54d2ff", "stroke-width": 3 });
       const readout = schematicShape(drawing, "g", { "data-field": "vmidReadout" });
-      schematicShape(readout, "rect", { x: 490, y: mid - 166, width: 180, height: 156, rx: 10, fill: "#142535" });
+      schematicInfoBox(readout, 490, mid - 166, 180, 156);
       const nominal = schematicText(readout, 502, mid - 140, "", 20); nominal.id = "schematicVmid";
       schematicShape(nominal, "tspan", { x: 502, y: mid - 140 }).textContent = "VMID ";
       for (const [index, [label, value, field]] of [["Nominal", state?.result.vout, "vmidNominal"], ["Min", state?.bounds.min, "vmidMin"], ["Max", state?.bounds.max, "vmidMax"]].entries()) {
@@ -1354,6 +1369,7 @@
             row.dataset.schematicPart = part.id;
             row.setAttribute("transform", `translate(0 ${partY})`);
             group.append(row);
+            const background = schematicInfoBox(row, -10, -22, columnWidth + 20, 0);
             schematicRole(schematicText(row, 0, 0, part.name, 15), arm, roles);
             schematicEditable(schematicRole(schematicText(row, columnWidth * 0.35, 0, format(part.resistance, "Ω"), 15, "#eaf6ff", "resistance"), arm, roles), part.id, `${part.name} resistance`);
             schematicText(row, 0, 26, "Tolerance", 11, "#a8bece");
@@ -1379,7 +1395,9 @@
               schematicText(row, 0, extraY + 18, `${format(alt.powerW, "W")} allowed · ${alt.workingVoltageV} V · ${alt.temperatureC} °C · ${alt.mode}`, 11, "#a8bece", "alternativeLimits");
               extraY += 38;
             }
-            partY += Math.max(178, extraY + 24);
+            const partHeight = Math.max(178, extraY + 24);
+            background.setAttribute("height", partHeight - 10);
+            partY += partHeight;
           }
           bottom = Math.max(bottom, y + partY + 16);
         }
