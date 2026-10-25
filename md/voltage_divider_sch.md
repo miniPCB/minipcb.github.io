@@ -20,6 +20,16 @@ with their independent ratings. Ratings are not combined. Stress
 values use the nominal operating point and include each part's working-voltage
 limit when entered. Invalid circuit data clears the live values and stresses.
 
+The component legend uses **yellow** for missing/invalid inputs or an unspecified
+footprint, **green** for defined information, and **red** for the active solve
+target. Given/Missing/Solve labels and a **Solving for** heading identify the
+roles without relying on color. The selected calculation, form inputs and result
+use the same cues; a solved value stays red to identify its role. A blank optional
+RL is a defined open circuit. Multi-part arms highlight all resistors being
+scaled. Pair previews highlight the candidate RTOP/RBOT in red; the applied
+circuit remains labeled as given information when no pair preview is shown.
+Stress colors continue to describe rating limits independently of input roles.
+
 Click an underlined SVG value, or focus it and press Enter/Space, to edit the
 circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
 tolerance (blank resistance means open circuit). Each physical resistor opens
