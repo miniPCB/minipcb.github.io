@@ -15,6 +15,8 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   const api=w.ResistorParts,catalog=await api.load(),tid='vishay-tnpw-e3',mid='vishay-eh-m55342';
   const errors=[];w.addEventListener('error',event=>errors.push(event.message));
   const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));get(id).dispatchEvent(new w.Event('change',{bubbles:true}));};
+  const familyToggles=[...d.querySelectorAll('[data-pair-family]')];
+  const setFamilies=(...families)=>{for(const input of familyToggles)if(input.checked!==families.includes(input.dataset.pairFamily))input.click();};
   const pick=()=>d.querySelector('[data-solve-mode="pairs"]').click();
   const reset=async()=>{get('pairForm').reset();await pause();pick();};
   const run=async()=>{get('pairForm').requestSubmit();return await w.pairSearchReady;};
@@ -56,13 +58,27 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   set('pairSort','power');
   assert(items.every((p,i)=>i===0||items[i-1].result.total<=p.result.total+1e-15),'Sorting orders the full result set by performance');
   const shown=()=>w.filterPairItems(),samePairs=(a,b)=>a.map(key).sort().join('|')===b.map(key).sort().join('|');
+  const familyKey=p=>p.top.familyId===tid&&p.bot.familyId===tid?'tnpw':p.top.familyId===mid&&p.bot.familyId===mid?'mil':'mixed';
+  assert(familyToggles.length===3&&familyToggles.every(input=>input.checked),'All three independently selectable legend families are enabled by default');
+  for(let mask=0;mask<8;mask++){
+   const families=['tnpw','mil','mixed'].filter((_,index)=>mask&(1<<index));setFamilies(...families);
+   const expected=items.filter(p=>families.includes(familyKey(p)));
+   assert(samePairs(shown(),expected),`Legend selection ${mask} shows exactly the selected family combinations`);
+   const plotted=w.eval('pairPoints');
+   assert(plotted.length===expected.length&&plotted.every(point=>families.includes(familyKey(items[point.index]))),`Legend selection ${mask} completely hides unselected families from the chart`);
+   assert([...get('pairRows').rows].every(row=>expected.includes(items[Number(row.dataset.valueRow)]))&&w.pairSearchCsv(true).trim().split('\r\n').length===(expected.length?expected.length+1:1),`Legend selection ${mask} keeps table and filtered CSV in sync`);
+   if(!families.length)assert(get('pairApply').disabled&&get('pairFilteredCsv').disabled&&!get('schematicHeading').textContent.includes('preview')&&get('pairFilterStatus').textContent.includes('Select a family'),'Turning off all families clears chart, table and preview with a recovery hint');
+  }
+  setFamilies('mil','mixed');set('pairAxisX','current');
+  assert(!get('pairShowTnpw').checked&&samePairs(shown(),items.filter(p=>familyKey(p)!=='tnpw')),'Axis changes preserve multiple selected legend families');
+  get('pairClearFilters').click();assert(familyToggles.every(input=>input.checked)&&shown().length===items.length,'Clear filters restores all three legend families');
   const primary=(arm)=>d.querySelector(`[data-schematic-part="${arm}"] [data-field="mpn"]`)?.textContent;
   const actualInputs=['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|'),actualBom=w.catalogBomCsv();
   const different=items.findIndex(p=>Math.abs(p.result.vout-6)>0.001);w.selectPair(different);
   assert(get('schematicVmid').textContent==='VMID '+w.format(items[different].result.vout,'V')&&primary('r1')===items[different].top.mpn&&primary('r2')===items[different].bot.mpn,'Selecting a pair previews its VMID and both actual MPNs in the top SVG');
   assert(get('schematicHeading').textContent.includes('preview')&&get('liveSchematic').querySelector('[data-field="pairPerformance"]').textContent.includes('preview'),'The SVG identifies candidate preview separately from the applied circuit');
   assert(['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|')===actualInputs&&w.catalogBomCsv()===actualBom,'Selecting a chart/table pair leaves actual inputs and BOM intact');
-  set('pairAxisX','power');set('pairAxisY','error');set('pairFilterFamily','tnpw');
+  set('pairAxisX','power');set('pairAxisY','error');setFamilies('tnpw');
   assert(shown().length>0&&shown().every(p=>p.top.familyId===tid&&p.bot.familyId===tid),'Family filtering restricts table pairs to the selected family combination');
   assert(primary('r1').startsWith('TNPW')&&d.querySelector('[data-schematic-part="r1"] [data-field="mpnAlternative"]').textContent.includes('M55342'),'A TNPW preview also displays the qualifying exact-value M55342 alternative');
   assert(d.querySelector('[data-schematic-part="r1"] [data-field="alternativeLimits"]').textContent.includes('150 mW'),'SVG alternatives retain their own power rating rather than the selected family rating');
@@ -73,6 +89,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   set('pairFilterXMin','1');set('pairFilterXMax','10');set('pairFilterYMin','1.5');set('pairFilterYMax','3.5');
   let visible=shown(),expected=items.filter(p=>p.top.familyId===tid&&p.bot.familyId===tid&&p.result.total*1000>=1-1e-10&&p.result.total*1000<=10+1e-10&&p.error>=1.5-1e-10&&p.error<=3.5+1e-10);
   assert(visible.length>0&&visible.length<items.length&&samePairs(visible,expected),'Numeric bounds intersect both chart axes and the family filter exactly');
+  assert(w.eval('pairPoints').every(point=>familyKey(items[point.index])==='tnpw')&&w.eval('pairPoints').some(point=>!point.visible),'Bounds dim only enabled-family points while unselected families remain hidden');
   assert(get('pairFilterXMinLabel').textContent.includes('mW')&&get('pairFilterYMaxLabel').textContent.includes('error'),'Manual filter labels track the selected axis units');
   assert(w.pairSearchCsv(true).trim().split('\r\n').length===visible.length+1&&w.pairSearchCsv().trim().split('\r\n').length===items.length+1,'Filtered CSV contains exactly visible pairs while all-combinations CSV retains the full search');
   assert([...get('pairRows').rows].every(row=>visible.includes(items[Number(row.dataset.valueRow)])),'Every table row belongs to the filtered result set');
@@ -106,7 +123,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   pointer('pointerdown',x1,y1);pointer('pointermove',x2,y2);pointer('pointercancel',x2,y2);assert(samePairs(shown(),expected),'Pointer cancellation preserves the previously committed region');
   frame.style.width='390px';await pause();assert(samePairs(shown(),expected),'Resize preserves drag filters in data coordinates');frame.style.width='1440px';await pause();
   set('pairAxisX','current');assert(get('pairFilterXMin').value===''&&get('pairFilterYMin').value===''&&shown().length===items.length&&get('pairFilterXMaxLabel').textContent.includes('µA'),'Axis changes clear old coordinate bounds and relabel their units');
-  set('pairFilterFamily','mixed');set('pairFilterXMin','1');get('pairChart').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert(shown().length===items.length&&get('pairFilterFamily').value==='all','Escape outside a gesture clears the active visualization filters');
+  setFamilies('mixed');set('pairFilterXMin','1');get('pairChart').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert(shown().length===items.length&&familyToggles.every(input=>input.checked),'Escape outside a gesture clears bounds and restores all legend families');
   get('pairClearFilters').click();
   await reset();set('pairMinR','1000');set('pairMaxR','3000');set('pairVmid','4');set('pairRl','10000');set('pairSourceTol','1');set('pairLoadTol','3');
   items=await run();const spec=w.readPairSpec(),tops=w.catalogPairParts(spec,'Top'),bots=w.catalogPairParts(spec,'Bot'),brute=[];

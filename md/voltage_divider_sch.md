@@ -236,12 +236,15 @@ combinations CSV** includes every match, its conditions, source links, and nomin
 and worst-case performance. Supplier stock remains unverified.
 
 Click and drag a rectangle over the chart to show only pairs inside that area in
-the table. Dragging in any direction replaces the previous area. Excluded points
-remain dimmed so the full search stays visible as context. **Filter bounds and
-families** offers equivalent numeric limits in the displayed axis units, plus a
-same-family/mixed-family selector. Numeric bounds and the family filter intersect.
-Axis changes clear coordinate bounds and retain the family filter; resizing keeps
-the selected data range. **Clear filters** restores all matches. With the chart
+the table. Dragging in any direction replaces the previous area. Points outside
+the bounds remain dimmed as context. The **TNPW / TNPW**, **M55342 / M55342** and
+**Mixed families** legend checkboxes independently control which combinations
+appear in the chart, table and filtered CSV. All three start selected; unchecking
+all three leaves an empty chart and table. Unselected families are hidden entirely.
+**Filter bounds** offers equivalent numeric limits in the displayed axis units.
+Numeric bounds and selected families intersect. Axis changes clear coordinate
+bounds and retain selected families; resizing keeps the selected data range.
+**Clear filters** restores all matches and enables all three families. With the chart
 focused, Escape cancels an unfinished drag, or clears all filters when no drag
 is active.
 

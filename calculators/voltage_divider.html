@@ -206,8 +206,10 @@
     .bom-copy-text { width: 100%; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #101823; color: var(--text); font: 0.78rem/1.5 var(--mono); }
     .pair-chart { display: block; width: 100%; height: 340px; margin-top: 12px; border-radius: 10px; background: #101823; cursor: crosshair; touch-action: none; }
     .pair-controls { margin: 16px 0; }
-    .pair-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0; }
-    .pair-legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--point-color); }
+    .pair-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 12px 0; }
+    .pair-legend label { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; font-size: inherit; cursor: pointer; }
+    .pair-legend input { width: 16px; height: 16px; min-height: auto; margin: 0; padding: 0; accent-color: var(--point-color); }
+    .pair-legend input:not(:checked) + span { opacity: 0.6; }
     .pair-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
     .pair-table { margin-top: 14px; max-height: 430px; }
     .pair-inspector { margin: 16px 0; padding: 14px; border-radius: 10px; background: #101823; }
@@ -704,16 +706,19 @@
                 <div class="field"><label for="pairAxisX">Chart X axis</label><select id="pairAxisX"><option value="power">Total power (mW)</option><option value="current">Input current (µA)</option><option value="rth">Output resistance Rth (kΩ)</option></select></div>
                 <div class="field"><label for="pairAxisY">Chart Y axis</label><select id="pairAxisY"><option value="error">Worst-case target error (%)</option><option value="nominalError">Nominal target error (%)</option><option value="vmid">Nominal VMID (V)</option><option value="pstress">Worst-case Pstress (%)</option><option value="vstress">Worst-case V/I stress (%)</option></select></div>
               </div>
-              <p id="pairChartHelp" class="hint">Drag a rectangle to filter the table. Click a point or select a row to preview it in the top SVG. Dim points fall outside the filters; identical performance can overlap. X axes use a logarithmic scale. Escape cancels a drag or clears filters.</p>
+              <p id="pairChartHelp" class="hint">Drag a rectangle to filter the table. Click a point or select a row to preview it in the top SVG. Choose which families to show using the checkboxes below. Dim points fall outside the bounds; identical performance can overlap. X axes use a logarithmic scale. Escape cancels a drag or clears filters.</p>
               <canvas id="pairChart" class="pair-chart" width="900" height="340" tabindex="0" aria-describedby="pairChartHelp" aria-label="Resistor pair performance scatter chart. Drag to filter, or use the numeric bounds below."></canvas>
-              <div class="pair-legend hint"><span style="--point-color:#54d2ff">TNPW / TNPW</span><span style="--point-color:#ffba52">M55342 / M55342</span><span style="--point-color:#6ee7ac">Mixed families</span></div>
-              <details id="pairFilterOptions"><summary>Filter bounds and families</summary>
+              <div class="pair-legend hint" role="group" aria-label="Show pair families">
+                <label style="--point-color:#54d2ff"><input id="pairShowTnpw" type="checkbox" data-pair-family="tnpw" checked /><span>TNPW / TNPW</span></label>
+                <label style="--point-color:#ffba52"><input id="pairShowMil" type="checkbox" data-pair-family="mil" checked /><span>M55342 / M55342</span></label>
+                <label style="--point-color:#6ee7ac"><input id="pairShowMixed" type="checkbox" data-pair-family="mixed" checked /><span>Mixed families</span></label>
+              </div>
+              <details id="pairFilterOptions"><summary>Filter bounds</summary>
                 <div class="rating-fields">
                   <div class="field"><label for="pairFilterXMin" id="pairFilterXMinLabel">Minimum X</label><input id="pairFilterXMin" type="number" step="any" placeholder="No minimum" /></div>
                   <div class="field"><label for="pairFilterXMax" id="pairFilterXMaxLabel">Maximum X</label><input id="pairFilterXMax" type="number" step="any" placeholder="No maximum" /></div>
                   <div class="field"><label for="pairFilterYMin" id="pairFilterYMinLabel">Minimum Y</label><input id="pairFilterYMin" type="number" step="any" placeholder="No minimum" /></div>
                   <div class="field"><label for="pairFilterYMax" id="pairFilterYMaxLabel">Maximum Y</label><input id="pairFilterYMax" type="number" step="any" placeholder="No maximum" /></div>
-                  <div class="field"><label for="pairFilterFamily">Pair families</label><select id="pairFilterFamily"><option value="all">All families</option><option value="tnpw">TNPW / TNPW</option><option value="mil">M55342 / M55342</option><option value="mixed">Mixed families</option></select></div>
                 </div>
               </details>
               <div class="actions parts-table-actions"><button id="pairClearFilters" class="btn" type="button">Clear filters</button><button id="pairFilteredCsv" class="btn" type="button" disabled>Download filtered CSV ↓</button></div>
@@ -1248,6 +1253,7 @@
     let pairGeneration = 0, pairItems = [], pairView = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
     let pairPlot = null, pairBrush = null, pairIgnoreClick = false;
     const PAIR_PAGE_SIZE = 50;
+    const pairFamilyToggles = Array.from(document.querySelectorAll("[data-pair-family]"));
     const catalogSame = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1e-12, Math.abs(a), Math.abs(b));
 
     function catalogAssignment(part) {
@@ -1305,20 +1311,24 @@
       return top && bot ? "mil" : !top && !bot ? "tnpw" : "mixed";
     }
 
+    function selectedPairFamilies() {
+      return new Set(pairFamilyToggles.filter(input => input.checked).map(input => input.dataset.pairFamily));
+    }
+
     function updatePairFilterLabels() {
       for (const axis of ["X", "Y"]) for (const bound of ["Min", "Max"]) byId(`pairFilter${axis}${bound}Label`).textContent = `${bound === "Min" ? "Minimum" : "Maximum"} ${byId(`pairAxis${axis}`).selectedOptions[0].textContent}`;
     }
 
     function resetPairFilterInputs(rangesOnly = false) {
       for (const id of ["pairFilterXMin", "pairFilterXMax", "pairFilterYMin", "pairFilterYMax"]) { byId(id).value = ""; byId(id).removeAttribute("aria-invalid"); }
-      if (!rangesOnly) byId("pairFilterFamily").value = "all";
+      if (!rangesOnly) for (const input of pairFamilyToggles) input.checked = true;
       byId("pairFilterStatus").textContent = "";
       pairBrush = null;
       updatePairFilterLabels();
     }
 
     function pairFilterActive() {
-      return byId("pairFilterFamily").value !== "all" || ["pairFilterXMin", "pairFilterXMax", "pairFilterYMin", "pairFilterYMax"].some(id => byId(id).value !== "" || byId(id).validity.badInput);
+      return pairFamilyToggles.some(input => !input.checked) || ["pairFilterXMin", "pairFilterXMax", "pairFilterYMin", "pairFilterYMax"].some(id => byId(id).value !== "" || byId(id).validity.badInput);
     }
 
     function readPairFilters() {
@@ -1336,10 +1346,10 @@
     }
 
     function filterPairItems() {
-      const filters = readPairFilters(), family = byId("pairFilterFamily").value;
+      const filters = readPairFilters(), families = selectedPairFamilies();
       const within = (value, min, max) => (min === null || value >= min - 1e-10 * Math.max(1, Math.abs(min))) && (max === null || value <= max + 1e-10 * Math.max(1, Math.abs(max)));
-      pairView = filters.error ? [] : pairItems.filter(pair => (family === "all" || pairFamilyKey(pair) === family) && within(pairMetric(pair, byId("pairAxisX").value), filters.XMin, filters.XMax) && within(pairMetric(pair, byId("pairAxisY").value), filters.YMin, filters.YMax));
-      byId("pairFilterStatus").textContent = filters.error || `${pairView.length.toLocaleString()} of ${pairItems.length.toLocaleString()} combinations shown${pairFilterActive() ? " · filters active" : ""}.${pairView.length ? "" : " Clear filters or expand the bounds to see more pairs."}`;
+      pairView = filters.error ? [] : pairItems.filter(pair => families.has(pairFamilyKey(pair)) && within(pairMetric(pair, byId("pairAxisX").value), filters.XMin, filters.XMax) && within(pairMetric(pair, byId("pairAxisY").value), filters.YMin, filters.YMax));
+      byId("pairFilterStatus").textContent = filters.error || `${pairView.length.toLocaleString()} of ${pairItems.length.toLocaleString()} combinations shown${pairFilterActive() ? " · filters active" : ""}.${pairView.length ? "" : families.size ? " Clear filters or expand the bounds to see more pairs." : " Select a family above to show pairs."}`;
       if (filters.error) byId("pairFilterOptions").open = true;
       pairPage = pairSelected && pairView.includes(pairSelected) ? Math.floor(pairView.indexOf(pairSelected) / PAIR_PAGE_SIZE) : 0;
       if (!pairView.includes(pairSelected)) pairSelected = pairView[0] || null;
@@ -1585,8 +1595,9 @@
       ctx.fillStyle = "#d3e6f4"; ctx.textAlign = "left"; ctx.fillText(byId("pairAxisY").selectedOptions[0].textContent, 10, 15);
       ctx.textAlign = "center"; ctx.fillText(byId("pairAxisX").selectedOptions[0].textContent + " · log scale", width / 2, height - 9);
       pairPoints = [];
-      const visible = new Set(pairView);
+      const visible = new Set(pairView), families = selectedPairFamilies();
       for (const [index, pair] of pairItems.entries()) {
+        if (!families.has(pairFamilyKey(pair))) continue;
         const x = xPos(pairMetric(pair, xKey)), y = yPos(pairMetric(pair, yKey));
         ctx.fillStyle = { mil: "#ffba52", tnpw: "#54d2ff", mixed: "#6ee7ac" }[pairFamilyKey(pair)];
         ctx.globalAlpha = visible.has(pair) ? 1 : 0.12;
@@ -2252,7 +2263,7 @@
     byId("pairCancel").addEventListener("click", () => invalidatePairSearch("Search canceled."));
     for (const id of ["pairAxisX", "pairAxisY"]) byId(id).addEventListener("change", () => { resetPairFilterInputs(true); filterPairItems(); });
     for (const id of ["pairFilterXMin", "pairFilterXMax", "pairFilterYMin", "pairFilterYMax"]) byId(id).addEventListener("input", filterPairItems);
-    byId("pairFilterFamily").addEventListener("change", filterPairItems);
+    for (const input of pairFamilyToggles) input.addEventListener("change", filterPairItems);
     byId("pairClearFilters").addEventListener("click", () => { resetPairFilterInputs(); filterPairItems(); });
     byId("pairSort").addEventListener("change", sortPairItems);
     byId("pairPrevious").addEventListener("click", () => { if (pairPage > 0) { pairPage--; renderPairTable(); } });
