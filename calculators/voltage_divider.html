@@ -1177,6 +1177,8 @@
     let schematicEditContext = null;
     let schematicBomData = [];
     let schematicBomCopyGeneration = 0;
+    let schematicBomChoiceRevision = 0;
+    const schematicBomChoices = new Map(), schematicCandidatePools = new Map();
 
     function schematicEditLocks(key) {
       const mode = byId("solveFor").value, state = pairPreviewState || schematicState;
@@ -1402,20 +1404,24 @@
     }
 
     function renderSchematicTable(host, state, roles, x, y, width, alternativesByPart) {
-      const narrow = width < 580, refWidth = narrow ? 34 : 60, stressWidth = narrow ? 42 : 72;
-      const pnWidth = (width - refWidth - 3 * stressWidth) / 2, widths = [refWidth, pnWidth, pnWidth, stressWidth, stressWidth, stressWidth];
-      const labels = ["Ref Des", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress"], offsets = [0];
+      const narrow = width < 650, refWidth = 50, descriptionWidth = narrow ? 0 : width * 0.21, stressWidth = narrow ? 42 : 50;
+      const pnWidth = (width - (narrow ? 0 : refWidth + descriptionWidth) - 3 * stressWidth) / 2;
+      const widths = [refWidth, descriptionWidth, pnWidth, pnWidth, stressWidth, stressWidth, stressWidth];
+      const labels = ["Ref Des", "Description", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress"], offsets = [0];
       for (const size of widths) offsets.push(offsets.at(-1) + size);
+      // Narrow rows put the reference and description above the PN/stress cells.
+      if (narrow) offsets.splice(2, 5, 0, pnWidth, 2 * pnWidth, 2 * pnWidth + stressWidth, 2 * pnWidth + 2 * stressWidth);
       const entries = state ? ARMS.flatMap(arm => state.physical[arm].map(part => ({ arm, part }))) : [];
-      const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress"]];
-      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor part numbers and nominal stresses", "aria-colcount": 6, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
+      const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress", "Description", "Part status", "TNPW recommendation (not applied)", "M55342 recommendation (not applied)"]];
+      schematicBomChoices.clear(); schematicBomChoiceRevision++;
+      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor descriptions, part numbers and nominal stresses", "aria-colcount": 7, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
       schematicText(table, 0, 16, "Resistor parts · nominal stress", 14, "#eaf6ff");
-      const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = narrow ? 44 : 32;
+      const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = narrow ? 64 : 32;
       schematicInfoBox(head, 0, 30, width, headerHeight);
       labels.forEach((label, index) => {
         const cell = schematicShape(head, "g", { role: "columnheader", "aria-colindex": index + 1 });
-        const lines = narrow ? index < 3 ? label.split(" ").map((word, i) => i ? word : word + " ") : [label[0], "stress"] : [label];
-        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, 49 + i * 14, line, narrow ? 9 : 11, "#a8bece"));
+        const lines = narrow && index >= 2 ? index < 4 ? label.split(" ").map((word, i) => i ? word : word + " ") : [label[0], "stress"] : [label];
+        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, (narrow && index >= 2 ? 72 : 49) + i * 14, line, narrow ? 9 : Math.min(11, (widths[index] - 8) / (line.length * 0.62)), "#a8bece"));
       });
       let top = 30 + headerHeight + 6;
       for (const [index, { arm, part }] of entries.entries()) {
@@ -1427,27 +1433,46 @@
         const refCell = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
         const reference = schematicTableText(refCell, 4, 21, part.name, refWidth - 8, narrow ? 10 : 13, SOLVE_ROLES[roles[arm]].color), ref = reference.text;
         schematicEditable(schematicRole(ref, arm, roles), part.id, `${description}; catalog specifications`, "specifications");
-        const alternatives = part.alternatives || schematicPartAlternatives(part); alternativesByPart.set(part.id, alternatives);
-        const candidates = [part.catalog, ...alternatives].filter(Boolean);
+        const matches = schematicPartMatches(part, arm, state), candidates = matches.filter(match => match.kind !== "nearby").map(match => match.candidate);
+        alternativesByPart.set(part.id, candidates.filter(candidate => candidate.mpn !== part.mpn));
         const familyNumbers = { tnpw: candidates.find(item => item.familyId.includes("tnpw"))?.mpn, mil: candidates.find(item => item.familyId.includes("m55342"))?.mpn };
         const cells = bomPartCells(part, part.catalog, familyNumbers);
-        bom.push(["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil", "pstress", "vstress", "istress"].map(key => cells[key]));
-        let lineCount = reference.lines;
-        for (const [column, family] of [[1, "tnpw"], [2, "m55342"]]) {
-          const candidate = candidates.find(item => item.familyId.includes(family)), selected = candidate && candidate.mpn === part.mpn;
-          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": column + 1, "data-family": family });
-          const content = candidate?.mpn || "—", field = candidate ? selected ? "mpn" : "mpnAlternative" : null;
-          const wrapped = schematicTableText(cell, offsets[column] + (selected ? 14 : 4), 21, content, pnWidth - (selected ? 18 : 8), fontSize, candidate ? selected ? "#54d2ff" : "#ffba52" : "#a8bece", field);
-          lineCount = Math.max(lineCount, wrapped.lines);
-          if (selected) schematicText(cell, offsets[column] + 4, 21, "*", fontSize, "#54d2ff");
-          if (candidate) schematicShape(cell, "title", selected ? {} : { "data-field": "alternativeLimits" }).textContent = `${selected ? "Selected" : "Alternative"} ${candidate.mpn}; ${format(candidate.resistanceOhms, "Ω")}; ${format(candidate.powerW, "W")} allowed; ${candidate.workingVoltageV} V; ${candidate.temperatureC} °C; ${candidate.mode}; ±${candidate.tcrPpm} ppm/°C; reliability ${candidate.failureRate || "N/A"}`;
+        const actualDescription = `${cells.value} · ${cells.tolerance} · ${part.catalog?.case || "Footprint not set"}`;
+        const descriptionCell = schematicShape(row, "g", { role: "cell", "aria-colindex": 2 });
+        const described = schematicTableText(descriptionCell, refWidth + 4, 21, actualDescription, narrow ? width - refWidth - 8 : descriptionWidth - 8, narrow ? 11 : 10, "#c6e3ff", "description");
+        const recommendationText = family => { const match = matches.find(item => item.family === family && item.kind === "nearby"), delta = match ? (match.candidate.resistanceOhms / part.resistance - 1) * 100 : 0; return match ? `${match.candidate.mpn}; ${format(match.candidate.resistanceOhms, "Ω")}; ±${percent(match.candidate.tolerancePct)}; ${match.candidate.case}; ΔR ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "—"; };
+        bom.push([...["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil", "pstress", "vstress", "istress"].map(key => cells[key]), actualDescription, part.catalog ? "Applied" : candidates.length ? "Exact-value matches; not applied" : "Unassigned; recommendations are not applied", recommendationText("tnpw"), recommendationText("mil")]);
+        const partTop = narrow ? 21 + Math.max(reference.lines, described.lines) * 15 + 8 : 21;
+        let rowBottom = Math.max(reference.lines, described.lines) * 15 + 15;
+        for (const [column, family] of [[2, "tnpw"], [3, "mil"]]) {
+          const match = matches.find(item => item.family === family), candidate = match?.candidate, selected = match?.kind === "selected", nearby = match?.kind === "nearby";
+          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": column + 1, "data-family": family === "mil" ? "m55342" : family });
+          if (candidate) cell.dataset.partMatch = match.kind;
+          const content = candidate?.mpn || "—", field = candidate ? selected ? "mpn" : nearby ? "mpnRecommendation" : "mpnAlternative" : null;
+          const wrapped = schematicTableText(cell, offsets[column] + (selected ? 14 : 4), partTop, content, pnWidth - (selected ? 18 : 8), fontSize, candidate ? selected ? "#54d2ff" : nearby ? "#ffba52" : "#6ee7ac" : "#a8bece", field);
+          let cellBottom = partTop + wrapped.lines * 15;
+          if (selected) schematicText(cell, offsets[column] + 4, partTop, "*", fontSize, "#54d2ff");
+          if (candidate) schematicShape(cell, "title", selected ? {} : { "data-field": nearby ? "recommendationLimits" : "alternativeLimits" }).textContent = `${selected ? "Selected" : nearby ? "Recommendation; not applied" : "Exact-value match; not applied"} ${candidate.mpn}; ${format(candidate.resistanceOhms, "Ω")}; ±${percent(candidate.tolerancePct)}; ${candidate.case}; ${format(candidate.powerW, "W")} allowed; ${candidate.workingVoltageV} V; ${candidate.temperatureC} °C; ${candidate.mode}; ±${candidate.tcrPpm} ppm/°C; reliability ${candidate.failureRate || "N/A"}${match.preview ? `; using this part gives VMID ${format(match.preview.result.vout, "V")}, selected-part maximum stress ${percent(match.preview.highest)}` : match.previewError ? `; cannot use: ${match.previewError}` : ""}`;
+          if (candidate && !selected) {
+            const delta = (candidate.resistanceOhms / part.resistance - 1) * 100;
+            const label = nearby ? catalogSame(candidate.resistanceOhms, part.resistance) ? "Tolerance change" : `Nearest · ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "Exact value";
+            const note = schematicTableText(cell, offsets[column] + 4, cellBottom, label, pnWidth - 8, 10, nearby ? "#ffba52" : "#6ee7ac", "matchStatus"); cellBottom += note.lines * 15;
+            const specs = schematicTableText(cell, offsets[column] + 4, cellBottom, `${nearby ? format(candidate.resistanceOhms, "Ω") + " · " : ""}±${percent(candidate.tolerancePct)} · ${candidate.case}`, pnWidth - 8, 10, "#c6d7e5", "candidateDescription"); cellBottom += specs.lines * 15;
+            const locks = schematicEditLocks(part.id), locked = locks.value && !catalogSame(part.resistance, candidate.resistanceOhms) || locks.tolerance && (!catalogSame(part.tolerance, candidate.tolerancePct) || !catalogSame(part.resistance, candidate.resistanceOhms));
+            const disabled = !!state.pair ? !match.pair : locked || !match.preview || match.preview.highest > 100 + 1e-9;
+            const action = `bom-use:${schematicBomChoiceRevision}:${part.id}:${family}`;
+            schematicBomChoices.set(action, { ...match, part, state, disabled });
+            const button = pairSvgAction(cell, offsets[column] + 4, cellBottom + 2, !!state.pair ? "Preview" : locked ? "Find value" : !match.preview ? "No solution" : disabled ? "Over rating" : "Use", action, { disabled, color: nearby ? "#ffba52" : "#6ee7ac", maxWidth: pnWidth - 8, label: `${state.pair ? "Preview" : "Use"} ${candidate.mpn} for ${part.name}; ${format(candidate.resistanceOhms, "Ω")}, ±${percent(candidate.tolerancePct)}, ${candidate.case}${locked ? "; calculated Find values are read-only" : ""}` });
+            button.pill.dataset.bomPart = part.id; button.pill.dataset.bomFamily = family; cellBottom += 34;
+          }
+          rowBottom = Math.max(rowBottom, cellBottom);
         }
         for (const [metricIndex, key] of ["p", "v", "i"].entries()) {
-          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 4 }), value = part.stress[key], content = percent(value);
+          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 5 }), value = part.stress[key], content = percent(value);
           const colors = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" };
-          schematicText(cell, offsets[metricIndex + 3] + 4, 21, content, Math.min(narrow ? 10 : 13, (stressWidth - 8) / (content.length * 0.62)), colors[stressClass(value)], key);
+          schematicText(cell, offsets[metricIndex + 4] + 4, partTop, content, Math.min(narrow ? 10 : 13, (stressWidth - 8) / (content.length * 0.62)), colors[stressClass(value)], key);
         }
-        const height = Math.max(36, lineCount * 15 + 15); background.setAttribute("height", height); top += height + 6;
+        const height = Math.max(36, rowBottom + 6); background.setAttribute("height", height); top += height + 6;
       }
       if (!entries.length) { const note = schematicTableText(table, 4, top + 20, state?.pairSetup ? "Set inputs in the diagram, then Find pairs." : "Enter valid circuit data.", width - 8, 12, "#ffba52"); top += Math.max(38, note.lines * 15 + 18); }
       const previousBom = schematicBomTsv(); schematicBomData = bom;
@@ -2310,19 +2335,57 @@
       renderSchematic();
     }
 
-    function schematicPartAlternatives(part) {
-      if (!part.catalog || !resistorCatalog || !schematicState) return [];
-      const alternatives = [];
+    function schematicPartMatches(part, arm, state) {
+      if (!resistorCatalog) return [];
+      const matches = [], pairMode = !!state.pair;
       for (const entry of parts2Families) {
-        if (entry.id === part.catalog.familyId) continue;
+        const selected = part.catalog?.familyId === entry.id;
+        if (selected) { matches.push({ family: entry.key, candidate: part.catalog, kind: "selected" }); continue; }
+        if (pairMode) {
+          const side = arm === "r1" ? "top" : "bot", other = side === "top" ? "bot" : "top";
+          const exact = part.alternatives?.find(candidate => candidate.familyId === entry.id);
+          const options = pairView.filter(pair => pair[side].familyId === entry.id && pair[other].mpn === state.pair[other].mpn);
+          const closest = exact ? null : options.reduce((best, pair) => !best || Math.abs(pair[side].resistanceOhms / part.resistance - 1) < Math.abs(best[side].resistanceOhms / part.resistance - 1) ? pair : best, null);
+          const candidate = exact || closest?.[side];
+          if (candidate) matches.push({ family: entry.key, candidate, kind: catalogSame(candidate.resistanceOhms, part.resistance) ? "exact" : "nearby", pair: options.find(pair => pair[side].mpn === candidate.mpn) });
+          continue;
+        }
         try {
-          const family = ResistorParts.family(resistorCatalog, entry.id), options = parts2Options(family, part.catalog.case, part.catalog.temperatureC, part.catalog.tcrPpm);
+          const family = ResistorParts.family(resistorCatalog, entry.id);
+          const size = part.catalog?.case || byId("parts2Package").value;
+          const options = parts2Options(family, size, part.catalog?.temperatureC ?? byId("parts2Temperature").valueAsNumber, part.catalog?.tcrPpm ?? Number(byId("parts2Tcr").value));
           if (!options) continue;
-          const candidate = ResistorParts.evaluate(resistorCatalog, entry.id, { ...options, resistanceOhms: part.resistance, tolerancePct: part.tolerance });
-          if (previewCatalogPart(candidate, part.id).highest <= 100 + 1e-9) alternatives.push(candidate);
-        } catch (_) { /* Unsupported or electrically unsuitable alternate part. */ }
+          const tolerances = [...family.toleranceCodes.filter(item => item.pct <= part.tolerance).sort((a, b) => b.pct - a.pct), ...family.toleranceCodes.filter(item => item.pct > part.tolerance).sort((a, b) => a.pct - b.pct)];
+          const pkg = family.packages.find(item => item.code === options.package);
+          let pool = [];
+          for (const tolerance of tolerances) {
+            const key = JSON.stringify([entry.id, options, tolerance.pct]);
+            if (!schematicCandidatePools.has(key)) schematicCandidatePools.set(key, ResistorParts.enumerate(resistorCatalog, entry.id, { ...options, tolerancePct: tolerance.pct, minOhms: Math.min(...pkg.limits.map(limit => limit.minOhms)), maxOhms: Math.max(...pkg.limits.map(limit => limit.maxOhms)) }));
+            pool = schematicCandidatePools.get(key); if (pool.length) break;
+          }
+          let low = 0, high = pool.length;
+          while (low < high) { const middle = (low + high) >>> 1; if (pool[middle].resistanceOhms < part.resistance) low = middle + 1; else high = middle; }
+          const candidate = [pool[low - 1], pool[low]].filter(Boolean).reduce((best, item) => !best || Math.abs(item.resistanceOhms - part.resistance) < Math.abs(best.resistanceOhms - part.resistance) ? item : best, null);
+          if (!candidate) continue;
+          let preview = null, previewError = "";
+          try { preview = previewCatalogPart(candidate, part.id, true); } catch (error) { previewError = error.message; }
+          matches.push({ family: entry.key, candidate, preview, previewError, kind: catalogSame(candidate.resistanceOhms, part.resistance) && catalogSame(candidate.tolerancePct, part.tolerance) ? "exact" : "nearby" });
+        } catch (_) { /* No supported package/TCR/tolerance or valid circuit preview. */ }
       }
-      return alternatives;
+      return matches;
+    }
+
+    function useSchematicBomPart(action) {
+      const choice = schematicBomChoices.get(action), state = byId("solveFor").value === "pairs" ? pairPreviewState : schematicState;
+      if (!choice || choice.state !== state || choice.disabled) return;
+      if (state.pair) {
+        if (choice.pair && pairView.includes(choice.pair)) selectPair(pairItems.indexOf(choice.pair));
+      } else {
+        const locks = schematicEditLocks(choice.part.id);
+        if (locks.value && !catalogSame(choice.part.resistance, choice.candidate.resistanceOhms) || locks.tolerance && (!catalogSame(choice.part.tolerance, choice.candidate.tolerancePct) || !catalogSame(choice.part.resistance, choice.candidate.resistanceOhms))) return;
+        applyCatalogPart(choice.candidate, choice.part.id, true);
+      }
+      byId("liveSchematic").querySelector(`[data-schematic-part="${choice.part.id}"] [role="rowheader"] [data-schematic-edit]`)?.focus({ preventScroll: true });
     }
 
     function pairMetricBounds(key) {
@@ -2583,6 +2646,7 @@
 
     function runSchematicPairAction(action) {
       if (action === "copy-bom") { copySchematicBom(); return; }
+      if (action.startsWith("bom-use:")) { useSchematicBomPart(action); return; }
       activateSchematicPairResults();
       if (action.startsWith("family:")) pairFamilyToggles.find(input => input.dataset.pairFamily === action.split(":")[1])?.click();
       else if (action === "clear") byId("pairClearFilters").click();
@@ -2935,7 +2999,7 @@
       renderCatalogMatches();
     }
 
-    function previewCatalogPart(candidate, targetId) {
+    function previewCatalogPart(candidate, targetId, preserveMode = false) {
       const state = schematicState;
       const equivalents = {};
       let targetArm;
@@ -2949,7 +3013,13 @@
         equivalents[arm] = networkEquivalent(physical[arm], state.networks[arm]?.connection || "series");
       }
       if (!targetArm) throw new Error("Select a physical resistor.");
-      const circuit = { ...state.circuit, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance };
+      const mode = preserveMode ? byId("solveFor").value : "vout";
+      const circuit = solveCircuit(mode, { ...state.circuit, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance }, state.result.vout);
+      if (ARMS.includes(mode)) {
+        const scale = circuit[mode] / equivalents[mode].resistance;
+        for (const item of physical[mode]) item.resistance *= scale;
+        equivalents[mode] = networkEquivalent(physical[mode], state.networks[mode]?.connection || "series");
+      }
       const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl);
       const tolerances = { ...state.tolerances, r1: equivalents.r1.tolerance, r2: equivalents.r2.tolerance };
       const bounds = toleranceAnalysis(circuit, tolerances, Object.fromEntries(ARMS.map(arm => [arm, [equivalents[arm].min, equivalents[arm].max]])));
@@ -3015,9 +3085,9 @@
       } catch (error) { byId("catalogMatchStatus").textContent = error.message; }
     }
 
-    function applyCatalogPart(candidate, targetId) {
+    function applyCatalogPart(candidate, targetId, preserveMode = false) {
       if (!schematicState) return;
-      const preview = previewCatalogPart(candidate, targetId);
+      const preview = previewCatalogPart(candidate, targetId, preserveMode);
       if (preview.highest > 100 + 1e-9) return;
       catalogDesignVmid ??= schematicState.result.vout;
       const arm = preview.targetArm;
@@ -3032,7 +3102,7 @@
       if (!multiple && ![...power.options].some(option => Number(option.value) === candidate.powerW)) power.add(new Option(`${format(candidate.powerW, "W")} · catalog limit`, candidate.powerW));
       power.value = candidate.powerW;
       appliedCatalogParts.set(targetId, { ...candidate });
-      byId("solveFor").value = "vout";
+      if (!preserveMode) byId("solveFor").value = "vout";
       update();
     }
 
@@ -3056,6 +3126,7 @@
         initializeParts2();
         initializePairSearch();
         configureCatalogFamily(true);
+        renderSchematic();
         return true;
       } catch (error) {
         byId("catalogStatus").textContent = `Part suggestions unavailable: ${error.message} Serve this page over HTTP to load the shared JSON catalogs. Manual circuit analysis remains available.`;
@@ -3296,7 +3367,7 @@
     byId("catalogFamily").addEventListener("change", () => configureCatalogFamily(true));
     for (const id of ["catalogPackage", "catalogTcr"]) byId(id).addEventListener("change", () => configureCatalogFamily(false));
     byId("catalogPackaging").addEventListener("change", renderCatalogMatches);
-    for (const id of ["parts2Part", "parts2Package", "parts2Tolerance", "parts2Temperature", "parts2Tcr"]) byId(id).addEventListener("input", renderParts2);
+    for (const id of ["parts2Part", "parts2Package", "parts2Tolerance", "parts2Temperature", "parts2Tcr"]) byId(id).addEventListener("input", () => { renderParts2(); if (id !== "parts2Part") renderSchematic(); });
     byId("parts2Family").addEventListener("change", () => updateParts2Selection());
     byId("parts2Apply").addEventListener("click", () => {
       const row = parts2Values.find(value => value.key === parts2Selection);

@@ -34,9 +34,12 @@ input; calculated arm values are read-only.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
 connections visible. The right side contains a native SVG table with **Ref Des**,
-**TNPW PN**, **M55342 PN**, **Pstress**, **Vstress** and **Istress** columns and one
-row per physical resistor. On smaller screens it appears below the drawing and
-wraps complete part numbers within their columns. An asterisk marks the selected
+**Description**, **TNPW PN**, **M55342 PN**, **Pstress**, **Vstress** and **Istress**
+columns and one row per physical resistor. The description shows actual resistance,
+tolerance and footprint; unassigned footprints read **Footprint not set**. On
+smaller screens, each reference and description sit above the part-number and
+stress cells so the table stays readable without horizontal scrolling.
+An asterisk marks the selected
 part number; stress uses the current circuit or preview part's own ratings.
 A dash means no assigned or qualifying part number for that family. Click a
 reference to edit the resistor and its catalog options. Reference tooltips retain
@@ -64,6 +67,31 @@ spreadsheet-ready table, including quantity, resistance, tolerance, footprint,
 selected part number, both family part numbers and nominal P/V/I stress. In pair
 mode it copies the preview without applying it to the circuit. If clipboard
 access is unavailable, the text is selected below the diagram for manual copying.
+
+The SVG BOM shows exact resistance/tolerance matches even before a catalog part
+has been applied. Unassigned parts use the package, ambient and TCR selected in
+**Parts (2)** for suggestions; assigned parts retain their own package and
+conditions. If a family has no exact match, its cell shows an amber **Nearest**
+recommendation with the proposed resistance, signed percentage change, tolerance
+and footprint. Unsupported tolerances are visibly labeled **Tolerance change**.
+The nearest resistance uses the current tolerance where supported. Otherwise,
+the closest supported tighter tolerance is preferred; a looser tolerance is shown
+only when no tighter option exists.
+
+**Use** adopts that one physical resistor's resistance, tolerance, footprint,
+power rating, working-voltage limit and real part number, then recalculates the
+circuit and BOM while preserving the active Find mode. Calculated Find values
+remain read-only. Over-rating or infeasible recommendations cannot be applied;
+their tooltip shows the candidate's limits and preview result or reason.
+In pair mode, suggestions come from validated visible pairs with the other
+resistor unchanged. **Preview** selects that pair; **Apply pair** remains the
+explicit step that transfers it to the circuit.
+
+**Copy BOM** includes the description and assignment status. Exact matches appear
+in the family PN columns; nearby-value or different-tolerance proposals appear
+in separate **recommendation (not applied)** columns, preserving the actual
+values and selected PN until adoption. Static SVG downloads keep descriptions
+and recommendation labels while removing live adoption controls.
 
 Click an underlined SVG value or a pill, or focus it and press Enter/Space, to
 edit the circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
