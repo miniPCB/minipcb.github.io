@@ -33,7 +33,7 @@
         const schematicField = (id, field) => {
           if (field === "rating") return schematicPart(id).querySelector(":scope > title").textContent.match(/(?:Rated|Allowed) [^;]+/)[0];
           const node = schematicPart(id).querySelector(`[data-field="${field}"]`) || d.querySelector(`[data-schematic-symbol="${id}"] [data-field="${field}"]`);
-          return node.textContent.replace(/^(Tol\. |Footprint )/, "");
+          return node.textContent;
         };
         const valid = label => {
           assert(get("inputError").hidden, `${label}: ${text("inputError")}`);
@@ -49,13 +49,13 @@
         };
 
         valid("Initial calculation");
-        assert(schematicField("r1", "footprint") === "Not set" && get("liveSchematic").textContent.includes("Tolerance"), "SVG labels tolerance and leaves manual footprints explicitly unset");
+        assert(schematicField("r1", "footprint") === "Not set" && get("liveSchematic").querySelectorAll('.schematic-pill[role="button"]').length === 4, "SVG shows editable tolerance/package pills and leaves manual packages explicitly unset");
         assert(text("vout") === "6 V" && text("iin") === "600 µA" && text("ptotal") === "7.2 mW", "Original default operating point");
         assert(stressOutputs().join(",") === "1.44,12,12,1.44,12,12", "Original default resistor stresses");
         assert(text("voutMin") === "5.94 V" && text("voutMax") === "6.06 V" && text("voutError") === "1%", "Default ±1% resistor output bounds");
         assert(get("targetVout").readOnly && !get("vin").readOnly, "VMID mode marks the calculated field");
         assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 6, "Fifteen common ratings retain selected highlights");
-        assert(text("schematicVtop") === "VTOP 12 V · ±0%" && text("schematicVmid") === "VMID 6 V", "Schematic shows the default source, tolerance, and midpoint");
+        assert(text("schematicVtop") === "VTOP 12 V ±0%" && text("schematicVmid") === "VMID 6 V", "Schematic shows the default source, tolerance, and midpoint");
         assert(schematicField("r1", "resistance") === "10 kΩ" && schematicField("r1", "tolerance") === "±1%" && schematicField("r1", "rating") === "Rated 250 mW", "Schematic shows actual resistance, tolerance, and rating");
         assert(["p", "v", "i"].map(field => schematicField("r1", field)).join(",") === "1.44%,12%,12%", "Schematic shows default Pstress, Vstress, and Istress");
 
@@ -72,7 +72,7 @@
         await reset(); set("solveFor", "vin"); set("targetVout", "5");
         valid("VTOP solution");
         near(get("vin").valueAsNumber, 10, "VTOP = 10 V for 5 V unloaded target");
-        assert(text("schematicVtop") === "VTOP 10 V · ±0%", "Schematic shows a solved source voltage");
+        assert(text("schematicVtop") === "VTOP 10 V ±0%", "Schematic shows a solved source voltage");
         assert(get("vin").readOnly && !get("targetVout").readOnly, "VTOP mode field states");
         set("rl", "10");
         near(get("vin").valueAsNumber, 15, "VTOP = 15 V for 5 V target with 10 kΩ load");

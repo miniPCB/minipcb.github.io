@@ -6,8 +6,10 @@ This hand-authored reference describes the calculator's ideal DC circuit; it is
 not an EAGLE board export. The downloadable LTspice file contains the default
 values below. Calculator edits do not modify these reference files.
 
-The calculation choices appear above the live circuit SVG. The SVG updates VTOP,
-VMID, the equivalent arm resistances, and the open/finite RL value as you edit.
+The calculation choices appear above the live circuit SVG. Each choice lists
+**Given** inputs and the value to **Find**; the form and diagram use the same
+**Find** wording. The SVG updates VTOP, VMID, the equivalent arm resistances,
+and the open/finite RL value as you edit.
 Voltage readouts are part of the circuit drawing: VTOP and source tolerance sit
 beside the source, and VMID sits at the end of a blue output wire extending just
 past the RL branch. A separate, spaced VMID readout lists **Nominal**, **Min** and
@@ -20,8 +22,12 @@ Each physical RTOP/RBOT resistor is annotated with its resistance, tolerance,
 footprint size, power rating, Pstress, Vstress, and Istress. The drawing contains
 one symbol per physical RTOP/RBOT resistor in the work form, wired as a series
 chain or a parallel bank. A finite RL adds its load symbol; an open RL has no
-resistor symbol. Each drawn part shows its value, tolerance and footprint;
-manual footprints read **Not set**, since package size cannot be inferred from
+resistor symbol. Each drawn part shows its value and two small filled pills for
+tolerance (for example, **±1%**) and package size (for example, **0805**), without
+repeating Tol. or Footprint labels. The pills have no outlines and their entire
+area is clickable and keyboard accessible; hover/focus identifies the control.
+Accessible labels and reference tooltips retain the full parameter names.
+Manual packages read **Not set**, since package size cannot be inferred from
 power. Equivalent arm labels stay available for editing the total resistance.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
@@ -39,17 +45,19 @@ values use the nominal operating point and include each part's working-voltage
 limit when entered. Invalid circuit data clears the live values and stresses.
 
 The component legend uses **yellow** for missing/invalid inputs or an unspecified
-footprint, **green** for defined information, and **red** for the active solve
-target. Given/Missing/Solve labels and a **Solving for** heading identify the
-roles without relying on color. The selected calculation, form inputs and result
-use the same cues; a solved value stays red to identify its role. A blank optional
-RL is a defined open circuit. Multi-part arms highlight all resistors being
-scaled. Pair previews highlight the candidate RTOP/RBOT in red; the applied
-circuit remains labeled as given information when no pair preview is shown.
+footprint, **green** for known information, and **red** for the value to find.
+The legend reads **Missing / check input**, **Known** and **Find**. A **Find**
+heading and target labels identify the active calculation without relying on
+color; known components omit repeated status labels. The selected calculation,
+form inputs and result use the same cues; a calculated value stays red to identify
+its role. A blank optional RL is a known open circuit. Multi-part arms highlight
+all resistors being scaled. Pair previews highlight the candidate RTOP/RBOT in
+red; the applied
+circuit is labeled **Current circuit** when no pair preview is shown.
 Stress colors continue to describe rating limits independently of input roles.
 
-Click an underlined SVG value, or focus it and press Enter/Space, to edit the
-circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
+Click an underlined SVG value or a pill, or focus it and press Enter/Space, to
+edit the circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
 tolerance (blank resistance means open circuit). Each physical resistor opens
 its resistance and dropdowns for family, footprint, TCR (ppm/°C), tolerance and
 reliability level. M55342 offers the catalog reliability codes; TNPW displays
