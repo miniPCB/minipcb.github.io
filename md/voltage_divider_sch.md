@@ -127,6 +127,34 @@ preserve the current settings and applied circuit. A search with no matches clea
 old candidate annotations and leaves its inputs editable. Use the existing
 **Apply** action to transfer a chosen pair into the circuit and BOM.
 
+Below the circuit, the same SVG contains a **Pair performance** explorer. Six
+two-ended sliders filter total power, input current, output Rth, target error,
+Pstress and V/I stress. Power/current/Rth are nominal; error/stress use the
+validated worst-case tolerance intervals. Positive power, current and Rth ranges
+use logarithmic interpolation. The slider domains stay at the full search range
+so filtered-out values can be restored. Sliders, numeric chart bounds, family
+toggles, result rows and filtered CSV share one result selection; filters across
+different metrics intersect. Axis changes clear the old coordinate bounds while
+retaining other performance filters. Clear filters restores every range/family.
+
+Two native SVG scatter plots show actual part-number combinations, with both axes
+rescaled to the currently filtered pairs. The first uses the detailed chart's
+selectable axes; the second plots Rth against Pstress. Disabled families and
+filtered-out pairs are omitted. Hover shows both full part numbers separately
+from the selected combination. Click a point to update the circuit preview and
+table selection; clicking overlapping points cycles their actual combinations.
+Dragging either plot adds its data-space bounds to the shared filters.
+
+**Axes**, **View table**, **Compare pair**, **Copy comparison** and **Apply pair**
+are available beside the plots. Comparison membership survives performance
+filtering, and copying uses the existing standard comparison table and its column
+and performance filters. Only Apply changes the circuit/BOM. Controls reflow on
+small screens and support mouse, touch and keyboard. Slider arrows change the
+range; PageUp/PageDown use larger steps, Home/End reach the endpoints, and Escape
+cancels a drag or clears filters. Plot arrows select real combinations and Enter
+toggles their comparison membership. The standalone SVG retains native plots,
+selected part numbers and range annotations with live controls removed.
+
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
 
 [Calculator](../calculators/voltage_divider.html) ·
