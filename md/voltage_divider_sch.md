@@ -17,10 +17,25 @@ limit when entered. Invalid circuit data clears the live values and stresses.
 Click an underlined SVG value, or focus it and press Enter/Space, to edit the
 circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
 tolerance (blank resistance means open circuit). Each physical resistor opens
-its resistance, tolerance, power/allowed-power rating and optional working-voltage
-limit. Saving updates the existing forms and recalculates VMID and stress using
-forward analysis; changing a catalog part's specifications removes its old MPN
-assignment. Cancel or Escape leaves the circuit unchanged.
+its resistance and dropdowns for family, footprint, TCR (ppm/°C), tolerance and
+reliability level. M55342 offers the catalog reliability codes; TNPW displays
+**Not applicable**. Footprint, TCR and tolerance choices follow the selected
+family's supported combinations. A live part-number preview shows the result.
+
+Power is read-only in the SVG editor and follows the selected catalog part's
+footprint, operating mode and ambient derating. Catalog working-voltage limits
+also update automatically. Saving applies the validated part number, tolerance,
+power and voltage limits to the circuit and BOM. Unsupported exact values and
+parts exceeding nominal power/voltage limits cannot be applied. Existing catalog
+parts reopen with their reliability, TCR, tolerance, footprint and conditions.
+
+For an unassigned resistor, **Manual · keep current limits** preserves its current
+power rating and offers a tolerance dropdown and optional working-voltage input.
+Choose a family to enable catalog footprint, TCR and reliability choices. Manual
+mode permits custom values and clears a prior catalog assignment when explicitly
+selected. Source/load tolerances retain numeric entry. Saving updates the existing
+forms and recalculates VMID and stress using forward analysis. Cancel or Escape
+leaves the circuit unchanged.
 
 Click VMID to enter a target and choose whether VTOP, RTOP, RBOT or RL should be
 solved. For a multi-resistor arm, clicking its equivalent value or connection

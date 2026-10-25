@@ -358,7 +358,7 @@
           </div>
         </div>
         <figcaption>
-          <p>Click an underlined SVG value to edit VTOP, VMID, RL, or a resistor's value, tolerance and power rating. R1/RTOP and R2/RBOT show equivalent arm values; each physical resistor has its own settings and nominal stress. Optional RL loads VMID in parallel with RBOT.</p>
+          <p>Click an underlined SVG value to edit VTOP, VMID, RL, or a resistor's value and catalog options. Choose a resistor's footprint, TCR, tolerance and reliability level; its power rating follows the selected part. R1/RTOP and R2/RBOT show equivalent arm values. Optional RL loads VMID in parallel with RBOT.</p>
           <div class="resource-links">
             <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
             <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
@@ -378,8 +378,18 @@
         <div id="schematicEditSolveField" class="field" hidden><label for="schematicEditSolve">Adjust to reach VMID</label><select id="schematicEditSolve"><option value="r1">RTOP</option><option value="r2">RBOT</option><option value="vin">VTOP</option><option value="rl">RL</option></select></div>
         <div id="schematicEditConnectionField" class="field" hidden><label for="schematicEditConnection">Arm connection</label><select id="schematicEditConnection"><option value="series">Series chain</option><option value="parallel">Parallel bank</option></select></div>
         <div id="schematicEditToleranceField" class="field"><label for="schematicEditTolerance">Tolerance · ± (%)</label><input id="schematicEditTolerance" type="number" min="0" max="99.999" step="any" required /></div>
-        <div id="schematicEditPowerField" class="field" hidden><label id="schematicEditPowerLabel" for="schematicEditPower">Power rating (W)</label><input id="schematicEditPower" type="number" min="0" step="any" required /></div>
-        <div id="schematicEditVmaxField" class="field" hidden><label for="schematicEditVmax">Max working voltage (V, optional)</label><input id="schematicEditVmax" type="number" min="0" step="any" placeholder="Power-based" /></div>
+        <div id="schematicEditCatalogFields" class="form-grid" hidden>
+          <div class="field"><label for="schematicEditFamily">Resistor family</label><select id="schematicEditFamily"></select></div>
+          <div class="field"><label for="schematicEditFootprint">Footprint</label><select id="schematicEditFootprint"></select></div>
+          <div class="rating-fields">
+            <div class="field"><label for="schematicEditTcr">TCR · ± (ppm/°C)</label><select id="schematicEditTcr"></select></div>
+            <div class="field"><label for="schematicEditPartTolerance">Tolerance · ± (%)</label><select id="schematicEditPartTolerance"></select></div>
+          </div>
+          <div class="field"><label for="schematicEditReliability">Reliability level</label><select id="schematicEditReliability"></select></div>
+          <p id="schematicEditPartStatus" class="hint" role="status"></p>
+        </div>
+        <div id="schematicEditPowerField" class="field" hidden><label id="schematicEditPowerLabel" for="schematicEditPower">Power rating (W)</label><input id="schematicEditPower" type="number" step="any" readonly /></div>
+        <div id="schematicEditVmaxField" class="field" hidden><label id="schematicEditVmaxLabel" for="schematicEditVmax">Max working voltage (V, optional)</label><input id="schematicEditVmax" type="number" min="0" step="any" placeholder="Power-based" /></div>
         <p id="schematicEditError" class="note" role="alert" hidden></p>
         <div class="actions"><button id="schematicEditSave" class="btn btn-accent" type="submit">Save changes</button><button id="schematicEditCancel" class="btn" type="button">Cancel</button></div>
       </form>
@@ -1237,7 +1247,7 @@
             schematicEditable(schematicText(row, columnWidth * 0.35, 0, format(part.resistance, "Ω"), 15, "#eaf6ff", "resistance"), part.id, `${part.name} resistance`);
             schematicEditable(schematicText(row, 0, 21, `±${percent(part.tolerance)}`, 13, "#a8bece", "tolerance"), part.id, `${part.name} tolerance`, "tolerance");
             const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
-            schematicEditable(schematicText(row, columnWidth * 0.35, 21, `${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`, 13, "#a8bece", "rating"), part.id, `${part.name} power rating and voltage limit`, "power");
+            schematicEditable(schematicText(row, columnWidth * 0.35, 21, `${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`, 13, "#a8bece", "rating"), part.id, `${part.name} footprint and catalog options`, "power");
             for (const [metricIndex, [key, label]] of [["p", "Pstress"], ["v", "Vstress"], ["i", "Istress"]].entries()) {
               const metricX = metricIndex * columnWidth / 3;
               const value = part.stress[key];
@@ -1285,6 +1295,68 @@
       }
     }
 
+    function configureSchematicCatalog(reset = false) {
+      const context = schematicEditContext; if (context?.kind !== "part") return;
+      const familyId = byId("schematicEditFamily").value, chosen = context.part.catalog;
+      if (!familyId) {
+        for (const [id, label] of [["Footprint", "Unspecified (manual)"], ["Tcr", "Unspecified (manual)"], ["Reliability", "Not specified (manual)"]]) {
+          catalogOptions(`schematicEdit${id}`, [{ value: "", label }], ""); byId(`schematicEdit${id}`).disabled = true;
+        }
+        const tolerances = [...new Set([0, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, context.part.tolerance])].sort((a, b) => a - b);
+        catalogOptions("schematicEditPartTolerance", tolerances.map(value => ({ value, label: `±${value}%` })), String(context.part.tolerance));
+        byId("schematicEditVmax").value = context.part.vmax ?? "";
+      } else {
+        const family = ResistorParts.family(resistorCatalog, familyId), same = chosen?.familyId === familyId;
+        const mode = same ? chosen.mode : family.defaults.mode;
+        if (reset) catalogOptions("schematicEditFootprint", family.packages.filter(pkg => pkg.powerW[mode]).map(pkg => ({ value: pkg.code, label: family.encoding === "mil55342" ? `${pkg.case} · /${pkg.code} (${pkg.style})` : pkg.case })), same ? chosen.package : family.packages.find(pkg => pkg.case === chosen?.case)?.code || family.defaults.package);
+        const pkg = family.packages.find(pkg => pkg.code === byId("schematicEditFootprint").value);
+        const tcrs = family.tcrCodes.filter(tcr => pkg?.limits.some(limit => limit.tcrCodes.includes(tcr.code)));
+        catalogOptions("schematicEditTcr", tcrs.map(tcr => ({ value: tcr.code, label: `±${tcr.ppm} ppm/°C` })), reset ? same ? chosen.tcrCode : tcrs.find(tcr => tcr.ppm === chosen?.tcrPpm)?.code || family.defaults.tcrCode : undefined);
+        const tolerances = family.toleranceCodes.filter(tol => pkg?.limits.some(limit => limit.tcrCodes.includes(byId("schematicEditTcr").value) && limit.tolerancesPct.includes(tol.pct)));
+        catalogOptions("schematicEditPartTolerance", tolerances.map(tol => ({ value: tol.pct, label: `±${tol.pct}%` })), reset ? String(context.part.tolerance) : undefined);
+        catalogOptions("schematicEditReliability", family.failureRates?.map(rate => ({ value: rate.code, label: `${rate.code} · ${rate.label}` })) || [{ value: "", label: "Not applicable (TNPW)" }], reset ? same ? chosen.failureRate : family.defaults.failureRate || "" : undefined);
+        byId("schematicEditFootprint").disabled = false; byId("schematicEditTcr").disabled = false;
+        byId("schematicEditReliability").disabled = !family.failureRates?.length;
+      }
+      updateSchematicCatalogPreview();
+    }
+
+    function schematicCatalogCandidate(resistanceOhms) {
+      const familyId = byId("schematicEditFamily").value; if (!familyId) return null;
+      const family = ResistorParts.family(resistorCatalog, familyId), chosen = schematicEditContext.part.catalog;
+      const pkg = family.packages.find(pkg => pkg.code === byId("schematicEditFootprint").value), tcrCode = byId("schematicEditTcr").value;
+      if (!pkg || !tcrCode || byId("schematicEditPartTolerance").value === "") throw new Error("Choose a supported footprint, TCR and tolerance.");
+      const packing = family.packaging.filter(item => pkg.packagingCodes.includes(item.code) && (!item.tcrCodes || item.tcrCodes.includes(tcrCode)));
+      const same = chosen?.familyId === familyId;
+      const options = { resistanceOhms, package: pkg.code, tcrCode, tolerancePct: Number(byId("schematicEditPartTolerance").value), failureRate: byId("schematicEditReliability").value, temperatureC: chosen?.temperatureC ?? 70, mode: same ? chosen.mode : family.defaults.mode, packaging: packing.find(item => item.code === (same ? chosen.packaging : family.defaults.packaging))?.code || packing[0]?.code };
+      if (same && chosen.packaging === "") options.legacy = true;
+      const candidate = ResistorParts.evaluate(resistorCatalog, familyId, options);
+      if (same && ["package", "tcrCode", "tolerancePct", "failureRate", "mode", "temperatureC", "packaging"].every(key => candidate[key] === chosen[key]) && catalogSame(candidate.resistanceOhms, chosen.resistanceOhms)) return { ...chosen };
+      return candidate;
+    }
+
+    function updateSchematicCatalogPreview() {
+      const context = schematicEditContext; if (context?.kind !== "part") return;
+      byId("schematicEditValue").removeAttribute("aria-invalid");
+      byId("schematicEditSave").disabled = false;
+      byId("schematicEditError").hidden = true;
+      byId("schematicEditVmax").readOnly = !!byId("schematicEditFamily").value;
+      byId("schematicEditVmaxLabel").textContent = byId("schematicEditFamily").value ? "Catalog working-voltage limit (V)" : "Max working voltage (V, optional)";
+      try {
+        const value = readInput("schematicEditValue", "Resistance", false, true, Number(byId("schematicEditUnit").value));
+        const candidate = schematicCatalogCandidate(value);
+        byId("schematicEditPower").value = candidate?.powerW ?? context.part.rating;
+        byId("schematicEditPowerLabel").textContent = candidate ? `Allowed power at ${candidate.temperatureC} °C (W)` : "Current power rating (W)";
+        if (candidate) byId("schematicEditVmax").value = candidate.workingVoltageV;
+        byId("schematicEditPartStatus").textContent = candidate ? `${candidate.mpn} · ${candidate.temperatureC} °C · ${candidate.mode} mode. Power and voltage limits come from the catalog.` : `${resistorCatalog ? "Select a family for footprint, TCR and reliability options." : "Catalog options are unavailable."} Manual mode retains the current power rating.`;
+      } catch (error) {
+        byId("schematicEditPartStatus").textContent = error.message;
+        byId("schematicEditPower").value = byId("schematicEditFamily").value ? "" : context.part.rating;
+        if (byId("schematicEditFamily").value) byId("schematicEditVmax").value = "";
+        byId("schematicEditSave").disabled = true;
+      }
+    }
+
     function openSchematicEditor(node) {
       const state = pairPreviewState || schematicState;
       if (!state || byId("schematicEditor").open) return;
@@ -1308,20 +1380,27 @@
       byId("schematicEditSolve").value = ["vin", "r1", "r2", "rl"].includes(byId("solveFor").value) ? byId("solveFor").value : "r1";
       byId("schematicEditConnectionField").hidden = kind !== "arm";
       if (kind === "arm") byId("schematicEditConnection").value = state.networks[key].connection;
-      byId("schematicEditToleranceField").hidden = ["arm", "target"].includes(kind);
+      byId("schematicEditToleranceField").hidden = kind !== "source" && kind !== "load";
       byId("schematicEditTolerance").value = kind === "part" ? part.tolerance : kind === "source" ? state.tolerances.vin : state.tolerances.rl;
       byId("schematicEditPowerField").hidden = kind !== "part"; byId("schematicEditVmaxField").hidden = kind !== "part";
       byId("schematicEditPowerLabel").textContent = part?.catalog ? `Allowed power at ${part.catalog.temperatureC} °C (W)` : "Power rating (W)";
       byId("schematicEditPower").value = part?.rating ?? ""; byId("schematicEditVmax").value = part?.vmax ?? "";
-      const help = kind === "target" ? "Choose which parameter to adjust to reach the requested VMID." : kind === "arm" ? "All resistances in this arm scale together to reach the equivalent value and connection. Edit individual SVG rows for independent part settings." : "Saving recalculates VMID and all stresses from the edited circuit.";
-      byId("schematicEditHelp").textContent = help + (part?.catalog ? " Changing a catalog part's specifications clears its part-number assignment." : "") + (pairPreviewState ? " Saving applies this preview pair to the circuit and BOM first; catalog search results stay unchanged." : "");
+      byId("schematicEditCatalogFields").hidden = kind !== "part";
+      byId("schematicEditSave").disabled = false;
+      if (kind === "part") {
+        catalogOptions("schematicEditFamily", [{ value: "", label: "Manual · keep current limits" }, ...(resistorCatalog ? resistorCatalog.families.map(family => ({ value: family.id, label: family.name })) : [])], part.catalog?.familyId || "");
+        byId("schematicEditFamily").disabled = !resistorCatalog;
+        configureSchematicCatalog(true);
+      }
+      const help = kind === "target" ? "Choose which parameter to adjust to reach the requested VMID." : kind === "arm" ? "All resistances in this arm scale together to reach the equivalent value and connection. Edit individual SVG rows for independent part settings." : kind === "part" ? "Choose a family for catalog footprint, TCR, tolerance and reliability options. Power and voltage limits follow that part. Manual mode keeps the current power rating." : "Saving recalculates VMID and all stresses from the edited circuit.";
+      byId("schematicEditHelp").textContent = help + (pairPreviewState ? " Saving applies this preview pair to the circuit and BOM first; catalog search results stay unchanged." : "");
       byId("schematicEditSave").textContent = pairPreviewState ? "Apply pair and save" : "Save changes";
       byId("schematicEditError").hidden = true;
       for (const input of byId("schematicEditForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
       byId("schematicEditor").showModal();
-      const field = { tolerance: "Tolerance", power: "Power", connection: "Connection" }[focus] || "Value";
+      const field = { tolerance: kind === "part" ? "PartTolerance" : "Tolerance", power: byId("schematicEditFootprint").disabled ? byId("schematicEditFamily").disabled ? "PartTolerance" : "Family" : "Footprint", connection: "Connection" }[focus] || "Value";
       byId(`schematicEdit${field}`).focus();
-      if (field !== "Connection") byId(`schematicEdit${field}`).select();
+      if (byId(`schematicEdit${field}`).tagName === "INPUT") byId(`schematicEdit${field}`).select();
     }
 
     function closeSchematicEditor() {
@@ -1338,11 +1417,14 @@
       const networks = Object.fromEntries(ARMS.map(arm => [arm, state.networks[arm] ? { ...state.networks[arm], parts: physical[arm] } : null]));
       const resistance = ["part", "arm", "load"].includes(kind);
       const value = readInput("schematicEditValue", byId("schematicEditValueLabel").textContent, kind === "load", resistance, resistance ? Number(byId("schematicEditUnit").value) : 1);
-      let mode = "vout";
+      let mode = "vout", assignment = null;
       if (kind === "source") { circuit.vin = value; tolerances.vin = readTolerance("schematicEditTolerance", "VTOP tolerance"); }
       else if (kind === "load") { circuit.rl = value; tolerances.rl = readTolerance("schematicEditTolerance", "RL tolerance"); }
       else if (kind === "part") {
-        Object.assign(physical[arm].find(item => item.id === part.id), { resistance: value, tolerance: readTolerance("schematicEditTolerance", "Resistor tolerance"), rating: readInput("schematicEditPower", "Power rating", false, true), vmax: readInput("schematicEditVmax", "Working voltage", true, true) });
+        assignment = schematicCatalogCandidate(value);
+        const tolerance = Number(byId("schematicEditPartTolerance").value);
+        if (byId("schematicEditPartTolerance").value === "" || !Number.isFinite(tolerance) || tolerance < 0 || tolerance > 99.999) throw new Error("Choose a supported resistor tolerance.");
+        Object.assign(physical[arm].find(item => item.id === part.id), { resistance: assignment?.resistanceOhms ?? value, tolerance: assignment?.tolerancePct ?? tolerance, rating: assignment?.powerW ?? part.rating, vmax: assignment ? assignment.workingVoltageV : readInput("schematicEditVmax", "Working voltage", true, true) });
       } else if (kind === "arm") {
         networks[arm].connection = byId("schematicEditConnection").value;
         const scale = value / networkEquivalent(physical[arm], networks[arm].connection).resistance;
@@ -1362,11 +1444,12 @@
       const bounds = toleranceAnalysis(solved, tolerances, ranges);
       const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null)];
       for (const arm of ARMS) for (const item of analyzeParts(physical[arm], networks[arm]?.connection || "series", arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2)) {
+        if (assignment && item.id === part.id && Math.max(item.stress.p, item.stress.v, item.stress.i) > 100 + 1e-9) throw new Error("This part exceeds its power or working-voltage limit. Choose a larger footprint or change the circuit.");
         numbers.push(item.resistance, item.voltage, item.current, item.power, ...Object.values(item.stress));
         for (const rating of RATINGS) numbers.push(...Object.values(stress(item.resistance, item.voltage, item.current, item.power, rating.watts, item.vmax)));
       }
       if (numbers.some(number => !Number.isFinite(number))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
-      return { circuit: solved, tolerances, physical, networks, mode, target: value };
+      return { circuit: solved, tolerances, physical, networks, mode, target: value, assignment };
     }
 
     function saveSchematicEditor(event) {
@@ -1393,6 +1476,10 @@
           }
         }
         byId("solveFor").value = draft.mode;
+        if (context.kind === "part") {
+          if (draft.assignment) appliedCatalogParts.set(context.part.id, { ...draft.assignment });
+          else appliedCatalogParts.delete(context.part.id);
+        }
         if (context.kind === "target") byId("targetVout").value = draft.target;
         catalogDesignVmid = null; update(); selectResultTab("overviewTab"); closeSchematicEditor();
       } catch (error) {
@@ -2455,6 +2542,10 @@
       event.preventDefault(); openSchematicEditor(node);
     });
     byId("schematicEditForm").addEventListener("submit", saveSchematicEditor);
+    byId("schematicEditFamily").addEventListener("change", () => configureSchematicCatalog(true));
+    for (const id of ["schematicEditFootprint", "schematicEditTcr"]) byId(id).addEventListener("change", () => configureSchematicCatalog());
+    for (const id of ["schematicEditPartTolerance", "schematicEditReliability", "schematicEditUnit"]) byId(id).addEventListener("change", updateSchematicCatalogPreview);
+    byId("schematicEditValue").addEventListener("input", updateSchematicCatalogPreview);
     byId("schematicEditCancel").addEventListener("click", closeSchematicEditor);
     byId("schematicEditor").addEventListener("cancel", event => { event.preventDefault(); closeSchematicEditor(); });
     window.addEventListener("resize", renderSchematic);
