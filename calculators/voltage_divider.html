@@ -1370,6 +1370,37 @@
       return { text, lines };
     }
 
+    const PAIR_ANALYSIS_HEIGHT = 244;
+
+    function renderSchematicPairAnalysis(host, state, x, y, width) {
+      const pair = state.pair, url = "https://www.minipcb.com/calculators/voltage_divider.html";
+      const analyzed = state.analyzedAt.slice(0, 16).replace("T", " ") + " UTC";
+      const rows = [
+        ["Nominal total power", format(pair.result.total, "W"), "nominalPower"],
+        ["Nominal input current", format(Math.abs(pair.result.i1), "A"), "nominalCurrent"],
+        ["Source resistance Rth", format(pair.result.rth, "Ω"), "rth"],
+        ["Worst Pstress", percent(pair.pstress), "pstress"],
+        ["Worst V/I stress", percent(pair.vstress), "vistress"],
+        ["Analyzed", analyzed, "analyzedAt"],
+        ["Calculator", "Voltage divider ↗", "calculator"]
+      ];
+      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Pair preview analysis", "aria-colcount": 2, "aria-rowcount": rows.length, "data-field": "pairPerformance", "data-analyzed-at": state.analyzedAt });
+      schematicInfoBox(table, 0, 0, width, PAIR_ANALYSIS_HEIGHT);
+      schematicText(table, 12, 24, "Pair preview · analysis", 14, "#eaf6ff");
+      for (const [index, [label, value, field]] of rows.entries()) {
+        const row = schematicShape(table, "g", { role: "row", "aria-rowindex": index + 1 }), top = 52 + index * 28 + (index >= 5 ? 8 : 0);
+        const name = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
+        schematicText(name, 12, top, label, width < 420 ? 11 : 12, "#a8bece");
+        const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": 2 });
+        const parent = field === "calculator" ? schematicShape(cell, "a", { href: url, target: "_top", "aria-label": "Voltage divider calculator page" }) : cell;
+        const text = schematicText(parent, width - 12, top, value, index >= 5 ? 11 : 13, field === "calculator" ? "#54d2ff" : "#c6e3ff", field);
+        text.setAttribute("text-anchor", "end");
+        if (field === "calculator") { text.setAttribute("text-decoration", "underline"); schematicShape(parent, "title").textContent = url; }
+        if (field === "analyzedAt") schematicShape(cell, "title").textContent = state.analyzedAt;
+      }
+      return "Pair preview analysis. " + rows.map(([label, value]) => `${label}: ${value}`).join(". ") + `. Calculator page: ${url}.`;
+    }
+
     function renderSchematicTable(host, state, roles, x, y, width, alternativesByPart) {
       const narrow = width < 580, refWidth = narrow ? 34 : 60, stressWidth = narrow ? 42 : 72;
       const pnWidth = (width - refWidth - 3 * stressWidth) / 2, widths = [refWidth, pnWidth, pnWidth, stressWidth, stressWidth, stressWidth];
@@ -1466,23 +1497,14 @@
       byId("schematicHeading").textContent = pairPreviewState ? "Circuit reference · selected pair preview" : mode === "pairs" ? "Circuit reference · pair search inputs" : "Circuit reference";
       byId("liveSchematicTitle").textContent = pairPreviewState ? "Voltage divider · selected resistor pair preview" : mode === "pairs" ? "Voltage divider · pair search inputs" : "Voltage divider · live circuit values";
       const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
-      const previewLines = [];
-      if (state?.pair) {
-        const pair = state.pair, maxCharacters = Math.floor((width - 32) / 6.9);
-        for (const text of ["Pair preview · nominal part stresses", `P ${format(pair.result.total, "W")} · I ${format(Math.abs(pair.result.i1), "A")} · Rth ${format(pair.result.rth, "Ω")}`, `Worst Pstress ${percent(pair.pstress)} · V/I ${percent(pair.vstress)}`]) {
-          let line = "";
-          for (const word of text.split(" ")) { if (line && line.length + word.length + 1 > maxCharacters) { previewLines.push(line); line = ""; } line += (line ? " " : "") + word; }
-          if (line) previewLines.push(line);
-        }
-      }
       const searchOffset = mode === "pairs" ? 40 : 0;
-      const previewSlots = mode === "pairs" && pairItems.length ? Math.max(previewLines.length, width < 460 ? 5 : 3) : previewLines.length;
-      const drawingY = 62 + searchOffset + (previewSlots ? previewSlots * 18 + 16 : 0);
       const stacked = width < 1050;
+      const analysisHeight = mode === "pairs" && pairItems.length ? PAIR_ANALYSIS_HEIGHT + 16 : 0;
+      const drawingY = 62 + searchOffset + (stacked ? analysisHeight : 0);
       const drawingWidth = stacked ? Math.min(680, width - 32) : Math.min(560, width * 0.42);
       const drawingBottom = drawingY + drawingWidth * renderSchematicDrawing(state, roles) / 680;
       const detailsX = stacked ? 24 : drawingWidth + 40;
-      const detailsY = stacked ? drawingBottom + 22 : 30 + drawingY - 64;
+      const detailsY = stacked ? drawingBottom + 22 : 30 + drawingY - 64 + analysisHeight;
       const detailsWidth = width - detailsX - 16;
       const partsGroup = byId("schematicParts");
       partsGroup.replaceChildren();
@@ -1493,7 +1515,7 @@
           if (resistorCatalog) { schematicEditable(control.pill, key, content); control.pill.setAttribute("aria-label", key === "search-run" ? "Find real resistor pairs" : "Edit pair search options"); }
         }
       }
-      previewLines.forEach((line, index) => schematicText(partsGroup, 16, 49 + searchOffset + index * 18, line, 11, "#c6e3ff", "pairPerformance"));
+      const previewDescription = state?.pair ? renderSchematicPairAnalysis(partsGroup, state, stacked ? 16 : detailsX, stacked ? 82 : detailsY - analysisHeight, stacked ? width - 32 : detailsWidth) : "";
       const alternativeParts = new Map();
       byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY}) scale(${drawingWidth / 680})`);
       byId("schematicR1Value").textContent = state?.pairSetup ? "—" : state ? format(state.circuit.r1, "Ω") : "—";
@@ -1504,6 +1526,11 @@
       if (state) for (const [id, key, label] of [["schematicVtop", "source", "VTOP and source tolerance"], ...(mode === "pairs" ? [] : [["schematicVmid", "target", "VMID target"]]), ["schematicR1Value", "r1", "RTOP"], ["schematicR2Value", "r2", "RBOT"], ["schematicLoadValue", "load", "RL and load tolerance"]]) schematicEditable(byId(id), key, label);
       const bottom = renderSchematicTable(partsGroup, state, roles, detailsX, detailsY, detailsWidth, alternativeParts);
       let contentBottom = Math.max(drawingBottom + 20, bottom);
+      if (mode === "pairs" && pairItems.length) {
+        const key = `${pairGeneration}:${width}`;
+        if (pairSvgLayout?.key !== key) pairSvgLayout = { key, bottom: contentBottom };
+        contentBottom = pairSvgLayout.bottom = Math.max(pairSvgLayout.bottom, contentBottom);
+      } else pairSvgLayout = null;
       if (mode === "pairs") contentBottom = renderSchematicPairExplorer(partsGroup, 16, contentBottom + 12, width - 32);
       const height = Math.ceil(contentBottom);
       svg.setAttribute("width", width);
@@ -1513,7 +1540,7 @@
       const roleDescription = `${solveLabel}. Yellow means missing or invalid input; green means known; red identifies the value to find. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
       const voltageDescription = state && !state.pairSetup ? `Nominal VMID ${format(state.result.vout, "V")}; minimum ${format(state.bounds.min, "V")}; maximum ${format(state.bounds.max, "V")}.${state.pair ? ` Target error ${percent(state.pair.error)}.` : ""} ` : "";
       const searchDescription = mode === "pairs" ? `Search target VMID ${byId("pairVmid").value || "not set"} V; allowed error ±${byId("pairErrorPct").value || "not set"}%. Edit the source, target, load, resistor constraints or Options; Find pairs runs the search. Found resistance and performance values are read-only. Circuit inputs and BOM change only on Apply. ` : "";
-      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.${previewLines.length ? " " + previewLines.join(". ") : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.");
+      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.${previewDescription ? " " + previewDescription : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.");
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       // The download is a self-contained snapshot of the live SVG.
@@ -1797,7 +1824,7 @@
     let parts2Values = [], parts2BomData = [], parts2BomEntries = [], parts2BomRevision = 0, parts2Selection = null, parts2Target = null;
     let pairGeneration = 0, pairItems = [], pairView = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
     let pairPlot = null, pairBrush = null, pairIgnoreClick = false;
-    let pairPerformanceBounds = {}, pairSvgPlots = [], pairSvgGesture = null, pairSvgIgnoreClick = false;
+    let pairPerformanceBounds = {}, pairSvgPlots = [], pairSvgGesture = null, pairSvgIgnoreClick = false, pairSvgLayout = null;
     const pairSvgDomains = new Map();
     const PAIR_METRICS = {
       power: { label: "Total power (mW)", log: true, value: pair => pair.result.total * 1000 },
@@ -2040,6 +2067,7 @@
           if (index % 16 === 0) { byId("pairStatus").textContent = `Checking ${index + 1} / ${tops.length} RTOP parts against ${bots.length} RBOT parts…`; await new Promise(resolve => setTimeout(resolve, 0)); }
         }
         if (generation !== pairGeneration) return [];
+        spec.analyzedAt = new Date().toISOString();
         pairSpec = spec; pairItems = matches; pairSelected = null; pairPage = 0;
         sortPairItems();
         byId("pairStatus").textContent = `${pairItems.length.toLocaleString()} valid combinations from ${tops.length} RTOP and ${bots.length} RBOT catalog parts. All supported values from ${format(spec.minOhms, "Ω")} to ${format(spec.maxOhms, "Ω")} were searched. Target ${format(spec.target, "V")} ±${spec.errorPct}%; worst-case stress ≤ ${spec.maxStress}%.`;
@@ -2278,7 +2306,7 @@
         id: arm, name: arm === "r1" ? "R1" : "R2", resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV,
         mpn: chosen.mpn, catalog: chosen, alternatives: pairAlternativeParts(pair, side)
       }], "series", voltage, current);
-      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, bounds: pair.bounds, pair };
+      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, bounds: pair.bounds, pair, analyzedAt: spec.analyzedAt };
       renderSchematic();
     }
 

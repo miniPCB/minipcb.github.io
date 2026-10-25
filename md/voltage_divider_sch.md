@@ -116,6 +116,14 @@ Selecting a candidate preserves the applied circuit inputs and BOM. The heading
 identifies the preview, and Download SVG captures it. Leaving the visualization
 or selecting an empty region restores the pair-search input display.
 
+A compact **Pair preview · analysis** table lists nominal total power, input
+current and source resistance Rth, followed by worst-case Pstress and V/I stress.
+It appears beside the circuit on larger screens and above it on smaller screens.
+The **Analyzed** row records the completed search date and time in UTC; filtering,
+resizing or choosing another pair keeps that timestamp. A new search records a
+new timestamp. The **Calculator** link opens the voltage divider page. Both the
+timestamp and link remain in the downloaded SVG.
+
 The SVG also sets up the pair search before any results exist. Click VTOP for the
 source and its tolerance, the separate **Target** row for VMID and its allowed
 error, or RL for the optional load and its tolerance. Click a resistor reference,
