@@ -25,9 +25,15 @@ manual footprints read **Not set**, since package size cannot be inferred from
 power. Equivalent arm labels stay available for editing the total resistance.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
-connections visible. Each physical part's detailed values, ratings, stresses
-and part numbers also share one padded box, which expands for alternate MPNs.
-The detail boxes retain both valid family MPNs with their independent ratings.
+connections visible. The right side contains a native SVG table with **Ref Des**,
+**TNPW PN**, **M55342 PN**, **Pstress**, **Vstress** and **Istress** columns and one
+row per physical resistor. On smaller screens it appears below the drawing and
+wraps complete part numbers within their columns. An asterisk marks the selected
+part number; stress uses the current circuit or preview part's own ratings.
+A dash means no assigned or qualifying part number for that family. Click a
+reference to edit the resistor and its catalog options. Reference tooltips retain
+value, tolerance, footprint and rating; part-number tooltips retain each family's
+independent limits and conditions. The table is included in Download SVG.
 Ratings are not combined. Stress
 values use the nominal operating point and include each part's working-voltage
 limit when entered. Invalid circuit data clears the live values and stresses.

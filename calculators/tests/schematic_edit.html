@@ -21,8 +21,8 @@ document.getElementById('calculator').addEventListener('load',async event=>{
   const open=(key,focus='value',keyboard=null)=>{const target=node(key,focus);if(keyboard){target.focus();target.dispatchEvent(new w.KeyboardEvent('keydown',{key:keyboard,bubbles:true,cancelable:true}));}else target.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(get('schematicEditor').open,`${key}/${focus} opens an editor${keyboard?' by keyboard':''}`);};
   const save=()=>get('schematicEditForm').requestSubmit();
   const cancel=()=>get('schematicEditCancel').click();
-  const field=(id,name)=>d.querySelector(`[data-schematic-part="${id}"] [data-field="${name}"]`);
-  assert(get('liveSchematic').getAttribute('role')==='group'&&get('liveSchematic').querySelectorAll('[role="button"][tabindex="0"]').length===19,'The SVG exposes labeled keyboard-editable diagram values, tolerances, footprints and detail fields');
+  const field=(id,name)=>d.querySelector(`[data-schematic-part="${id}"] [data-field="${name}"]`)||d.querySelector(`[data-schematic-symbol="${id}"] [data-field="${name}"]`);
+  assert(get('liveSchematic').getAttribute('role')==='group'&&get('liveSchematic').querySelectorAll('[role="button"][tabindex="0"]').length===13,'The SVG exposes labeled keyboard-editable diagram values, tolerances, footprints and table references');
   assert(!get('liveSchematic').querySelector('[data-field="p"][role="button"], [data-field="v"][role="button"], [data-field="i"][role="button"]'),'Calculated stresses remain results');
   open('source','value','Enter');assert(d.activeElement===get('schematicEditValue'),'Keyboard activation focuses the voltage field');
   set('schematicEditValue','24');set('schematicEditTolerance','2');save();
@@ -32,7 +32,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{
   open('source','value',' ');set('schematicEditValue','5');get('schematicEditor').dispatchEvent(new w.Event('cancel',{cancelable:true}));assert(!get('schematicEditor').open&&actual()===beforeCancel&&d.activeElement===node('source'),'Escape cancellation leaves the circuit unchanged and returns focus');
   await reset();open('r1');set('schematicEditValue','20');set('schematicEditPartTolerance','0.5');set('schematicEditVmax','7');save();
   assert(get('r1').valueAsNumber===20&&get('tolR1').valueAsNumber===0.5&&get('p1').value==='0.25'&&get('vmax1').valueAsNumber===7&&text('vout')==='4 V','Manual resistor edits write resistance, dropdown tolerance and voltage limit while retaining power');
-  assert(field('r1','resistance').textContent==='20 kΩ'&&field('r1','rating').textContent==='Rated 250 mW'&&field('r1','v').textContent==='114.29%','SVG resistance, retained rating and limited stress recalculate');
+  assert(field('r1','resistance').textContent==='20 kΩ'&&d.querySelector('[data-schematic-part="r1"] > title').textContent.includes('Rated 250 mW')&&field('r1','v').textContent==='114.29%','SVG resistance, retained rating metadata and limited stress recalculate');
   open('r1','tolerance');assert(d.activeElement===get('schematicEditPartTolerance')&&get('schematicEditPartTolerance').tagName==='SELECT','Tolerance text opens directly at its dropdown');cancel();
   open('r1','power');assert(d.activeElement===get('schematicEditFamily')&&get('schematicEditPower').readOnly,'Power text opens catalog choices with derived power read-only');cancel();
   for(const [key,id,value]of [['source','schematicEditValue',''],['source','schematicEditTolerance','100'],['source','schematicEditValue','1e308'],['r1','schematicEditValue','0'],['r1','schematicEditVmax','-1'],['r1','schematicEditPartTolerance','-1']]){

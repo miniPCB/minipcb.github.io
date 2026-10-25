@@ -1255,7 +1255,8 @@
       schematicText(drawing, 285, bottom + 55, "GND", 18, "#a8bece");
       for (const [arm, start, end] of [["r1", top, mid - 44], ["r2", botStart, bottom - 24]]) {
         const connection = state?.networks[arm]?.connection || "series", parts = state?.physical[arm] || [];
-        schematicRole(schematicText(drawing, 300, start - 28, `${arm === "r1" ? "RTOP" : "RBOT"} · ${SOLVE_ROLES[roles[arm]].short} · ${connection} × ${parts.length || "—"}`, 16), arm, roles);
+        const armHeading = schematicRole(schematicText(drawing, 300, start - 28, `${arm === "r1" ? "RTOP" : "RBOT"} · ${SOLVE_ROLES[roles[arm]].short} · ${connection} × ${parts.length || "—"}`, 16), arm, roles);
+        if (state?.networks[arm]) schematicEditable(armHeading, arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
         const equivalent = schematicText(drawing, 300, start - 4, "—", 18, "#a8bece"); equivalent.id = arm === "r1" ? "schematicR1Value" : "schematicR2Value";
         if (connection === "parallel") schematicShape(wires, "path", { d: `${arm === "r1" ? `M170 ${start}` : `M260 ${start}H170`}V${end - 30}M480 ${start + 48}V${end}H260` });
         for (const [index, part] of parts.entries()) {
@@ -1268,9 +1269,9 @@
           else schematicShape(line, "path", { d: `M260 ${y}v20l-10 5 20 10 -20 10 20 10 -20 10 10 7V${y + 110}` });
           const value = format(part.resistance, "Ω"), tolerance = `Tol. ±${percent(part.tolerance)}`, footprint = `Footprint ${part.catalog?.case || "Not set"}`;
           schematicRole(schematicText(info, parallelArm ? 205 : 300, y + 28, part.name, 18), arm, roles);
-          schematicEditable(schematicRole(schematicText(info, parallelArm ? 340 : 300, y + (parallelArm ? 28 : 51), value, Math.min(18, (parallelArm ? 124 : 170) / (value.length * 0.62))), arm, roles), part.id, `${part.name} resistance`);
-          schematicEditable(schematicText(info, parallelArm ? 205 : 300, y + (parallelArm ? 78 : 74), tolerance, Math.min(parallelArm ? 14 : 16, (parallelArm ? 98 : 170) / (tolerance.length * 0.62)), "#a8bece"), part.id, `${part.name} tolerance`, "tolerance");
-          schematicEditable(schematicText(info, parallelArm ? 310 : 300, y + (parallelArm ? 78 : 97), footprint, Math.min(parallelArm ? 14 : 16, (parallelArm ? 154 : 170) / (footprint.length * 0.62)), SOLVE_ROLES[part.catalog ? "defined" : "undefined"].color), part.id, `${part.name} footprint`, "power");
+          schematicEditable(schematicRole(schematicText(info, parallelArm ? 340 : 300, y + (parallelArm ? 28 : 51), value, Math.min(18, (parallelArm ? 124 : 170) / (value.length * 0.62)), "#eaf6ff", "resistance"), arm, roles), part.id, `${part.name} resistance`);
+          schematicEditable(schematicText(info, parallelArm ? 205 : 300, y + (parallelArm ? 78 : 74), tolerance, Math.min(parallelArm ? 14 : 16, (parallelArm ? 98 : 170) / (tolerance.length * 0.62)), "#a8bece", "tolerance"), part.id, `${part.name} tolerance`, "tolerance");
+          schematicEditable(schematicText(info, parallelArm ? 310 : 300, y + (parallelArm ? 78 : 97), footprint, Math.min(parallelArm ? 14 : 16, (parallelArm ? 154 : 170) / (footprint.length * 0.62)), SOLVE_ROLES[part.catalog ? "defined" : "undefined"].color, "footprint"), part.id, `${part.name} footprint`, "power");
         }
         schematicShape(wires, "path", { d: arm === "r1" ? `M260 ${end}V${mid}` : `M260 ${mid}V${start}M260 ${end}V${bottom}` });
       }
@@ -1308,6 +1309,69 @@
       return bottom + 80;
     }
 
+    function schematicTableText(parent, x, y, content, width, size, color, field = null) {
+      const text = schematicText(parent, x, y, "", size, color, field), count = Math.max(1, Math.floor(width / (size * 0.62)));
+      let start = 0, lines = 0;
+      while (start < content.length) {
+        let end = Math.min(content.length, start + count);
+        if (end < content.length) { const space = content.lastIndexOf(" ", end - 1); if (space >= start) end = space + 1; }
+        schematicShape(text, "tspan", { x, y: y + lines * 15 }).textContent = content.slice(start, end);
+        start = end; lines++;
+      }
+      return { text, lines };
+    }
+
+    function renderSchematicTable(host, state, roles, x, y, width, alternativesByPart) {
+      const narrow = width < 580, refWidth = narrow ? 34 : 60, stressWidth = narrow ? 42 : 72;
+      const pnWidth = (width - refWidth - 3 * stressWidth) / 2, widths = [refWidth, pnWidth, pnWidth, stressWidth, stressWidth, stressWidth];
+      const labels = ["Ref Des", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress"], offsets = [0];
+      for (const size of widths) offsets.push(offsets.at(-1) + size);
+      const entries = state ? ARMS.flatMap(arm => state.physical[arm].map(part => ({ arm, part }))) : [];
+      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor part numbers and nominal stresses", "aria-colcount": 6, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
+      schematicText(table, 0, 16, "Resistor parts · nominal stress", 14, "#eaf6ff");
+      const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = narrow ? 44 : 32;
+      schematicInfoBox(head, 0, 30, width, headerHeight);
+      labels.forEach((label, index) => {
+        const cell = schematicShape(head, "g", { role: "columnheader", "aria-colindex": index + 1 });
+        const lines = narrow ? index < 3 ? label.split(" ").map((word, i) => i ? word : word + " ") : [label[0], "stress"] : [label];
+        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, 49 + i * 14, line, narrow ? 9 : 11, "#a8bece"));
+      });
+      let top = 30 + headerHeight + 6;
+      for (const [index, { arm, part }] of entries.entries()) {
+        const row = schematicShape(table, "g", { transform: `translate(0 ${top})`, role: "row", "aria-rowindex": index + 2, "data-schematic-part": part.id });
+        const background = schematicInfoBox(row, 0, 0, width, 0), fontSize = narrow ? 10 : 11;
+        const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
+        const description = `${part.name}; ${format(part.resistance, "Ω")}; Tolerance ±${percent(part.tolerance)}; Footprint ${part.catalog?.case || "Not set"}; ${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`;
+        schematicShape(row, "title").textContent = description;
+        const refCell = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
+        const reference = schematicTableText(refCell, 4, 21, part.name, refWidth - 8, narrow ? 10 : 13, SOLVE_ROLES[roles[arm]].color), ref = reference.text;
+        schematicEditable(schematicRole(ref, arm, roles), part.id, `${description}; catalog specifications`, "specifications");
+        const alternatives = part.alternatives || schematicPartAlternatives(part); alternativesByPart.set(part.id, alternatives);
+        const candidates = [part.catalog, ...alternatives].filter(Boolean);
+        let lineCount = reference.lines;
+        for (const [column, family] of [[1, "tnpw"], [2, "m55342"]]) {
+          const candidate = candidates.find(item => item.familyId.includes(family)), selected = candidate && candidate.mpn === part.mpn;
+          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": column + 1, "data-family": family });
+          const content = candidate?.mpn || "—", field = candidate ? selected ? "mpn" : "mpnAlternative" : null;
+          const wrapped = schematicTableText(cell, offsets[column] + (selected ? 14 : 4), 21, content, pnWidth - (selected ? 18 : 8), fontSize, candidate ? selected ? "#54d2ff" : "#ffba52" : "#a8bece", field);
+          lineCount = Math.max(lineCount, wrapped.lines);
+          if (selected) schematicText(cell, offsets[column] + 4, 21, "*", fontSize, "#54d2ff");
+          if (candidate) schematicShape(cell, "title", selected ? {} : { "data-field": "alternativeLimits" }).textContent = `${selected ? "Selected" : "Alternative"} ${candidate.mpn}; ${format(candidate.powerW, "W")} allowed; ${candidate.workingVoltageV} V; ${candidate.temperatureC} °C; ${candidate.mode}; ±${candidate.tcrPpm} ppm/°C; reliability ${candidate.failureRate || "N/A"}`;
+        }
+        for (const [metricIndex, key] of ["p", "v", "i"].entries()) {
+          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 4 }), value = part.stress[key], content = percent(value);
+          const colors = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" };
+          schematicText(cell, offsets[metricIndex + 3] + 4, 21, content, Math.min(narrow ? 10 : 13, (stressWidth - 8) / (content.length * 0.62)), colors[stressClass(value)], key);
+        }
+        const height = Math.max(36, lineCount * 15 + 15); background.setAttribute("height", height); top += height + 6;
+      }
+      if (!entries.length) { schematicText(table, 4, top + 20, "Enter valid circuit data.", 12, "#ffba52"); top += 38; }
+      for (const content of ["* Selected PN; stress uses current/preview part ratings.", "Click Ref Des to edit. Hover a PN for its limits."]) {
+        const note = schematicTableText(table, 0, top + 15, content, width, 10, "#a8bece"); top += note.lines * 15 + 6;
+      }
+      return y + top + 12;
+    }
+
     function renderSchematic() {
       const svg = byId("liveSchematic");
       const state = pairPreviewState || schematicState;
@@ -1336,8 +1400,6 @@
       const detailsX = stacked ? 24 : drawingWidth + 40;
       const detailsY = stacked ? drawingBottom + 22 : 30 + drawingY - 64;
       const detailsWidth = width - detailsX - 16;
-      const columns = detailsWidth >= 600 ? 2 : 1;
-      const columnWidth = (detailsWidth - (columns - 1) * 24) / columns;
       const partsGroup = byId("schematicParts");
       partsGroup.replaceChildren();
       previewLines.forEach((line, index) => schematicText(partsGroup, 16, 49 + index * 18, line, 11, "#c6e3ff", "pairPerformance"));
@@ -1349,63 +1411,7 @@
       for (const [id, key] of [["schematicVtop", "vin"], ["schematicVmid", "vout"], ["schematicR1Value", "r1"], ["schematicR2Value", "r2"], ["schematicLoadValue", "rl"]]) schematicRole(byId(id), key, roles);
       byId("schematicLoad").setAttribute("opacity", roles.rl === "solving" || state && state.circuit.rl !== null ? "1" : "0.35");
       if (state) for (const [id, key, label] of [["schematicVtop", "source", "VTOP and source tolerance"], ["schematicVmid", "target", "VMID target"], ["schematicR1Value", "r1", "RTOP"], ["schematicR2Value", "r2", "RBOT"], ["schematicLoadValue", "load", "RL and load tolerance"]]) schematicEditable(byId(id), key, label);
-      let bottom = detailsY;
-      if (state) {
-        for (const [index, arm] of ARMS.entries()) {
-          const group = document.createElementNS(svg.namespaceURI, "g");
-          group.dataset.schematicArm = arm;
-          const x = detailsX + (columns === 2 ? index * (columnWidth + 24) : 0);
-          const y = columns === 2 ? detailsY : bottom;
-          group.setAttribute("transform", `translate(${x} ${y})`);
-          partsGroup.append(group);
-          schematicRole(schematicText(group, 0, 16, `${arm === "r1" ? "R1 · RTOP" : "R2 · RBOT"} · ${SOLVE_ROLES[roles[arm]].label}`, 16), arm, roles);
-          const network = state.networks[arm];
-          const summary = network ? `${network.parts.length} ${network.connection} · ${format(state.circuit[arm], "Ω")} eq · ±${percent(state.tolerances[arm])}` : "Single resistor";
-          const summaryNode = schematicText(group, 0, 37, summary, 12, "#a8bece");
-          if (network) schematicEditable(summaryNode, arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
-          let partY = 80;
-          for (const part of state.physical[arm]) {
-            const row = document.createElementNS(svg.namespaceURI, "g");
-            row.dataset.schematicPart = part.id;
-            row.setAttribute("transform", `translate(0 ${partY})`);
-            group.append(row);
-            const background = schematicInfoBox(row, -10, -22, columnWidth + 20, 0);
-            schematicRole(schematicText(row, 0, 0, part.name, 15), arm, roles);
-            schematicEditable(schematicRole(schematicText(row, columnWidth * 0.35, 0, format(part.resistance, "Ω"), 15, "#eaf6ff", "resistance"), arm, roles), part.id, `${part.name} resistance`);
-            schematicText(row, 0, 26, "Tolerance", 11, "#a8bece");
-            schematicText(row, columnWidth * 0.5, 26, "Footprint", 11, "#a8bece");
-            schematicEditable(schematicText(row, 0, 46, `±${percent(part.tolerance)}`, 14, mode === "tolerance" ? SOLVE_ROLES.solving.color : SOLVE_ROLES.defined.color, "tolerance"), part.id, `${part.name} tolerance`, "tolerance");
-            schematicEditable(schematicText(row, columnWidth * 0.5, 46, part.catalog?.case || "Not set", 14, SOLVE_ROLES[part.catalog ? "defined" : "undefined"].color, "footprint"), part.id, `${part.name} footprint`, "power");
-            const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
-            schematicEditable(schematicText(row, 0, 74, `${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`, 13, "#a8bece", "rating"), part.id, `${part.name} footprint and catalog options`, "power");
-            for (const [metricIndex, [key, label]] of [["p", "Pstress"], ["v", "Vstress"], ["i", "Istress"]].entries()) {
-              const metricX = metricIndex * columnWidth / 3;
-              const value = part.stress[key];
-              const colors = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" };
-              schematicText(row, metricX, 102, label, 11, "#a8bece");
-              schematicText(row, metricX, 124, percent(value), 15, colors[stressClass(value)], key);
-            }
-            let extraY = 152;
-            if (part.mpn) { schematicText(row, 0, extraY, part.mpn, 11, "#54d2ff", "mpn"); extraY += 20; }
-            if (part.catalog) { schematicText(row, 0, extraY - 2, `${part.catalog.temperatureC} °C · ${part.catalog.mode} · P70 ${format(part.catalog.ratedPowerW, "W")}`, 11, "#a8bece", "condition"); extraY += 18; }
-            const alternatives = part.alternatives || schematicPartAlternatives(part);
-            alternativeParts.set(part.id, alternatives);
-            for (const alt of alternatives) {
-              schematicText(row, 0, extraY, `Alt ${alt.familyId.includes("m55342") ? "M55342" : "TNPW"}: ${alt.mpn}`, 11, "#ffba52", "mpnAlternative");
-              schematicText(row, 0, extraY + 18, `${format(alt.powerW, "W")} allowed · ${alt.workingVoltageV} V · ${alt.temperatureC} °C · ${alt.mode}`, 11, "#a8bece", "alternativeLimits");
-              extraY += 38;
-            }
-            const partHeight = Math.max(178, extraY + 24);
-            background.setAttribute("height", partHeight - 10);
-            partY += partHeight;
-          }
-          bottom = Math.max(bottom, y + partY + 16);
-        }
-      } else {
-        schematicText(partsGroup, detailsX, detailsY + 20, "Enter valid circuit data", 15, "#ffba52");
-        schematicText(partsGroup, detailsX, detailsY + 44, "to update values and stresses.", 13, "#a8bece");
-        bottom += 60;
-      }
+      const bottom = renderSchematicTable(partsGroup, state, roles, detailsX, detailsY, detailsWidth, alternativeParts);
       const height = Math.ceil(Math.max(drawingBottom + 20, bottom));
       svg.setAttribute("width", width);
       svg.setAttribute("height", height);

@@ -30,7 +30,11 @@
         const reset = async () => { get("dividerForm").reset(); await new Promise(resolve => setTimeout(resolve, 5)); };
         const stressOutputs = () => [...get("stressCards").querySelectorAll("output")].map(el => Number.parseFloat(el.textContent));
         const schematicPart = id => d.querySelector(`[data-schematic-part="${id}"]`);
-        const schematicField = (id, field) => schematicPart(id).querySelector(`[data-field="${field}"]`).textContent;
+        const schematicField = (id, field) => {
+          if (field === "rating") return schematicPart(id).querySelector(":scope > title").textContent.match(/(?:Rated|Allowed) [^;]+/)[0];
+          const node = schematicPart(id).querySelector(`[data-field="${field}"]`) || d.querySelector(`[data-schematic-symbol="${id}"] [data-field="${field}"]`);
+          return node.textContent.replace(/^(Tol\. |Footprint )/, "");
+        };
         const valid = label => {
           assert(get("inputError").hidden, `${label}: ${text("inputError")}`);
           assert(text("schematicVmid") === `VMID ${text("vout")}`, `${label}: schematic follows the solved midpoint`);
