@@ -16,8 +16,9 @@ past the RL branch. A separate, spaced VMID readout lists **Nominal**, **Min** a
 **Max** voltages for both normal calculations and pair previews. Its minimum and
 maximum use the same entered tolerance limits as the analysis results; pair
 previews also show their target error. Invalid circuit data clears all three
-values. The nominal voltage remains editable, and the readouts retain their
-solve-role colors and appear in the standalone SVG download.
+values. Calculated voltages are read-only; an entered VMID target remains editable
+in inverse modes. The readouts retain their role colors and appear in the
+standalone SVG download.
 Each physical RTOP/RBOT resistor is annotated with its resistance, tolerance,
 footprint size, power rating, Pstress, Vstress, and Istress. The drawing contains
 one symbol per physical RTOP/RBOT resistor in the work form, wired as a series
@@ -28,7 +29,8 @@ repeating Tol. or Footprint labels. The pills have no outlines and their entire
 area is clickable and keyboard accessible; hover/focus identifies the control.
 Accessible labels and reference tooltips retain the full parameter names.
 Manual packages read **Not set**, since package size cannot be inferred from
-power. Equivalent arm labels stay available for editing the total resistance.
+power. Equivalent arm labels allow total-resistance editing when that arm is an
+input; calculated arm values are read-only.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
 connections visible. The right side contains a native SVG table with **Ref Des**,
@@ -52,8 +54,8 @@ color; known components omit repeated status labels. The selected calculation,
 form inputs and result use the same cues; a calculated value stays red to identify
 its role. A blank optional RL is a known open circuit. Multi-part arms highlight
 all resistors being scaled. Pair previews highlight the candidate RTOP/RBOT in
-red; the applied
-circuit is labeled **Current circuit** when no pair preview is shown.
+red. Without a selected pair, the diagram shows pair-search inputs and unknown
+resistor values instead of the applied circuit.
 Stress colors continue to describe rating limits independently of input roles.
 
 Click an underlined SVG value or a pill, or focus it and press Enter/Space, to
@@ -76,11 +78,16 @@ power rating and offers a tolerance dropdown and optional working-voltage input.
 Choose a family to enable catalog footprint, TCR and reliability choices. Manual
 mode permits custom values and clears a prior catalog assignment when explicitly
 selected. Source/load tolerances retain numeric entry. Saving updates the existing
-forms and recalculates VMID and stress using forward analysis. Cancel or Escape
-leaves the circuit unchanged.
+forms and recalculates the selected result and stress while preserving the active
+Find mode. Cancel or Escape leaves the circuit unchanged.
 
-Click VMID to enter a target and choose whether VTOP, RTOP, RBOT or RL should be
-solved. For a multi-resistor arm, clicking its equivalent value or connection
+In inverse modes, click VMID to edit the entered target and choose whether VTOP,
+RTOP, RBOT or RL should be found. Every value in the Find state has no edit link
+or keyboard button, including individual resistances in a calculated multi-part
+arm. Other specification editors keep calculated values and units read-only;
+calculated tolerance selections are disabled in tolerance analysis. Known inputs
+remain editable, and their changes recalculate the selected result.
+For a multi-resistor input arm, clicking its equivalent value or connection
 opens an editor that scales all part resistances together for the requested
 equivalent and series/parallel connection, preserving independent ratings and
 tolerances. Individual SVG rows edit just that physical resistor. Invalid edits
@@ -100,11 +107,25 @@ voltage limits. Preview alternatives must also satisfy the pair search criteria;
 other calculator views check alternatives at the nominal operating point.
 Selecting a candidate preserves the applied circuit inputs and BOM. The heading
 identifies the preview, and Download SVG captures it. Leaving the visualization
-or selecting an empty region restores the current circuit display.
-The same value editors work on a selected pair preview. Their **Apply pair and
-save** action explicitly applies that pair before saving edits to the circuit;
-canceling preserves both the preview and the applied circuit. Catalog search
-results retain their original validated specifications.
+or selecting an empty region restores the pair-search input display.
+
+The SVG also sets up the pair search before any results exist. Click VTOP for the
+source and its tolerance, the separate **Target** row for VMID and its allowed
+error, or RL for the optional load and its tolerance. Click a resistor reference,
+tolerance pill or package pill to choose that arm's family, package and exact
+catalog tolerance. These editors also offer the shared TCR requirement.
+The SVG's **Options** control opens the resistance range, ambient temperature,
+shared TCR, maximum stress and optional total-power limit. **Find pairs** runs the
+search directly from the diagram. All these controls use the same settings and
+validation as the pair-search form, including when the applied circuit is invalid.
+
+The pair diagram keeps entered targets separate from candidate nominal/min/max
+results. Resistor values and nominal performance are read-only. Saving an SVG
+search edit synchronizes the pair form and searches again; it does not apply a
+candidate or change the circuit/BOM. Canceling, invalid edits and stale editors
+preserve the current settings and applied circuit. A search with no matches clears
+old candidate annotations and leaves its inputs editable. Use the existing
+**Apply** action to transfer a chosen pair into the circuit and BOM.
 
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
 
