@@ -34,6 +34,9 @@
         const valid = label => {
           assert(get("inputError").hidden, `${label}: ${text("inputError")}`);
           assert(text("schematicVmid") === `VMID ${text("vout")}`, `${label}: schematic follows the solved midpoint`);
+          const symbols = [...get("liveSchematic").querySelectorAll("[data-schematic-symbol]")].map(node => node.dataset.schematicSymbol).sort();
+          const physical = [...get("liveSchematic").querySelectorAll("[data-schematic-part]")].map(node => node.dataset.schematicPart).sort();
+          assert(symbols.join(",") === physical.join(",") && symbols.length > 0, `${label}: drawn resistor symbols match every physical work-form part`);
         };
         const invalid = label => {
           assert(!get("inputError").hidden, `${label}: visible error`);
@@ -42,6 +45,7 @@
         };
 
         valid("Initial calculation");
+        assert(schematicField("r1", "footprint") === "Not set" && get("liveSchematic").textContent.includes("Tolerance"), "SVG labels tolerance and leaves manual footprints explicitly unset");
         assert(text("vout") === "6 V" && text("iin") === "600 µA" && text("ptotal") === "7.2 mW", "Original default operating point");
         assert(stressOutputs().join(",") === "1.44,12,12,1.44,12,12", "Original default resistor stresses");
         assert(text("voutMin") === "5.94 V" && text("voutMax") === "6.06 V" && text("voutError") === "1%", "Default ±1% resistor output bounds");
@@ -206,6 +210,7 @@
         assert(get("operatingRows").rows.length === 6, "Operating table includes arm totals and each series part");
         assert(d.querySelectorAll('[data-schematic-part]').length === 5 && text("schematicR1Value") === "10 kΩ", "Schematic lists all physical parts beside the equivalent arm");
         assert(ids("r1").every(id => schematicField(id, "resistance") === "2.5 kΩ" && schematicField(id, "p") === "0.36%"), "Four-part schematic uses individual values and dissipation");
+        assert([...get("schematicDrawing").querySelectorAll('[data-arm="r1"]')].every(node => node.dataset.connection === "series" && node.querySelector("path")), "Series work-form parts are drawn as individual connected resistor symbols");
         for (const part of armParts("r1")) {
           near(part.voltage, 1.5, "Equal series part voltage");
           near(part.current, 0.0006, "Equal series part current");
@@ -258,6 +263,7 @@
         set("targetVout", "4"); valid("Network inverse solve recovers");
 
         await reset(); enableParts("r1"); set("r1Connection", "parallel"); split("r1");
+        assert(get("schematicDrawing").querySelectorAll('[data-arm="r1"][data-connection="parallel"]').length === 4, "A four-part parallel work-form arm draws four parallel resistor branches");
         valid("Four equal parallel parts");
         for (const id of ids("r1")) near(get(`${id}R`).valueAsNumber, 40, "Four parallel parts preserve equivalent resistance with 40 kΩ each");
         for (const part of armParts("r1")) {
@@ -341,7 +347,7 @@
         assert(!get("r1Multiple").checked && !get("r2Multiple").checked && !ids("r1").length && !ids("r2").length && get("stressCards").children.length === 2 && text("vout") === "6 V", "Reset removes networks and restores the original calculator");
         assert(d.querySelectorAll('[data-schematic-part]').length === 2 && text("schematicLoadValue") === "Open" && get("schematicLoad").getAttribute("opacity") === "0.35", "Reset restores the two-resistor schematic and open load");
         assert(d.querySelector("img.schematic").complete && d.querySelector("img.schematic").naturalWidth === 640, "Schematic image loads");
-        assert(!!(get("circuitReference").compareDocumentPosition(d.querySelector(".mode-picker")) & w.Node.DOCUMENT_POSITION_FOLLOWING), "Circuit reference appears before the calculation choices");
+        assert(!!(d.querySelector(".mode-picker").compareDocumentPosition(get("circuitReference")) & w.Node.DOCUMENT_POSITION_FOLLOWING), "Calculation choices appear before the circuit reference");
         for (const link of [...d.querySelectorAll("a[href]")].filter(a => a.origin === location.origin)) {
           assert((await fetch(link.href)).ok, `Local resource loads: ${link.getAttribute("href")}`);
         }

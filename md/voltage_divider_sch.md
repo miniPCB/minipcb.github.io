@@ -6,11 +6,17 @@ This hand-authored reference describes the calculator's ideal DC circuit; it is
 not an EAGLE board export. The downloadable LTspice file contains the default
 values below. Calculator edits do not modify these reference files.
 
-The calculator shows a live SVG above the calculation choices. It updates VTOP,
+The calculation choices appear above the live circuit SVG. The SVG updates VTOP,
 VMID, the equivalent arm resistances, and the open/finite RL value as you edit.
 Each physical RTOP/RBOT resistor is annotated with its resistance, tolerance,
-power rating, Pstress, Vstress, and Istress. Multi-part arms list every resistor
-and identify the series/parallel connection; ratings are not combined. Stress
+footprint size, power rating, Pstress, Vstress, and Istress. The drawing contains
+one symbol per physical RTOP/RBOT resistor in the work form, wired as a series
+chain or a parallel bank. A finite RL adds its load symbol; an open RL has no
+resistor symbol. Each drawn part shows its value, tolerance and footprint;
+manual footprints read **Not set**, since package size cannot be inferred from
+power. Equivalent arm labels stay available for editing the total resistance.
+Roomier detail rows list every physical part and retain both valid family MPNs
+with their independent ratings. Ratings are not combined. Stress
 values use the nominal operating point and include each part's working-voltage
 limit when entered. Invalid circuit data clears the live values and stresses.
 
@@ -301,12 +307,19 @@ selected pairs outside the current chart filters. Uncheck a pair, use its
 **Remove** button, or **Clear comparison** to remove selections. Starting a new
 search, editing its inputs or resetting/canceling it clears stale comparisons.
 
-Each comparison row includes both MPNs and independent resistance, tolerance,
-footprint, TCR, reliability, power, voltage and operating conditions. Performance
-columns show nominal VMID and its interval, worst target error, nominal/worst
-total power and input current, Rth, and worst per-arm Pstress and V/I stress.
-**Copy table** copies exactly the selected pairs, their part details and search
-conditions as tab-separated text for a spreadsheet or document. If clipboard
+Each selected option has two standard BOM rows, one for RTOP and one for RBOT,
+with option number, reference, quantity, value, tolerance, actual footprint and
+manufacturer part number. VMID is shown by default. **Columns and performance
+filters** adds individual ratings, TCR/reliability, operating-point values,
+worst per-part stresses, divider statistics, search conditions or alternate-family
+numbers. Numeric filters apply maximum worst Pstress, V/I stress and worst total
+power to complete options; a part-number/text match keeps both resistors together.
+These table filters preserve the comparison selections. **Clear table filters**
+restores rows while retaining the chosen columns.
+
+**Copy table** copies only visible physical rows and selected columns as
+tab-separated text for a spreadsheet or document. Enable **Search conditions**
+to include the source, target, load and ambient in the copied table. If clipboard
 access is unavailable, the page selects the complete text for manual copying.
 Changing the selected comparison clears outdated copy text.
 
@@ -370,18 +383,24 @@ Rows align the same resistance, tolerance, size, and TCR. Each family retains
 its own allowed power and working-voltage limit. A dash means no supported match
 meets the selected family rules and selected-part nominal stress limits.
 
-The **Circuit BOM** table lists every physical RTOP/RBOT resistor, its actual
-value/tolerance, both exact-value family options where supported, and the
-applied part or **Unassigned**. Applied parts keep their own package, ambient,
-TCR, and power mode when the comparison filters change. Alternatives use the
-same package/ambient/TCR, with the other family's default power mode. An applied
-part remains listed if later circuit edits exceed its ratings; current maximum
-stress is displayed so the assignment does not imply compliance.
+The **Circuit BOM** starts with standard reference, quantity, value, tolerance,
+footprint and manufacturer-part-number columns, with one row per physical
+RTOP/RBOT resistor. Unassigned parts show **Unassigned** and **Not set** for the
+MPN and footprint. **Columns and performance filters** can add ratings,
+TCR/reliability, part voltage/current/power, nominal P/V/I stress, conditions and
+both exact-value family alternatives. Text search and maximum nominal Pstress,
+V/I stress and per-part power narrow the visible rows without changing the circuit.
+Clear table filters restores all rows; column choices persist.
 
-**Copy BOM** copies tab-separated text for spreadsheets, including quantities,
-both family options and their independent power allowances, conditions, applied
-parts, and unverified stock status. If clipboard access is unavailable, a text
-area opens with the complete BOM selected for manual copying. Invalid circuit
+Applied parts retain their actual package, ambient, TCR and mode when catalog
+comparison settings change. Alternatives use those conditions where available
+and the other family's default mode. Previously applied parts remain identified
+when later edits exceed their ratings; optional stress columns show the result.
+
+**Copy BOM** copies the visible standard/optional columns and filtered physical
+rows as tab-separated text. The original resistor BOM CSV retains the complete
+applied-circuit export. If clipboard access is unavailable, a text area opens
+with the visible BOM selected for manual copying. Invalid circuit
 data clears the BOM; manual part edits and reset clear stale assignments.
 
 ## Stress definitions

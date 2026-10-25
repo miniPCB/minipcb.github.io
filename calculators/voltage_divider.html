@@ -220,6 +220,10 @@
     .pair-inspector { margin: 16px 0; padding: 14px; border-radius: 10px; background: #101823; }
     .pair-inspector p { margin: 8px 0 0; }
     .pair-comparison-conditions { min-width: 240px; max-width: 320px; white-space: normal; }
+    .bom-view-controls { margin: 14px 0; }
+    .bom-column-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 9px 16px; margin: 12px 0; }
+    .bom-column-options label { display: flex; align-items: center; gap: 7px; font-size: 0.76rem; }
+    .bom-column-options input { width: 16px; min-height: auto; margin: 0; accent-color: var(--accent); }
     fieldset { margin: 2px 0 0; padding: 10px 0 0; border: 0; }
     legend { padding: 0 8px 0 0; }
     details { border: 0; padding-top: 0; }
@@ -311,6 +315,18 @@
       <span class="live-tag">DC analysis · Online calculator</span>
     </header>
     <noscript><p>Enable JavaScript to calculate circuit results and resistor stress. The schematic and reference files are available below.</p></noscript>
+    <section class="mode-picker" aria-labelledby="modePickerHeading">
+      <h2 id="modePickerHeading">1. What would you like to calculate?</h2>
+      <div class="mode-choices" role="group" aria-label="Calculation to perform">
+        <button class="mode-choice" type="button" data-solve-mode="vout" aria-pressed="true" aria-controls="dividerForm"><span>Given VTOP, RTOP, RBOT</span><strong>Solve for VMID</strong></button>
+        <button class="mode-choice" type="button" data-solve-mode="vin" aria-pressed="false" aria-controls="dividerForm"><span>Given VMID, RTOP, RBOT</span><strong>Solve for VTOP</strong></button>
+        <button class="mode-choice" type="button" data-solve-mode="r1" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RBOT</span><strong>Solve for RTOP</strong></button>
+        <button class="mode-choice" type="button" data-solve-mode="r2" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP</span><strong>Solve for RBOT</strong></button>
+        <button class="mode-choice" type="button" data-solve-mode="rl" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP, RBOT</span><strong>Solve for RL</strong></button>
+        <button class="mode-choice" type="button" data-solve-mode="pairs" aria-pressed="false" aria-controls="pairForm pairPanel"><span>Given VTOP, VMID, tolerances</span><strong>Find real resistor pairs</strong></button>
+      </div>
+      <p class="hint">Optional RL loads the divider. Pair searches include the selected source, load, and resistor tolerances.</p>
+    </section>
     <section id="circuitReference" class="panel circuit-reference" aria-labelledby="schematicHeading">
       <h2 id="schematicHeading">Circuit reference</h2>
       <figure class="circuit-reference-body">
@@ -323,43 +339,13 @@
               <rect width="100%" height="100%" fill="#101823" />
               <text id="schematicVtop" x="16" y="27" font-size="15" fill="#eaf6ff">VTOP —</text>
               <text id="schematicVmid" x="16" y="54" font-size="21" fill="#54d2ff">VMID —</text>
-              <g id="schematicDrawing">
-                <g fill="none" stroke="#a8bece" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
-                  <path d="M110 142V55H300V85M300 145V205M300 265V310H110V218" />
-                  <circle cx="110" cy="180" r="38" />
-                  <path d="M100 166H120M110 156V176M100 195H120" />
-                  <path d="M300 85L290 90L310 100L290 110L310 120L290 130L310 140L300 145" />
-                  <path d="M300 205L290 210L310 220L290 230L310 240L290 250L310 260L300 265" />
-                  <path d="M300 310V328M282 328H318M288 337H312M295 346H305" />
-                </g>
-                <g id="schematicLoad" fill="none" stroke="#ffba52" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6">
-                  <path d="M300 175H490V205M490 265V310H300" />
-                  <rect x="479" y="205" width="22" height="60" rx="2" />
-                </g>
-                <g fill="none" stroke="#54d2ff" stroke-width="3" stroke-linecap="round">
-                  <path d="M300 175H377" /><circle cx="384" cy="175" r="6" />
-                </g>
-                <circle cx="300" cy="175" r="5" fill="#54d2ff" />
-                <g font-size="23" fill="#eaf6ff">
-                  <text x="43" y="112">VTOP</text>
-                  <text x="332" y="112">R1/RTOP</text>
-                  <text x="332" y="234">R2/RBOT</text>
-                  <text x="401" y="153" fill="#54d2ff">VMID</text>
-                  <text x="518" y="244" fill="#ffba52">RL</text>
-                </g>
-                <g font-size="18" fill="#a8bece">
-                  <text id="schematicR1Value" x="332" y="139">—</text>
-                  <text id="schematicR2Value" x="332" y="261">—</text>
-                  <text id="schematicLoadValue" x="515" y="272">Open</text>
-                  <text x="326" y="344">GND</text>
-                </g>
-              </g>
+              <g id="schematicDrawing" />
               <g id="schematicParts" />
             </svg>
           </div>
         </div>
         <figcaption>
-          <p>Click an underlined SVG value to edit VTOP, VMID, RL, or a resistor's value and catalog options. Choose a resistor's footprint, TCR, tolerance and reliability level; its power rating follows the selected part. R1/RTOP and R2/RBOT show equivalent arm values. Optional RL loads VMID in parallel with RBOT.</p>
+          <p>Click an underlined SVG value to edit the circuit or catalog options. Each symbol represents a physical resistor in the configured series or parallel arm. Values, tolerance and footprint are shown beside each symbol; Not set means no catalog footprint has been assigned. RTOP/RBOT labels show equivalent arm values. Optional RL loads VMID in parallel with RBOT.</p>
           <div class="resource-links">
             <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
             <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
@@ -395,18 +381,6 @@
         <div class="actions"><button id="schematicEditSave" class="btn btn-accent" type="submit">Save changes</button><button id="schematicEditCancel" class="btn" type="button">Cancel</button></div>
       </form>
     </dialog>
-    <section class="mode-picker" aria-labelledby="modePickerHeading">
-      <h2 id="modePickerHeading">1. What would you like to calculate?</h2>
-      <div class="mode-choices" role="group" aria-label="Calculation to perform">
-        <button class="mode-choice" type="button" data-solve-mode="vout" aria-pressed="true" aria-controls="dividerForm"><span>Given VTOP, RTOP, RBOT</span><strong>Solve for VMID</strong></button>
-        <button class="mode-choice" type="button" data-solve-mode="vin" aria-pressed="false" aria-controls="dividerForm"><span>Given VMID, RTOP, RBOT</span><strong>Solve for VTOP</strong></button>
-        <button class="mode-choice" type="button" data-solve-mode="r1" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RBOT</span><strong>Solve for RTOP</strong></button>
-        <button class="mode-choice" type="button" data-solve-mode="r2" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP</span><strong>Solve for RBOT</strong></button>
-        <button class="mode-choice" type="button" data-solve-mode="rl" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP, RBOT</span><strong>Solve for RL</strong></button>
-        <button class="mode-choice" type="button" data-solve-mode="pairs" aria-pressed="false" aria-controls="pairForm pairPanel"><span>Given VTOP, VMID, tolerances</span><strong>Find real resistor pairs</strong></button>
-      </div>
-      <p class="hint">Optional RL loads the divider. Pair searches include the selected source, load, and resistor tolerances.</p>
-    </section>
     <div class="layout">
       <div class="column">
         <section class="panel" aria-labelledby="inputHeading">
@@ -718,10 +692,12 @@
               <p id="parts2Preview" class="note" role="status"></p>
               <div class="actions parts-table-actions"><button id="parts2Apply" class="btn btn-accent" type="button" disabled>Apply selected part</button></div>
               <div class="parts-table-title"><h3>Circuit BOM</h3><button id="parts2Copy" class="btn" type="button" disabled>Copy BOM</button></div>
-              <p id="parts2BomHelp" class="hint">One row per physical RTOP/RBOT resistor. Applied parts are shared with the original Parts tab. Other family numbers are evaluated options at the listed conditions, with independent ratings.</p>
+              <p id="parts2BomHelp" class="hint">One row per physical resistor. Choose optional performance columns or filter by nominal stress and power. Manual footprints remain Not set until a catalog part is applied.</p>
+              <div id="parts2BomControls" class="bom-view-controls"></div>
+              <p id="parts2BomStatus" class="hint" role="status"></p>
               <div class="table-wrap" tabindex="0" role="region" aria-label="Circuit resistor BOM, scroll horizontally on small screens">
                 <table id="parts2Bom" class="parts-table parts-bom" aria-describedby="parts2BomHelp">
-                  <thead><tr><th scope="col">Reference</th><th scope="col">Value / tolerance</th><th scope="col">TNPW option</th><th scope="col">M55342 / D55342 option</th><th scope="col">Applied part</th></tr></thead>
+                  <thead id="parts2BomHead"></thead>
                   <tbody id="parts2BomRows"></tbody>
                 </table>
               </div>
@@ -768,8 +744,9 @@
               <section aria-labelledby="pairComparisonHeading">
                 <div class="parts-table-title"><h3 id="pairComparisonHeading" tabindex="-1">Compare resistor pairs</h3><div class="actions"><button id="pairComparisonCopy" class="btn" type="button" disabled>Copy table</button><button id="pairComparisonClear" class="btn" type="button" disabled>Clear comparison</button></div></div>
                 <p id="pairComparisonStatus" class="hint" role="status">Check pairs above or add the current preview to compare them here.</p>
+                <div id="pairBomControls" class="bom-view-controls"></div>
                 <div class="table-wrap parts-values pair-table" tabindex="0" role="region" aria-label="Selected resistor pairs comparison, scroll for all performance columns">
-                  <table id="pairComparisonTable" class="parts-table" aria-describedby="pairComparisonStatus"><caption>Nominal and worst-case performance at the search conditions. Each part retains its own ratings.</caption><thead id="pairComparisonHead"></thead><tbody id="pairComparisonRows"></tbody></table>
+                  <table id="pairComparisonTable" class="parts-table" aria-describedby="pairComparisonStatus"><caption>One BOM row per resistor, grouped by selected pair. Stress and limits use worst-case intervals; part voltage/current/power use nominal values. Copy includes visible rows and columns.</caption><thead id="pairComparisonHead"></thead><tbody id="pairComparisonRows"></tbody></table>
                 </div>
                 <p id="pairComparisonCopyStatus" class="hint" role="status"></p>
                 <div id="pairComparisonCopyFallback" hidden><label for="pairComparisonCopyText">Comparison text · copy into a spreadsheet</label><textarea id="pairComparisonCopyText" class="bom-copy-text" rows="6" readonly spellcheck="false"></textarea></div>
@@ -1197,6 +1174,54 @@
       return node;
     }
 
+    function schematicShape(parent, tag, attributes = {}) {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+      parent.append(node); return node;
+    }
+
+    function renderSchematicDrawing(state) {
+      const drawing = byId("schematicDrawing"); drawing.replaceChildren();
+      const count = arm => Math.max(1, state?.physical[arm].length || 0);
+      const top = 80, mid = top + count("r1") * 110 + 44, botStart = mid + 78, bottom = botStart + count("r2") * 110 + 24;
+      const wires = schematicShape(drawing, "g", { fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" });
+      const sourceY = (top + bottom) / 2;
+      schematicShape(wires, "path", { d: `M55 ${sourceY - 34}V${top}H${state?.networks.r1?.connection === "parallel" ? 170 : 260}M55 ${sourceY + 34}V${bottom}H260M260 ${bottom}v28m-20 0h40m-32 10h24m-16 10h8` });
+      schematicShape(wires, "circle", { cx: 55, cy: sourceY, r: 34 });
+      schematicShape(wires, "path", { d: `M44 ${sourceY - 12}h22m-11 -11v22m-11 14h22` });
+      schematicText(drawing, 12, sourceY - 52, "VTOP", 20);
+      schematicText(drawing, 285, bottom + 55, "GND", 18, "#a8bece");
+      for (const [arm, start, end] of [["r1", top, mid - 44], ["r2", botStart, bottom - 24]]) {
+        const connection = state?.networks[arm]?.connection || "series", parts = state?.physical[arm] || [];
+        schematicText(drawing, 300, start - 28, `${arm === "r1" ? "RTOP" : "RBOT"} · ${connection} × ${parts.length || "—"}`, 18, "#54d2ff");
+        const equivalent = schematicText(drawing, 300, start - 4, "—", 18, "#a8bece"); equivalent.id = arm === "r1" ? "schematicR1Value" : "schematicR2Value";
+        if (connection === "parallel") schematicShape(wires, "path", { d: `${arm === "r1" ? `M170 ${start}` : `M260 ${start}H170`}V${end - 30}M480 ${start + 48}V${end}H260` });
+        for (const [index, part] of parts.entries()) {
+          const symbol = schematicShape(drawing, "g"); symbol.dataset.schematicSymbol = part.id; symbol.dataset.connection = connection; symbol.dataset.arm = arm;
+          const line = schematicShape(symbol, "g", { fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" });
+          const y = start + index * 110, parallelArm = connection === "parallel";
+          if (parallelArm) schematicShape(line, "path", { d: `M170 ${y + 48}H270l5 -10 10 20 10 -20 10 20 10 -20 10 20 5 -10H480` });
+          else schematicShape(line, "path", { d: `M260 ${y}v20l-10 5 20 10 -20 10 20 10 -20 10 10 7V${y + 110}` });
+          schematicText(symbol, parallelArm ? 205 : 300, y + 28, part.name, 18);
+          schematicEditable(schematicText(symbol, parallelArm ? 340 : 300, y + (parallelArm ? 28 : 51), format(part.resistance, "Ω"), 18), part.id, `${part.name} resistance`);
+          schematicEditable(schematicText(symbol, parallelArm ? 205 : 300, y + (parallelArm ? 78 : 74), `Tol. ±${percent(part.tolerance)}`, 16, "#a8bece"), part.id, `${part.name} tolerance`, "tolerance");
+          schematicEditable(schematicText(symbol, parallelArm ? 320 : 300, y + (parallelArm ? 78 : 97), `Footprint ${part.catalog?.case || "Not set"}`, 16, "#a8bece"), part.id, `${part.name} footprint`, "power");
+        }
+        schematicShape(wires, "path", { d: arm === "r1" ? `M260 ${end}V${mid}` : `M260 ${mid}V${start}M260 ${end}V${bottom}` });
+      }
+      const loadY = (mid + bottom) / 2, load = schematicShape(drawing, "g", { id: "schematicLoad", fill: "none", stroke: "#ffba52", "stroke-width": 2.5, "stroke-linejoin": "round", "stroke-dasharray": "7 6" });
+      schematicShape(load, "path", { d: `M260 ${mid}H560V${loadY - 26}M560 ${loadY + 26}V${bottom}H260` });
+      if (state?.circuit.rl !== null && state) { schematicShape(load, "rect", { x: 549, y: loadY - 26, width: 22, height: 52, rx: 2 }); load.dataset.schematicLoadSymbol = "rl"; }
+      schematicText(drawing, 586, loadY - 12, "RL", 20, "#ffba52");
+      const loadValue = schematicText(drawing, 586, loadY + 16, "Open", 17, "#a8bece"); loadValue.id = "schematicLoadValue";
+      if (state?.circuit.rl !== null && state) schematicText(drawing, 495, loadY + 62, `Tol. ±${percent(state.tolerances.rl)}`, 16, "#a8bece");
+      schematicShape(drawing, "path", { d: `M260 ${mid}H420`, fill: "none", stroke: "#54d2ff", "stroke-width": 3 });
+      schematicShape(drawing, "circle", { cx: 260, cy: mid, r: 5, fill: "#54d2ff" });
+      schematicShape(drawing, "circle", { cx: 426, cy: mid, r: 6, fill: "#101823", stroke: "#54d2ff", "stroke-width": 3 });
+      schematicText(drawing, 310, mid - 16, "VMID", 20, "#54d2ff");
+      return bottom + 80;
+    }
+
     function renderSchematic() {
       const svg = byId("liveSchematic");
       const state = pairPreviewState || schematicState;
@@ -1213,11 +1238,11 @@
           if (line) previewLines.push(line);
         }
       }
-      const drawingY = 64 + (previewLines.length ? previewLines.length * 18 + 12 : 0);
-      const stacked = width < 760;
-      const drawingWidth = stacked ? Math.min(560, width) : Math.min(480, width * 0.43);
-      const drawingBottom = drawingY + drawingWidth * 370 / 640;
-      const detailsX = stacked ? 16 : drawingWidth + 24;
+      const drawingY = 92 + (previewLines.length ? previewLines.length * 18 + 16 : 0);
+      const stacked = width < 1050;
+      const drawingWidth = stacked ? Math.min(680, width - 32) : Math.min(560, width * 0.42);
+      const drawingBottom = drawingY + drawingWidth * renderSchematicDrawing(state) / 680;
+      const detailsX = stacked ? 24 : drawingWidth + 40;
       const detailsY = stacked ? drawingBottom + 22 : 30 + drawingY - 64;
       const detailsWidth = width - detailsX - 16;
       const columns = detailsWidth >= 600 ? 2 : 1;
@@ -1226,7 +1251,7 @@
       partsGroup.replaceChildren();
       previewLines.forEach((line, index) => schematicText(partsGroup, 16, 79 + index * 18, line, 11, "#c6e3ff", "pairPerformance"));
       const alternativeParts = new Map();
-      byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 0} ${drawingY}) scale(${drawingWidth / 640})`);
+      byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY}) scale(${drawingWidth / 680})`);
       byId("schematicVtop").textContent = state ? `VTOP ${format(state.circuit.vin, "V")} · ±${percent(state.tolerances.vin)}` : "VTOP —";
       byId("schematicVmid").textContent = state ? `VMID ${format(state.result.vout, "V")}` : "VMID —";
       byId("schematicR1Value").textContent = state ? format(state.circuit.r1, "Ω") : "—";
@@ -1248,7 +1273,7 @@
           const summary = network ? `${network.parts.length} ${network.connection} · ${format(state.circuit[arm], "Ω")} eq · ±${percent(state.tolerances[arm])}` : "Single resistor";
           const summaryNode = schematicText(group, 0, 37, summary, 12, "#a8bece");
           if (network) schematicEditable(summaryNode, arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
-          let partY = 62;
+          let partY = 80;
           for (const part of state.physical[arm]) {
             const row = document.createElementNS(svg.namespaceURI, "g");
             row.dataset.schematicPart = part.id;
@@ -1256,17 +1281,20 @@
             group.append(row);
             schematicText(row, 0, 0, part.name, 15);
             schematicEditable(schematicText(row, columnWidth * 0.35, 0, format(part.resistance, "Ω"), 15, "#eaf6ff", "resistance"), part.id, `${part.name} resistance`);
-            schematicEditable(schematicText(row, 0, 21, `±${percent(part.tolerance)}`, 13, "#a8bece", "tolerance"), part.id, `${part.name} tolerance`, "tolerance");
+            schematicText(row, 0, 26, "Tolerance", 11, "#a8bece");
+            schematicText(row, columnWidth * 0.5, 26, "Footprint", 11, "#a8bece");
+            schematicEditable(schematicText(row, 0, 46, `±${percent(part.tolerance)}`, 14, "#eaf6ff", "tolerance"), part.id, `${part.name} tolerance`, "tolerance");
+            schematicEditable(schematicText(row, columnWidth * 0.5, 46, part.catalog?.case || "Not set", 14, "#eaf6ff", "footprint"), part.id, `${part.name} footprint`, "power");
             const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
-            schematicEditable(schematicText(row, columnWidth * 0.35, 21, `${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`, 13, "#a8bece", "rating"), part.id, `${part.name} footprint and catalog options`, "power");
+            schematicEditable(schematicText(row, 0, 74, `${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`, 13, "#a8bece", "rating"), part.id, `${part.name} footprint and catalog options`, "power");
             for (const [metricIndex, [key, label]] of [["p", "Pstress"], ["v", "Vstress"], ["i", "Istress"]].entries()) {
               const metricX = metricIndex * columnWidth / 3;
               const value = part.stress[key];
               const colors = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" };
-              schematicText(row, metricX, 44, label, 11, "#a8bece");
-              schematicText(row, metricX, 64, percent(value), 15, colors[stressClass(value)], key);
+              schematicText(row, metricX, 102, label, 11, "#a8bece");
+              schematicText(row, metricX, 124, percent(value), 15, colors[stressClass(value)], key);
             }
-            let extraY = 86;
+            let extraY = 152;
             if (part.mpn) { schematicText(row, 0, extraY, part.mpn, 11, "#54d2ff", "mpn"); extraY += 20; }
             if (part.catalog) { schematicText(row, 0, extraY - 2, `${part.catalog.temperatureC} °C · ${part.catalog.mode} · P70 ${format(part.catalog.ratedPowerW, "W")}`, 11, "#a8bece", "condition"); extraY += 18; }
             const alternatives = part.alternatives || schematicPartAlternatives(part);
@@ -1276,7 +1304,7 @@
               schematicText(row, 0, extraY + 18, `${format(alt.powerW, "W")} allowed · ${alt.workingVoltageV} V · ${alt.temperatureC} °C · ${alt.mode}`, 11, "#a8bece", "alternativeLimits");
               extraY += 38;
             }
-            partY += Math.max(94, extraY + 8);
+            partY += Math.max(178, extraY + 24);
           }
           bottom = Math.max(bottom, y + partY + 16);
         }
@@ -1290,7 +1318,7 @@
       svg.setAttribute("height", height);
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
       const descriptions = state ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
-      byId("liveSchematicDesc").textContent = state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. RTOP and RBOT are equivalent arms. ${descriptions.join(" ")} Selected-part stresses use nominal circuit values.${previewLines.length ? " " + previewLines.join(". ") : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.";
+      byId("liveSchematicDesc").textContent = state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.${previewLines.length ? " " + previewLines.join(". ") : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.";
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       // The download is a self-contained snapshot of the live SVG.
@@ -1503,12 +1531,18 @@
     let catalogDesignVmid = null;
     const appliedCatalogParts = new Map();
     const parts2Families = [{ key: "tnpw", id: "vishay-tnpw-e3", label: "TNPW" }, { key: "mil", id: "vishay-eh-m55342", label: "M55342 / D55342" }];
-    let parts2Values = [], parts2BomData = [], parts2Selection = null, parts2Target = null;
+    let parts2Values = [], parts2BomData = [], parts2BomEntries = [], parts2BomRevision = 0, parts2Selection = null, parts2Target = null;
     let pairGeneration = 0, pairItems = [], pairView = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
     let pairPlot = null, pairBrush = null, pairIgnoreClick = false;
     const pairComparisons = new Set();
     let pairComparisonRevision = 0;
-    const PAIR_COMPARISON_HEADERS = ["RTOP part", "RBOT part", "VMID", "VMID range", "Worst target error", "Nominal power", "Worst power", "Nominal input I", "Worst input I", "Rth", "RTOP Pstress", "RBOT Pstress", "RTOP V/I stress", "RBOT V/I stress", "Search conditions"];
+    const BOM_COLUMNS = [
+      ["option", "Option", "base", "pair"], ["reference", "Reference", "base"], ["qty", "Qty", "base"], ["value", "Value", "base"], ["tolerance", "Tolerance", "base"], ["footprint", "Footprint", "base"], ["mpn", "Manufacturer part number", "base"],
+      ["allowed", "Allowed power", "optional"], ["vmax", "Working voltage limit", "optional"], ["tcr", "TCR (ppm/°C)", "optional"], ["reliability", "Reliability", "optional"], ["conditions", "Conditions", "optional"],
+      ["voltage", "Part voltage", "optional"], ["current", "Part current", "optional"], ["power", "Part power", "optional"], ["pstress", "Pstress", "optional"], ["vstress", "Vstress", "optional"], ["istress", "Istress", "optional"],
+      ["vmid", "VMID", "optional", "pair"], ["range", "VMID range", "optional", "pair"], ["error", "Worst target error", "optional", "pair"], ["totalPower", "Nominal power", "optional", "pair"], ["worstPower", "Worst power", "optional", "pair"], ["inputI", "Nominal input I", "optional", "pair"], ["worstI", "Worst input I", "optional", "pair"], ["rth", "Rth", "optional", "pair"], ["search", "Search conditions", "optional", "pair"],
+      ["tnpw", "TNPW alternative", "optional"], ["mil", "M55342 alternative", "optional"]
+    ];
     const PAIR_PAGE_SIZE = 50;
     const pairFamilyToggles = Array.from(document.querySelectorAll("[data-pair-family]"));
     const catalogSame = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1e-12, Math.abs(a), Math.abs(b));
@@ -1800,45 +1834,103 @@
       byId("pairCompareAdd").textContent = added ? "Added to comparison" : "Add preview to comparison";
     }
 
-    function pairComparisonPartDetails(part) {
-      return `${format(part.resistanceOhms, "Ω")} · ±${part.tolerancePct}% · ${part.case} · ±${part.tcrPpm} ppm/°C · reliability ${part.failureRate || "N/A"} · ${format(part.powerW, "W")} allowed · ${part.workingVoltageV} V max · ${part.temperatureC} °C · ${part.mode}`;
+    function initializeBomControls(prefix, pair, render) {
+      const host = byId(`${prefix}Controls`), name = pair ? "pair comparison" : "circuit BOM";
+      host.innerHTML = `<details><summary>Columns and performance filters</summary><fieldset><legend>Show optional columns</legend><div class="bom-column-options"></div></fieldset><div class="rating-fields">
+        <div class="field"><label for="${prefix}Query">Search ${name}</label><input id="${prefix}Query" type="search" placeholder="Reference, part number, footprint…" /></div>
+        <div class="field"><label for="${prefix}MaxP">Maximum ${pair ? "worst " : ""}Pstress (%)</label><input id="${prefix}MaxP" type="number" min="0" step="any" placeholder="No limit" /></div>
+        <div class="field"><label for="${prefix}MaxVI">Maximum ${pair ? "worst " : ""}V/I stress (%)</label><input id="${prefix}MaxVI" type="number" min="0" step="any" placeholder="No limit" /></div>
+        <div class="field"><label for="${prefix}MaxPower">Maximum ${pair ? "worst total" : "part"} power (mW)</label><input id="${prefix}MaxPower" type="number" min="0" step="any" placeholder="No limit" /></div>
+        </div><button id="${prefix}Reset" class="btn" type="button">Clear table filters</button></details>`;
+      const options = host.querySelector(".bom-column-options");
+      for (const [key, label, group, scope] of BOM_COLUMNS) {
+        if (group === "base" || (scope === "pair" && !pair)) continue;
+        const wrapper = document.createElement("label"), input = document.createElement("input");
+        input.type = "checkbox"; input.value = key; input.checked = pair && key === "vmid";
+        input.dataset.bomColumnToggle = key; wrapper.append(input, document.createTextNode(label)); options.append(wrapper);
+      }
+      host.addEventListener("input", render);
+      byId(`${prefix}Reset`).addEventListener("click", () => { for (const input of host.querySelectorAll('input:not([type="checkbox"])')) input.value = ""; render(); });
+    }
+
+    function bomColumns(prefix, pair = false) {
+      const selected = new Set([...byId(`${prefix}Controls`).querySelectorAll('input[type="checkbox"]:checked')].map(input => input.value));
+      return BOM_COLUMNS.filter(([key, , group, scope]) => (scope !== "pair" || pair) && (group === "base" || selected.has(key)));
+    }
+
+    function readBomFilters(prefix) {
+      const filters = { query: byId(`${prefix}Query`).value.trim().toLowerCase() };
+      for (const name of ["MaxP", "MaxVI", "MaxPower"]) {
+        const input = byId(`${prefix}${name}`); input.removeAttribute("aria-invalid");
+        const value = input.value === "" && !input.validity.badInput ? null : input.valueAsNumber;
+        if (value !== null && (!Number.isFinite(value) || value < 0)) { input.setAttribute("aria-invalid", "true"); filters.error = "Enter nonnegative finite performance limits or leave them blank."; }
+        filters[name] = value;
+      }
+      if (filters.error) byId(`${prefix}Controls`).querySelector("details").open = true;
+      return filters;
+    }
+
+    function bomMatches(cells, metrics, filters) {
+      const under = (value, limit) => limit === null || value <= limit + 1e-9 * Math.max(1, limit);
+      return !filters.error && (!filters.query || cells.join(" ").toLowerCase().includes(filters.query)) && under(metrics.p, filters.MaxP) && under(metrics.vi, filters.MaxVI) && under(metrics.power * 1000, filters.MaxPower);
+    }
+
+    function bomPartCells(part, chosen = part.catalog, alternatives = {}) {
+      return { reference: part.name, qty: "1", value: format(part.resistance, "Ω"), tolerance: `±${percent(part.tolerance)}`, footprint: chosen?.case || "Not set", mpn: chosen?.mpn || "Unassigned",
+        allowed: format(part.rating, "W"), vmax: part.vmax === null ? "Power-based" : format(part.vmax, "V"), tcr: chosen ? `±${chosen.tcrPpm}` : "Not set", reliability: chosen ? chosen.failureRate || "N/A" : "Not set", conditions: chosen ? `${chosen.temperatureC} °C · ${chosen.mode}` : "Manual",
+        voltage: format(part.voltage, "V"), current: format(Math.abs(part.current), "A"), power: format(part.power, "W"), pstress: percent(part.stress.p), vstress: percent(part.stress.v), istress: percent(part.stress.i), tnpw: alternatives.tnpw || "—", mil: alternatives.mil || "—" };
+    }
+
+    function appendBomCells(row, cells, columns) {
+      for (const [key] of columns) {
+        const cell = parts2Cell(row, cells[key] ?? "—", key === "reference" ? "th" : "td"); cell.dataset.bomColumn = key;
+        if (key === "reference") cell.scope = "row";
+        if (["mpn", "tnpw", "mil"].includes(key)) cell.className = "part-number";
+        if (["pstress", "vstress", "istress"].includes(key)) cell.className = stressClass(Number.parseFloat(cells[key]));
+        if (["search", "conditions"].includes(key)) cell.className = "pair-comparison-conditions";
+      }
+    }
+
+    function pairComparisonView() {
+      const columns = bomColumns("pairBom", true), filters = readBomFilters("pairBom"), groups = [];
+      if (!pairSpec) return { columns, filters, groups };
+      const spec = pairSpec;
+      const search = `VTOP ${format(spec.vin, "V")} ±${percent(spec.sourceTolerance)}; target VMID ${format(spec.target, "V")} ±${percent(spec.errorPct)}; RL ${spec.rl === null ? "Open" : `${format(spec.rl, "Ω")} ±${percent(spec.loadTolerance)}`}; ambient ${spec.temperatureC} °C; stress ≤ ${percent(spec.maxStress)}${spec.maxPower === null ? "" : `; total power ≤ ${format(spec.maxPower, "W")}`}`;
+      for (const [index, pair] of [...pairComparisons].entries()) {
+        const rows = [["Top", pair.top, "r1"], ["Bot", pair.bot, "r2"]].map(([side, chosen, arm]) => {
+          const limits = pair.worst[side === "Top" ? "top" : "bot"], alternatives = {};
+          for (const option of [chosen, ...pairAlternativeParts(pair, side)]) alternatives[option.familyId.includes("m55342") ? "mil" : "tnpw"] = option.mpn;
+          const part = { name: arm.toUpperCase(), resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV, voltage: arm === "r1" ? pair.result.v1 : pair.result.vout, current: arm === "r1" ? pair.result.i1 : pair.result.i2, power: arm === "r1" ? pair.result.p1 : pair.result.p2, stress: { p: limits.p, v: limits.v, i: limits.v } };
+          return { ...bomPartCells(part, chosen, alternatives), option: String(index + 1), vmid: format(pair.result.vout, "V"), range: `${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")}`, error: percent(pair.error), totalPower: format(pair.result.total, "W"), worstPower: format(pair.worst.power, "W"), inputI: format(Math.abs(pair.result.i1), "A"), worstI: format(pair.worst.current, "A"), rth: format(pair.result.rth, "Ω"), search };
+        });
+        if (bomMatches(rows.flatMap(Object.values), { p: pair.pstress, vi: pair.vstress, power: pair.worst.power }, filters)) groups.push({ pair, rows });
+      }
+      return { columns, filters, groups };
     }
 
     function pairComparisonData() {
-      const rows = [PAIR_COMPARISON_HEADERS];
-      if (!pairSpec) return rows;
-      const spec = pairSpec;
-      const conditions = `VTOP ${format(spec.vin, "V")} ±${percent(spec.sourceTolerance)}; target VMID ${format(spec.target, "V")} ±${percent(spec.errorPct)}; RL ${spec.rl === null ? "Open" : `${format(spec.rl, "Ω")} ±${percent(spec.loadTolerance)}`}; ambient ${spec.temperatureC} °C; stress ≤ ${percent(spec.maxStress)}${spec.maxPower === null ? "" : `; total power ≤ ${format(spec.maxPower, "W")}`}`;
-      for (const pair of pairComparisons) rows.push([
-        ...[pair.top, pair.bot].map(part => `${part.mpn}\n${pairComparisonPartDetails(part)}`),
-        format(pair.result.vout, "V"), `${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")}`, percent(pair.error),
-        format(pair.result.total, "W"), format(pair.worst.power, "W"), format(Math.abs(pair.result.i1), "A"), format(pair.worst.current, "A"), format(pair.result.rth, "Ω"),
-        percent(pair.worst.top.p), percent(pair.worst.bot.p), percent(pair.worst.top.v), percent(pair.worst.bot.v), conditions
-      ]);
-      return rows;
+      const { columns, groups } = pairComparisonView();
+      return [columns.map(column => column[1]), ...groups.flatMap(group => group.rows.map(cells => columns.map(([key]) => cells[key] ?? "—")))];
     }
 
     function renderPairComparison(resetCopy = false) {
       const head = byId("pairComparisonHead"), host = byId("pairComparisonRows"); head.replaceChildren(); host.replaceChildren();
       const headings = document.createElement("tr");
-      for (const label of ["Remove", ...PAIR_COMPARISON_HEADERS]) { const cell = parts2Cell(headings, label, "th"); cell.scope = "col"; }
+      const { columns, filters, groups } = pairComparisonView();
+      for (const label of ["Remove", ...columns.map(column => column[1])]) { const cell = parts2Cell(headings, label, "th"); cell.scope = "col"; }
       head.append(headings);
-      const pairs = [...pairComparisons], data = pairComparisonData();
-      pairs.forEach((pair, index) => {
+      const pairs = [...pairComparisons];
+      for (const { pair, rows } of groups) {
         const row = document.createElement("tr"), action = parts2Cell(row, ""), remove = document.createElement("button");
+        action.rowSpan = rows.length;
         row.dataset.pairComparison = String(pairItems.indexOf(pair));
         remove.type = "button"; remove.className = "btn"; remove.textContent = "Remove"; remove.setAttribute("aria-label", `Remove ${pair.top.mpn} and ${pair.bot.mpn} from comparison`);
         remove.addEventListener("click", () => { setPairCompared(pair, false); byId(pairComparisons.size ? "pairComparisonClear" : "pairComparisonHeading").focus({ preventScroll: true }); }); action.append(remove);
-        for (const [column, value] of data[index + 1].entries()) {
-          const [first, detail] = value.split("\n"), cell = parts2Cell(row, first);
-          if (column < 2) { cell.className = "part-number"; const small = document.createElement("small"); small.textContent = detail; cell.append(small); }
-          if (column === PAIR_COMPARISON_HEADERS.length - 1) cell.className = "pair-comparison-conditions";
-        }
-        host.append(row);
-      });
+        rows.forEach((cells, index) => { const partRow = index ? document.createElement("tr") : row; partRow.dataset.comparisonPart = cells.reference; appendBomCells(partRow, cells, columns); host.append(partRow); });
+      }
       const outside = pairs.filter(pair => !pairView.includes(pair)).length;
-      byId("pairComparisonStatus").textContent = pairs.length ? `${pairs.length} pair${pairs.length === 1 ? "" : "s"} selected${outside ? ` · ${outside} outside the current chart filters` : ""}. Comparisons stay selected across pages, sorting and filters.` : "Check pairs above or add the current preview to compare them here.";
-      byId("pairComparisonCopy").disabled = !pairs.length; byId("pairComparisonClear").disabled = !pairs.length;
+      byId("pairComparisonStatus").textContent = filters.error || (pairs.length ? `${pairs.length} pair${pairs.length === 1 ? "" : "s"} selected · ${groups.length} shown by table filters${outside ? ` · ${outside} outside the current chart filters` : ""}. Comparisons stay selected across pages, sorting and filters.` : "Check pairs above or add the current preview to compare them here.");
+      byId("pairComparisonCopy").disabled = !groups.length; byId("pairComparisonClear").disabled = !pairs.length;
       if (resetCopy) { byId("pairComparisonCopyStatus").textContent = ""; byId("pairComparisonCopyFallback").hidden = true; byId("pairComparisonCopyText").value = ""; }
       updatePairComparisonControls();
     }
@@ -2100,8 +2192,7 @@
     }
 
     function renderParts2Bom(parts) {
-      const host = byId("parts2BomRows"); host.replaceChildren();
-      parts2BomData = [["Reference", "Quantity", "Resistance (ohm)", "Tolerance (%)", "TNPW option", "TNPW allowed power (W)", "M55342 option", "M55342 allowed power (W)", "Option package", "Option ambient (C)", "Option TCR (ppm/C)", "Applied part", "Applied allowed power (W)", "Applied ambient (C)", "Stock"]];
+      parts2BomEntries = [];
       for (const part of parts) {
         const chosen = catalogAssignment(part);
         const size = chosen?.case || byId("parts2Package").value;
@@ -2118,16 +2209,22 @@
             if (chosen?.mpn === candidate.mpn || preview.highest <= 100 + 1e-9) matches[entry.key] = { candidate, preview };
           } catch (_) { /* No supported exact-value alternative under these conditions. */ }
         }
-        const row = document.createElement("tr"); row.dataset.bomPart = part.id;
-        parts2Cell(row, part.name, "th");
-        parts2Cell(row, `${format(part.resistance, "Ω")} · ±${part.tolerance}%`);
-        for (const entry of parts2Families) parts2CandidateCell(row, matches[entry.key]);
-        const applied = parts2Cell(row, chosen?.mpn || "Unassigned");
-        if (chosen) { const detail = document.createElement("small"); detail.textContent = `${format(part.rating, "W")} allowed · ${chosen.temperatureC} °C · ${chosen.mode}`; applied.append(detail); }
-        host.append(row);
-        parts2BomData.push([part.name, 1, part.resistance, part.tolerance, matches.tnpw?.candidate.mpn || "", matches.tnpw?.candidate.powerW ?? "", matches.mil?.candidate.mpn || "", matches.mil?.candidate.powerW ?? "", size, Number.isFinite(temperature) ? temperature : "", tcr, chosen?.mpn || "Unassigned", part.rating, chosen?.temperatureC ?? "Manual", "Not checked"]);
+        parts2BomEntries.push({ part, cells: bomPartCells(part, chosen, { tnpw: matches.tnpw?.candidate.mpn, mil: matches.mil?.candidate.mpn }), metrics: { p: part.stress.p, vi: Math.max(part.stress.v, part.stress.i), power: part.power } });
       }
-      byId("parts2Copy").disabled = !parts.length;
+      renderCircuitBomView();
+    }
+
+    function renderCircuitBomView() {
+      parts2BomRevision++;
+      const columns = bomColumns("parts2Bom"), filters = readBomFilters("parts2Bom");
+      const rows = parts2BomEntries.filter(entry => bomMatches(Object.values(entry.cells), entry.metrics, filters));
+      const head = byId("parts2BomHead"), host = byId("parts2BomRows"); head.replaceChildren(); host.replaceChildren();
+      const headings = document.createElement("tr");
+      for (const [key, label] of columns) { const cell = parts2Cell(headings, label, "th"); cell.scope = "col"; cell.dataset.bomColumn = key; } head.append(headings);
+      parts2BomData = [columns.map(column => column[1])];
+      for (const { part, cells } of rows) { const row = document.createElement("tr"); row.dataset.bomPart = part.id; appendBomCells(row, cells, columns); host.append(row); parts2BomData.push(columns.map(([key]) => cells[key] ?? "—")); }
+      byId("parts2BomStatus").textContent = filters.error || `${rows.length} of ${parts2BomEntries.length} physical resistors shown. Performance uses the nominal operating point; copy includes visible rows and columns.`;
+      byId("parts2Copy").disabled = !rows.length;
       byId("parts2CopyStatus").textContent = "";
       byId("parts2CopyFallback").hidden = true;
       byId("parts2CopyText").value = "";
@@ -2138,14 +2235,16 @@
     }
 
     async function copyParts2Bom() {
-      const text = parts2BomTsv();
+      const text = parts2BomTsv(), revision = parts2BomRevision;
       if (!text) return;
       try {
         if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
         await navigator.clipboard.writeText(text);
+        if (revision !== parts2BomRevision) return;
         byId("parts2CopyStatus").textContent = "BOM copied. Paste into a spreadsheet or document.";
         byId("parts2CopyFallback").hidden = true;
       } catch (_) {
+        if (revision !== parts2BomRevision) return;
         byId("parts2CopyFallback").hidden = false;
         byId("parts2CopyText").value = text;
         byId("parts2CopyText").focus(); byId("parts2CopyText").select();
@@ -2675,6 +2774,8 @@
       update();
       selectResultTab("overviewTab");
     }, 0));
+    initializeBomControls("parts2Bom", false, renderCircuitBomView);
+    initializeBomControls("pairBom", true, () => { pairComparisonRevision++; renderPairComparison(true); });
     renderPairComparison();
     update();
     window.resistorCatalogReady = initializeCatalog();
