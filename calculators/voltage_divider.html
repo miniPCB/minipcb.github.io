@@ -1257,7 +1257,7 @@
     function pairSchematicState() {
       if (pairPreviewState) return pairPreviewState;
       const number = id => Number.isFinite(byId(id).valueAsNumber) ? byId(id).valueAsNumber : null;
-      return { pairSetup: true, circuit: { vin: number("pairVin"), rl: byId("pairRl").value === "" && !byId("pairRl").validity.badInput ? null : byId("pairRl").valueAsNumber }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical: { r1: [], r2: [] }, networks: { r1: null, r2: null }, result: {}, bounds: {} };
+      return { pairSetup: true, circuit: { vin: number("pairVin"), rl: byId("pairRl").value === "" && !byId("pairRl").validity.badInput ? null : byId("pairRl").valueAsNumber }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical: { r1: [], r2: [] }, networks: { r1: null, r2: null }, result: {}, bounds: {}, target: number("pairVmid"), allowedErrorPct: number("pairErrorPct"), analyzedAt: pairSpec?.analyzedAt || null };
     }
 
     function schematicRole(node, key, roles, attribute = "fill") {
@@ -1372,35 +1372,62 @@
       return { text, lines };
     }
 
-    const PAIR_ANALYSIS_HEIGHT = 244;
-
-    function renderSchematicPairAnalysis(host, state, x, y, width) {
-      const pair = state.pair, url = "https://www.minipcb.com/calculators/voltage_divider.html";
-      const analyzed = state.analyzedAt.slice(0, 16).replace("T", " ") + " UTC";
+    function circuitCharacteristics(state, mode) {
+      const complete = !!state && !state.pairSetup, pair = state?.pair, target = state?.target;
+      const value = (number, unit) => Number.isFinite(number) ? format(number, unit) : "—";
+      const accuracy = distance => {
+        if (!complete || !Number.isFinite(target)) return "—";
+        if (target === 0) return value(distance, "V");
+        const error = distance / Math.abs(target) * 100;
+        return percent(error < 1e-10 ? 0 : error);
+      };
+      const solved = !complete ? mode === "pairs" ? "No selected pair" : "—" : mode === "pairs" ? "Pair preview" : mode === "tolerance" ? `±${percent(state.tolerances.r1)} each` : mode === "vout" ? value(state.result.vout, "V") : mode === "vin" ? value(state.circuit.vin, "V") : state.circuit[mode] === null ? "Open circuit" : value(state.circuit[mode], "Ω");
       const rows = [
-        ["Nominal total power", format(pair.result.total, "W"), "nominalPower"],
-        ["Nominal input current", format(Math.abs(pair.result.i1), "A"), "nominalCurrent"],
-        ["Source resistance Rth", format(pair.result.rth, "Ω"), "rth"],
-        ["Worst Pstress", percent(pair.pstress), "pstress"],
-        ["Worst V/I stress", percent(pair.vstress), "vistress"],
-        ["Analyzed", analyzed, "analyzedAt"],
-        ["Calculator", "Voltage divider ↗", "calculator"]
+        [mode === "pairs" ? "Find RTOP + RBOT" : mode === "tolerance" ? "Find R tolerance" : `Find ${MODE_DETAILS[mode].symbol}`, solved, "findResult"],
+        ["Nominal total power", complete ? value(state.result.total, "W") : "—", "nominalPower"],
+        ["Nominal input current", complete ? value(Math.abs(state.result.i1), "A") : "—", "nominalCurrent"],
+        ["Source resistance Rth", complete ? value(state.result.rth, "Ω") : "—", "rth"]
       ];
-      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Pair preview analysis", "aria-colcount": 2, "aria-rowcount": rows.length, "data-field": "pairPerformance", "data-analyzed-at": state.analyzedAt });
-      schematicInfoBox(table, 0, 0, width, PAIR_ANALYSIS_HEIGHT);
-      schematicText(table, 12, 24, "Pair preview · analysis", 14, "#eaf6ff");
+      if (["pairs", "vin", "r1", "r2", "rl"].includes(mode) || mode === "vout" && Number.isFinite(target)) {
+        rows.push([mode === "vout" ? "Nominal VMID target" : "Target VMID", value(target, "V"), "targetVmid"],
+          ["Nominal target error", accuracy(Math.abs(state?.result.vout - target)), "nominalError"],
+          ["Worst target error", accuracy(Math.max(Math.abs(state?.bounds.min - target), Math.abs(state?.bounds.max - target))), "worstError"]);
+      } else rows.push(["VMID accuracy", !complete ? "—" : state.bounds.deviation === null ? value(Math.max(Math.abs(state.bounds.min - state.result.vout), Math.abs(state.bounds.max - state.result.vout)), "V") : `±${percent(state.bounds.deviation)}`, "vmidAccuracy"]);
+      if (["pairs", "tolerance"].includes(mode)) rows.push(["Allowed VMID error", Number.isFinite(state?.allowedErrorPct) ? `±${percent(state.allowedErrorPct)}` : "—", "allowedError"]);
+      if (mode === "rl") rows.push(["Load power", complete ? value(state.result.pl, "W") : "—", "loadPower"]);
+      const parts = complete ? ARMS.flatMap(arm => state.physical[arm]) : [];
+      rows.push([mode === "pairs" ? "Worst Pstress" : "Nominal Pstress", !complete ? "—" : percent(pair ? pair.pstress : Math.max(...parts.map(part => part.stress.p))), "pstress"],
+        [mode === "pairs" ? "Worst V/I stress" : "Nominal V/I stress", !complete ? "—" : percent(pair ? pair.vstress : Math.max(...parts.flatMap(part => [part.stress.v, part.stress.i]))), "vistress"],
+        ["Analyzed", state?.analyzedAt ? state.analyzedAt.slice(0, 16).replace("T", " ") + " UTC" : "—", "analyzedAt"],
+        ["Calculator", "Voltage divider ↗", "calculator"]);
+      return { rows, height: rows.length * 28 + 48, complete };
+    }
+
+    function renderCircuitCharacteristics(host, state, characteristics, mode, x, y, width) {
+      const { rows, height, complete } = characteristics, url = "https://www.minipcb.com/calculators/voltage_divider.html";
+      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Circuit characteristics", "aria-colcount": 2, "aria-rowcount": rows.length, "data-field": "circuitCharacteristics", "data-analysis-mode": mode, "data-analysis-state": complete ? state.pair ? "preview" : "calculated" : "awaiting", "data-analyzed-at": state?.analyzedAt || "" });
+      schematicInfoBox(table, 0, 0, width, height);
+      schematicText(table, 12, 24, "Circuit characteristics", 14, "#eaf6ff");
       for (const [index, [label, value, field]] of rows.entries()) {
-        const row = schematicShape(table, "g", { role: "row", "aria-rowindex": index + 1 }), top = 52 + index * 28 + (index >= 5 ? 8 : 0);
+        const metadata = index >= rows.length - 2, row = schematicShape(table, "g", { role: "row", "aria-rowindex": index + 1 }), top = 52 + index * 28 + (metadata ? 8 : 0);
+        const labelSize = width < 420 ? 11 : 12, valueSize = Math.min(metadata ? 11 : 13, (width - 36 - label.length * labelSize * 0.62) / (value.length * 0.62));
         const name = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
-        schematicText(name, 12, top, label, width < 420 ? 11 : 12, "#a8bece");
+        schematicText(name, 12, top, label, labelSize, "#a8bece");
         const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": 2 });
         const parent = field === "calculator" ? schematicShape(cell, "a", { href: url, target: "_top", "aria-label": "Voltage divider calculator page" }) : cell;
-        const text = schematicText(parent, width - 12, top, value, index >= 5 ? 11 : 13, field === "calculator" ? "#54d2ff" : "#c6e3ff", field);
+        const text = schematicText(parent, width - 12, top, value, valueSize, field === "calculator" ? "#54d2ff" : field === "findResult" ? complete ? "#ff8e8e" : "#f6d365" : "#c6e3ff", field);
         text.setAttribute("text-anchor", "end");
         if (field === "calculator") { text.setAttribute("text-decoration", "underline"); schematicShape(parent, "title").textContent = url; }
-        if (field === "analyzedAt") schematicShape(cell, "title").textContent = state.analyzedAt;
+        if (field === "analyzedAt" && state?.analyzedAt) schematicShape(cell, "title").textContent = state.analyzedAt;
+        if (["nominalError", "worstError"].includes(field)) schematicShape(cell, "title").textContent = targetErrorDescription(state?.target);
+        if (field === "vmidAccuracy") schematicShape(cell, "title").textContent = "Worst tolerance deviation from nominal VMID; voltage units are used when nominal VMID is zero.";
+        if (["pstress", "vistress"].includes(field)) schematicShape(cell, "title").textContent = mode === "pairs" ? "Highest worst-case stress across both resistors, including the source and component tolerance intervals." : "Highest nominal stress across all physical RTOP/RBOT resistors, using each part's own ratings.";
       }
-      return "Pair preview analysis. " + rows.map(([label, value]) => `${label}: ${value}`).join(". ") + `. Calculator page: ${url}.`;
+      return "Circuit characteristics. " + rows.map(([label, value]) => `${label}: ${value}`).join(". ") + `. Calculator page: ${url}.`;
+    }
+
+    function targetErrorDescription(target) {
+      return target === 0 ? "Absolute voltage error; percent error is undefined for a zero target." : "Absolute percent error relative to the target VMID; 0% means on target. Worst error includes the full tolerance interval.";
     }
 
     function renderSchematicTable(host, state, roles, x, y, width, alternativesByPart) {
@@ -1415,15 +1442,15 @@
       const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress", "Description", "Part status", "TNPW recommendation (not applied)", "M55342 recommendation (not applied)"]];
       schematicBomChoices.clear(); schematicBomChoiceRevision++;
       const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor descriptions, part numbers and nominal stresses", "aria-colcount": 7, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
-      schematicText(table, 0, 16, "Resistor parts · nominal stress", 14, "#eaf6ff");
+      const title = schematicTableText(table, 0, 16, "Parts list and electrical part stress", width, 14, "#eaf6ff"), headerTop = title.lines * 15 + 15;
       const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = narrow ? 64 : 32;
-      schematicInfoBox(head, 0, 30, width, headerHeight);
+      schematicInfoBox(head, 0, headerTop, width, headerHeight);
       labels.forEach((label, index) => {
         const cell = schematicShape(head, "g", { role: "columnheader", "aria-colindex": index + 1 });
         const lines = narrow && index >= 2 ? index < 4 ? label.split(" ").map((word, i) => i ? word : word + " ") : [label[0], "stress"] : [label];
-        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, (narrow && index >= 2 ? 72 : 49) + i * 14, line, narrow ? 9 : Math.min(11, (widths[index] - 8) / (line.length * 0.62)), "#a8bece"));
+        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, headerTop + (narrow && index >= 2 ? 42 : 19) + i * 14, line, narrow ? 9 : Math.min(11, (widths[index] - 8) / (line.length * 0.62)), "#a8bece"));
       });
-      let top = 30 + headerHeight + 6;
+      let top = headerTop + headerHeight + 6;
       for (const [index, { arm, part }] of entries.entries()) {
         const row = schematicShape(table, "g", { transform: `translate(0 ${top})`, role: "row", "aria-rowindex": index + 2, "data-schematic-part": part.id });
         const background = schematicInfoBox(row, 0, 0, width, 0), fontSize = narrow ? 10 : 11;
@@ -1524,7 +1551,7 @@
       const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
       const searchOffset = mode === "pairs" ? 40 : 0;
       const stacked = width < 1050;
-      const analysisHeight = mode === "pairs" && pairItems.length ? PAIR_ANALYSIS_HEIGHT + 16 : 0;
+      const characteristics = circuitCharacteristics(state, mode), analysisHeight = characteristics.height + 16;
       const drawingY = 62 + searchOffset + (stacked ? analysisHeight : 0);
       const drawingWidth = stacked ? Math.min(680, width - 32) : Math.min(560, width * 0.42);
       const drawingBottom = drawingY + drawingWidth * renderSchematicDrawing(state, roles) / 680;
@@ -1540,7 +1567,7 @@
           if (resistorCatalog) { schematicEditable(control.pill, key, content); control.pill.setAttribute("aria-label", key === "search-run" ? "Find real resistor pairs" : "Edit pair search options"); }
         }
       }
-      const previewDescription = state?.pair ? renderSchematicPairAnalysis(partsGroup, state, stacked ? 16 : detailsX, stacked ? 82 : detailsY - analysisHeight, stacked ? width - 32 : detailsWidth) : "";
+      const characteristicsDescription = renderCircuitCharacteristics(partsGroup, state, characteristics, mode, stacked ? 16 : detailsX, stacked ? 42 + searchOffset : detailsY - analysisHeight, stacked ? width - 32 : detailsWidth);
       const alternativeParts = new Map();
       byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY}) scale(${drawingWidth / 680})`);
       byId("schematicR1Value").textContent = state?.pairSetup ? "—" : state ? format(state.circuit.r1, "Ω") : "—";
@@ -1565,7 +1592,7 @@
       const roleDescription = `${solveLabel}. Yellow means missing or invalid input; green means known; red identifies the value to find. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
       const voltageDescription = state && !state.pairSetup ? `Nominal VMID ${format(state.result.vout, "V")}; minimum ${format(state.bounds.min, "V")}; maximum ${format(state.bounds.max, "V")}.${state.pair ? ` Target error ${percent(state.pair.error)}.` : ""} ` : "";
       const searchDescription = mode === "pairs" ? `Search target VMID ${byId("pairVmid").value || "not set"} V; allowed error ±${byId("pairErrorPct").value || "not set"}%. Edit the source, target, load, resistor constraints or Options; Find pairs runs the search. Found resistance and performance values are read-only. Circuit inputs and BOM change only on Apply. ` : "";
-      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.${previewDescription ? " " + previewDescription : ""}` : "Calculation unavailable. Enter valid circuit data to update the schematic.");
+      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.") + " " + characteristicsDescription;
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       // The download is a self-contained snapshot of the live SVG.
@@ -2331,7 +2358,7 @@
         id: arm, name: arm === "r1" ? "R1" : "R2", resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV,
         mpn: chosen.mpn, catalog: chosen, alternatives: pairAlternativeParts(pair, side)
       }], "series", voltage, current);
-      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, bounds: pair.bounds, pair, analyzedAt: spec.analyzedAt };
+      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, bounds: pair.bounds, pair, target: spec.target, allowedErrorPct: spec.errorPct, analyzedAt: spec.analyzedAt };
       renderSchematic();
     }
 
@@ -2789,6 +2816,7 @@
     function applySelectedPair() {
       if (!pairSelected || !pairSpec) return;
       const pair = pairSelected, spec = pairSpec;
+      catalogDesignVmid = spec.target;
       byId("vin").value = spec.vin; byId("tolVin").value = spec.sourceTolerance;
       byId("rl").value = spec.rl === null ? "" : spec.rl / Number(byId("rlUnit").value); byId("tolRl").value = spec.loadTolerance;
       for (const [arm, index, part] of [["r1", "1", pair.top], ["r2", "2", pair.bot]]) {
@@ -3325,7 +3353,7 @@
           return `<tr><th scope="row">${rating.label}</th>${cells}</tr>`;
         }).join("");
         byId("updateStatus").textContent = `Results updated. Output ${format(result.vout, "V")}; input current ${format(result.i1, "A")}.`;
-        schematicState = { circuit, tolerances, networks, physical, result, bounds };
+        schematicState = { circuit, tolerances, networks, physical, result, bounds, target: mode === "vout" ? catalogDesignVmid : target, allowedErrorPct: mode === "tolerance" ? byId("targetError").valueAsNumber : null, analyzedAt: new Date().toISOString() };
         renderSchematic();
         renderCatalogMatches();
       } catch (error) {

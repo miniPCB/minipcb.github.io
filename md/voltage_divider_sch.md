@@ -33,7 +33,7 @@ power. Equivalent arm labels allow total-resistance editing when that arm is an
 input; calculated arm values are read-only.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
-connections visible. The right side contains a native SVG table with **Ref Des**,
+connections visible. The **Parts list and electrical part stress** table contains **Ref Des**,
 **Description**, **TNPW PN**, **M55342 PN**, **Pstress**, **Vstress** and **Istress**
 columns and one row per physical resistor. The description shows actual resistance,
 tolerance and footprint; unassigned footprints read **Footprint not set**. On
@@ -144,13 +144,32 @@ Selecting a candidate preserves the applied circuit inputs and BOM. The heading
 identifies the preview, and Download SVG captures it. Leaving the visualization
 or selecting an empty region restores the pair-search input display.
 
-A compact **Pair preview · analysis** table lists nominal total power, input
-current and source resistance Rth, followed by worst-case Pstress and V/I stress.
-It appears beside the circuit on larger screens and above it on smaller screens.
-The **Analyzed** row records the completed search date and time in UTC; filtering,
-resizing or choosing another pair keeps that timestamp. A new search records a
-new timestamp. The **Calculator** link opens the voltage divider page. Both the
-timestamp and link remain in the downloaded SVG.
+The common **Circuit characteristics** table appears in every Find mode, beside
+the circuit on larger screens and above it on smaller screens. It identifies the
+calculated quantity and lists nominal total power, input current and source
+resistance Rth. Ordinary modes show the highest nominal Pstress and V/I stress
+among all physical RTOP/RBOT parts; pair previews retain their validated worst-case
+stress values. Find RL also shows load power; tolerance analysis shows the found
+per-resistor tolerance and allowed VMID error.
+
+Where an independent VMID target exists (inverse modes and pair searches),
+**Nominal target error** is the absolute output error divided by the target
+magnitude, expressed as a percentage; **0%** means on target. **Worst target
+error** uses the full minimum/maximum VMID interval. Pair searches also show the
+allowed error. Find VMID instead shows **VMID accuracy**, the worst tolerance
+deviation about its nominal result, without inventing a target. Zero targets and
+zero nominal VMID use voltage error/variation because relative percent is undefined.
+After adopting a nearby catalog part, Find VMID retains the original nominal
+VMID as its reference and shows the resulting target error. Applying a resistor
+pair retains that search's requested VMID target. A manual circuit edit clears
+the saved reference, returning to the nominal tolerance band.
+
+The **Analyzed** row records the successful circuit calculation or completed pair
+search date and time in UTC. Filtering, resizing or choosing another pair keeps
+that timestamp; recalculating the circuit or running a new search records a new
+one. Missing/invalid inputs and pair setup keep the common table while clearing
+unavailable or stale results. The **Calculator** link opens the voltage divider
+page. The table, timestamp and link remain in the downloaded SVG in every mode.
 
 The SVG also sets up the pair search before any results exist. Click VTOP for the
 source and its tolerance, the separate **Target** row for VMID and its allowed

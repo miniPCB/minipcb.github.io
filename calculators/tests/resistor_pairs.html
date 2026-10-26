@@ -125,14 +125,14 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   const actualInputs=['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|'),actualBom=w.catalogBomCsv();
   const different=items.findIndex(p=>Math.abs(p.result.vout-6)>0.001);w.selectPair(different);
   assert(get('schematicVmid').textContent==='VMID '+w.format(items[different].result.vout,'V')&&primary('r1')===items[different].top.mpn&&primary('r2')===items[different].bot.mpn,'Selecting a pair previews its VMID and both actual MPNs in the top SVG');
-  assert(get('schematicHeading').textContent.includes('preview')&&get('liveSchematic').querySelector('[data-field="pairPerformance"]').textContent.includes('preview'),'The SVG identifies candidate preview separately from the applied circuit');
+  assert(get('schematicHeading').textContent.includes('preview')&&get('liveSchematic').querySelector('[data-field="circuitCharacteristics"]').textContent.includes('preview'),'The SVG identifies candidate preview separately from the applied circuit');
   assert(['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|')===actualInputs&&w.catalogBomCsv()===actualBom,'Selecting a chart/table pair leaves actual inputs and BOM intact');
   set('pairAxisX','power');set('pairAxisY','error');setFamilies('tnpw');
   assert(shown().length>0&&shown().every(p=>p.top.familyId===tid&&p.bot.familyId===tid),'Family filtering restricts table pairs to the selected family combination');
   assert(primary('r1').startsWith('TNPW')&&d.querySelector('[data-schematic-part="r1"] [data-field="mpnAlternative"]').textContent.includes('M55342'),'A TNPW preview also displays the qualifying exact-value M55342 alternative');
   assert(d.querySelector('[data-schematic-part="r1"] [data-field="alternativeLimits"]').textContent.includes('150 mW'),'SVG alternatives retain their own power rating rather than the selected family rating');
   const svgSnapshot=await(await fetch(get('schematicDownload').href)).text();
-  assert(svgSnapshot.includes('TNPW')&&svgSnapshot.includes('M55342')&&svgSnapshot.includes('pairPerformance')&&!new DOMParser().parseFromString(svgSnapshot,'image/svg+xml').querySelector('parsererror'),'Downloaded SVG captures both family numbers and selected-pair performance');
+  assert(svgSnapshot.includes('TNPW')&&svgSnapshot.includes('M55342')&&svgSnapshot.includes('circuitCharacteristics')&&!new DOMParser().parseFromString(svgSnapshot,'image/svg+xml').querySelector('parsererror'),'Downloaded SVG captures both family numbers and selected-pair characteristics');
   get('overviewTab').click();assert(!get('schematicHeading').textContent.includes('preview')&&!primary('r1'),'Leaving the visualization restores the current circuit SVG');
   get('pairTab').click();assert(primary('r1').startsWith('TNPW'),'Returning to the visualization restores its selected pair preview');
   set('pairFilterXMin','1');set('pairFilterXMax','10');set('pairFilterYMin','1.5');set('pairFilterYMax','3.5');
