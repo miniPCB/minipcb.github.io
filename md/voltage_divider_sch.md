@@ -15,6 +15,52 @@ and downloading files keep your work on the page. Circuit data is not saved
 between visits; the browser controls the warning text and requires prior user
 interaction before showing it.
 
+Right-click a physical RTOP/RBOT resistor in the live SVG to add a resistor in
+**series** with it or in **parallel** across it. Focus the resistor and press
+**Shift+F10** for the same menu; arrow keys select an action and Escape closes
+it. Additions apply to that resistor, so an arm can contain nested series and
+parallel branches. The drawing, equivalent resistance, per-part currents,
+powers, tolerance limits, stresses and BOM use that actual connection tree.
+The work form shows **Mixed · follow schematic** for a mixed arm; choosing
+Series chain or Parallel bank reconnects every resistor in that arm accordingly.
+Remove prunes the selected resistor and collapses one-member branches. Pair
+searches continue to use one resistor per arm; apply a pair before editing its
+construction.
+
+New resistors default to **undefined automatic values**. Existing entered values
+stay fixed. The **Choose resistor values** form lets you set target VMID, a
+preferred nominal error, catalog family, footprint, TCR and starting RTOP + RBOT.
+Each physical resistor retains its own tolerance selection. Use the context menu
+or each part's checkbox to mark other resistances automatic; **Make all resistors
+automatic** includes both arms. Select one automatic resistor as the **ratio
+trim**. **Keep the current value fixed** converts a chosen value into an input.
+
+The first picking rule seeks similar **nominal dissipated power** across all
+non-trim RTOP/RBOT resistors, including fixed resistors. It samples power scales and
+refines discrete catalog choices, then inverts the trim resistor's connection
+path and checks neighboring catalog values to approach the requested divider
+ratio. It prefers results inside the nominal error band and then lower power
+spread; if no searched candidate meets the band, it reports the closest result
+found and labels it **outside preferred band**. The spread is the non-trim
+maximum minus minimum power, divided by their mean. Starting resistance sets
+the initial scale and breaks otherwise equivalent choices; it is not a hard
+total-resistance constraint. The search is bounded, not exhaustive or a proof of
+the globally best catalog combination.
+
+Automatic choices use the shared TNPW or M55342-family catalog and its supported
+ordering rules at 70 °C. The chosen footprint determines power/voltage limits;
+nominal per-part stress must remain within those limits. Source/load and
+component tolerances remain part of the circuit analysis; the preferred design
+band is nominal, unlike the existing real-pair search's worst-case band. Review
+the resulting tolerance interval and stresses. Supplier stock is not checked.
+Actual selected values and MPNs appear in the SVG and copied BOM; the resistance
+input remains blank with its chosen value as a placeholder to distinguish an
+automatic value from a fixed input. Edits invalidate old choices and clear stale
+analysis until values are chosen again. Switching Find modes fixes already
+chosen resistances before the ordinary solver runs. Reset defaults clears
+construction, automatic roles and chosen parts. SVG downloads preserve the
+connection drawing as a static snapshot.
+
 The calculation choices appear above the live circuit SVG. Each choice lists
 **Given** inputs and the value to **Find**; the form and diagram use the same
 **Find** wording. The SVG updates VTOP, VMID, the equivalent arm resistances,
