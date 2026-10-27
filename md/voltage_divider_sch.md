@@ -6,6 +6,15 @@ This hand-authored reference describes the calculator's ideal DC circuit; it is
 not an EAGLE board export. The downloadable LTspice file contains the default
 values below. Calculator edits do not modify these reference files.
 
+After circuit edits or resistor-pair searches, leaving, refreshing or closing the
+page requests the browser's standard confirmation so you can stay and keep your
+work. This includes changes made through the SVG and unfinished SVG edits.
+Restoring the original circuit and search defaults clears the warning when no
+search results or assigned parts remain. Switching result tabs, copying tables
+and downloading files keep your work on the page. Circuit data is not saved
+between visits; the browser controls the warning text and requires prior user
+interaction before showing it.
+
 The calculation choices appear above the live circuit SVG. Each choice lists
 **Given** inputs and the value to **Find**; the form and diagram use the same
 **Find** wording. The SVG updates VTOP, VMID, the equivalent arm resistances,

@@ -828,6 +828,39 @@
     ];
     const form = document.getElementById("dividerForm");
     const byId = id => document.getElementById(id);
+    let initialCircuitWork = null, schematicDraftWork = null, leaveWarningActive = false;
+    const initialPairWork = new Map();
+
+    function workFormValues(owner) {
+      return [...owner.querySelectorAll("input, select")]
+        .filter(input => input.tagName !== "SELECT" || input.options.length)
+        .map(input => [input.id, input.type === "checkbox" || input.type === "radio" ? input.checked : input.value, input.validity.badInput])
+        .sort((a, b) => a[0].localeCompare(b[0]));
+    }
+
+    function hasCircuitWork() {
+      if (initialCircuitWork === null) return false;
+      return JSON.stringify(workFormValues(form)) !== initialCircuitWork
+        || workFormValues(byId("pairForm")).some(([id, ...value]) => JSON.stringify(value) !== initialPairWork.get(id))
+        || appliedCatalogParts.size > 0 || catalogDesignVmid !== null || pairSpec !== null || pairComparisons.size > 0
+        || (byId("schematicEditor").open && JSON.stringify(workFormValues(byId("schematicEditForm"))) !== schematicDraftWork);
+    }
+
+    function confirmCircuitLeave(event) {
+      if (!hasCircuitWork()) return;
+      // Browsers supply the confirmation wording and require prior user interaction.
+      event.preventDefault();
+      event.returnValue = true;
+    }
+
+    function refreshLeaveWarning() {
+      const active = hasCircuitWork();
+      if (active === leaveWarningActive) return;
+      leaveWarningActive = active;
+      if (active) window.addEventListener("beforeunload", confirmCircuitLeave);
+      else window.removeEventListener("beforeunload", confirmCircuitLeave);
+    }
+
     const resultTabs = [...byId("resultTabs").querySelectorAll('[role="tab"]')];
 
     function selectResultTab(id, focus = false) {
@@ -1706,6 +1739,7 @@
       byId("schematicEditHelp").textContent = key === "plot-axes" ? "Choose axes for the first SVG plot and the detailed chart. Other performance slider filters remain in effect." : "These settings belong to the resistor-pair search. Saving finds new pairs; the applied circuit and BOM change only when you choose Apply. TCR applies to both arms.";
       byId("schematicEditSave").textContent = key === "plot-axes" ? "Update axes" : "Save & find pairs"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
       byId("schematicEditor").showModal();
+      schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
       const selected = fields[focus === "tolerance" ? `pairTol${side}` : focus === "power" ? `pairPackage${side}` : ids[0]] || fields[ids[0]];
       selected.focus(); if (selected.tagName === "INPUT") selected.select();
     }
@@ -1758,6 +1792,7 @@
       byId("schematicEditError").hidden = true;
       for (const input of byId("schematicEditForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
       byId("schematicEditor").showModal();
+      schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
       const field = { tolerance: kind === "part" ? "PartTolerance" : "Tolerance", power: byId("schematicEditFootprint").disabled ? byId("schematicEditFamily").disabled ? "PartTolerance" : "Family" : "Footprint", connection: "Connection" }[focus] || "Value";
       byId(`schematicEdit${field}`).focus();
       if (byId(`schematicEdit${field}`).tagName === "INPUT") byId(`schematicEdit${field}`).select();
@@ -2136,6 +2171,7 @@
         return [];
       } finally {
         if (generation === pairGeneration) { byId("pairFind").disabled = false; byId("pairCancel").hidden = true; }
+        refreshLeaveWarning();
       }
     }
 
@@ -3228,7 +3264,7 @@
     function update() {
       for (const input of form.querySelectorAll("input")) input.removeAttribute("aria-invalid");
       const mode = configureSolver();
-      if (mode === "pairs") return;
+      if (mode === "pairs") { refreshLeaveWarning(); return; }
       try {
         const networks = Object.fromEntries(ARMS.map(arm => [arm, readNetwork(arm, mode)]));
         const inputs = {
@@ -3358,6 +3394,8 @@
         renderCatalogMatches();
       } catch (error) {
         clearResults(error.message);
+      } finally {
+        refreshLeaveWarning();
       }
     }
 
@@ -3503,7 +3541,19 @@
     initializeBomControls("pairBom", true, () => { pairComparisonRevision++; renderPairComparison(true); });
     renderPairComparison();
     update();
-    window.resistorCatalogReady = initializeCatalog();
+    initialCircuitWork = JSON.stringify(workFormValues(form));
+    for (const [id, ...value] of workFormValues(byId("pairForm"))) initialPairWork.set(id, JSON.stringify(value));
+    // Recheck after UI handlers run, including programmatic SVG edits and part adoption.
+    for (const type of ["input", "change", "click", "submit"]) document.addEventListener(type, () => queueMicrotask(refreshLeaveWarning));
+    document.addEventListener("reset", () => setTimeout(refreshLeaveWarning, 0));
+    byId("schematicEditor").addEventListener("close", refreshLeaveWarning);
+    window.addEventListener("pageshow", refreshLeaveWarning);
+    window.resistorCatalogReady = initializeCatalog().then(ready => {
+      // Catalog selects arrive asynchronously; preserve any inputs edited while loading.
+      for (const [id, ...value] of workFormValues(byId("pairForm"))) if (!initialPairWork.has(id)) initialPairWork.set(id, JSON.stringify(value));
+      refreshLeaveWarning();
+      return ready;
+    });
   </script>
 </body>
 </html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Leave warning checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui,sans-serif}pre{white-space:pre-wrap}iframe{display:block;border:0;width:1440px;height:2200px}</style></head>
+<body>
+<h1>Leave warning checks</h1><pre id="results" role="status">RUNNING</pre>
+<iframe id="calculator" src="../voltage_divider.html?leave-warning-test=1" title="Calculator under test"></iframe>
+<script>
+"use strict";
+const checks=[],failures=[],assert=(condition,label)=>{checks.push(label);if(!condition)failures.push(label);};
+document.getElementById("calculator").addEventListener("load",async event=>{try{
+  const w=event.target.contentWindow,d=w.document,get=id=>d.getElementById(id),pause=()=>new Promise(resolve=>setTimeout(resolve,15));
+  const errors=[];w.addEventListener("error",event=>errors.push(event.message));
+  const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event("input",{bubbles:true}));};
+  const reset=async()=>{get("dividerForm").reset();get("pairForm").reset();await pause();};
+  const guarded=()=>{const event=new w.Event("beforeunload",{cancelable:true});w.dispatchEvent(event);return event.defaultPrevented;};
+  const open=(key,focus="value")=>get("liveSchematic").querySelector(`[data-schematic-edit="${key}"][data-edit-focus="${focus}"]`).dispatchEvent(new w.MouseEvent("click",{bubbles:true}));
+  assert(!guarded(),"An untouched calculator does not request confirmation while catalogs load");
+  assert(await w.resistorCatalogReady,"Shared resistor catalogs load");
+  assert(!guarded(),"Catalog initialization and initial calculation do not trigger the warning");
+  for(const id of ["stressTab","parts2Tab","overviewTab"]){get(id).click();await pause();assert(!guarded(),`${id}: switching result tabs does not create circuit work`);}
+  w.update();w.renderSchematic();await pause();assert(!guarded(),"Recalculating unchanged values and regenerating the SVG do not trigger confirmation");
+  set("vin","24");assert(guarded()&&get("vout").textContent==="12 V","Editing VTOP immediately protects the recalculated circuit");
+  assert(guarded()&&get("vin").value==="24","Repeated canceled leave attempts preserve circuit inputs");
+  set("vin","12");await pause();assert(!guarded(),"Restoring the original circuit values disarms the warning");
+  set("r1","");assert(guarded()&&!get("inputError").hidden,"Incomplete or invalid circuit edits are protected too");
+  await reset();assert(!guarded(),"Reset restores the untouched circuit without a leftover warning");
+  for(const mode of ["vin","r1","r2","rl","tolerance","pairs"]){
+    if(mode==="tolerance")set("solveFor",mode);else d.querySelector(`[data-solve-mode="${mode}"]`).click();
+    await pause();assert(guarded(),`${mode}: Find mode changes are protected`);
+    await reset();assert(!guarded(),`${mode}: resetting both forms removes the warning`);
+  }
+  get("r1Multiple").click();get("r1Split").click();await pause();
+  const part=get("r1Parts").firstElementChild.dataset.part;
+  assert(guarded()&&get("r1Parts").children.length===4,"A four-resistor arm is protected");
+  set(`${part}Power`,"0.05");set(`${part}Tol`,"0.5");assert(guarded(),"Individual physical-part ratings and tolerances remain protected");
+  await reset();assert(!guarded(),"Resetting a multi-resistor circuit removes topology and edit warnings");
+  open("source");await pause();assert(!guarded(),"Opening an SVG editor alone does not trigger confirmation");
+  set("schematicEditValue","18");await pause();assert(guarded()&&get("vin").value==="12","Unfinished SVG edits are protected before they are applied");
+  get("schematicEditCancel").click();await pause();assert(!guarded()&&get("vin").value==="12","Canceling an SVG draft clears its warning and preserves the original circuit");
+  open("source");set("schematicEditValue","18");get("schematicEditForm").requestSubmit();await pause();
+  assert(guarded()&&!get("schematicEditor").open&&get("vin").value==="18","Saved SVG changes protect the actual circuit");
+  await reset();open("r1","tolerance");set("schematicEditPartTolerance","0.5");await pause();assert(guarded(),"An unsaved resistor dropdown edit is protected");
+  get("schematicEditor").dispatchEvent(new w.Event("cancel",{cancelable:true}));await pause();assert(!guarded(),"Escape cancellation clears a discarded dropdown edit");
+  const chosen=[...w.eval("schematicBomChoices").values()].find(choice=>choice.part.id==="r1"&&choice.family==="tnpw");
+  w.applyCatalogPart(chosen.candidate,"r1",true);await pause();assert(guarded()&&w.eval("appliedCatalogParts").size===1,"Real-part adoption is protected even without a form input event");
+  await reset();assert(!guarded(),"Resetting assigned parts returns to a clean circuit");
+  set("pairVmid","5");await pause();assert(guarded(),"Pair-search targets are protected independently of the applied circuit");
+  get("dividerForm").reset();await pause();assert(guarded(),"Resetting the circuit does not discard the warning for changed pair settings");
+  get("pairForm").reset();await pause();assert(!guarded(),"Resetting search settings clears their warning when no results remain");
+  get("pairTab").click();get("pairForm").requestSubmit();await w.pairSearchReady;
+  assert(w.eval("pairItems.length")>0&&guarded(),"Completed searches using default inputs are protected even outside Find pairs mode");
+  get("pairCompareAdd").click();await pause();assert(w.eval("pairComparisons.size")===1&&guarded(),"Selected comparison options retain leave protection");
+  get("pairApply").click();await pause();assert(guarded()&&w.eval("appliedCatalogParts").size===2,"Applying a pair protects both assigned resistor part numbers");
+  get("dividerForm").reset();await pause();assert(guarded(),"Resetting the circuit retains protection for existing search and comparison results");
+  get("pairForm").reset();await pause();assert(!guarded(),"Resetting both circuit and search results clears all leave protection");
+  set("vin","24");get("schematicDownload").click();await pause();
+  assert(d.documentElement.isConnected&&get("vin").value==="24"&&guarded(),"Downloading the SVG preserves circuit work and leave protection");
+  await reset();assert(!guarded(),"Final reset leaves the calculator clean");
+  assert(errors.length===0,"No browser runtime errors: "+errors.join("; "));
+}catch(error){failures.push(error.stack);}
+document.getElementById("results").textContent=JSON.stringify({status:failures.length?"FAIL":"PASS",count:checks.length,failures,checks},null,2);document.body.dataset.status=failures.length?"FAIL":"PASS";
+});
+</script>
+</body></html>
