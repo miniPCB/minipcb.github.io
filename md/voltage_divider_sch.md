@@ -6,7 +6,7 @@ This hand-authored reference describes the calculator's ideal DC circuit; it is
 not an EAGLE board export. The downloadable LTspice file contains the default
 values below. Calculator edits do not modify these reference files.
 
-After circuit edits or resistor-pair searches, leaving, refreshing or closing the
+After circuit edits or resistor-combination searches, leaving, refreshing or closing the
 page requests the browser's standard confirmation so you can stay and keep your
 work. This includes changes made through the SVG and unfinished SVG edits.
 Restoring the original circuit and search defaults clears the warning when no
@@ -23,9 +23,9 @@ parallel branches. The drawing, equivalent resistance, per-part currents,
 powers, tolerance limits, stresses and BOM use that actual connection tree.
 The work form shows **Mixed · follow schematic** for a mixed arm; choosing
 Series chain or Parallel bank reconnects every resistor in that arm accordingly.
-Remove prunes the selected resistor and collapses one-member branches. Pair
-searches continue to use one resistor per arm; apply a pair before editing its
-construction.
+Remove prunes the selected resistor and collapses one-member branches.
+**Find real resistor combinations** can reuse this construction, or you can
+right-click its search SVG to build an independent network before applying it.
 
 New resistors default to **undefined automatic values**. Existing entered values
 stay fixed. The **Choose resistor values** form lets you set target VMID, a
@@ -51,7 +51,7 @@ Automatic choices use the shared TNPW or M55342-family catalog and its supported
 ordering rules at 70 °C. The chosen footprint determines power/voltage limits;
 nominal per-part stress must remain within those limits. Source/load and
 component tolerances remain part of the circuit analysis; the preferred design
-band is nominal, unlike the existing real-pair search's worst-case band. Review
+band is nominal, unlike the combination search's worst-case band. Review
 the resulting tolerance interval and stresses. Supplier stock is not checked.
 Actual selected values and MPNs appear in the SVG and copied BOM; the resistance
 input remains blank with its chosen value as a placeholder to distinguish an
@@ -68,8 +68,8 @@ and the open/finite RL value as you edit.
 Voltage readouts are part of the circuit drawing: VTOP and source tolerance sit
 beside the source, and VMID sits at the end of a blue output wire extending just
 past the RL branch. A separate, spaced VMID readout lists **Nominal**, **Min** and
-**Max** voltages for both normal calculations and pair previews. Its minimum and
-maximum use the same entered tolerance limits as the analysis results; pair
+**Max** voltages for both normal calculations and combination previews. Its minimum and
+maximum use the same entered tolerance limits as the analysis results; combination
 previews also show their target error. Invalid circuit data clears all three
 values. Calculated voltages are read-only; an entered VMID target remains editable
 in inverse modes. The readouts retain their role colors and appear in the
@@ -110,8 +110,8 @@ A **Find** heading and target labels identify the active calculation without rel
 color; known components omit repeated status labels. The selected calculation,
 form inputs and result use the same cues; a calculated value stays red to identify
 its role. A blank optional RL is a known open circuit. Multi-part arms highlight
-all resistors being scaled. Pair previews highlight the candidate RTOP/RBOT in
-red. Without a selected pair, the diagram shows pair-search inputs and unknown
+all resistors being scaled. Combination previews highlight the candidate RTOP/RBOT in
+red. Without a selected combination, the diagram shows combination-search inputs and unknown
 resistor values instead of the applied circuit.
 Stress colors continue to describe rating limits independently of input roles.
 
@@ -119,7 +119,7 @@ Part-number tooltips include resistance alongside the part's operating limits;
 both graph hover readouts also show the resistance of each part. The **Copy BOM**
 pill below the SVG parts table copies the displayed physical resistors as a
 spreadsheet-ready table, including quantity, resistance, tolerance, footprint,
-selected part number, both family part numbers and nominal P/V/I stress. In pair
+selected part number, both family part numbers and nominal P/V/I stress. In combination
 mode it copies the preview without applying it to the circuit. If clipboard
 access is unavailable, the text is selected below the diagram for manual copying.
 
@@ -138,9 +138,11 @@ power rating, working-voltage limit and real part number, then recalculates the
 circuit and BOM while preserving the active Find mode. Calculated Find values
 remain read-only. Over-rating or infeasible recommendations cannot be applied;
 their tooltip shows the candidate's limits and preview result or reason.
-In pair mode, suggestions come from validated visible pairs with the other
-resistor unchanged. **Preview** selects that pair; **Apply pair** remains the
-explicit step that transfers it to the circuit.
+In the two-resistor search, **Preview** selects a validated visible combination
+with the other resistor unchanged. Network previews also show exact-value
+other-family matches when a full-combination substitution passes the limits;
+these are unapplied informational matches. **Apply combination** transfers the
+selected complete result to the circuit.
 
 **Copy BOM** includes the description and assignment status. Exact matches appear
 in the family PN columns; nearby-value or different-tolerance proposals appear
@@ -189,65 +191,68 @@ below and the LTspice/Markdown downloads remain the default circuit references;
 the calculator keeps its live SVG, editor, styling, and logic in the one HTML
 file. Downloads are static annotated images without calculator editing controls.
 
-In the resistor-pair visualization, selecting a point or table row previews that
-pair in the top SVG, including VMID bounds, error, power, current, Rth and worst
+In the resistor-combination visualization, selecting a point or table row previews that
+combination in the top SVG, including VMID bounds, error, power, current, Rth and worst
 stress. The per-part fields show the selected MPN's nominal stress. Matching
 TNPW or M55342/D55342 alternatives appear alongside it with their own power and
-voltage limits. Preview alternatives must also satisfy the pair search criteria;
+voltage limits. Preview alternatives must also satisfy the combination search criteria;
 other calculator views check alternatives at the nominal operating point.
 Selecting a candidate preserves the applied circuit inputs and BOM. The heading
 identifies the preview, and Download SVG captures it. Leaving the visualization
-or selecting an empty region restores the pair-search input display.
+or selecting an empty region restores the combination-search input display.
 
 The common **Circuit characteristics** table appears in every Find mode, beside
 the circuit on larger screens and above it on smaller screens. It identifies the
 calculated quantity and lists nominal total power, input current and source
 resistance Rth. Ordinary modes show the highest nominal Pstress and V/I stress
-among all physical RTOP/RBOT parts; pair previews retain their validated worst-case
+among all physical RTOP/RBOT parts; combination previews retain their validated worst-case
 stress values. Find RL also shows load power; tolerance analysis shows the found
 per-resistor tolerance and allowed VMID error.
 
-Where an independent VMID target exists (inverse modes and pair searches),
+Where an independent VMID target exists (inverse modes and combination searches),
 **Nominal target error** is the absolute output error divided by the target
 magnitude, expressed as a percentage; **0%** means on target. **Worst target
-error** uses the full minimum/maximum VMID interval. Pair searches also show the
+error** uses the full minimum/maximum VMID interval. Combination searches also show the
 allowed error. Find VMID instead shows **VMID accuracy**, the worst tolerance
 deviation about its nominal result, without inventing a target. Zero targets and
 zero nominal VMID use voltage error/variation because relative percent is undefined.
 After adopting a nearby catalog part, Find VMID retains the original nominal
 VMID as its reference and shows the resulting target error. Applying a resistor
-pair retains that search's requested VMID target. A manual circuit edit clears
+combination retains that search's requested VMID target. A manual circuit edit clears
 the saved reference, returning to the nominal tolerance band.
 
-The **Analyzed** row records the successful circuit calculation or completed pair
-search date and time in UTC. Filtering, resizing or choosing another pair keeps
+The **Analyzed** row records the successful circuit calculation or completed combination
+search date and time in UTC. Filtering, resizing or choosing another combination keeps
 that timestamp; recalculating the circuit or running a new search records a new
-one. Missing/invalid inputs and pair setup keep the common table while clearing
+one. Missing/invalid inputs and combination setup keep the common table while clearing
 unavailable or stale results. The **Calculator** link opens the voltage divider
 page. The table, timestamp and link remain in the downloaded SVG in every mode.
 
-The SVG also sets up the pair search before any results exist. Click VTOP for the
+The SVG also sets up the combination search before any results exist. Click VTOP for the
 source and its tolerance, the separate **Target** row for VMID and its allowed
 error, or RL for the optional load and its tolerance. Click a resistor reference,
-tolerance pill or package pill to choose that arm's family, package and exact
-catalog tolerance. These editors also offer the shared TCR requirement.
+tolerance pill or package pill to choose a physical resistor's family, package,
+catalog tolerance and TCR. In the two-part variant these use arm defaults; network
+parts can have independent overrides. The arm heading edits shared defaults.
 The SVG's **Options** control opens the resistance range, ambient temperature,
-shared TCR, maximum stress and optional total-power limit. **Find pairs** runs the
+shared TCR, maximum stress and optional total-power limit. **Find combinations** runs the
 search directly from the diagram. All these controls use the same settings and
-validation as the pair-search form, including when the applied circuit is invalid.
+validation as the combination-search form, including when the applied circuit is invalid.
 
-The pair diagram keeps entered targets separate from candidate nominal/min/max
+The combination diagram keeps entered targets separate from candidate nominal/min/max
 results. Resistor values and nominal performance are read-only. Saving an SVG
-search edit synchronizes the pair form and searches again; it does not apply a
+search edit synchronizes the combination form and searches again; it does not apply a
 candidate or change the circuit/BOM. Canceling, invalid edits and stale editors
 preserve the current settings and applied circuit. A search with no matches clears
 old candidate annotations and leaves its inputs editable. Use the existing
-**Apply** action to transfer a chosen pair into the circuit and BOM.
+**Apply** action to transfer a chosen combination into the circuit and BOM.
 
-Below the circuit, the same SVG contains a **Pair performance** explorer. Six
+Below the circuit, the same SVG contains a **Combination performance** explorer. Six
 two-ended sliders filter total power, input current, output Rth, target error,
-Pstress and V/I stress. Power/current/Rth are nominal; error/stress use the
-validated worst-case tolerance intervals. Positive power, current and Rth ranges
+Pstress and V/I stress. Networks add a seventh slider for non-trim power spread.
+Power/current/Rth are nominal; error uses the full output interval. Network
+stress uses conservative per-part interval bounds; the two-part variant retains
+its analytic stress maxima. Positive power, current and Rth ranges
 use logarithmic interpolation. The slider domains stay at the full search range
 so filtered-out values can be restored. Sliders, numeric chart bounds, family
 toggles, result rows and filtered CSV share one result selection; filters across
@@ -255,14 +260,14 @@ different metrics intersect. Axis changes clear the old coordinate bounds while
 retaining other performance filters. Clear filters restores every range/family.
 
 Two native SVG scatter plots show actual part-number combinations, with both axes
-rescaled to the currently filtered pairs. The first uses the detailed chart's
+rescaled to the currently filtered combinations. The first uses the detailed chart's
 selectable axes; the second plots Rth against Pstress. Disabled families and
-filtered-out pairs are omitted. Hover shows both full part numbers separately
-from the selected combination. Click a point to update the circuit preview and
+filtered-out combinations are omitted. Hover identifies each arm; the SVG parts
+table lists all physical MPNs for a selected combination. Click a point to update the circuit preview and
 table selection; clicking overlapping points cycles their actual combinations.
 Dragging either plot adds its data-space bounds to the shared filters.
 
-**Axes**, **View table**, **Compare pair**, **Copy comparison** and **Apply pair**
+**Axes**, **View table**, **Compare combination**, **Copy comparison** and **Apply combination**
 are available beside the plots. Comparison membership survives performance
 filtering, and copying uses the existing standard comparison table and its column
 and performance filters. Only Apply changes the circuit/BOM. Controls reflow on
@@ -326,23 +331,23 @@ At the defaults, VMID is 6 V, I1 and I2 are 0.6 mA, and R1 and R2 each dissipate
 RTOP is R1 and RBOT is R2. The calculator can solve for VMID, VTOP, RTOP, RBOT,
 or RL while the remaining nominal quantities are held at their entered values.
 Choose a calculation button at the top of the page. The sixth button,
-**Find real resistor pairs**, searches actual catalog parts for a target VMID.
+**Find real resistor combinations**, searches actual catalog parts for a target VMID.
 Each circuit-analysis view names the goal, explains its inputs, and shows a
 matching equation and Calculate action. Only known quantities appear as primary
 inputs; the calculated quantity appears in the result banner. Switching views
 preserves circuit data.
 
 The result area uses **Overview**, **Tolerances**, **Stress**,
-**Ratings**, **Parts**, **Parts (2)**, **Resistor pairs**, and **Method** tabs to show
+**Ratings**, **Parts**, **Parts (2)**, **Resistor combinations**, and **Method** tabs to show
 one focused panel at a time.
 The solved value stays visible above the tabs; all results continue updating as
 you edit. Switching result tabs preserves circuit data and selected parts.
-Pair searches open **Resistor pairs**; circuit calculation choices open
+Combination searches open **Resistor combinations**; circuit calculation choices open
 **Overview**. The Calculate action opens the relevant result view, and Reset
 restores **Overview**. Use Left/Right Arrow, Home, or End to navigate the tabs
 with a keyboard. Printing includes all result panels.
 
-Output load and tolerance/rating settings are collapsible. Pair searches have
+Output load and tolerance/rating settings are collapsible. Combination searches have
 their own target and tolerance form. An invalid setting automatically opens its
 containing sections so it can be corrected. The page styling and circuit-analysis
 logic remain in the one HTML file; shared part catalogs and their numbering
@@ -420,7 +425,7 @@ Largest deviation is the larger endpoint distance from nominal VMID, divided by
 `abs(nominal VMID)`. It is undefined for zero nominal output.
 
 At the defaults, ±1% R1/R2 gives VMID from 5.94 to 6.06 V. A ±5% output error
-band around a 6 V target therefore includes that divider. The pair search checks
+band around a 6 V target therefore includes that divider. The combination search checks
 the full interval against the target band, including any nominal output mismatch.
 The other operating-point and stress tabs continue to use nominal values.
 
@@ -435,102 +440,110 @@ both arm intervals and the individual part intervals.
 These are independent worst-case limits, not a statistical average: four equal
 1% parts still allow a 1% equivalent arm excursion when they all vary together
 in the same direction. Manual multi-part stress analysis uses nominal per-part
-voltages and currents; the two-resistor pair search additionally checks worst-case
+voltages and currents; the two-resistor search additionally checks worst-case
 power and voltage across its selected source, resistor, and load intervals.
 
-## Finding real resistor pairs
+## Finding real resistor combinations
 
-Choose **Given VTOP, VMID, tolerances → Find real resistor pairs**. Enter VTOP,
-its tolerance, target VMID, allowed target error, and the exact catalog tolerance
-for each resistor. The source and target must have the same sign, with
-`0 < abs(VMID) < abs(VTOP)`. The search uses one catalog resistor per arm.
+Choose **Given VTOP, VMID, tolerances, construction - Find real resistor
+combinations**. Set source/target voltage, source tolerance, allowed target
+error and default catalog limits for each arm. VTOP and VMID need the same sign,
+with `0 < abs(VMID) < abs(VTOP)`. Source and load settings belong to the search;
+previewing and editing search construction do not change the applied circuit.
 
-Optional settings choose the family and package independently for RTOP and RBOT,
-an inclusive resistance range for both arms, load/tolerance, ambient, TCR, maximum
-stress, and maximum total power. Defaults search both catalog families, 0805,
-1 kΩ–100 kΩ, ±1% resistors, 70 °C, and 25 ppm/°C, with an open load. Family default
-power modes, failure-rate levels, and package-compatible packing apply. These
-settings define the complete search space; unsupported or custom catalog values,
-other ordering variants, temperature drift, and multi-part networks are outside
-this pair search. The existing manual multi-part calculator remains available.
+**One resistor per arm** retains the exhaustive search over supported preferred
+values in the inclusive resistance range. It checks both catalog families,
+same-family and mixed-family combinations, and analytic worst-case stress
+maxima including interior resistance values where power peaks.
 
-**Find resistor pairs** enumerates every supported preferred value in the chosen
-range, validates real part numbers through the shared catalog engine, and checks
-same-family and mixed-family pairs. A combination qualifies only when its entire
-VMID interval lies within `target ± abs(target) × allowed error / 100`, and both
-parts meet the selected stress limit. This includes nominal ratio error, source
-tolerance, each resistor's actual tolerance, and finite-load tolerance.
+**Series / parallel networks** searches a complete physical construction,
+including nested branches. Entering this Find mode with a multi-resistor circuit
+imports that construction; **Use circuit construction** loads it explicitly.
+You can also right-click any resistor in the search SVG to add series/parallel
+parts without altering the applied circuit. Newly added resistances are unknown.
+The original two-resistor case remains available in the construction selector.
 
-Worst-case power uses the maximum source magnitude and the resistor/load bounds.
-It also checks interior maximum-power points: RTOP matched to the minimum loaded
-bottom resistance, and RBOT matched to `RTOP_min || RL_max` (or RTOP_min with no
-load). Worst voltage uses the appropriate monotonic endpoints. V/I stress follows
-the existing power-derived limit capped by the part's working voltage; independent
-datasheet current limits are not modeled. Total-power limits include RL, whose
-rating is not checked. Catalog ambient derates allowable power; TCR filters codes.
+**Find every resistor value** searches all physical values. **Keep entered fixed
+values** retains imported manual resistances and varies automatic resistors.
+Use the context menu to mark a resistor automatic, select it as ratio trim, or
+fix its current previewed value. A fixed value must have a real supported catalog
+part within the selected constraints; unsupported fixed values produce an error
+rather than a fabricated part number. The ratio-trim selector lists the free
+resistors. With no free values, the search checks catalog assignments for the
+fully specified network.
 
-All matches appear on the interactive scatter chart. Choose power, input current,
-or unloaded output resistance Rth for the logarithmic X axis; compare worst target
-error, nominal error/VMID, or worst P/V/I stress on Y. Points can overlap when
-different part numbers have the same performance. Hover to inspect a point,
-or select a point/table row to preview its pair in the top SVG. Sorting applies
-to all matching results; table pages show 50 visible combinations at a time. **Download all
-combinations CSV** includes every match, its conditions, source links, and nominal
-and worst-case performance. Supplier stock remains unverified.
+Family, footprint, tolerance and TCR fields are arm defaults. Each physical SVG
+reference or specification pill can open an individual catalog-limit editor.
+Those overrides take precedence; other parts retain their defaults. Imported
+construction preserves each part's tolerance and any known footprint/TCR.
+Ambient, power modes and compatible ordering rules determine actual allowed
+power and voltage. Independent fixed ratings are not pooled into an arm rating.
+Supplier stock is not checked.
 
-Click and drag a rectangle over the chart to show only pairs inside that area in
-the table. Dragging in any direction replaces the previous area. Points outside
-the bounds remain dimmed as context. The **TNPW / TNPW**, **M55342 / M55342** and
-**Mixed families** legend checkboxes independently control which combinations
-appear in the chart, table and filtered CSV. All three start selected; unchecking
-all three leaves an empty chart and table. Unselected families are hidden entirely.
-**Filter bounds** offers equivalent numeric limits in the displayed axis units.
-Numeric bounds and selected families intersect. Axis changes clear coordinate
-bounds and retain selected families; resizing keeps the selected data range.
-**Clear filters** restores all matches and enables all three families. With the chart
-focused, Escape cancels an unfinished drag, or clears all filters when no drag
-is active.
+The network search samples nominal power scales, maps near-equal power values
+onto the connection tree, and chooses nearby real catalog values. One designated
+resistor trims the ratio. It checks multiple family patterns, including families
+mixed within one arm, and retains distinct MPN combinations. **Maximum non-trim
+power spread** optionally limits `(maximum - minimum) / mean * 100` for all
+physical divider resistors except the trim. The same statistic has a plot axis,
+SVG slider, sort option and optional comparison column.
 
-Counts, table sorting and pagination follow the visible subset. If the current
-pair is excluded, the first remaining pair is previewed; an empty selection
-clears the preview and disables applying or exporting a filtered pair set.
-**Download filtered CSV** includes exactly the visible pairs, while **Download
-all combinations CSV** preserves the full search. Filters do not rerun the
-catalog search. Editing search inputs or resetting the search clears filters
-and stale results together.
+Network enumeration is bounded: up to 1,000 power scales, 25,000 checked distinct
+assignments and 5,000 retained results. The status reports the checked/retained
+counts and any reached budget. Additional valid combinations may exist; this is
+not an exhaustive search or proof of the globally best design. Narrow constraints
+or use the performance filters to examine a useful subset.
 
-Use a result row's **Compare** checkbox to select multiple pairs for the
-**Compare resistor pairs** table below the results. **Add preview to comparison**
-also adds the currently previewed chart/table pair. **Preview** continues to
-choose the pair displayed in the top SVG; adding a comparison leaves the applied
-circuit and BOM unchanged. Pairs are kept in selection order without duplicates
-across pages, sorting, axis changes and chart/family filters. The count identifies
-selected pairs outside the current chart filters. Uncheck a pair, use its
-**Remove** button, or **Clear comparison** to remove selections. Starting a new
-search, editing its inputs or resetting/canceling it clears stale comparisons.
+Every retained result must fit its **entire VMID interval** inside
+`target +/- abs(target) * allowed error / 100`. This includes nominal ratio
+mismatch, source variation, each physical tolerance and finite-load tolerance.
+For networks, equivalent resistance intervals follow the actual connection tree.
+Per-part voltage/current intervals propagate through series and parallel
+branches; their conservative power/stress bounds include possible interior power
+peaks. They can reject a feasible design when the bounds are loose, but do not
+substitute nominal arm stress for individual resistor limits. The SVG analysis
+table and result status identify **Conservative interval bounds**. The ordinary
+manual circuit views still show actual nominal per-part stress. Total power
+includes RL; its rating is not checked. Temperature drift/tracking are not modeled.
 
-Each selected option has two standard BOM rows, one for RTOP and one for RBOT,
-with option number, reference, quantity, value, tolerance, actual footprint and
-manufacturer part number. VMID is shown by default. **Columns and performance
-filters** adds individual ratings, TCR/reliability, operating-point values,
-worst per-part stresses, divider statistics, search conditions or alternate-family
-numbers. Numeric filters apply maximum worst Pstress, V/I stress and worst total
-power to complete options; a part-number/text match keeps both resistors together.
-These table filters preserve the comparison selections. **Clear table filters**
-restores rows while retaining the chosen columns.
+Each plotted point represents one complete real-part combination. Click a point
+or result row to preview all physical symbols, individual descriptions/MPNs and
+nominal stress in the top SVG. The characteristics table reports actual target
+accuracy, aggregate stress bounds and non-trim power spread. Other-family exact
+MPNs are shown alongside a selected part when substituting that part also passes
+the complete combination constraints; they are marked as unapplied matches.
+Sorting and pagination operate on complete combinations, with 50 result rows per
+page. Result cells list all physical parts in each arm.
 
-**Copy table** copies only visible physical rows and selected columns as
-tab-separated text for a spreadsheet or document. Enable **Search conditions**
-to include the source, target, load and ambient in the copied table. If clipboard
-access is unavailable, the page selects the complete text for manual copying.
-Changing the selected comparison clears outdated copy text.
+Drag a rectangle on either plot, use SVG performance sliders, or enter numeric
+bounds to filter the same result set and table. **All TNPW**, **All M55342** and
+**Mixed families** classify the entire physical combination, including mixing
+inside an arm. The plots autoscale to the visible results. Points with identical
+performance can overlap and can be cycled. Clear filters restores found results;
+search input or construction edits clear stale results and comparisons. Edits or
+cancellation also prevent an older asynchronous search from publishing.
 
-**Apply selected pair** sets both actual resistor values and ratings together,
-copies the search's source/load conditions, and switches to forward VMID analysis.
-It opens the Parts (2) BOM with both MPNs and updates the live SVG. Applying a pair
-selects single-resistor arms; retained manual network editors can be re-enabled.
-Changing search settings clears stale results, export, and application. **Cancel**
-discards incomplete results, and **Reset search** restores the search defaults.
+**Compare** keeps multiple combinations in selection order. The comparison table
+and **Copy table** contain one standard BOM row per physical resistor, grouped by
+option. Optional columns include real ratings, TCR/reliability, nominal operating
+values, conservative per-part stress bounds, target accuracy and power spread.
+Text/performance filters keep complete options together. Copy includes only
+visible rows and selected columns, with a manual-copy fallback.
+
+**Download filtered CSV** includes exactly the visible combinations;
+**Download all combinations CSV** includes every retained result. Network CSV is
+long-form: one row per physical resistor with its MPN, value, tolerance,
+footprint, TCR, ambient, power mode, reliability, source, ratings, nominal
+performance, individual stress bounds, VMID interval/error, power spread,
+connection trees, UTC analysis date and calculator link. The original two-part
+search retains its existing CSV format.
+
+**Apply selected combination** copies source/load conditions, every selected
+physical value and catalog limit, and the full connection tree into the work
+form. It switches to Find VMID and opens the Parts (2) BOM with all selected
+MPNs. Static SVG downloads preserve the complete previewed circuit, parts table,
+analysis date/link and filtered plots without interactive controls. Reset search
+restores the one-resistor-per-arm search and clears its independent construction.
 
 ## Selecting actual resistor part numbers
 

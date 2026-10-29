@@ -1,0 +1,80 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Resistor combination checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui,sans-serif}pre{white-space:pre-wrap}iframe{display:block;border:0;width:1440px;height:2400px}</style></head><body><h1>Resistor combination checks</h1><pre id="results" role="status">RUNNING</pre><iframe id="calculator" src="../voltage_divider.html?combination-test=1" title="Calculator under test"></iframe><script>
+"use strict";
+const checks=[],failures=[],assert=(condition,label)=>{checks.push(label);if(!condition)failures.push(label);},near=(a,b)=>Math.abs(a-b)<=1e-8*Math.max(1,Math.abs(a),Math.abs(b));
+document.getElementById("calculator").addEventListener("load",async event=>{try{
+ const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get("liveSchematic"),pause=()=>new Promise(resolve=>setTimeout(resolve,20)),items=()=>w.eval("pairItems"),selected=()=>w.eval("pairSelected"),spec=()=>w.eval("pairSpec"),template=()=>w.eval("pairConstruction");
+ assert(await w.resistorCatalogReady,"Shared catalog loads");const errors=[];w.addEventListener("error",event=>errors.push(event.message));
+ const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event("input",{bubbles:true}));},search=async()=>{get("pairForm").requestSubmit();await w.pairSearchReady;await pause();};
+ const circuit=()=>JSON.stringify([...get("dividerForm").querySelectorAll("input,select")].map(input=>[input.id,input.value,input.checked]))+w.catalogBomCsv();
+ const action=(id,kind)=>{svg().querySelector(`[data-schematic-symbol="${id}"]`).dispatchEvent(new w.MouseEvent("contextmenu",{bubbles:true,cancelable:true,clientX:220,clientY:140}));get("resistorMenu").querySelector(`[data-resistor-action="${kind}"]`).click();};
+ assert(d.querySelector('[data-solve-mode="pairs"]').textContent.includes("Find real resistor combinations")&&get("pairTab").textContent==="Resistor combinations","The calculation tile and result tab use combinations wording");
+ d.querySelector('[data-solve-mode="pairs"]').click();const appliedBefore=circuit();
+ action("r1","series");action(template().r1.parts.at(-1).id,"series");action(template().r1.parts.at(-1).id,"series");
+ assert(get("pairConstructionMode").value==="configured"&&template().r1.parts.length===4&&template().r2.parts.length===1,"Right-click construction configures four top resistors and one bottom resistor inside Find combinations");
+ assert(circuit()===appliedBefore&&svg().querySelectorAll("[data-schematic-symbol]").length===5,"Search construction stays independent of the applied circuit and is fully drawn");
+ assert(!svg().querySelector('[data-schematic-edit][data-edit-focus="value"][data-schematic-edit="r1"]')&&!svg().textContent.includes("NaN"),"Unfound resistor values stay read-only without invalid placeholder numbers");
+ set("pairTrim","r2");set("pairMaxR","30000");await search();
+ assert(items().length>1&&items().every(item=>item.combination)&&spec().searchBounded&&spec().construction.r1.parts.length===4,"The bounded search returns multiple actual five-resistor combinations");
+ assert(get("pairStatus").textContent.includes("Bounded network search")&&get("pairStatus").textContent.includes("conservative"),"Results disclose bounded enumeration and conservative per-part stress limits");
+ assert(items().every(item=>item.error<=spec().errorPct+1e-8&&item.pstress<=spec().maxStress+1e-8&&item.vstress<=spec().maxStress+1e-8),"Every returned candidate passes full-interval voltage and per-part stress constraints");
+ assert(items().every(item=>Object.values(item.physical).flat().every(part=>part.catalog.mpn===part.mpn&&part.catalog.resistanceOhms===part.resistance&&part.catalog.case==="0805")),"Every physical resistor has its own real supported part number, value and footprint");
+ assert(new Set(items().map(item=>w.pairFamilyKey(item))).size===3,"All-TNPW, all-M55342 and mixed-family combinations are generated");
+ assert(items().some(item=>new Set(item.physical.r1.map(part=>part.catalog.familyId)).size===2&&w.pairFamilyKey(item)==="mixed"),"Mixed-family classification covers mixing inside a single arm");
+ const alternateIndex=items().findIndex(item=>item.physical.r1.some(part=>w.combinationAlternativeParts(item,"r1",part).length));w.selectPair(alternateIndex);
+ assert(alternateIndex>=0&&svg().querySelector('[data-field="mpnAlternative"]')&&svg().textContent.includes("TNPW")&&svg().textContent.includes("M55342"),"Valid exact-value alternate-family MPNs appear beside the selected physical parts in the SVG");
+ set("pairSort","powerSpread");get("pairSort").dispatchEvent(new w.Event("change",{bubbles:true}));w.selectPair(0);
+ assert(selected().powerSpread<1e-8,"The similar-power rule finds matching nominal dissipation in the four non-trim resistors");
+ assert(near(selected().circuit.r1,selected().physical.r1.reduce((sum,part)=>sum+part.resistance,0))&&near(selected().result.i1,selected().result.i2),"The four-resistor series equivalent and divider KCL are correct");
+ assert(svg().querySelectorAll("[data-schematic-symbol]").length===5&&svg().querySelectorAll("[data-schematic-part]").length===5,"A selected combination shows all five physical symbols and SVG BOM rows");
+ assert(svg().querySelector('[data-field="stressMethod"]').textContent.includes("Conservative")&&svg().querySelector('[data-field="powerSpread"]'),"Circuit characteristics identify the stress method and actual non-trim power spread");
+ assert(svg().querySelectorAll('[data-pair-slider="powerSpread"]').length===2,"The SVG includes a synchronized non-trim power-spread slider");
+ assert(get("pairRows").firstElementChild.querySelectorAll("td:nth-child(3) .part-number").length===4,"Each results row lists all RTOP part numbers instead of collapsing the network into a fictitious part");
+ for(const item of items().slice(0,10)){
+  const parts=Object.values(item.physical).flat();let safe=true;
+  for(let mask=0;mask<(1<<parts.length);mask++){
+   const resistance=part=>part.resistance*(1+((mask>>parts.indexOf(part))&1?1:-1)*part.tolerance/100),top=item.physical.r1.reduce((sum,part)=>sum+resistance(part),0),bottom=resistance(item.physical.r2[0]),result=w.analyze(Math.abs(spec().vin)*(1+spec().sourceTolerance/100),top,bottom,null);
+   for(const part of parts){const r=resistance(part),current=part===item.physical.r2[0]?result.i2:result.i1,stress=w.stress(r,current*r,current,current*current*r,part.rating,part.vmax),limit=item.worst.byPart[part.id];safe&&=stress.p<=limit.p+1e-8&&stress.v<=limit.v+1e-8&&stress.i<=limit.i+1e-8;}
+  }
+  assert(safe,"Conservative per-part bounds contain every physical-resistor tolerance corner for a sampled combination");
+ }
+ get("pairCompareAdd").click();w.selectPair(1);get("pairCompareAdd").click();
+ const spreadColumn=get("pairBomControls").querySelector('[data-bom-column-toggle="powerSpread"]');spreadColumn.checked=true;spreadColumn.dispatchEvent(new w.Event("input",{bubbles:true}));assert(w.pairComparisonTsv().includes("Non-trim power spread"),"The standard comparison table can display and copy the power-spread statistic");
+ const tsv=w.pairComparisonTsv();assert(get("pairComparisonRows").querySelectorAll("tr").length===10&&tsv.trim().split("\r\n").length===11,"Comparison and copied BOM tables contain one row per physical resistor in both selected combinations");
+ assert(Object.values(selected().physical).flat().every(part=>tsv.includes(part.mpn)),"Comparison output contains every actual selected MPN");
+ get("pairShowMil").checked=false;get("pairShowMil").dispatchEvent(new w.Event("change",{bubbles:true}));get("pairShowMixed").checked=false;get("pairShowMixed").dispatchEvent(new w.Event("change",{bubbles:true}));
+ assert(w.eval("pairView").length>0&&w.eval("pairView").every(item=>w.pairFamilyKey(item)==="tnpw"),"Family controls filter complete combinations, including their graph/table selection");
+ w.setPairMetricBounds("powerSpread",null,0);w.filterPairItems();assert(w.eval("pairView").every(item=>item.powerSpread<1e-8),"Power-spread slider bounds filter the same actual combinations");
+ const csv=w.pairSearchCsv(true);assert(csv.includes('"Reference"')&&csv.includes('"Stress method"')&&csv.trim().split("\r\n").length===1+5*w.eval("pairView").length,"Filtered CSV exports a complete long-form physical BOM for exactly the visible combinations");
+ get("pairClearFilters").click();w.selectPair(0);const snapshot=await(await fetch(get("schematicDownload").href)).text(),saved=new DOMParser().parseFromString(snapshot,"image/svg+xml");assert(!saved.querySelector("parsererror,[role=button],[tabindex],script")&&saved.querySelectorAll("[data-schematic-symbol]").length===5&&saved.querySelector('[data-field="stressMethod"]'),"Static SVG export preserves the full selected network, per-part BOM and stress method");
+ for(const width of [320,390,768,1440]){frame.style.width=width+"px";await pause();const box=svg().getBoundingClientRect();assert([...svg().querySelectorAll("text")].every(node=>{const b=node.getBoundingClientRect();return b.left>=box.left-1&&b.right<=box.right+1&&b.top>=box.top-1&&b.bottom<=box.bottom+1;}),width+"px: combination schematic, BOM and explorer text fit within the SVG");}
+ frame.style.width="1440px";await pause();
+ const first=template().r1.parts[0].id,edit=svg().querySelector(`[data-schematic-part="${first}"] [data-schematic-edit]`);edit.dispatchEvent(new w.MouseEvent("click",{bubbles:true}));
+ set("schematicPair_pairPackageTop","0603");set("schematicPair_pairTolTop","0.5");set("schematicPair_pairTcr","50");get("schematicEditForm").requestSubmit();await w.pairSearchReady;await pause();
+ assert(template().r1.parts[0].settings.package==="0603"&&template().r1.parts[0].settings.tolerancePct===0.5&&get("pairTolTop").value==="1"&&get("pairPackageTop").value==="0805","SVG part constraints can override footprint/tolerance without overwriting other resistor defaults");
+ assert(items().length&&items().every(item=>item.physical.r1[0].catalog.case==="0603"&&item.physical.r1[0].tolerance===0.5&&item.physical.r1[0].catalog.tcrPpm===50&&item.physical.r1.slice(1).every(part=>part.catalog.case==="0805"&&part.tolerance===1&&part.catalog.tcrPpm===25)),"Actual combinations honor individual footprints, TCR, ratings and tolerances");
+ action(first,"parallel");set("pairTrim","r2");await search();
+ assert(items().length&&svg().querySelector('[data-mixed-network="r1"]')&&selected().physical.r1.length===5,"Find combinations supports a parallel branch nested in a series arm");
+ const mixed=selected(),branch=template().r1.parts[1].id,find=id=>mixed.physical.r1.find(part=>part.id===id),expected=w.parallel(find(first).resistance,find(branch).resistance)+mixed.physical.r1.filter(part=>![first,branch].includes(part.id)).reduce((sum,part)=>sum+part.resistance,0);
+ assert(near(mixed.circuit.r1,expected)&&near(find(first).voltage,find(branch).voltage)&&near(find(first).current+find(branch).current,mixed.result.i1),"Nested network equivalents, shared branch voltage and branch-current sums match an independent circuit calculation");
+ assert(circuit()===appliedBefore,"Searching, previewing, filtering, comparing and editing part limits still preserve the applied circuit");
+ const expectedNumbers=Object.values(mixed.physical).flat().map(part=>part.mpn).sort(),expectedReferences=Object.values(mixed.physical).flat().map(part=>part.name).sort(),nominal=mixed.result.vout;get("pairApply").click();await pause();
+ const applied=w.eval("schematicState");assert(get("solveFor").value==="vout"&&applied.physical.r1.length===5&&applied.physical.r2.length===1&&near(applied.result.vout,nominal)&&get("r1Parts").dataset.topology,"Apply materializes every physical resistor and the exact mixed construction in the work form");
+ assert(JSON.stringify(Object.values(applied.physical).flat().map(part=>part.mpn).sort())===JSON.stringify(expectedNumbers)&&w.catalogBomCsv().includes(expectedNumbers[0]),"The applied circuit and standard BOM retain all chosen real part numbers and ratings");
+ assert(JSON.stringify(Object.values(applied.physical).flat().map(part=>part.name).sort())===JSON.stringify(expectedReferences),"Physical reference designators stay consistent between preview, comparison BOM and the applied circuit");
+ d.querySelector('[data-solve-mode="pairs"]').click();assert(template().r1.parts.length===5&&get("pairConstructionMode").value==="configured"&&!items().length&&!spec(),"Re-entering Find combinations imports the current circuit and invalidates stale results");
+ set("pairValuePolicy","fixed");action(template().r2.parts[0].id,"trim");await search();assert(items().length>0,"Fixed-value policy can search one ratio trim while holding the other imported parts fixed");
+ const fixed=template().r1.parts.filter(part=>!part.automatic);assert(items().every(item=>fixed.every(part=>near(item.physical.r1.find(actual=>actual.id===part.id).resistance,part.resistance))),"Every retained fixed resistance stays unchanged across the returned combinations");
+ set("pairVin","-12");set("pairVmid","-6");set("pairSourceTol","2");set("pairRl","100000");set("pairLoadTol","5");await search();
+ assert(items().length&&items().every(item=>item.result.vout<0&&item.error<=5+1e-8&&Object.values(item.physical).flat().every(part=>part.power>0)),"Loaded negative-source combinations preserve positive dissipation and full-interval target accuracy");
+ const loaded=selected(),all=Object.values(loaded.physical).flat(),left=loaded.physical.r1[0].id,right=loaded.physical.r1[1].id;let containsCorners=true;
+ for(let mask=0;mask<(1<<all.length);mask++)for(const direction of [-1,1]){
+  const r=new Map(all.map((part,index)=>[part.id,part.resistance*(1+((mask>>index)&1?1:-1)*part.tolerance/100)])),par=w.parallel(r.get(left),r.get(right)),top=par+loaded.physical.r1.slice(2).reduce((sum,part)=>sum+r.get(part.id),0),bottom=r.get(loaded.physical.r2[0].id),load=spec().rl*(1+direction*spec().loadTolerance/100),a=w.analyze(-Math.abs(spec().vin)*(1+spec().sourceTolerance/100),top,bottom,load);
+  for(const part of all){const resistance=r.get(part.id),current=part===loaded.physical.r2[0]?a.i2:[left,right].includes(part.id)?a.i1*par/resistance:a.i1,stress=w.stress(resistance,current*resistance,current,current*current*resistance,part.rating,part.vmax),limits=loaded.worst.byPart[part.id];containsCorners&&=stress.p<=limits.p+1e-8&&stress.v<=limits.v+1e-8&&stress.i<=limits.i+1e-8;}
+ }
+ assert(containsCorners,"Conservative bounds contain every loaded mixed-network resistance/load corner, with unique tolerances and a negative source");
+ const beforeFailure=circuit();template().r1.parts[0].resistance=1234.567;get("pairForm").requestSubmit();await w.pairSearchReady;assert(!items().length&&!get("pairError").hidden&&circuit()===beforeFailure,"A fixed non-catalog value gives an explicit no-part result without fabricating a PN or modifying the circuit");
+ set("pairValuePolicy","all");get("pairForm").requestSubmit();const pending=w.pairSearchReady;set("pairVin","15");await pending;assert(!items().length&&!w.eval("pairSpec"),"Editing search inputs cancels in-flight network searches and prevents stale publication");
+ get("pairForm").reset();get("dividerForm").reset();await pause();assert(!template()&&get("pairConstructionMode").value==="single"&&get("pairTrim").value===""&&!w.eval("leaveWarningActive"),"Reset restores single-resistor defaults, clears construction/results and removes leave protection");
+ assert(errors.length===0,"No browser runtime errors: "+errors.join("; "));
+}catch(error){failures.push(error.stack);}document.getElementById("results").textContent=JSON.stringify({status:failures.length?"FAIL":"PASS",count:checks.length,failures,checks},null,2);document.body.dataset.status=failures.length?"FAIL":"PASS";});
+</script></body></html>

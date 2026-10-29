@@ -82,8 +82,8 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  set("vin","12");await choose();
  set("designTarget","0");await choose();assert(!state()&&choices().size===0&&get("designStatus").textContent.includes("same sign"),"Invalid target constraints never apply a partial design");
  set("designTarget","8");set("vin","1000000000");await choose();assert(!state()&&choices().size===0&&get("designStatus").textContent.includes("No safe"),"Unsafe catalog assignments are rejected instead of overstressing the parts");
- await reset();d.querySelector('[data-solve-mode="pairs"]').click();get("pairForm").requestSubmit();await w.pairSearchReady;
- const context=new w.MouseEvent("contextmenu",{bubbles:true,cancelable:true});symbol("r1").dispatchEvent(context);assert(!context.defaultPrevented&&get("resistorMenu").hidden,"Pair previews keep their original topology until explicitly applied");
+ await reset();get("pairForm").reset();await pause();d.querySelector('[data-solve-mode="pairs"]').click();get("pairForm").requestSubmit();await w.pairSearchReady;
+ const beforeSearchEdit=JSON.stringify(state().circuit),context=new w.MouseEvent("contextmenu",{bubbles:true,cancelable:true});symbol("r1").dispatchEvent(context);assert(context.defaultPrevented&&!get("resistorMenu").hidden&&JSON.stringify(state().circuit)===beforeSearchEdit,"Combination previews expose construction editing while preserving the applied circuit");w.closeResistorMenu();
  assert(errors.length===0,"No browser runtime errors: "+errors.join("; "));
 }catch(error){failures.push(error.stack);}document.getElementById("results").textContent=JSON.stringify({status:failures.length?"FAIL":"PASS",count:checks.length,failures,checks},null,2);document.body.dataset.status=failures.length?"FAIL":"PASS";});
 </script></body></html>

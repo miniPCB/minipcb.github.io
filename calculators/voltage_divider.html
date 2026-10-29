@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Find real resistor pairs for a target voltage and tolerance, compare their performance, and analyze voltage divider power, voltage, and current stress." />
+  <meta name="description" content="Find real resistor combinations for a target voltage and tolerance, compare their performance, and analyze voltage divider power, voltage, and current stress." />
   <title>Voltage Divider Calculator | miniPCB</title>
   <style>
     :root {
@@ -349,7 +349,7 @@
         <button class="mode-choice" type="button" data-solve-mode="r1" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RBOT</span><strong>Find RTOP</strong></button>
         <button class="mode-choice" type="button" data-solve-mode="r2" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP</span><strong>Find RBOT</strong></button>
         <button class="mode-choice" type="button" data-solve-mode="rl" aria-pressed="false" aria-controls="dividerForm"><span>Given VTOP, VMID, RTOP, RBOT</span><strong>Find RL</strong></button>
-        <button class="mode-choice" type="button" data-solve-mode="pairs" aria-pressed="false" aria-controls="pairForm pairPanel"><span>Given VTOP, VMID, tolerances</span><strong>Find real resistor pairs</strong></button>
+        <button class="mode-choice" type="button" data-solve-mode="pairs" aria-pressed="false" aria-controls="pairForm pairPanel"><span>Given VTOP, VMID, tolerances, construction</span><strong>Find real resistor combinations</strong></button>
       </div>
     </section>
     <section id="circuitReference" class="panel circuit-reference" aria-labelledby="schematicHeading">
@@ -371,7 +371,7 @@
         <figcaption>
           <p id="schematicBomCopyStatus" class="hint" role="status" hidden></p>
           <div id="schematicBomCopyFallback" hidden><label for="schematicBomCopyText">BOM text · copy into a spreadsheet</label><textarea id="schematicBomCopyText" class="bom-copy-text" rows="6" readonly spellcheck="false"></textarea></div>
-          <p>Click an input or pill to edit; right-click a resistor to add a series or parallel branch. In pair mode, apply a pair before changing its construction. Pills show tolerance (±%) and package size (for example, 0805). Hover a part number for its limits.</p>
+          <p>Click an input or pill to edit; right-click a resistor to add a series or parallel branch. In combination mode, construction edits update the search without changing the applied circuit. Pills show tolerance (±%) and package size (for example, 0805). Hover a part number for its limits.</p>
           <div class="resource-links">
             <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
             <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
@@ -448,7 +448,7 @@
                 <option value="r1">RTOP · Upper resistor (R1)</option>
                 <option value="r2">RBOT · Lower resistor (R2)</option>
                 <option value="rl">RL · Output load</option>
-                <option value="pairs">Real resistor pairs · Target VMID and tolerances</option>
+                <option value="pairs">Real resistor combinations · Target VMID and tolerances</option>
                 <option value="tolerance" hidden>Common tolerance analysis</option>
               </select>
             </div>
@@ -575,7 +575,19 @@
             <p class="hint">Results update as you edit. Reference downloads contain the default 12 V, 10 kΩ / 10 kΩ circuit.</p>
           </form>
           <form id="pairForm" class="panel-body form-grid" novalidate hidden>
-            <div class="mode-context"><p class="solve-target">Find RTOP + RBOT</p><h3>Find real resistor pairs</h3><p class="hint">Specify your target and tolerances. Search one catalog resistor per arm, then compare and apply a pair to the circuit and BOM.</p></div>
+            <div class="mode-context"><p class="solve-target">Find RTOP + RBOT</p><h3>Find real resistor combinations</h3><p class="hint">Set your target and tolerances, then find catalog parts for the selected construction. Preview, compare and apply complete combinations to the circuit and BOM.</p></div>
+            <div class="field"><label for="pairConstructionMode">Resistor construction</label><select id="pairConstructionMode"><option value="single">One resistor per arm</option><option value="configured">Series / parallel networks</option></select></div>
+            <div class="actions"><button id="pairUseCircuit" class="btn" type="button">Use circuit construction</button></div>
+            <div id="pairNetworkOptions" hidden>
+              <p id="pairConstructionSummary" class="hint"></p>
+              <p class="hint">Right-click an SVG resistor to add series or parallel parts. Click its reference or pills for individual catalog limits; those limits take precedence over arm defaults.</p>
+              <div class="rating-fields">
+                <div class="field"><label for="pairValuePolicy">Resistance values</label><select id="pairValuePolicy"><option value="all">Find every resistor value</option><option value="fixed">Keep entered fixed values</option></select></div>
+                <div class="field"><label for="pairTrim">Ratio-trim resistor</label><select id="pairTrim"><option value="">Automatic</option></select></div>
+                <div class="field"><label for="pairPowerSpread">Maximum non-trim power spread (%)</label><input id="pairPowerSpread" type="number" min="0" step="any" placeholder="No extra limit" /></div>
+              </div>
+              <p class="hint">The network search samples similar-power assignments and varies one resistor for the ratio. It returns a bounded set of real combinations; voltage and stress limits include tolerances.</p>
+            </div>
             <div class="rating-fields">
               <div class="field"><label for="pairVin">VTOP (V)</label><input id="pairVin" type="number" value="12" step="any" required /></div>
               <div class="field"><label for="pairSourceTol">VTOP tolerance · ± (%)</label><input id="pairSourceTol" type="number" value="0" min="0" max="99.999" step="any" /></div>
@@ -592,7 +604,7 @@
               <div class="field"><label for="pairPackageBot">RBOT package size</label><select id="pairPackageBot"></select></div>
               <div class="field"><label for="pairMinR">Minimum resistance (Ω)</label><input id="pairMinR" type="number" value="1000" min="0" step="any" /></div>
               <div class="field"><label for="pairMaxR">Maximum resistance (Ω)</label><input id="pairMaxR" type="number" value="100000" min="0" step="any" /></div>
-            </div><p class="hint">Search every supported catalog value in this inclusive range for each arm, including mixed-family pairs.</p></details>
+            </div><p class="hint">Per-resistor catalog range. Single-resistor arms are exhaustive; larger networks use a bounded similar-power search, including mixed families.</p></details>
             <details><summary>Load, temperature, and stress limits</summary><div class="rating-fields">
               <div class="field"><label for="pairRl">Optional RL (Ω)</label><input id="pairRl" type="number" placeholder="Open circuit" min="0" step="any" /></div>
               <div class="field"><label for="pairLoadTol">RL tolerance · ± (%)</label><input id="pairLoadTol" type="number" value="0" min="0" max="99.999" step="any" /></div>
@@ -603,7 +615,7 @@
             </div><p class="hint">Limits use worst-case source and resistor intervals. Power includes RL; its rating is not checked. Family default power modes and compatible packing apply. TCR filters part numbers; temperature drift and tracking are not modeled.</p></details>
             <p id="pairCatalogStatus" class="hint" role="status">Loading resistor catalogs…</p>
             <p id="pairError" class="error" role="alert" hidden></p>
-            <div class="actions"><button id="pairFind" class="btn btn-accent" type="submit" disabled>Find resistor pairs</button><button id="pairCancel" class="btn" type="button" hidden>Cancel</button><button class="btn" type="reset">Reset search</button></div>
+            <div class="actions"><button id="pairFind" class="btn btn-accent" type="submit" disabled>Find resistor combinations</button><button id="pairCancel" class="btn" type="button" hidden>Cancel</button><button class="btn" type="reset">Reset search</button></div>
           </form>
         </section>
       </div>
@@ -617,7 +629,7 @@
           <button id="ratingsTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="ratingsPanel" tabindex="-1">Ratings</button>
           <button id="partsTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="catalogPanel" tabindex="-1">Parts</button>
           <button id="parts2Tab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="parts2Panel" tabindex="-1">Parts (2)</button>
-          <button id="pairTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="pairPanel" tabindex="-1">Resistor pairs</button>
+          <button id="pairTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="pairPanel" tabindex="-1">Resistor combinations</button>
           <button id="methodTab" class="result-tab" type="button" role="tab" aria-selected="false" aria-controls="methodPanel" tabindex="-1">Method</button>
         </div>
         <section id="overviewPanel" class="panel result-panel" role="tabpanel" aria-labelledby="overviewTab" tabindex="0">
@@ -762,19 +774,19 @@
           </div>
         </section>
         <section id="pairPanel" class="panel result-panel" role="tabpanel" aria-labelledby="pairTab" tabindex="0" hidden>
-          <h2>Resistor pair performance</h2>
+          <h2>Resistor combination performance</h2>
           <div class="panel-body">
-            <p id="pairStatus" class="hint" role="status">Choose “Find real resistor pairs” above to enter a target and search the catalogs.</p>
+            <p id="pairStatus" class="hint" role="status">Choose “Find real resistor combinations” above to enter a target and search the catalogs.</p>
             <div id="pairResults" hidden>
               <div class="rating-fields pair-controls">
                 <div class="field"><label for="pairAxisX">Chart X axis</label><select id="pairAxisX"><option value="power">Total power (mW)</option><option value="current">Input current (µA)</option><option value="rth">Output resistance Rth (kΩ)</option></select></div>
                 <div class="field"><label for="pairAxisY">Chart Y axis</label><select id="pairAxisY"><option value="error">Worst-case target error (%)</option><option value="nominalError">Nominal target error (%)</option><option value="vmid">Nominal VMID (V)</option><option value="pstress">Worst-case Pstress (%)</option><option value="vstress">Worst-case V/I stress (%)</option></select></div>
               </div>
               <p id="pairChartHelp" class="hint">Drag a rectangle to filter the table. Click a point or select a row to preview it in the top SVG. Choose which families to show using the checkboxes below. Dim points fall outside the bounds; identical performance can overlap. X axes use a logarithmic scale. Escape cancels a drag or clears filters.</p>
-              <canvas id="pairChart" class="pair-chart" width="900" height="340" tabindex="0" aria-describedby="pairChartHelp" aria-label="Resistor pair performance scatter chart. Drag to filter, or use the numeric bounds below."></canvas>
-              <div class="pair-legend hint" role="group" aria-label="Show pair families">
-                <label style="--point-color:#54d2ff"><input id="pairShowTnpw" type="checkbox" data-pair-family="tnpw" checked /><span>TNPW / TNPW</span></label>
-                <label style="--point-color:#ffba52"><input id="pairShowMil" type="checkbox" data-pair-family="mil" checked /><span>M55342 / M55342</span></label>
+              <canvas id="pairChart" class="pair-chart" width="900" height="340" tabindex="0" aria-describedby="pairChartHelp" aria-label="Resistor combination performance scatter chart. Drag to filter, or use the numeric bounds below."></canvas>
+              <div class="pair-legend hint" role="group" aria-label="Show combination families">
+                <label style="--point-color:#54d2ff"><input id="pairShowTnpw" type="checkbox" data-pair-family="tnpw" checked /><span>All TNPW</span></label>
+                <label style="--point-color:#ffba52"><input id="pairShowMil" type="checkbox" data-pair-family="mil" checked /><span>All M55342</span></label>
                 <label style="--point-color:#6ee7ac"><input id="pairShowMixed" type="checkbox" data-pair-family="mixed" checked /><span>Mixed families</span></label>
               </div>
               <details id="pairFilterOptions"><summary>Filter bounds</summary>
@@ -789,19 +801,19 @@
               <p id="pairFilterStatus" class="note" role="status"></p>
               <p id="pairHover" class="hint" role="status">Select a combination to inspect its part numbers and performance.</p>
               <div id="pairInspector" class="pair-inspector" hidden></div>
-              <div class="actions"><button id="pairApply" class="btn btn-accent" type="button" disabled>Apply selected pair</button><button id="pairCompareAdd" class="btn" type="button" disabled>Add preview to comparison</button><button id="pairCsv" class="btn" type="button" disabled>Download all combinations CSV ↓</button></div>
+              <div class="actions"><button id="pairApply" class="btn btn-accent" type="button" disabled>Apply selected combination</button><button id="pairCompareAdd" class="btn" type="button" disabled>Add preview to comparison</button><button id="pairCsv" class="btn" type="button" disabled>Download all combinations CSV ↓</button></div>
               <div class="field pair-controls"><label for="pairSort">Sort combinations</label><select id="pairSort"><option value="error">Worst-case target error</option><option value="power">Total power</option><option value="current">Input current</option><option value="rth">Output resistance Rth</option><option value="pstress">Worst-case Pstress</option></select></div>
-              <p class="hint">Check Compare to keep multiple pairs in the table below. Preview selects the pair shown in the top SVG.</p>
+              <p class="hint">Check Compare to keep multiple combinations in the table below. Preview selects the combination shown in the top SVG.</p>
               <div class="table-wrap parts-values pair-table" tabindex="0" role="region" aria-label="Matching resistor combinations, scroll for all performance columns">
                 <table class="parts-table"><caption id="pairTableCaption">Matching combinations · all results are included in the CSV.</caption><thead><tr><th scope="col">Preview</th><th scope="col">Compare</th><th scope="col">RTOP part</th><th scope="col">RBOT part</th><th scope="col">VMID</th><th scope="col">VMID range</th><th scope="col">Worst error</th><th scope="col">Power</th><th scope="col">Input I</th><th scope="col">Rth</th><th scope="col">Pstress</th><th scope="col">V/I stress</th></tr></thead><tbody id="pairRows"></tbody></table>
               </div>
               <div class="pair-pagination"><button id="pairPrevious" class="btn" type="button">Previous</button><span id="pairPage" class="hint"></span><button id="pairNext" class="btn" type="button">Next</button></div>
               <section aria-labelledby="pairComparisonHeading">
-                <div class="parts-table-title"><h3 id="pairComparisonHeading" tabindex="-1">Compare resistor pairs</h3><div class="actions"><button id="pairComparisonCopy" class="btn" type="button" disabled>Copy table</button><button id="pairComparisonClear" class="btn" type="button" disabled>Clear comparison</button></div></div>
-                <p id="pairComparisonStatus" class="hint" role="status">Check pairs above or add the current preview to compare them here.</p>
+                <div class="parts-table-title"><h3 id="pairComparisonHeading" tabindex="-1">Compare resistor combinations</h3><div class="actions"><button id="pairComparisonCopy" class="btn" type="button" disabled>Copy table</button><button id="pairComparisonClear" class="btn" type="button" disabled>Clear comparison</button></div></div>
+                <p id="pairComparisonStatus" class="hint" role="status">Check combinations above or add the current preview to compare them here.</p>
                 <div id="pairBomControls" class="bom-view-controls"></div>
-                <div class="table-wrap parts-values pair-table" tabindex="0" role="region" aria-label="Selected resistor pairs comparison, scroll for all performance columns">
-                  <table id="pairComparisonTable" class="parts-table" aria-describedby="pairComparisonStatus"><caption>One BOM row per resistor, grouped by selected pair. Stress and limits use worst-case intervals; part voltage/current/power use nominal values. Copy includes visible rows and columns.</caption><thead id="pairComparisonHead"></thead><tbody id="pairComparisonRows"></tbody></table>
+                <div class="table-wrap parts-values pair-table" tabindex="0" role="region" aria-label="Selected resistor combinations comparison, scroll for all performance columns">
+                  <table id="pairComparisonTable" class="parts-table" aria-describedby="pairComparisonStatus"><caption>One BOM row per resistor, grouped by selected combination. Stress and limits use worst-case intervals; part voltage/current/power use nominal values. Copy includes visible rows and columns.</caption><thead id="pairComparisonHead"></thead><tbody id="pairComparisonRows"></tbody></table>
                 </div>
                 <p id="pairComparisonCopyStatus" class="hint" role="status"></p>
                 <div id="pairComparisonCopyFallback" hidden><label for="pairComparisonCopyText">Comparison text · copy into a spreadsheet</label><textarea id="pairComparisonCopyText" class="bom-copy-text" rows="6" readonly spellcheck="false"></textarea></div>
@@ -827,8 +839,8 @@
                 </div>
               </div>
               <p class="note">Inverse solutions use <code>g = VMID / VTOP</code>, <code>Rb = RTOP × g / (1 − g)</code>, <code>RTOP = Rb × (1 − g) / g</code>, and <code>RBOT = Rb / (1 − Rb / RL)</code> when loaded. A finite positive divider needs 0 &lt; g &lt; 1. RL may be open when the target equals the unloaded output.</p>
-              <p class="note">Tolerance bounds evaluate the endpoint VTOP values with minimum gain (R1 high, R2/RL low) and maximum gain (R1 low, R2/RL high). Resistor-pair searches require this entire interval to fit the allowed band around the target VMID. Pair searches also evaluate worst-case power and voltage, including interior resistance values where power peaks; the other analysis tabs show nominal stress.</p>
-              <p class="note">Multiple-part arms support a series chain or parallel bank. Each part has its own rating, tolerance, and optional working voltage. Equivalent resistance is the series sum or reciprocal conductance sum. Series parts share arm current; parallel parts share arm voltage. Solving RTOP/RBOT scales that arm's part resistances proportionally; it does not select standard values. The pair search selects one resistor per arm. Manual multi-part analysis remains available; ratings are not pooled into a fictitious arm rating.</p>
+              <p class="note">Tolerance bounds evaluate the endpoint VTOP values with minimum gain (R1 high, R2/RL low) and maximum gain (R1 low, R2/RL high). Combination searches require this entire interval to fit the allowed target band. Single-resistor arms use analytic stress maxima, including interior power peaks; larger networks use conservative per-part interval bounds. Other analysis tabs show nominal stress.</p>
+              <p class="note">Multiple-part arms support series, parallel and nested branches. Each physical part has its own rating, tolerance and working-voltage limit. Solving RTOP/RBOT in the ordinary calculator scales the existing resistances. Find real resistor combinations selects catalog parts for the construction and checks every physical resistor; ratings are not pooled into an arm rating.</p>
               <p class="note">Working voltage follows the lower of the power-derived voltage and the component's maximum working voltage. See <a href="https://www.vishay.com/docs/49873/49873_sg2113.pdf" target="_blank" rel="noopener">Vishay's resistor technical guide</a>.</p>
               <p class="note" id="updateStatus" role="status" aria-live="polite">Ready to calculate.</p>
           </div>
@@ -874,7 +886,7 @@
       if (initialCircuitWork === null) return false;
       return JSON.stringify(workFormValues(form)) !== initialCircuitWork
         || workFormValues(byId("pairForm")).some(([id, ...value]) => JSON.stringify(value) !== initialPairWork.get(id))
-        || appliedCatalogParts.size > 0 || catalogDesignVmid !== null || pairSpec !== null || pairComparisons.size > 0
+        || appliedCatalogParts.size > 0 || catalogDesignVmid !== null || pairSpec !== null || pairComparisons.size > 0 || pairConstruction !== null
         || !byId("automaticDesign").hidden || ARMS.some(arm => byId(`${arm}Parts`).dataset.topology)
         || (byId("schematicEditor").open && JSON.stringify(workFormValues(byId("schematicEditForm"))) !== schematicDraftWork);
     }
@@ -924,7 +936,7 @@
     const ARMS = ["r1", "r2"];
     const nextPart = { r1: 0, r2: 0 };
     const automaticChoices = new Map();
-    let resistorMenuContext = null, designGeneration = 0;
+    let resistorMenuContext = null, designGeneration = 0, lastSolveMode = "vout";
     const MODE_DETAILS = {
       vout: { title: "Find the output voltage", symbol: "VMID", help: "Enter VTOP, RTOP, and RBOT. The calculated output voltage appears in the results.", equation: "VMID = VTOP × Rbottom / (RTOP + Rbottom)" },
       vin: { title: "Find the required input voltage", symbol: "VTOP", help: "Enter your target VMID and both resistances. The result is the source voltage needed to reach that output.", equation: "VTOP = VMID × (1 + RTOP / Rbottom)" },
@@ -1013,7 +1025,7 @@
     function appendPart(arm, seed) {
       const number = ++nextPart[arm];
       const id = `${arm}part${number}`;
-      const name = `${arm.toUpperCase()}.${number}`;
+      const name = seed.name || `${arm.toUpperCase()}.${number}`;
       const row = document.createElement("details");
       row.id = id;
       row.className = "part-editor";
@@ -1135,6 +1147,7 @@
     }
 
     function editResistorConstruction(arm, id, action) {
+      if (byId("solveFor").value === "pairs") { editPairConstruction(arm, id, action); return; }
       const state = schematicState;
       if (byId("solveFor").value === "pairs" || pairPreviewState) return;
       const wasSingle = !byId(`${arm}Multiple`).checked;
@@ -1174,12 +1187,14 @@
 
     function openResistorMenu(event) {
       const symbol = event.target.closest("[data-schematic-symbol]");
-      if (!symbol || byId("solveFor").value === "pairs" || pairPreviewState) return;
+      if (!symbol) return;
       event.preventDefault();
       const menu = byId("resistorMenu"), box = symbol.getBoundingClientRect();
       resistorMenuContext = { arm: symbol.dataset.arm, id: symbol.dataset.schematicSymbol };
       byId("resistorMenuTitle").textContent = `${byId(symbol.dataset.schematicSymbol)?.dataset.name || symbol.dataset.schematicSymbol.toUpperCase()} · new values default to automatic`;
       menu.querySelector('[data-resistor-action="fixed"]').textContent = byId(`${symbol.dataset.schematicSymbol}Auto`)?.checked && !automaticChoices.has(symbol.dataset.schematicSymbol) ? "Enter a fixed resistance…" : "Keep the current value fixed";
+      const pendingPart = pairConstruction?.[symbol.dataset.arm]?.parts.find(part => part.id === symbol.dataset.schematicSymbol);
+      menu.querySelector('[data-resistor-action="fixed"]').disabled = byId("solveFor").value === "pairs" && !Number.isFinite(pairPreviewState?.physical[symbol.dataset.arm].find(part => part.id === symbol.dataset.schematicSymbol)?.resistance ?? pendingPart?.resistance);
       menu.hidden = false;
       menu.style.left = Math.max(12, Math.min(event.clientX || box.left, innerWidth - menu.offsetWidth - 12)) + "px";
       menu.style.top = Math.max(12, Math.min(event.clientY || box.top, innerHeight - menu.offsetHeight - 12)) + "px";
@@ -1423,6 +1438,9 @@
 
     function configureSolver() {
       const mode = byId("solveFor").value;
+      const enteringCombinations = mode === "pairs" && lastSolveMode !== "pairs";
+      lastSolveMode = mode;
+      if (enteringCombinations && ARMS.some(arm => byId(`${arm}Multiple`).checked)) importPairConstruction();
       form.hidden = mode === "pairs";
       byId("pairForm").hidden = mode !== "pairs";
       if (mode !== "pairs") pairPreviewState = null;
@@ -1513,7 +1531,7 @@
 
     function schematicEditLocks(key) {
       const mode = byId("solveFor").value, state = pairPreviewState || schematicState;
-      const arm = ARMS.find(arm => key === arm || state?.physical[arm].some(part => part.id === key));
+      const arm = ARMS.find(arm => key === arm || state?.physical[arm].some(part => part.id === key) || mode === "pairs" && pairConstruction?.[arm].parts.some(part => part.id === key));
       const property = { source: "vin", target: "vout", load: "rl" }[key] || arm;
       return { value: mode === property || mode === "tolerance" && property === "vout" || mode === "pairs" && !!arm || !!byId(`${key}Auto`)?.checked, tolerance: mode === "tolerance" && !!arm };
     }
@@ -1588,6 +1606,15 @@
     function pairSchematicState() {
       if (pairPreviewState) return pairPreviewState;
       const number = id => Number.isFinite(byId(id).valueAsNumber) ? byId(id).valueAsNumber : null;
+      if (byId("pairConstructionMode").value === "configured" && pairConstruction) {
+        const physical = {}, networks = {};
+        for (const arm of ARMS) {
+          const side = arm === "r1" ? "Top" : "Bot", model = pairConstruction[arm];
+          physical[arm] = model.parts.map(part => ({ ...part, resistance: byId("pairValuePolicy").value === "fixed" && !part.automatic && Number.isFinite(part.resistance) ? part.resistance : NaN, tolerance: part.settings.tolerancePct ?? Number(byId(`pairTol${side}`).value), settings: { ...part.settings, package: part.settings.package ?? byId(`pairPackage${side}`).value }, rating: NaN, stress: { p: NaN, v: NaN, i: NaN } }));
+          networks[arm] = model.parts.length > 1 ? { connection: displayNetworkConnection(model.connection), parts: physical[arm] } : null;
+        }
+        return { pairSetup: true, constructionSetup: true, circuit: { vin: number("pairVin"), rl: number("pairRl") }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical, networks, result: {}, bounds: {}, target: number("pairVmid"), allowedErrorPct: number("pairErrorPct"), analyzedAt: null };
+      }
       return { pairSetup: true, circuit: { vin: number("pairVin"), rl: byId("pairRl").value === "" && !byId("pairRl").validity.badInput ? null : byId("pairRl").valueAsNumber }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical: { r1: [], r2: [] }, networks: { r1: null, r2: null }, result: {}, bounds: {}, target: number("pairVmid"), allowedErrorPct: number("pairErrorPct"), analyzedAt: pairSpec?.analyzedAt || null };
     }
 
@@ -1620,10 +1647,11 @@
           schematicRole(schematicShape(symbol, "path", { d: `M${x} ${middle}H${x + width / 2 - 25}l5 -10 10 20 10 -20 10 20 10 -20 5 10H${x + width}`, fill: "none", "stroke-width": 3 }), arm, roles, "stroke");
           const info = schematicShape(symbol, "g", { "data-schematic-info": part.id });
           const name = schematicText(info, x + width / 2, middle - 22, part.name, 14); name.setAttribute("text-anchor", "middle");
+          if (byId("solveFor").value === "pairs") schematicEditable(name, part.id, `${part.name} search constraints`, "specifications");
           const content = Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : "Auto · undefined";
           const value = schematicText(info, x + width / 2, middle + 26, content, 13); value.setAttribute("text-anchor", "middle"); schematicEditable(value, part.id, `${part.name} resistance`);
           const tol = schematicPill(info, x + 10, middle + 38, `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`, "#c6d7e5", 65, "tolerance"); schematicEditable(tol.pill, part.id, `${part.name} tolerance`, "tolerance");
-          const footprint = schematicPill(info, x + 83, middle + 38, part.catalog?.case || "Not set", part.catalog ? "#6ee7ac" : "#f6d365", 68, "footprint"); schematicEditable(footprint.pill, part.id, `${part.name} footprint`, "power");
+          const footprint = schematicPill(info, x + 83, middle + 38, part.catalog?.case || part.settings?.package || "Not set", part.catalog || part.settings?.package ? "#6ee7ac" : "#f6d365", 68, "footprint"); schematicEditable(footprint.pill, part.id, `${part.name} footprint`, "power");
           return;
         }
         const sizes = node.children.map(measure);
@@ -1671,25 +1699,25 @@
       schematicText(drawing, 285, bottom + 55, "GND", 18, "#a8bece");
       for (const [arm, start, end] of [["r1", top, mid - 44], ["r2", botStart, bottom - 24]]) {
         const pairMode = byId("solveFor").value === "pairs", side = arm === "r1" ? "Top" : "Bot";
-        const connection = state?.networks[arm]?.connection || "series", parts = state?.pairSetup ? [{ id: arm, name: arm === "r1" ? "R1" : "R2", tolerance: Number(byId(`pairTol${side}`).value) }] : state?.physical[arm] || [];
+        const connection = state?.networks[arm]?.connection || "series", parts = state?.pairSetup && !state.constructionSetup ? [{ id: arm, name: arm === "r1" ? "R1" : "R2", tolerance: Number(byId(`pairTol${side}`).value) }] : state?.physical[arm] || [];
         const armHeading = schematicRole(schematicText(drawing, 300, start - 28, `${roles[arm] === "defined" ? "" : SOLVE_ROLES[roles[arm]].short + " "}${arm === "r1" ? "RTOP" : "RBOT"}${pairMode ? "" : ` · ${connectionLabel(connection)} × ${parts.length || "—"}`}`, 16), arm, roles);
-        if (state?.networks[arm]) schematicEditable(armHeading, arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
+        if (state?.networks[arm]) schematicEditable(armHeading, pairMode ? `arm-${arm}` : arm, pairMode ? `${arm === "r1" ? "RTOP" : "RBOT"} default catalog limits` : `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
         const equivalent = schematicText(drawing, 300, start - 4, "—", 18, "#a8bece"); equivalent.id = arm === "r1" ? "schematicR1Value" : "schematicR2Value";
         if (connection === "parallel") schematicShape(wires, "path", { d: `${arm === "r1" ? `M170 ${start}` : `M260 ${start}H170`}V${end - 30}M480 ${start + 48}V${end}H260` });
         if (typeof connection === "object") renderMixedArm(drawing, wires, arm, connection, parts, start, end, roles);
         for (const [index, part] of (typeof connection === "object" ? [] : parts).entries()) {
           const symbol = schematicShape(drawing, "g"); symbol.dataset.schematicSymbol = part.id; symbol.dataset.connection = connection; symbol.dataset.arm = arm;
-          if (!pairMode) { symbol.setAttribute("tabindex", "0"); symbol.setAttribute("role", "group"); symbol.setAttribute("aria-label", `${part.name}; right-click or press Shift+F10 for construction`); }
+          symbol.setAttribute("tabindex", "0"); symbol.setAttribute("role", "group"); symbol.setAttribute("aria-label", `${part.name}; right-click or press Shift+F10 for construction`);
           const y = start + index * 110, parallelArm = connection === "parallel";
-          if (!pairMode) schematicShape(symbol, "rect", { x: parallelArm ? 168 : 240, y, width: parallelArm ? 314 : 250, height: 110, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
+          schematicShape(symbol, "rect", { x: parallelArm ? 168 : 240, y, width: parallelArm ? 314 : 250, height: 110, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
           const info = schematicShape(symbol, "g", { "data-schematic-info": part.id });
           schematicInfoBox(info, parallelArm ? 192 : 290, y + (parallelArm ? 6 : 8), parallelArm ? 282 : 190, parallelArm ? 88 : 96);
           const line = schematicRole(schematicShape(symbol, "g", { fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" }), arm, roles, "stroke");
           if (parallelArm) schematicShape(line, "path", { d: `M170 ${y + 48}H270l5 -10 10 20 10 -20 10 20 10 -20 10 20 5 -10H480` });
           else schematicShape(line, "path", { d: `M260 ${y}v20l-10 5 20 10 -20 10 20 10 -20 10 10 7V${y + 110}` });
-          const value = state?.pairSetup ? "Find" : Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : "Auto · undefined", tolerance = `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`, footprint = pairMode ? byId(`pairPackage${side}`).value || "Not set" : part.catalog?.case || "Not set";
+          const value = state?.pairSetup ? Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : "Find" : Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : "Auto · undefined", tolerance = `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`, footprint = pairMode ? part.catalog?.case || part.settings?.package || byId(`pairPackage${side}`).value || "Not set" : part.catalog?.case || "Not set";
           const reference = schematicRole(schematicText(info, parallelArm ? 205 : 300, y + 28, part.name, 18), arm, roles);
-          if (pairMode && resistorCatalog) schematicEditable(reference, arm, `${arm === "r1" ? "RTOP" : "RBOT"} search constraints`, "specifications");
+          if (pairMode && resistorCatalog) schematicEditable(reference, state?.constructionSetup || state?.pair?.combination ? part.id : arm, `${part.name} search constraints`, "specifications");
           schematicEditable(schematicRole(schematicText(info, parallelArm ? 340 : 300, y + (parallelArm ? 28 : 51), value, Math.min(18, (parallelArm ? 124 : 170) / (value.length * 0.62)), "#eaf6ff", "resistance"), arm, roles), part.id, `${part.name} resistance`);
           const pillX = parallelArm ? 205 : 300, pillY = y + (parallelArm ? 62 : 66);
           const tolerancePill = schematicPill(info, pillX, pillY, tolerance, "#c6d7e5", 80, "tolerance");
@@ -1762,13 +1790,14 @@
         const error = distance / Math.abs(target) * 100;
         return percent(error < 1e-10 ? 0 : error);
       };
-      const solved = !complete ? mode === "pairs" ? "No selected pair" : "—" : mode === "pairs" ? "Pair preview" : mode === "tolerance" ? `±${percent(state.tolerances.r1)} each` : mode === "vout" ? value(state.result.vout, "V") : mode === "vin" ? value(state.circuit.vin, "V") : state.circuit[mode] === null ? "Open circuit" : value(state.circuit[mode], "Ω");
+      const solved = !complete ? mode === "pairs" ? "No selected combination" : "—" : mode === "pairs" ? "Combination preview" : mode === "tolerance" ? `±${percent(state.tolerances.r1)} each` : mode === "vout" ? value(state.result.vout, "V") : mode === "vin" ? value(state.circuit.vin, "V") : state.circuit[mode] === null ? "Open circuit" : value(state.circuit[mode], "Ω");
       const rows = [
         [mode === "pairs" ? "Find RTOP + RBOT" : mode === "tolerance" ? "Find R tolerance" : `Find ${MODE_DETAILS[mode].symbol}`, solved, "findResult"],
         ["Nominal total power", complete ? value(state.result.total, "W") : "—", "nominalPower"],
         ["Nominal input current", complete ? value(Math.abs(state.result.i1), "A") : "—", "nominalCurrent"],
         ["Source resistance Rth", complete ? value(state.result.rth, "Ω") : "—", "rth"]
       ];
+      if (state?.pair?.combination) rows.push(["Stress method", "Conservative interval bounds", "stressMethod"], ["Non-trim power spread", percent(state.pair.powerSpread), "powerSpread"]);
       if (["pairs", "vin", "r1", "r2", "rl"].includes(mode) || mode === "vout" && Number.isFinite(target)) {
         rows.push([mode === "vout" ? "Nominal VMID target" : "Target VMID", value(target, "V"), "targetVmid"],
           ["Nominal target error", accuracy(Math.abs(state?.result.vout - target)), "nominalError"],
@@ -1802,7 +1831,7 @@
         if (field === "analyzedAt" && state?.analyzedAt) schematicShape(cell, "title").textContent = state.analyzedAt;
         if (["nominalError", "worstError"].includes(field)) schematicShape(cell, "title").textContent = targetErrorDescription(state?.target);
         if (field === "vmidAccuracy") schematicShape(cell, "title").textContent = "Worst tolerance deviation from nominal VMID; voltage units are used when nominal VMID is zero.";
-        if (["pstress", "vistress"].includes(field)) schematicShape(cell, "title").textContent = mode === "pairs" ? "Highest worst-case stress across both resistors, including the source and component tolerance intervals." : "Highest nominal stress across all physical RTOP/RBOT resistors, using each part's own ratings.";
+        if (["pstress", "vistress"].includes(field)) schematicShape(cell, "title").textContent = mode === "pairs" ? "Highest stress bound across all physical divider resistors, including source, load and component tolerance intervals." : "Highest nominal stress across all physical RTOP/RBOT resistors, using each part's own ratings.";
       }
       return "Circuit characteristics. " + rows.map(([label, value]) => `${label}: ${value}`).join(". ") + `. Calculator page: ${url}.`;
     }
@@ -1868,10 +1897,12 @@
             const specs = schematicTableText(cell, offsets[column] + 4, cellBottom, `${nearby ? format(candidate.resistanceOhms, "Ω") + " · " : ""}±${percent(candidate.tolerancePct)} · ${candidate.case}`, pnWidth - 8, 10, "#c6d7e5", "candidateDescription"); cellBottom += specs.lines * 15;
             const locks = schematicEditLocks(part.id), locked = locks.value && !catalogSame(part.resistance, candidate.resistanceOhms) || locks.tolerance && (!catalogSame(part.tolerance, candidate.tolerancePct) || !catalogSame(part.resistance, candidate.resistanceOhms));
             const disabled = !!state.pair ? !match.pair : locked || !match.preview || match.preview.highest > 100 + 1e-9;
-            const action = `bom-use:${schematicBomChoiceRevision}:${part.id}:${family}`;
-            schematicBomChoices.set(action, { ...match, part, state, disabled });
-            const button = pairSvgAction(cell, offsets[column] + 4, cellBottom + 2, !!state.pair ? "Preview" : locked ? "Find value" : !match.preview ? "No solution" : disabled ? "Over rating" : "Use", action, { disabled, color: nearby ? "#ffba52" : "#6ee7ac", maxWidth: pnWidth - 8, label: `${state.pair ? "Preview" : "Use"} ${candidate.mpn} for ${part.name}; ${format(candidate.resistanceOhms, "Ω")}, ±${percent(candidate.tolerancePct)}, ${candidate.case}${locked ? "; calculated Find values are read-only" : ""}` });
-            button.pill.dataset.bomPart = part.id; button.pill.dataset.bomFamily = family; cellBottom += 34;
+            if (!match.displayOnly) {
+              const action = `bom-use:${schematicBomChoiceRevision}:${part.id}:${family}`;
+              schematicBomChoices.set(action, { ...match, part, state, disabled });
+              const button = pairSvgAction(cell, offsets[column] + 4, cellBottom + 2, !!state.pair ? "Preview" : locked ? "Find value" : !match.preview ? "No solution" : disabled ? "Over rating" : "Use", action, { disabled, color: nearby ? "#ffba52" : "#6ee7ac", maxWidth: pnWidth - 8, label: `${state.pair ? "Preview" : "Use"} ${candidate.mpn} for ${part.name}; ${format(candidate.resistanceOhms, "Ω")}, ±${percent(candidate.tolerancePct)}, ${candidate.case}${locked ? "; calculated Find values are read-only" : ""}` });
+              button.pill.dataset.bomPart = part.id; button.pill.dataset.bomFamily = family; cellBottom += 34;
+            }
           }
           rowBottom = Math.max(rowBottom, cellBottom);
         }
@@ -1882,7 +1913,7 @@
         }
         const height = Math.max(36, rowBottom + 6); background.setAttribute("height", height); top += height + 6;
       }
-      if (!entries.length) { const note = schematicTableText(table, 4, top + 20, state?.pairSetup ? "Set inputs in the diagram, then Find pairs." : "Enter valid circuit data.", width - 8, 12, "#ffba52"); top += Math.max(38, note.lines * 15 + 18); }
+      if (!entries.length) { const note = schematicTableText(table, 4, top + 20, state?.pairSetup ? "Set inputs in the diagram, then Find combinations." : "Enter valid circuit data.", width - 8, 12, "#ffba52"); top += Math.max(38, note.lines * 15 + 18); }
       const previousBom = schematicBomTsv(); schematicBomData = bom;
       if (previousBom !== schematicBomTsv()) {
         schematicBomCopyGeneration++;
@@ -1927,8 +1958,8 @@
       byId("schematicSolveStatus").textContent = solveLabel;
       byId("schematicSolveStatus").setAttribute("fill", SOLVE_ROLES.solving.color);
       for (const node of svg.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
-      byId("schematicHeading").textContent = pairPreviewState ? "Circuit reference · selected pair preview" : mode === "pairs" ? "Circuit reference · pair search inputs" : "Circuit reference";
-      byId("liveSchematicTitle").textContent = pairPreviewState ? "Voltage divider · selected resistor pair preview" : mode === "pairs" ? "Voltage divider · pair search inputs" : "Voltage divider · live circuit values";
+      byId("schematicHeading").textContent = pairPreviewState ? "Circuit reference · selected combination preview" : mode === "pairs" ? "Circuit reference · combination search inputs" : "Circuit reference";
+      byId("liveSchematicTitle").textContent = pairPreviewState ? "Voltage divider · selected resistor combination preview" : mode === "pairs" ? "Voltage divider · combination search inputs" : "Voltage divider · live circuit values";
       const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
       const searchOffset = mode === "pairs" ? 40 : 0;
       const stacked = width < 1050;
@@ -1943,9 +1974,9 @@
       partsGroup.replaceChildren();
       if (mode === "pairs") {
         const controls = schematicShape(partsGroup, "g", { "data-schematic-controls": "" });
-        for (const [x, content, key] of [[16, "Options", "search-options"], [108, "Find pairs", "search-run"]]) {
+        for (const [x, content, key] of [[16, "Options", "search-options"], [108, "Find combinations", "search-run"]]) {
           const control = schematicPill(controls, x, 39, content, key === "search-run" ? "#ff8e8e" : "#c6e3ff", width - x - 16);
-          if (resistorCatalog) { schematicEditable(control.pill, key, content); control.pill.setAttribute("aria-label", key === "search-run" ? "Find real resistor pairs" : "Edit pair search options"); }
+          if (resistorCatalog) { schematicEditable(control.pill, key, content); control.pill.setAttribute("aria-label", key === "search-run" ? "Find real resistor combinations" : "Edit combination search options"); }
         }
       }
       const characteristicsDescription = renderCircuitCharacteristics(partsGroup, state, characteristics, mode, stacked ? 16 : detailsX, stacked ? 42 + searchOffset : detailsY - analysisHeight, stacked ? width - 32 : detailsWidth);
@@ -1957,7 +1988,7 @@
       for (const [id, key] of [["schematicVtop", "vin"], ["schematicVmid", "vout"], ["schematicR1Value", "r1"], ["schematicR2Value", "r2"], ["schematicLoadValue", "rl"]]) schematicRole(byId(id), key, roles);
       byId("schematicLoad").setAttribute("opacity", roles.rl === "solving" || state && state.circuit.rl !== null ? "1" : "0.35");
       if (state && !state.pending) for (const [id, key, label] of [["schematicVtop", "source", "VTOP and source tolerance"], ...(mode === "pairs" ? [] : [["schematicVmid", "target", "VMID target"]]), ["schematicR1Value", "r1", "RTOP"], ["schematicR2Value", "r2", "RBOT"], ["schematicLoadValue", "load", "RL and load tolerance"]]) schematicEditable(byId(id), key, label);
-      const bottom = renderSchematicTable(partsGroup, state?.pending ? null : state, roles, detailsX, detailsY, detailsWidth, alternativeParts);
+      const bottom = renderSchematicTable(partsGroup, state?.pending || state?.constructionSetup ? null : state, roles, detailsX, detailsY, detailsWidth, alternativeParts);
       let contentBottom = Math.max(drawingBottom + 20, bottom);
       if (mode === "pairs" && pairItems.length) {
         const key = `${pairGeneration}:${width}`;
@@ -1969,11 +2000,11 @@
       svg.setAttribute("width", width);
       svg.setAttribute("height", height);
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      const descriptions = state && !state.pending ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
+      const descriptions = state && !state.pending && !state.pairSetup ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
       const roleDescription = `${solveLabel}. Yellow means missing or invalid input; green means known; red identifies the value to find. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
       const voltageDescription = state && !state.pairSetup && !state.pending ? `Nominal VMID ${format(state.result.vout, "V")}; minimum ${format(state.bounds.min, "V")}; maximum ${format(state.bounds.max, "V")}.${state.pair ? ` Target error ${percent(state.pair.error)}.` : ""} ` : "";
-      const searchDescription = mode === "pairs" ? `Search target VMID ${byId("pairVmid").value || "not set"} V; allowed error ±${byId("pairErrorPct").value || "not set"}%. Edit the source, target, load, resistor constraints or Options; Find pairs runs the search. Found resistance and performance values are read-only. Circuit inputs and BOM change only on Apply. ` : "";
-      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor pair preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.") + " " + characteristicsDescription;
+      const searchDescription = mode === "pairs" ? `Search target VMID ${byId("pairVmid").value || "not set"} V; allowed error ±${byId("pairErrorPct").value || "not set"}%. Edit the source, target, load, resistor constraints or Options; Find combinations runs the search. Found resistance and performance values are read-only. Circuit inputs and BOM change only on Apply. ` : "";
+      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor combination preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.") + " " + characteristicsDescription;
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       // The download is a self-contained snapshot of the live SVG.
@@ -2059,7 +2090,7 @@
     }
 
     function pairFormFingerprint() {
-      return JSON.stringify([...byId("pairForm").querySelectorAll("input, select")].map(input => [input.id, input.value]));
+      return JSON.stringify([[...byId("pairForm").querySelectorAll("input, select")].map(input => [input.id,input.value]), pairConstruction]);
     }
 
     function findPairsFromSchematic(context) {
@@ -2072,22 +2103,25 @@
 
     function openPairSchematicEditor(key, focus) {
       if (key === "search-run") { findPairsFromSchematic({ key, focus }); return; }
-      const side = key === "r1" ? "Top" : "Bot";
-      const ids = { source: ["pairVin", "pairSourceTol"], target: ["pairVmid", "pairErrorPct"], load: ["pairRl", "pairLoadTol"], "plot-axes": ["pairAxisX", "pairAxisY"], "search-options": ["pairMinR", "pairMaxR", "pairTemperature", "pairTcr", "pairMaxStress", "pairMaxPower"] }[key] || ARMS.includes(key) && [`pairFamily${side}`, `pairPackage${side}`, `pairTol${side}`, "pairTcr"];
+      const armKey = key.startsWith("arm-") ? key.slice(4) : key;
+      const partArm = byId("pairConstructionMode").value === "configured" && ARMS.find(arm => pairConstruction?.[arm].parts.some(part => part.id === key)), part = partArm && pairConstruction[partArm].parts.find(part => part.id === key);
+      const side = (partArm || armKey) === "r1" ? "Top" : "Bot";
+      const ids = { source: ["pairVin", "pairSourceTol"], target: ["pairVmid", "pairErrorPct"], load: ["pairRl", "pairLoadTol"], "plot-axes": ["pairAxisX", "pairAxisY"], "search-options": ["pairMinR", "pairMaxR", "pairTemperature", "pairTcr", "pairMaxStress", "pairMaxPower"] }[key] || (ARMS.includes(armKey) || part) && [`pairFamily${side}`, `pairPackage${side}`, `pairTol${side}`, "pairTcr"];
       if (!ids) return;
-      const name = { source: "VTOP", target: "VMID target", load: "RL", r1: "RTOP search constraints", r2: "RBOT search constraints", "search-options": "pair search options", "plot-axes": "performance axes" }[key];
+      const name = { source: "VTOP", target: "VMID target", load: "RL", r1: "RTOP search constraints", r2: "RBOT search constraints", "search-options": "combination search options", "plot-axes": "performance axes" }[armKey];
       const fields = {};
       byId("schematicCircuitFields").hidden = true; byId("schematicPairFields").hidden = false; byId("schematicPairFields").replaceChildren();
       for (const id of ids) {
         const original = byId(id), input = original.cloneNode(true), field = document.createElement("div"), label = document.createElement("label");
         input.id = `schematicPair_${id}`; input.value = original.value; input.removeAttribute("aria-invalid"); input.removeAttribute("data-solve-state");
+        if (part) input.value = part.settings[{ [`pairFamily${side}`]: "family", [`pairPackage${side}`]: "package", [`pairTol${side}`]: "tolerancePct", pairTcr: "tcrPpm" }[id]] ?? original.value;
         label.htmlFor = input.id; label.textContent = original.labels[0].textContent;
         field.className = "field"; field.append(label, input); byId("schematicPairFields").append(field); fields[id] = input;
       }
-      schematicEditContext = { pairSearch: true, presentation: key === "plot-axes", mode: "pairs", key, focus, fields, fingerprint: pairFormFingerprint() };
-      byId("schematicEditHeading").textContent = `Edit ${name}`;
-      byId("schematicEditHelp").textContent = key === "plot-axes" ? "Choose axes for the first SVG plot and the detailed chart. Other performance slider filters remain in effect." : "These settings belong to the resistor-pair search. Saving finds new pairs; the applied circuit and BOM change only when you choose Apply. TCR applies to both arms.";
-      byId("schematicEditSave").textContent = key === "plot-axes" ? "Update axes" : "Save & find pairs"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
+      schematicEditContext = { pairSearch: true, pairPartId: part?.id, pairPartArm: partArm, presentation: key === "plot-axes", mode: "pairs", key, focus, fields, fingerprint: pairFormFingerprint() };
+      byId("schematicEditHeading").textContent = `Edit ${part ? part.name + " catalog limits" : name}`;
+      byId("schematicEditHelp").textContent = key === "plot-axes" ? "Choose axes for the first SVG plot and the detailed chart. Other performance filters remain in effect." : part ? "These limits apply to this physical resistor. Saving finds new combinations; Apply changes the circuit and BOM." : "These settings belong to the combination search. Saving searches again; Apply changes the circuit and BOM. The shared TCR applies unless a resistor has an override.";
+      byId("schematicEditSave").textContent = key === "plot-axes" ? "Update axes" : "Save & find combinations"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
       byId("schematicEditor").showModal();
       schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
       const selected = fields[focus === "tolerance" ? `pairTol${side}` : focus === "power" ? `pairPackage${side}` : ids[0]] || fields[ids[0]];
@@ -2230,6 +2264,11 @@
             resetPairFilterInputs(true); closeSchematicEditor(); filterPairItems(); focusSchematicEditorTarget(context); return;
           }
           readPairSpec(context.fields);
+          if (context.pairPartId) {
+            const side = context.pairPartArm === "r1" ? "Top" : "Bot", part = pairConstruction[context.pairPartArm].parts.find(part => part.id === context.pairPartId);
+            part.settings = { family: context.fields[`pairFamily${side}`].value, package: context.fields[`pairPackage${side}`].value, tolerancePct: Number(context.fields[`pairTol${side}`].value), tcrPpm: Number(context.fields.pairTcr.value) };
+            closeSchematicEditor(); findPairsFromSchematic(context); return;
+          }
           for (const [id, field] of Object.entries(context.fields)) byId(id).value = field.value;
           closeSchematicEditor(); findPairsFromSchematic(context);
           return;
@@ -2274,6 +2313,7 @@
     const parts2Families = [{ key: "tnpw", id: "vishay-tnpw-e3", label: "TNPW" }, { key: "mil", id: "vishay-eh-m55342", label: "M55342 / D55342" }];
     let parts2Values = [], parts2BomData = [], parts2BomEntries = [], parts2BomRevision = 0, parts2Selection = null, parts2Target = null;
     let pairGeneration = 0, pairItems = [], pairView = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
+    let pairConstruction = null, pairConstructionNext = 0;
     let pairPlot = null, pairBrush = null, pairIgnoreClick = false;
     let pairPerformanceBounds = {}, pairSvgPlots = [], pairSvgGesture = null, pairSvgIgnoreClick = false, pairSvgLayout = null;
     const pairSvgDomains = new Map();
@@ -2285,7 +2325,8 @@
       pstress: { label: "Worst Pstress (%)", value: pair => pair.pstress },
       vstress: { label: "Worst V/I stress (%)", value: pair => pair.vstress },
       nominalError: { label: "Nominal error (%)", value: pair => pair.nominalError },
-      vmid: { label: "Nominal VMID (V)", value: pair => pair.result.vout }
+      vmid: { label: "Nominal VMID (V)", value: pair => pair.result.vout },
+      powerSpread: { label: "Non-trim power spread (%)", value: pair => pair.powerSpread ?? 0 }
     };
     const PAIR_SLIDER_KEYS = ["power", "current", "rth", "error", "pstress", "vstress"];
     const pairComparisons = new Set();
@@ -2295,11 +2336,66 @@
       ["allowed", "Allowed power", "optional"], ["vmax", "Working voltage limit", "optional"], ["tcr", "TCR (ppm/°C)", "optional"], ["reliability", "Reliability", "optional"], ["conditions", "Conditions", "optional"],
       ["voltage", "Part voltage", "optional"], ["current", "Part current", "optional"], ["power", "Part power", "optional"], ["pstress", "Pstress", "optional"], ["vstress", "Vstress", "optional"], ["istress", "Istress", "optional"],
       ["vmid", "VMID", "optional", "pair"], ["range", "VMID range", "optional", "pair"], ["error", "Worst target error", "optional", "pair"], ["totalPower", "Nominal power", "optional", "pair"], ["worstPower", "Worst power", "optional", "pair"], ["inputI", "Nominal input I", "optional", "pair"], ["worstI", "Worst input I", "optional", "pair"], ["rth", "Rth", "optional", "pair"], ["search", "Search conditions", "optional", "pair"],
-      ["tnpw", "TNPW alternative", "optional"], ["mil", "M55342 alternative", "optional"]
+      ["powerSpread", "Non-trim power spread", "optional", "pair"], ["tnpw", "TNPW alternative", "optional"], ["mil", "M55342 alternative", "optional"]
     ];
     const PAIR_PAGE_SIZE = 50;
     const pairFamilyToggles = Array.from(document.querySelectorAll("[data-pair-family]"));
     const catalogSame = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1e-12, Math.abs(a), Math.abs(b));
+
+    function defaultPairConstruction() {
+      return Object.fromEntries(ARMS.map(arm => [arm, { connection: arm, parts: [{ id: arm, name: arm === "r1" ? "R1" : "R2", automatic: true, resistance: null, settings: {} }] }]));
+    }
+
+    function displayNetworkConnection(tree) {
+      return typeof tree === "object" && tree.children.every(child => typeof child === "string") ? tree.connection : tree;
+    }
+
+    function importPairConstruction(invalidate = true) {
+      pairConstruction = Object.fromEntries(ARMS.map(arm => {
+        const multiple = byId(`${arm}Multiple`).checked, index = arm === "r1" ? 1 : 2;
+        const parts = multiple ? [...byId(`${arm}Parts`).children].map(row => {
+          const chosen = appliedCatalogParts.get(row.id) || automaticChoices.get(row.id);
+          return { id: row.id, name: row.dataset.name, automatic: byId(`${row.id}Auto`).checked, resistance: byId(`${row.id}R`).valueAsNumber * Number(byId(`${row.id}Unit`).value) || chosen?.resistanceOhms || null, settings: { tolerancePct: byId(`${row.id}Tol`).valueAsNumber, ...(chosen ? { package: chosen.case, tcrPpm: chosen.tcrPpm } : {}) } };
+        }) : [{ id: arm, name: arm === "r1" ? "R1" : "R2", automatic: false, resistance: byId(arm).valueAsNumber * Number(byId(`${arm}Unit`).value), settings: { tolerancePct: byId(`tolR${index}`).valueAsNumber } }];
+        return [arm, { connection: multiple ? armTopology(arm) : arm, parts }];
+      }));
+      byId("pairConstructionMode").value = "configured"; refreshPairConstruction();
+      if (invalidate) invalidatePairSearch("Circuit construction loaded. Find resistor combinations to evaluate its parts.");
+    }
+
+    function refreshPairConstruction() {
+      const configured = byId("pairConstructionMode").value === "configured", selected = byId("pairTrim").value;
+      if (configured && !pairConstruction) pairConstruction = defaultPairConstruction();
+      byId("pairNetworkOptions").hidden = !configured;
+      if (!configured) { byId("pairTrim").replaceChildren(new Option("Automatic", "", true, true)); return; }
+      const free = ARMS.flatMap(arm => pairConstruction[arm].parts.filter(part => byId("pairValuePolicy").value === "all" || part.automatic || !Number.isFinite(part.resistance)));
+      byId("pairTrim").replaceChildren(...free.map(part => new Option(part.name, part.id)));
+      byId("pairTrim").value = free.some(part => part.id === selected) ? selected : free.at(-1)?.id || "";
+      byId("pairConstructionSummary").textContent = ARMS.map(arm => `${arm === "r1" ? "RTOP" : "RBOT"}: ${pairConstruction[arm].parts.length} resistor${pairConstruction[arm].parts.length === 1 ? "" : "s"} · ${pairConstruction[arm].parts.length === 1 ? "single" : connectionLabel(displayNetworkConnection(pairConstruction[arm].connection))}`).join("; ");
+    }
+
+    function editPairConstruction(arm, id, action) {
+      const construction = pairConstruction || defaultPairConstruction(), part = construction[arm].parts.find(part => part.id === id);
+      if (!part) return;
+      if (["series", "parallel"].includes(action)) {
+        const prefix = arm === "r1" ? "R1" : "R2";
+        if (construction[arm].parts.length === 1 && part.name === prefix) part.name = `${prefix}.1`;
+        let number = 1; while (construction[arm].parts.some(item => item.name === `${prefix}.${number}`)) number++;
+        const next = { id: `${arm}search${++pairConstructionNext}`, name: `${prefix}.${number}`, automatic: true, resistance: null, settings: { ...part.settings } };
+        construction[arm].parts.splice(construction[arm].parts.indexOf(part) + 1, 0, next);
+        construction[arm].connection = mapTopology(construction[arm].connection, leaf => leaf === id ? { connection: action, children: [leaf, next.id] } : leaf);
+        id = next.id;
+      } else if (action === "fixed") {
+        const value = pairPreviewState?.physical[arm].find(item => item.id === id)?.resistance ?? part.resistance;
+        if (!Number.isFinite(value)) return;
+        part.resistance = value; part.automatic = false; byId("pairValuePolicy").value = "fixed";
+      } else { part.automatic = true; if (action === "automatic") byId("pairValuePolicy").value = "fixed"; }
+      pairConstruction = construction; byId("pairConstructionMode").value = "configured";
+      refreshPairConstruction();
+      if (action !== "fixed") byId("pairTrim").value = id;
+      invalidatePairSearch("Search construction changed. Find resistor combinations to choose its values.");
+      refreshLeaveWarning();
+    }
 
     function catalogAssignment(part) {
       const chosen = appliedCatalogParts.get(part.id);
@@ -2335,7 +2431,7 @@
 
     function updatePairSummary() {
       if (byId("solveFor").value !== "pairs") return;
-      byId("solutionLabel").textContent = "3. Matching resistor pairs";
+      byId("solutionLabel").textContent = "3. Matching resistor combinations";
       byId("solutionValue").textContent = pairSpec ? `${pairView.length.toLocaleString()}${pairFilterActive() ? ` / ${pairItems.length.toLocaleString()}` : ""} combinations` : "Set targets and search";
     }
 
@@ -2355,6 +2451,7 @@
     }
 
     function pairFamilyKey(pair) {
+      if (pair.combination) { const families = new Set(ARMS.flatMap(arm => pair.physical[arm].map(part => part.catalog.familyId.includes("m55342") ? "mil" : "tnpw"))); return families.size === 1 ? [...families][0] : "mixed"; }
       const top = pair.top.familyId.includes("m55342"), bot = pair.bot.familyId.includes("m55342");
       return top && bot ? "mil" : !top && !bot ? "tnpw" : "mixed";
     }
@@ -2403,7 +2500,7 @@
       const within = (value, min, max) => (min === null || value >= min - 1e-10 * Math.max(1, Math.abs(min))) && (max === null || value <= max + 1e-10 * Math.max(1, Math.abs(max)));
       pairView = filters.error ? [] : pairItems.filter(pair => families.has(pairFamilyKey(pair)) && within(pairMetric(pair, byId("pairAxisX").value), filters.XMin, filters.XMax) && within(pairMetric(pair, byId("pairAxisY").value), filters.YMin, filters.YMax));
       pairView = pairView.filter(pair => Object.entries(pairPerformanceBounds).every(([key, bounds]) => within(pairMetric(pair, key), bounds.min, bounds.max)));
-      byId("pairFilterStatus").textContent = filters.error || `${pairView.length.toLocaleString()} of ${pairItems.length.toLocaleString()} combinations shown${pairFilterActive() ? " · filters active" : ""}.${pairView.length ? "" : families.size ? " Clear filters or expand the bounds to see more pairs." : " Select a family above to show pairs."}`;
+      byId("pairFilterStatus").textContent = filters.error || `${pairView.length.toLocaleString()} of ${pairItems.length.toLocaleString()} combinations shown${pairFilterActive() ? " · filters active" : ""}.${pairView.length ? "" : families.size ? " Clear filters or expand the bounds to see more combinations." : " Select a family above to show combinations."}`;
       if (filters.error) byId("pairFilterOptions").open = true;
       pairPage = pairSelected && pairView.includes(pairSelected) ? Math.floor(pairView.indexOf(pairSelected) / PAIR_PAGE_SIZE) : 0;
       if (!pairView.includes(pairSelected)) pairSelected = pairView[0] || null;
@@ -2412,7 +2509,7 @@
       if (pairSelected) selectPair(pairItems.indexOf(pairSelected));
       else {
         byId("pairInspector").replaceChildren(); byId("pairInspector").hidden = true;
-        byId("pairApply").disabled = true; byId("pairHover").textContent = "No pair selected.";
+        byId("pairApply").disabled = true; byId("pairHover").textContent = "No combination selected.";
         pairPreviewState = null; renderSchematic(); drawPairChart();
       }
       updatePairSummary();
@@ -2437,6 +2534,11 @@
         maxPower: read("pairMaxPower", "Maximum total power", true, false, 0.001)
       };
       spec.loadTolerance = spec.rl === null ? 0 : tolerance("pairLoadTol", "RL tolerance");
+      spec.construction = field("pairConstructionMode").value === "configured" ? JSON.parse(JSON.stringify(pairConstruction || defaultPairConstruction())) : null;
+      spec.valuePolicy = field("pairValuePolicy").value;
+      spec.trimId = field("pairTrim").value;
+      spec.maxSpread = spec.construction ? read("pairPowerSpread", "Maximum power spread", true) : null;
+      if (spec.maxSpread !== null && spec.maxSpread < 0) fail("pairPowerSpread", "Maximum power spread must be nonnegative or blank.");
       const gain = spec.target / spec.vin;
       if (!Number.isFinite(gain) || gain <= 0 || gain >= 1) fail("pairVmid", "VTOP and VMID must have the same sign, with 0 < |VMID| < |VTOP|.");
       if (!Number.isFinite(spec.vin * spec.vin) || spec.vin * spec.vin === 0) fail("pairVin", "VTOP is outside the supported numeric range.");
@@ -2444,6 +2546,136 @@
       if (spec.maxStress > 100) fail("pairMaxStress", "Maximum stress must be greater than zero and no more than 100%.");
       if (spec.maxPower !== null && spec.maxPower < 0) fail("pairMaxPower", "Maximum total power must be zero or greater, or blank.");
       return spec;
+    }
+
+    function combinationPartPool(spec, arm, part) {
+      const side = arm === "r1" ? "Top" : "Bot", settings = part.settings || {};
+      const options = { ...spec, [`family${side}`]: settings.family ?? spec[`family${side}`], [`package${side}`]: settings.package ?? spec[`package${side}`], [`tolerance${side}`]: settings.tolerancePct ?? spec[`tolerance${side}`], tcrPpm: settings.tcrPpm ?? spec.tcrPpm };
+      const pool = catalogPairParts(options, side);
+      return spec.valuePolicy === "fixed" && !part.automatic && Number.isFinite(part.resistance) ? pool.filter(candidate => catalogSame(candidate.resistanceOhms, part.resistance)) : pool;
+    }
+
+    function combinationNominal(spec, assignment) {
+      const physical = {}, equivalents = {}, networks = {};
+      for (const arm of ARMS) {
+        const model = spec.construction[arm];
+        const parts = model.parts.map(part => { const chosen = assignment.get(part.id); return { id: part.id, name: part.name, resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV, catalog: chosen, mpn: chosen.mpn }; });
+        equivalents[arm] = networkEquivalent(parts, model.connection);
+        networks[arm] = model.parts.length > 1 ? { connection: displayNetworkConnection(model.connection), parts } : null;
+        physical[arm] = parts;
+      }
+      const circuit = { vin: spec.vin, rl: spec.rl, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance }, result = analyze(spec.vin, circuit.r1, circuit.r2, spec.rl);
+      for (const arm of ARMS) physical[arm] = analyzeParts(physical[arm], spec.construction[arm].connection, arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2);
+      return { circuit, result, physical, equivalents, networks };
+    }
+
+    function combinationStressBounds(spec, state) {
+      const source = Math.abs(spec.vin) * (1 + spec.sourceTolerance / 100), top = state.equivalents.r1, bot = state.equivalents.r2;
+      const loadMin = spec.rl === null ? null : spec.rl * (1 - spec.loadTolerance / 100), loadMax = spec.rl === null ? null : spec.rl * (1 + spec.loadTolerance / 100);
+      const maximum = analyze(source, top.min, bot.min, loadMin), byPart = {}, groups = {};
+      for (const arm of ARMS) {
+        const parts = new Map(state.physical[arm].map(part => [part.id, part])), ranges = new Map();
+        const range = node => {
+          if (ranges.has(node)) return ranges.get(node);
+          const result = typeof node === "string" ? { min: parts.get(node).resistance * (1 - parts.get(node).tolerance / 100), max: parts.get(node).resistance * (1 + parts.get(node).tolerance / 100) } : node.children.map(range).reduce((a, b) => node.connection === "series" ? { min: a.min + b.min, max: a.max + b.max } : { min: parallel(a.min, b.min), max: parallel(a.max, b.max) });
+          ranges.set(node, result); return result;
+        };
+        // Monotone interval propagation supplies conservative bounds, including
+        // interior power peaks; it does not substitute nominal arm stress.
+        const visit = (node, voltage, current) => {
+          const interval = range(node);
+          if (typeof node === "string") {
+            const part = parts.get(node), power = Math.min(voltage * current, voltage * voltage / interval.min, current * current * interval.max);
+            const vlimit = Math.min(Math.sqrt(part.rating * interval.min), part.vmax), ilimit = Math.min(Math.sqrt(part.rating / interval.max), part.vmax / interval.max);
+            byPart[node] = { p: 100 * power / part.rating, v: 100 * voltage / vlimit, i: 100 * current / ilimit, power, voltage, current };
+          } else for (const child of node.children) {
+            const childRange = range(child);
+            if (node.connection === "parallel") visit(child, voltage, Math.min(current, voltage / childRange.min));
+            else {
+              const siblingsMin = node.children.filter(item => item !== child).reduce((sum, item) => sum + range(item).min, 0);
+              visit(child, Math.min(voltage, current * childRange.max, voltage * childRange.max / (childRange.max + siblingsMin)), Math.min(current, voltage / (childRange.min + siblingsMin)));
+            }
+          }
+        };
+        const voltage = arm === "r1" ? analyze(source, top.max, bot.min, loadMin).v1 : analyze(source, top.min, bot.max, loadMax).vout;
+        const connection = spec.construction[arm].connection;
+        visit(connection, voltage, arm === "r1" ? maximum.i1 : voltage / range(connection).min);
+        const limits = state.physical[arm].map(part => byPart[part.id]);
+        groups[arm] = { p: Math.max(...limits.map(limit => limit.p)), v: Math.max(...limits.flatMap(limit => [limit.v, limit.i])) };
+      }
+      return { top: groups.r1, bot: groups.r2, byPart, power: maximum.total, current: maximum.i1, conservative: true };
+    }
+
+    function evaluateResistorCombination(spec, assignment) {
+      const state = combinationNominal(spec, assignment), { circuit, equivalents, result, physical } = state;
+      const tolerances = { vin: spec.sourceTolerance, r1: equivalents.r1.tolerance, r2: equivalents.r2.tolerance, rl: spec.loadTolerance };
+      const bounds = toleranceAnalysis(circuit, tolerances, Object.fromEntries(ARMS.map(arm => [arm, [equivalents[arm].min, equivalents[arm].max]])));
+      const error = 100 * Math.max(Math.abs(bounds.min - spec.target), Math.abs(bounds.max - spec.target)) / Math.abs(spec.target);
+      if (!Number.isFinite(error) || error > spec.errorPct + 1e-9) return null;
+      const worst = combinationStressBounds(spec, state), pstress = Math.max(worst.top.p, worst.bot.p), vstress = Math.max(worst.top.v, worst.bot.v);
+      const powers = ARMS.flatMap(arm => physical[arm]).filter(part => part.id !== spec.trimId).map(part => part.power), mean = powers.reduce((sum, power) => sum + power, 0) / powers.length;
+      const powerSpread = powers.length < 2 ? 0 : 100 * (Math.max(...powers) - Math.min(...powers)) / mean;
+      if (![error, pstress, vstress, powerSpread, worst.power, worst.current, ...Object.values(result)].every(Number.isFinite) || Math.max(pstress, vstress) > spec.maxStress + 1e-9 || spec.maxPower !== null && worst.power > spec.maxPower * (1 + 1e-12) || spec.maxSpread !== null && powerSpread > spec.maxSpread + 1e-9) return null;
+      const aggregate = arm => ({ parts: physical[arm], resistanceOhms: equivalents[arm].resistance, tolerancePct: equivalents[arm].tolerance, mpn: physical[arm].map(part => `${part.name}: ${part.mpn}`).join(" + "), familyId: [...new Set(physical[arm].map(part => part.catalog.familyId))].join(" / "), case: [...new Set(physical[arm].map(part => part.catalog.case))].join(" / ") });
+      return { ...state, top: aggregate("r1"), bot: aggregate("r2"), tolerances, bounds, error, nominalError: 100 * Math.abs(result.vout - spec.target) / Math.abs(spec.target), worst, pstress, vstress, powerSpread, combination: true, assignment: new Map(assignment) };
+    }
+
+    async function searchResistorCombinations(spec, generation) {
+      const leaves = ARMS.flatMap(arm => spec.construction[arm].parts.map(part => ({ arm, ...part }))), pools = new Map(), found = new Map(), checked = new Set();
+      for (const part of leaves) { const pool = combinationPartPool(spec, part.arm, part); if (!pool.length) throw new Error(`${part.name}: no real catalog part matches its value, tolerance, footprint and TCR limits.`); pools.set(part.id, pool); }
+      const free = leaves.filter(part => spec.valuePolicy !== "fixed" || part.automatic || !Number.isFinite(part.resistance));
+      const trim = free.find(part => part.id === spec.trimId) || free.at(-1); spec.trimId = trim?.id || "";
+      const count = node => typeof node === "string" ? 1 : node.children.reduce((sum, child) => sum + count(child), 0), coefficients = new Map();
+      const distribute = (node, resistance) => { if (typeof node === "string") coefficients.set(node, resistance); else for (const child of node.children) distribute(child, resistance * (node.connection === "series" ? count(child) / count(node) : count(node) / count(child))); };
+      for (const arm of ARMS) distribute(spec.construction[arm].connection, Math.pow(arm === "r1" ? spec.vin - spec.target : spec.target, 2) / count(spec.construction[arm].connection));
+      const check = assignment => {
+        if (checked.size >= 25000 || found.size >= 5000) { spec.searchTruncated = true; return; }
+        const key = leaves.map(part => assignment.get(part.id).mpn).join("|"); if (checked.has(key)) return;
+        checked.add(key); const candidate = evaluateResistorCombination(spec, assignment); if (candidate) found.set(key, candidate);
+      };
+      const contains = (node, id) => typeof node === "string" ? node === id : node.children.some(child => contains(child, id));
+      const fit = assignment => {
+        if (!trim) { check(assignment); return; }
+        const state = combinationNominal(spec, assignment), model = spec.construction[trim.arm];
+        let desired;
+        try {
+          desired = solveCircuit(trim.arm, state.circuit, spec.target)[trim.arm];
+          let node = model.connection;
+          while (typeof node !== "string") {
+            const child = node.children.find(item => contains(item, trim.id)), siblings = node.children.filter(item => item !== child), resistance = item => networkEquivalent(state.physical[trim.arm], item).resistance;
+            if (node.connection === "series") desired -= siblings.reduce((sum, item) => sum + resistance(item), 0);
+            else { const conductance = 1 / desired - siblings.reduce((sum, item) => sum + 1 / resistance(item), 0); desired = conductance > 0 ? 1 / conductance : Infinity; }
+            node = child;
+          }
+        } catch (_) { desired = NaN; }
+        const pool = pools.get(trim.id), neighbors = Number.isFinite(desired) && desired > 0 ? designNeighbors(pool, desired) : [pool[0], pool.at(-1)];
+        const indices = new Set(neighbors.flatMap(candidate => { const at = pool.indexOf(candidate); return [at - 2, at - 1, at, at + 1, at + 2]; }));
+        for (const index of indices) if (pool[index]) { const values = new Map(assignment); values.set(trim.id, pool[index]); check(values); }
+      };
+      const scales = [...new Set(free.filter(part => part.id !== trim?.id).flatMap(part => pools.get(part.id).map(candidate => coefficients.get(part.id) / candidate.resistanceOhms)))].sort((a, b) => a - b);
+      if (!scales.length) scales.push(1);
+      const selectedScales = scales.length <= 1000 ? scales : Array.from({ length: 1000 }, (_, index) => scales[Math.round(index * (scales.length - 1) / 999)]);
+      // Family passes preserve distinct real MPN combinations, including mixed
+      // families within an arm. Catalog neighborhoods are sampled, not exhaustive.
+      const patterns = ["any", "tnpw", "mil", "top-tnpw", "top-mil", "alternate", "alternate-reverse"];
+      for (let index = 0; index < selectedScales.length; index++) {
+        if (generation !== pairGeneration) return [];
+        if (spec.searchTruncated) break;
+        for (const pattern of patterns) {
+          const assignment = new Map();
+          for (const [position, part] of leaves.entries()) {
+            const fixed = !free.includes(part), desired = coefficients.get(part.id) / selectedScales[index];
+            const family = pattern === "tnpw" ? "tnpw" : pattern === "mil" ? "m55342" : pattern.startsWith("top-") ? (part.arm === "r1") === (pattern === "top-tnpw") ? "tnpw" : "m55342" : pattern.startsWith("alternate") ? (position % 2 === 0) === (pattern === "alternate") ? "tnpw" : "m55342" : null;
+            const original = pools.get(part.id), subset = family ? original.filter(candidate => candidate.familyId.includes(family)) : original, pool = subset.length ? subset : original;
+            const neighbors = fixed ? pool : designNeighbors(pool, desired);
+            assignment.set(part.id, neighbors.reduce((a, b) => Math.abs(Math.log(a.resistanceOhms / desired)) <= Math.abs(Math.log(b.resistanceOhms / desired)) ? a : b));
+          }
+          fit(assignment);
+        }
+        if (index % 8 === 0) { byId("pairStatus").textContent = `Network search: ${checked.size.toLocaleString()} catalog assignments checked; ${found.size.toLocaleString()} valid combinations…`; await new Promise(resolve => setTimeout(resolve, 0)); }
+      }
+      spec.searchChecked = checked.size; spec.searchBounded = true;
+      return [...found.values()];
     }
 
     function catalogPairParts(spec, side) {
@@ -2492,13 +2724,19 @@
     }
 
     async function searchResistorPairs() {
-      invalidatePairSearch("Searching catalog pairs…");
+      invalidatePairSearch("Searching catalog combinations…");
       if (!resistorCatalog) return [];
       const generation = pairGeneration;
       byId("pairFind").disabled = true; byId("pairCancel").hidden = false;
       selectResultTab("pairTab");
       try {
-        const spec = readPairSpec(), tops = catalogPairParts(spec, "Top"), bots = catalogPairParts(spec, "Bot"), matches = [];
+        const spec = readPairSpec();
+        if (spec.construction) {
+          const matches = await searchResistorCombinations(spec, generation);
+          if (generation !== pairGeneration) return [];
+          return publishPairSearch(spec, matches, `${matches.length.toLocaleString()} valid resistor combinations from ${spec.searchChecked.toLocaleString()} checked assignments. Bounded network search; additional valid combinations may exist. ${spec.searchTruncated ? "Search/result budget reached. " : ""}Stress uses conservative interval bounds; the complete VMID tolerance interval must fit ±${spec.errorPct}%.`);
+        }
+        const tops = catalogPairParts(spec, "Top"), bots = catalogPairParts(spec, "Bot"), matches = [];
         const targetGain = spec.target / spec.vin;
         const gainMin = targetGain * (1 - spec.errorPct / 100), gainMax = Math.min(1, targetGain * (1 + spec.errorPct / 100));
         const lowerBound = value => { let low = 0, high = bots.length; while (low < high) { const middle = (low + high) >>> 1; if (bots[middle].resistanceOhms < value) low = middle + 1; else high = middle; } return low; };
@@ -2518,15 +2756,7 @@
           if (index % 16 === 0) { byId("pairStatus").textContent = `Checking ${index + 1} / ${tops.length} RTOP parts against ${bots.length} RBOT parts…`; await new Promise(resolve => setTimeout(resolve, 0)); }
         }
         if (generation !== pairGeneration) return [];
-        spec.analyzedAt = new Date().toISOString();
-        pairSpec = spec; pairItems = matches; pairSelected = null; pairPage = 0;
-        sortPairItems();
-        byId("pairStatus").textContent = `${pairItems.length.toLocaleString()} valid combinations from ${tops.length} RTOP and ${bots.length} RBOT catalog parts. All supported values from ${format(spec.minOhms, "Ω")} to ${format(spec.maxOhms, "Ω")} were searched. Target ${format(spec.target, "V")} ±${spec.errorPct}%; worst-case stress ≤ ${spec.maxStress}%.`;
-        byId("pairResults").hidden = !pairItems.length;
-        byId("pairCsv").disabled = !pairItems.length;
-        if (pairItems.length) selectPair(0);
-        updatePairSummary();
-        return pairItems;
+        return publishPairSearch(spec, matches, `${matches.length.toLocaleString()} valid combinations from ${tops.length} RTOP and ${bots.length} RBOT catalog parts. All supported values from ${format(spec.minOhms, "Ω")} to ${format(spec.maxOhms, "Ω")} were searched. Target ${format(spec.target, "V")} ±${spec.errorPct}%; worst-case stress ≤ ${spec.maxStress}%.`);
       } catch (error) {
         if (generation !== pairGeneration) return [];
         byId("pairError").textContent = error.message; byId("pairError").hidden = false;
@@ -2537,6 +2767,14 @@
         if (generation === pairGeneration) { byId("pairFind").disabled = false; byId("pairCancel").hidden = true; }
         refreshLeaveWarning();
       }
+    }
+
+    function publishPairSearch(spec, matches, status) {
+      spec.analyzedAt = new Date().toISOString(); pairSpec = spec; pairItems = matches; pairSelected = null; pairPage = 0;
+      sortPairItems(); byId("pairStatus").textContent = status;
+      byId("pairResults").hidden = !pairItems.length; byId("pairCsv").disabled = !pairItems.length;
+      if (pairItems.length) selectPair(0);
+      updatePairSummary(); return pairItems;
     }
 
     function sortPairItems() {
@@ -2561,6 +2799,11 @@
         compareCell.addEventListener("click", event => event.stopPropagation());
         compare.addEventListener("change", () => setPairCompared(pair, compare.checked)); compareCell.append(compare);
         for (const part of [pair.top, pair.bot]) {
+          if (pair.combination) {
+            const partCell = parts2Cell(row, "");
+            for (const physical of part.parts) { const number = document.createElement("div"); number.className = "part-number"; number.textContent = `${physical.name}: ${physical.mpn}`; const detail = document.createElement("small"); detail.textContent = `${format(physical.resistance, "Ω")} · ±${physical.tolerance}% · ${physical.catalog.case}`; partCell.append(number, detail); }
+            continue;
+          }
           const partCell = parts2Cell(row, part.mpn); partCell.className = "part-number";
           const detail = document.createElement("small"); detail.textContent = `${format(part.resistanceOhms, "Ω")} · ±${part.tolerancePct}% · ${part.case}`; partCell.append(detail);
         }
@@ -2580,6 +2823,7 @@
       for (const row of byId("pairRows").children) { const selected = Number(row.dataset.valueRow) === index; row.dataset.selected = String(selected); row.querySelector("input").checked = selected; }
       const inspector = byId("pairInspector"); inspector.replaceChildren(); inspector.hidden = false;
       for (const [label, part] of [["RTOP", pair.top], ["RBOT", pair.bot]]) {
+        if (pair.combination) { for (const item of part.parts) { const line = document.createElement("p"); line.className = "part-number"; line.textContent = `${item.name}: ${item.mpn} · ${format(item.resistance, "Ω")} · ±${item.tolerance}% · ${item.catalog.case} · ${format(item.rating, "W")} allowed · ${item.vmax} V max`; inspector.append(line); } continue; }
         const line = document.createElement("p"); line.className = "part-number";
         line.textContent = `${label}: ${part.mpn} · ${format(part.resistanceOhms, "Ω")} · ±${part.tolerancePct}% · ${format(part.powerW, "W")} allowed at ${part.temperatureC} °C · ${part.workingVoltageV} V max · ${part.tcrPpm} ppm/°C`; inspector.append(line);
       }
@@ -2587,6 +2831,7 @@
         const line = document.createElement("p"); line.className = "hint"; line.textContent = text; inspector.append(line);
       }
       byId("pairApply").disabled = false;
+      if (pair.combination) { const line = document.createElement("p"); line.className = "hint"; line.textContent = `Non-trim power spread ${percent(pair.powerSpread)}. Per-part stress values are conservative interval bounds.`; inspector.append(line); }
       updatePairComparisonControls();
       byId("pairHover").textContent = `Selected combination ${viewIndex + 1} of ${pairView.length.toLocaleString()} shown. The top SVG previews this pair; Apply updates the circuit and BOM.`;
       previewSelectedPair();
@@ -2602,7 +2847,7 @@
     }
 
     function initializeBomControls(prefix, pair, render) {
-      const host = byId(`${prefix}Controls`), name = pair ? "pair comparison" : "circuit BOM";
+      const host = byId(`${prefix}Controls`), name = pair ? "combination comparison" : "circuit BOM";
       host.innerHTML = `<details><summary>Columns and performance filters</summary><fieldset><legend>Show optional columns</legend><div class="bom-column-options"></div></fieldset><div class="rating-fields">
         <div class="field"><label for="${prefix}Query">Search ${name}</label><input id="${prefix}Query" type="search" placeholder="Reference, part number, footprint…" /></div>
         <div class="field"><label for="${prefix}MaxP">Maximum ${pair ? "worst " : ""}Pstress (%)</label><input id="${prefix}MaxP" type="number" min="0" step="any" placeholder="No limit" /></div>
@@ -2664,7 +2909,11 @@
       const spec = pairSpec;
       const search = `VTOP ${format(spec.vin, "V")} ±${percent(spec.sourceTolerance)}; target VMID ${format(spec.target, "V")} ±${percent(spec.errorPct)}; RL ${spec.rl === null ? "Open" : `${format(spec.rl, "Ω")} ±${percent(spec.loadTolerance)}`}; ambient ${spec.temperatureC} °C; stress ≤ ${percent(spec.maxStress)}${spec.maxPower === null ? "" : `; total power ≤ ${format(spec.maxPower, "W")}`}`;
       for (const [index, pair] of [...pairComparisons].entries()) {
-        const rows = [["Top", pair.top, "r1"], ["Bot", pair.bot, "r2"]].map(([side, chosen, arm]) => {
+        const rows = pair.combination ? ARMS.flatMap(arm => pair.physical[arm].map(part => {
+          const limits = pair.worst.byPart[part.id], alternatives = {};
+          for (const candidate of [part.catalog, ...combinationAlternativeParts(pair, arm, part)]) alternatives[candidate.familyId.includes("m55342") ? "mil" : "tnpw"] = candidate.mpn;
+          return { ...bomPartCells({ ...part, stress: limits }, part.catalog, alternatives), option: String(index + 1), vmid: format(pair.result.vout, "V"), range: `${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")}`, error: percent(pair.error), totalPower: format(pair.result.total, "W"), worstPower: format(pair.worst.power, "W"), inputI: format(Math.abs(pair.result.i1), "A"), worstI: format(pair.worst.current, "A"), rth: format(pair.result.rth, "Ω"), powerSpread: percent(pair.powerSpread), search: search + "; conservative stress bounds" };
+        })) : [["Top", pair.top, "r1"], ["Bot", pair.bot, "r2"]].map(([side, chosen, arm]) => {
           const limits = pair.worst[side === "Top" ? "top" : "bot"], alternatives = {};
           for (const option of [chosen, ...pairAlternativeParts(pair, side)]) alternatives[option.familyId.includes("m55342") ? "mil" : "tnpw"] = option.mpn;
           const part = { name: arm.toUpperCase(), resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV, voltage: arm === "r1" ? pair.result.v1 : pair.result.vout, current: arm === "r1" ? pair.result.i1 : pair.result.i2, power: arm === "r1" ? pair.result.p1 : pair.result.p2, stress: { p: limits.p, v: limits.v, i: limits.v } };
@@ -2681,6 +2930,7 @@
     }
 
     function renderPairComparison(resetCopy = false) {
+      byId("pairComparisonTable").caption.textContent = pairSpec?.construction ? "One BOM row per physical resistor, grouped by combination. Stress uses conservative interval bounds; part voltage/current/power are nominal. Copy includes visible rows and columns." : "One BOM row per resistor, grouped by selected combination. Stress and limits use worst-case intervals; part voltage/current/power use nominal values. Copy includes visible rows and columns.";
       const head = byId("pairComparisonHead"), host = byId("pairComparisonRows"); head.replaceChildren(); host.replaceChildren();
       const headings = document.createElement("tr");
       const { columns, filters, groups } = pairComparisonView();
@@ -2696,7 +2946,7 @@
         rows.forEach((cells, index) => { const partRow = index ? document.createElement("tr") : row; partRow.dataset.comparisonPart = cells.reference; appendBomCells(partRow, cells, columns); host.append(partRow); });
       }
       const outside = pairs.filter(pair => !pairView.includes(pair)).length;
-      byId("pairComparisonStatus").textContent = filters.error || (pairs.length ? `${pairs.length} pair${pairs.length === 1 ? "" : "s"} selected · ${groups.length} shown by table filters${outside ? ` · ${outside} outside the current chart filters` : ""}. Comparisons stay selected across pages, sorting and filters.` : "Check pairs above or add the current preview to compare them here.");
+      byId("pairComparisonStatus").textContent = filters.error || (pairs.length ? `${pairs.length} combination${pairs.length === 1 ? "" : "s"} selected · ${groups.length} shown by table filters${outside ? ` · ${outside} outside the current chart filters` : ""}. Comparisons stay selected across pages, sorting and filters.` : "Check combinations above or add the current preview to compare them here.");
       byId("pairComparisonCopy").disabled = !groups.length; byId("pairComparisonClear").disabled = !pairs.length;
       if (resetCopy) { byId("pairComparisonCopyStatus").textContent = ""; byId("pairComparisonCopyFallback").hidden = true; byId("pairComparisonCopyText").value = ""; }
       updatePairComparisonControls();
@@ -2734,6 +2984,7 @@
     }
 
     function pairAlternativeParts(pair, side) {
+      if (pair.combination) return [];
       pair.alternatives ||= {};
       if (pair.alternatives[side]) return pair.alternatives[side];
       const chosen = side === "Top" ? pair.top : pair.bot, alternatives = [];
@@ -2750,9 +3001,30 @@
       return alternatives;
     }
 
+    function combinationAlternativeParts(pair, arm, part) {
+      pair.partAlternatives ||= new Map();
+      if (pair.partAlternatives.has(part.id)) return pair.partAlternatives.get(part.id);
+      const alternatives = [], side = arm === "r1" ? "Top" : "Bot", template = pairSpec.construction[arm].parts.find(item => item.id === part.id);
+      const familyLimit = template.settings.family ?? pairSpec[`family${side}`];
+      for (const entry of parts2Families) {
+        if (entry.id === part.catalog.familyId || familyLimit !== "all" && familyLimit !== entry.id) continue;
+        try {
+          const family = ResistorParts.family(resistorCatalog, entry.id), options = parts2Options(family, part.catalog.case, pairSpec.temperatureC, part.catalog.tcrPpm);
+          if (!options) continue;
+          const candidate = ResistorParts.evaluate(resistorCatalog, entry.id, { ...options, resistanceOhms: part.resistance, tolerancePct: part.tolerance }), assignment = new Map(pair.assignment); assignment.set(part.id, candidate);
+          if (evaluateResistorCombination(pairSpec, assignment)) alternatives.push(candidate);
+        } catch (_) { /* This exact-value alternate fails the full combination limits. */ }
+      }
+      pair.partAlternatives.set(part.id, alternatives); return alternatives;
+    }
+
     function previewSelectedPair() {
       if (byId("solveFor").value !== "pairs" || !pairSelected || !pairSpec || byId("pairTab").getAttribute("aria-selected") !== "true") { pairPreviewState = null; renderSchematic(); return; }
       const pair = pairSelected, spec = pairSpec;
+      if (pair.combination) {
+        pairPreviewState = { circuit: pair.circuit, tolerances: pair.tolerances, networks: pair.networks, physical: pair.physical, result: pair.result, bounds: pair.bounds, pair, target: spec.target, allowedErrorPct: spec.errorPct, analyzedAt: spec.analyzedAt };
+        renderSchematic(); return;
+      }
       const physical = {};
       for (const [arm, side, chosen, voltage, current] of [["r1", "Top", pair.top, pair.result.v1, pair.result.i1], ["r2", "Bot", pair.bot, pair.result.vout, pair.result.i2]]) physical[arm] = analyzeParts([{
         id: arm, name: arm === "r1" ? "R1" : "R2", resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV,
@@ -2769,6 +3041,7 @@
         const selected = part.catalog?.familyId === entry.id;
         if (selected) { matches.push({ family: entry.key, candidate: part.catalog, kind: "selected" }); continue; }
         if (pairMode) {
+          if (state.pair.combination) { const candidate = combinationAlternativeParts(state.pair, arm, part).find(candidate => candidate.familyId === entry.id); if (candidate) matches.push({ family: entry.key, candidate, kind: "exact", displayOnly: true }); continue; }
           const side = arm === "r1" ? "top" : "bot", other = side === "top" ? "bot" : "top";
           const exact = part.alternatives?.find(candidate => candidate.familyId === entry.id);
           const options = pairView.filter(pair => pair[side].familyId === entry.id && pair[other].mpn === state.pair[other].mpn);
@@ -2897,7 +3170,7 @@
       schematicText(group, width / 2, height - 10, `${PAIR_METRICS[xKey].label}${PAIR_METRICS[xKey].log ? " · log" : ""}`, 11, "#c6e3ff").setAttribute("text-anchor", "middle");
       if (!pairView.length) {
         pairSvgPlots.push({ index, x, y, left: x + left, right: x + right, top: y + top, bottom: y + bottom, xKey, yKey, points: [] });
-        schematicTableText(group, 12, 66, "No pairs in this selection. Widen the ranges or Clear filters.", width - 24, 12, "#ffba52");
+        schematicTableText(group, 12, 66, "No combinations in this selection. Widen the ranges or Clear filters.", width - 24, 12, "#ffba52");
         return;
       }
       const log = PAIR_METRICS[xKey].log;
@@ -2928,13 +3201,13 @@
 
     function renderSchematicPairExplorer(parent, x, y, width) {
       pairSvgPlots = [];
-      const host = schematicShape(parent, "g", { "data-pair-explorer": "", role: "group", "aria-label": "Filter real resistor pairs by performance" });
-      schematicText(host, x, y + 18, "Pair performance", 18);
-      const status = pairItems.length ? `${pairView.length.toLocaleString()} / ${pairItems.length.toLocaleString()} combinations · plots fit the selection` : "Find pairs to enable performance sliders and plots.";
+      const host = schematicShape(parent, "g", { "data-pair-explorer": "", role: "group", "aria-label": "Filter real resistor combinations by performance" });
+      schematicText(host, x, y + 18, "Combination performance", 18);
+      const status = pairItems.length ? `${pairView.length.toLocaleString()} / ${pairItems.length.toLocaleString()} combinations · plots fit the selection` : "Find combinations to enable performance sliders and plots.";
       let top = y + 45;
       const note = schematicTableText(host, x, top, status, width, 12, "#a8bece"); top += Math.max(note.lines, width < 600 ? 2 : 1) * 15 + 8;
       if (!pairItems.length) return top + 18;
-      const basis = schematicTableText(host, x, top, "Power, current and Rth are nominal; error and stress are worst-case.", width, 11, "#a8bece"); top += basis.lines * 15 + 8;
+      const basis = schematicTableText(host, x, top, pairSpec?.construction ? "Nominal power/current/Rth; full-interval target error; conservative per-part stress bounds." : "Power, current and Rth are nominal; error and stress are worst-case.", width, 11, "#a8bece"); top += basis.lines * 15 + 8;
       let actionX = x;
       for (const input of pairFamilyToggles) {
         const key = input.dataset.pairFamily, label = `${input.checked ? "✓" : "○"} ${input.nextElementSibling.textContent}`;
@@ -2944,13 +3217,14 @@
       }
       top += 48;
       const columns = width >= 1000 ? 3 : width >= 600 ? 2 : 1, gap = 20, cellWidth = (width - (columns - 1) * gap) / columns;
-      PAIR_SLIDER_KEYS.forEach((key, index) => renderPairSvgSlider(host, key, x + (index % columns) * (cellWidth + gap), top + Math.floor(index / columns) * 72, cellWidth));
-      top += Math.ceil(PAIR_SLIDER_KEYS.length / columns) * 72 + 8;
+      const sliderKeys = pairSpec?.construction ? [...PAIR_SLIDER_KEYS, "powerSpread"] : PAIR_SLIDER_KEYS;
+      sliderKeys.forEach((key, index) => renderPairSvgSlider(host, key, x + (index % columns) * (cellWidth + gap), top + Math.floor(index / columns) * 72, cellWidth));
+      top += Math.ceil(sliderKeys.length / columns) * 72 + 8;
       const plotColumns = width >= 760 ? 2 : 1, plotWidth = (width - (plotColumns - 1) * 16) / plotColumns, plotHeight = 270;
       const indices = new Map(pairItems.map((pair, index) => [pair, index]));
       for (const [index, [xKey, yKey]] of [[byId("pairAxisX").value, byId("pairAxisY").value], ["rth", "pstress"]].entries()) renderPairSvgPlot(host, x + (index % plotColumns) * (plotWidth + 16), top + Math.floor(index / plotColumns) * (plotHeight + 16), plotWidth, plotHeight, xKey, yKey, indices);
       top += Math.ceil(2 / plotColumns) * (plotHeight + 16);
-      const help = schematicTableText(host, x, top + 12, "Click a point to preview; click again to cycle overlapping part numbers. Drag either plot to filter. Sliders use the full search range. Arrow keys adjust a slider or select a pair; Enter on a plot compares it.", width, 11, "#a8bece"); top += help.lines * 15 + 20;
+      const help = schematicTableText(host, x, top + 12, "Click a point to preview; click again to cycle overlapping part numbers. Drag either plot to filter. Sliders use the full search range. Arrow keys adjust a slider or select a combination; Enter on a plot compares it.", width, 11, "#a8bece"); top += help.lines * 15 + 20;
       help.text.setAttribute("data-schematic-controls", "");
       const readoutLabel = schematicText(host, x, top, "Selected combination", 12, "#a8bece"); readoutLabel.id = "schematicPairReadoutLabel"; top += 20;
       for (const [index, side] of ["top", "bot"].entries()) {
@@ -2958,7 +3232,7 @@
       }
       updateSchematicPairHover(pairSelected); top += 44;
       actionX = x;
-      for (const [label, action] of [["Axes", "axes"], ["Clear filters", "clear"], ["View table", "table"], ["Compare pair", "compare"], ["Copy comparison", "copy"], ["Apply pair", "apply"]]) {
+      for (const [label, action] of [["Axes", "axes"], ["Clear filters", "clear"], ["View table", "table"], ["Compare combination", "compare"], ["Copy comparison", "copy"], ["Apply combination", "apply"]]) {
         const estimated = label.length * 14 * 0.62 + 18;
         if (actionX > x && actionX + estimated > x + width) { top += 34; actionX = x; }
         const control = pairSvgAction(host, actionX, top, label, action, { disabled: ["compare", "apply"].includes(action) && !pairSelected || action === "copy" && byId("pairComparisonCopy").disabled, pressed: action === "compare" ? pairComparisons.has(pairSelected) : undefined, maxWidth: width }); actionX += control.width + 8;
@@ -2970,8 +3244,9 @@
       const label = byId("schematicPairReadoutLabel"); if (label) label.textContent = pair && pair !== pairSelected ? "Hover · click to preview" : "Selected combination";
       for (const side of ["top", "bot"]) {
         const text = byId(`schematicPair${side === "top" ? "Top" : "Bot"}Number`); if (!text) continue;
-        text.textContent = pair ? `${side === "top" ? "RTOP" : "RBOT"}: ${pair[side].mpn} · ${format(pair[side].resistanceOhms, "Ω")}` : side === "top" ? "No pair selected." : "Widen a range or Clear filters to restore pairs.";
-        text.setAttribute("font-size", Math.min(12, Number(text.dataset.maxWidth) / (text.textContent.length * 0.62)));
+        text.textContent = pair ? `${side === "top" ? "RTOP" : "RBOT"}: ${pair[side].mpn} · ${format(pair[side].resistanceOhms, "Ω")}` : side === "top" ? "No combination selected." : "Widen a range or Clear filters to restore combinations.";
+        if (pair?.combination) { text.textContent = `${side === "top" ? "RTOP" : "RBOT"}: ${pair[side].parts.length} real parts · ${format(pair[side].resistanceOhms, "Ω")} equivalent`; schematicShape(text, "title").textContent = pair[side].mpn; }
+        text.setAttribute("font-size", Math.min(12, Number(text.dataset.maxWidth) / ((text.firstChild?.textContent.length || 1) * 0.62)));
       }
     }
 
@@ -3208,6 +3483,11 @@
     function pairSearchCsv(filtered = false) {
       const items = filtered ? pairView : pairItems;
       if (!pairSpec || !items.length) return "";
+      if (pairSpec.construction) {
+        const rows = [["Combination", "Arm", "Reference", "Manufacturer part number", "Resistance (ohm)", "Tolerance (%)", "Footprint", "TCR (ppm/C)", "Ambient (C)", "Power mode", "Reliability", "Source", "Allowed power (W)", "Working voltage (V)", "Nominal part voltage (V)", "Nominal part current (A)", "Nominal part power (W)", "Pstress bound (%)", "Vstress bound (%)", "Istress bound (%)", "VTOP (V)", "Target VMID (V)", "Nominal VMID (V)", "Minimum VMID (V)", "Maximum VMID (V)", "Worst target error (%)", "Non-trim power spread (%)", "Stress method", "RTOP topology", "RBOT topology", "Analysis performed (UTC)", "Calculator", "Stock"]];
+        for (const [index, item] of items.entries()) for (const arm of ARMS) for (const part of item.physical[arm]) { const limits = item.worst.byPart[part.id]; rows.push([index + 1, arm === "r1" ? "RTOP" : "RBOT", part.name, part.mpn, part.resistance, part.tolerance, part.catalog.case, part.catalog.tcrPpm, part.catalog.temperatureC, part.catalog.mode, part.catalog.failureRate || "N/A", part.catalog.sourceUrl, part.rating, part.vmax, part.voltage, part.current, part.power, limits.p, limits.v, limits.i, pairSpec.vin, pairSpec.target, item.result.vout, item.bounds.min, item.bounds.max, item.error, item.powerSpread, "Conservative interval bounds", JSON.stringify(pairSpec.construction.r1.connection), JSON.stringify(pairSpec.construction.r2.connection), pairSpec.analyzedAt, "https://www.minipcb.com/calculators/voltage_divider.html", "Not checked"]); }
+        return rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(",")).join("\r\n") + "\r\n";
+      }
       const rows = [["RTOP part", "RBOT part", "RTOP (ohm)", "RBOT (ohm)", "RTOP tolerance (%)", "RBOT tolerance (%)", "VTOP (V)", "VTOP tolerance (%)", "Target VMID (V)", "Allowed error (%)", "RL (ohm)", "RL tolerance (%)", "Nominal VMID (V)", "Minimum VMID (V)", "Maximum VMID (V)", "Worst target error (%)", "Nominal power (W)", "Worst power (W)", "Nominal input current (A)", "Worst input current (A)", "Rth (ohm)", "Worst RTOP Pstress (%)", "Worst RBOT Pstress (%)", "Worst RTOP V/I stress (%)", "Worst RBOT V/I stress (%)", "RTOP allowed power (W)", "RBOT allowed power (W)", "Ambient (C)", "TCR (ppm/C)", "RTOP mode", "RBOT mode", "RTOP source", "RBOT source", "Stock"]];
       for (const pair of items) rows.push([pair.top.mpn, pair.bot.mpn, pair.top.resistanceOhms, pair.bot.resistanceOhms, pair.top.tolerancePct, pair.bot.tolerancePct, pairSpec.vin, pairSpec.sourceTolerance, pairSpec.target, pairSpec.errorPct, pairSpec.rl ?? "Open", pairSpec.loadTolerance, pair.result.vout, pair.bounds.min, pair.bounds.max, pair.error, pair.result.total, pair.worst.power, Math.abs(pair.result.i1), pair.worst.current, pair.result.rth, pair.worst.top.p, pair.worst.bot.p, pair.worst.top.v, pair.worst.bot.v, pair.top.powerW, pair.bot.powerW, pairSpec.temperatureC, pairSpec.tcrPpm, pair.top.mode, pair.bot.mode, pair.top.sourceUrl, pair.bot.sourceUrl, "Not checked"]);
       return rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(",")).join("\r\n") + "\r\n";
@@ -3219,6 +3499,26 @@
       catalogDesignVmid = spec.target;
       byId("vin").value = spec.vin; byId("tolVin").value = spec.sourceTolerance;
       byId("rl").value = spec.rl === null ? "" : spec.rl / Number(byId("rlUnit").value); byId("tolRl").value = spec.loadTolerance;
+      if (pair.combination) {
+        designGeneration++; automaticChoices.clear(); appliedCatalogParts.clear();
+        for (const arm of ARMS) {
+          const parts = pair.physical[arm], list = byId(`${arm}Parts`), mapping = new Map(), index = arm === "r1" ? 1 : 2;
+          list.replaceChildren(); delete list.dataset.topology; nextPart[arm] = 0;
+          byId(`${arm}Connection`).querySelector('[value="mixed"]').disabled = true;
+          const multiple = parts.length > 1 || parts[0].name !== (arm === "r1" ? "R1" : "R2");
+          byId(`${arm}Connection`).value = "series"; byId(`${arm}Multiple`).checked = multiple;
+          byId(arm).value = pair.circuit[arm] / Number(byId(`${arm}Unit`).value);
+          if (!multiple) {
+            const part = parts[0], chosen = part.catalog; byId(`tolR${index}`).value = part.tolerance; byId(`vmax${index}`).value = part.vmax;
+            const rating = byId(`p${index}`); if (![...rating.options].some(option => Number(option.value) === part.rating)) rating.add(new Option(format(part.rating, "W"), part.rating)); rating.value = part.rating;
+            appliedCatalogParts.set(arm, { ...chosen });
+          } else {
+            for (const part of parts) { const row = appendPart(arm, part); mapping.set(part.id, row.id); appliedCatalogParts.set(row.id, { ...part.catalog }); }
+            storeTopology(arm, mapTopology(spec.construction[arm].connection, id => mapping.get(id)));
+          }
+        }
+        byId("solveFor").value = "vout"; update(); selectResultTab("parts2Tab"); return;
+      }
       for (const [arm, index, part] of [["r1", "1", pair.top], ["r2", "2", pair.bot]]) {
         byId(`${arm}Multiple`).checked = false; byId(arm).value = part.resistanceOhms / Number(byId(`${arm}Unit`).value);
         byId(`tolR${index}`).value = part.tolerancePct; byId(`vmax${index}`).value = part.workingVoltageV;
@@ -3796,7 +4096,7 @@
     });
     for (const button of document.querySelectorAll("[data-solve-mode]")) button.addEventListener("click", () => {
       designGeneration++;
-      if (button.dataset.solveMode !== "vout") fixChosenAutomaticValues();
+      if (!["vout", "pairs"].includes(button.dataset.solveMode)) fixChosenAutomaticValues();
       if (automaticRows().length) byId("designStatus").textContent = "Automatic values are undefined. Choose values to update the circuit.";
       byId("solveFor").value = button.dataset.solveMode;
       update();
@@ -3805,7 +4105,8 @@
     for (const id of ["compareR1", "compareR2"]) byId(id).addEventListener("change", update);
     function circuitInputChanged(event) {
       const input = event.target;
-      if (input.id === "solveFor" && input.value !== "vout") fixChosenAutomaticValues();
+      if (input.id === "solveFor" && input.value === "pairs") { update(); return; }
+      if (input.id === "solveFor" && !["vout", "pairs"].includes(input.value)) fixChosenAutomaticValues();
       let fixed = null, fixedId = null;
       if (input.id.endsWith("Auto")) {
         const id = input.id.slice(0, -4), chosen = automaticChoices.get(id);
@@ -3831,10 +4132,12 @@
       if (match) applyCatalogPart(match.candidate, byId("parts2Part").value);
     });
     byId("parts2Copy").addEventListener("click", copyParts2Bom);
-    byId("pairForm").addEventListener("input", () => invalidatePairSearch());
+    byId("pairForm").addEventListener("input", () => { refreshPairConstruction(); invalidatePairSearch(); });
+    byId("pairUseCircuit").addEventListener("click", () => importPairConstruction());
     byId("pairForm").addEventListener("submit", event => { event.preventDefault(); window.pairSearchReady = searchResistorPairs(); });
     byId("pairForm").addEventListener("reset", () => setTimeout(() => {
-      invalidatePairSearch("Search defaults restored. Enter a target and find resistor pairs.");
+      pairConstruction = null; pairConstructionNext = 0; refreshPairConstruction();
+      invalidatePairSearch("Search defaults restored. Enter a target and find resistor combinations.");
       for (const details of byId("pairForm").querySelectorAll("details")) details.open = false;
       for (const input of byId("pairForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
     }, 0));
@@ -3954,6 +4257,8 @@
       selectResultTab("overviewTab");
     }, 0));
     initializeBomControls("parts2Bom", false, renderCircuitBomView);
+    byId("pairAxisY").add(new Option("Non-trim power spread (%)", "powerSpread"));
+    byId("pairSort").add(new Option("Non-trim power spread", "powerSpread"));
     initializeBomControls("pairBom", true, () => { pairComparisonRevision++; renderPairComparison(true); });
     renderPairComparison();
     update();
