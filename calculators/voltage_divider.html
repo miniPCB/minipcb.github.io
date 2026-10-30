@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Find real resistor combinations for a target voltage and tolerance, compare their performance, and analyze voltage divider power, voltage, and current stress." />
+  <meta name="description" content="Find real resistor combinations for a target voltage and tolerance, compare their performance, and analyze voltage divider power and voltage stress." />
   <title>Voltage Divider Calculator | miniPCB</title>
   <style>
     :root {
@@ -289,7 +289,7 @@
     .stress-card { border: 0; border-radius: 10px; padding: 15px; background: #101823; min-width: 0; }
     .stress-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
     h3 { margin: 0; font-size: 0.95rem; }
-    .stress-values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0 12px; }
+    .stress-values { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 16px 0 12px; }
     .stress-values span { color: var(--muted); display: block; font-size: 0.72rem; margin-bottom: 6px; }
     .stress-values output { font: 700 1rem var(--mono); overflow-wrap: anywhere; }
     .ok { color: var(--ok); }
@@ -349,7 +349,7 @@
     <header class="header">
       <div>
         <h1>Voltage Divider Calculator</h1>
-        <p class="subtitle">Calculate voltages. Explore tolerances. Check resistor power, voltage, and current stress.</p>
+        <p class="subtitle">Calculate voltages. Explore tolerances. Check resistor power and voltage stress.</p>
       </div>
       <span class="live-tag">DC analysis · Online calculator</span>
     </header>
@@ -431,7 +431,7 @@
           <p id="schematicEditPartStatus" class="hint" role="status"></p>
         </div>
         <div id="schematicEditPowerField" class="field" hidden><label id="schematicEditPowerLabel" for="schematicEditPower">Power rating (W)</label><input id="schematicEditPower" type="number" step="any" readonly /></div>
-        <div id="schematicEditVmaxField" class="field" hidden><label id="schematicEditVmaxLabel" for="schematicEditVmax">Max working voltage (V, optional)</label><input id="schematicEditVmax" type="number" min="0" step="any" placeholder="Power-based" /></div>
+        <div id="schematicEditVmaxField" class="field" hidden><label id="schematicEditVmaxLabel" for="schematicEditVmax">Max working voltage (V, optional)</label><input id="schematicEditVmax" type="number" min="0" step="any" placeholder="Not specified" /></div>
         </div>
         <div id="schematicPairFields" class="form-grid" hidden></div>
         <p id="schematicEditError" class="note" role="alert" hidden></p>
@@ -580,10 +580,10 @@
                 <details id="singleVoltageOptions">
                   <summary>Maximum working voltages (optional)</summary>
                   <div class="rating-fields">
-                    <div id="vmax1Field" class="field"><label for="vmax1">R1 · Vmax (V)</label><input id="vmax1" name="vmax1" type="number" min="0" step="any" placeholder="Power-based" /></div>
-                    <div id="vmax2Field" class="field"><label for="vmax2">R2 · Vmax (V)</label><input id="vmax2" name="vmax2" type="number" min="0" step="any" placeholder="Power-based" /></div>
+                    <div id="vmax1Field" class="field"><label for="vmax1">R1 · Vmax (V)</label><input id="vmax1" name="vmax1" type="number" min="0" step="any" placeholder="Not specified" /></div>
+                    <div id="vmax2Field" class="field"><label for="vmax2">R2 · Vmax (V)</label><input id="vmax2" name="vmax2" type="number" min="0" step="any" placeholder="Not specified" /></div>
                   </div>
-                  <p class="hint">Enter limits from the resistor datasheets. If blank, voltage and current limits are derived from power only.</p>
+                  <p class="hint">Enter maximum continuous working voltages from the resistor datasheets. If blank, power is checked and voltage stress is not assessed.</p>
                 </details>
                 <details>
                   <summary>Four-resistor setup help</summary>
@@ -633,7 +633,7 @@
               <div class="field"><label for="pairLoadTol">RL tolerance · ± (%)</label><input id="pairLoadTol" type="number" value="0" min="0" max="99.999" step="any" /></div>
               <div class="field"><label for="pairTemperature">Selection ambient (°C)</label><input id="pairTemperature" type="number" value="70" step="any" /></div>
               <div class="field"><label for="pairTcr">TCR (ppm/°C)</label><select id="pairTcr"></select></div>
-              <div class="field"><label for="pairMaxStress">Maximum P/V/I stress (%)</label><input id="pairMaxStress" type="number" value="100" min="0" max="100" step="any" /></div>
+              <div class="field"><label for="pairMaxStress">Maximum P/V stress (%)</label><input id="pairMaxStress" type="number" value="100" min="0" max="100" step="any" /></div>
               <div class="field"><label for="pairMaxPower">Maximum total power (mW)</label><input id="pairMaxPower" type="number" placeholder="No extra limit" min="0" step="any" /></div>
             </div><p class="hint">Limits use worst-case source and resistor intervals. Power includes RL; its rating is not checked. Family default power modes and compatible packing apply. TCR filters part numbers; temperature drift and tracking are not modeled.</p></details>
             <p id="pairCatalogStatus" class="hint" role="status">Loading resistor catalogs…</p>
@@ -695,7 +695,7 @@
           <h2 id="stressHeading">Physical resistor stress · selected ratings</h2>
           <div class="panel-body">
             <div id="stressCards" class="stress-cards"></div>
-            <p class="note">Stress is actual / limit × 100%. Values above 100% exceed the entered limit. With no Vmax entered, Vstress and Istress are power-equivalent checks; both equal √(Pstress / 100) × 100%.</p>
+            <p class="note">Pstress compares dissipation with allowed power. Vstress compares voltage drop with the specified maximum continuous working voltage. Values above 100% exceed that limit. A dash means the voltage rating is not specified and voltage stress is not assessed.</p>
           </div>
         </section>
         <section id="ratingsPanel" class="panel result-panel" role="tabpanel" aria-labelledby="ratingsTab" tabindex="0" hidden>
@@ -709,10 +709,10 @@
               <table class="rating-table">
                 <caption>Compare the chosen physical parts at different ratings. Highlighted cells match their actual ratings; custom ratings are included. Red values exceed 100%.</caption>
                 <thead>
-                  <tr><th scope="col" rowspan="2">Power rating</th><th scope="colgroup" id="compareR1Heading" colspan="3">R1 · upper resistor</th><th scope="colgroup" id="compareR2Heading" colspan="3">R2 · lower resistor</th></tr>
-                  <tr><th scope="col">Pstress</th><th scope="col">Vstress</th><th scope="col">Istress</th><th scope="col">Pstress</th><th scope="col">Vstress</th><th scope="col">Istress</th></tr>
+                  <tr><th scope="col" rowspan="2">Power rating</th><th scope="colgroup" id="compareR1Heading" colspan="2">R1 · upper resistor</th><th scope="colgroup" id="compareR2Heading" colspan="2">R2 · lower resistor</th></tr>
+                  <tr><th scope="col">Pstress</th><th scope="col">Vstress</th><th scope="col">Pstress</th><th scope="col">Vstress</th></tr>
                 </thead>
-                <tbody id="ratingRows"><tr><td colspan="7">—</td></tr></tbody>
+                <tbody id="ratingRows"><tr><td colspan="5">—</td></tr></tbody>
               </table>
             </div>
             <p class="note">Power ratings do not specify package size or working voltage. Use a rating suitable for the actual ambient temperature and mounting. RL power is shown above; its rating is not checked here.</p>
@@ -802,7 +802,7 @@
             <div id="pairResults" hidden>
               <div class="rating-fields pair-controls">
                 <div class="field"><label for="pairAxisX">Chart X axis</label><select id="pairAxisX"><option value="power">Total power (mW)</option><option value="current">Input current (µA)</option><option value="rth">Output resistance Rth (kΩ)</option></select></div>
-                <div class="field"><label for="pairAxisY">Chart Y axis</label><select id="pairAxisY"><option value="error">Worst-case target error (%)</option><option value="nominalError">Nominal target error (%)</option><option value="vmid">Nominal VMID (V)</option><option value="pstress">Worst-case Pstress (%)</option><option value="vstress">Worst-case V/I stress (%)</option></select></div>
+                <div class="field"><label for="pairAxisY">Chart Y axis</label><select id="pairAxisY"><option value="error">Worst-case target error (%)</option><option value="nominalError">Nominal target error (%)</option><option value="vmid">Nominal VMID (V)</option><option value="pstress">Worst-case Pstress (%)</option><option value="vstress">Worst-case Vstress (%)</option></select></div>
               </div>
               <p id="pairChartHelp" class="hint">Drag a rectangle to filter the table. Click a point or select a row to preview it in the top SVG. Choose which families to show using the checkboxes below. Dim points fall outside the bounds; identical performance can overlap. X axes use a logarithmic scale. Escape cancels a drag or clears filters.</p>
               <canvas id="pairChart" class="pair-chart" width="900" height="340" tabindex="0" aria-describedby="pairChartHelp" aria-label="Resistor combination performance scatter chart. Drag to filter, or use the numeric bounds below."></canvas>
@@ -827,7 +827,7 @@
               <div class="field pair-controls"><label for="pairSort">Sort combinations</label><select id="pairSort"><option value="error">Worst-case target error</option><option value="power">Total power</option><option value="current">Input current</option><option value="rth">Output resistance Rth</option><option value="pstress">Worst-case Pstress</option></select></div>
               <p class="hint">Check Compare to keep multiple combinations in the table below. Preview selects the combination shown in the top SVG.</p>
               <div class="table-wrap parts-values pair-table" tabindex="0" role="region" aria-label="Matching resistor combinations, scroll for all performance columns">
-                <table class="parts-table"><caption id="pairTableCaption">Matching combinations · all results are included in the CSV.</caption><thead><tr><th scope="col">Preview</th><th scope="col">Compare</th><th scope="col">RTOP part</th><th scope="col">RBOT part</th><th scope="col">VMID</th><th scope="col">VMID range</th><th scope="col">Worst error</th><th scope="col">Power</th><th scope="col">Input I</th><th scope="col">Rth</th><th scope="col">Pstress</th><th scope="col">V/I stress</th></tr></thead><tbody id="pairRows"></tbody></table>
+                <table class="parts-table"><caption id="pairTableCaption">Matching combinations · all results are included in the CSV.</caption><thead><tr><th scope="col">Preview</th><th scope="col">Compare</th><th scope="col">RTOP part</th><th scope="col">RBOT part</th><th scope="col">VMID</th><th scope="col">VMID range</th><th scope="col">Worst error</th><th scope="col">Power</th><th scope="col">Input I</th><th scope="col">Rth</th><th scope="col">Pstress</th><th scope="col">Vstress</th></tr></thead><tbody id="pairRows"></tbody></table>
               </div>
               <div class="pair-pagination"><button id="pairPrevious" class="btn" type="button">Previous</button><span id="pairPage" class="hint"></span><button id="pairNext" class="btn" type="button">Next</button></div>
               <section aria-labelledby="pairComparisonHeading">
@@ -854,16 +854,16 @@
                   <p><code>P = I² × R</code><br /><code>Rth = R1 || R2</code> (load excluded)</p>
                 </div>
                 <div>
-                  <p><code>Pstress = P / Prated × 100%</code></p>
-                  <p><code>Vlimit = √(Prated × R)</code>, capped by Vmax when entered.<br /><code>Ilimit = Vlimit / R</code></p>
-                  <p><code>Vstress = |V| / Vlimit × 100%</code><br /><code>Istress = |I| / Ilimit × 100%</code></p>
+                  <p><code>Pstress = P / Pallowed × 100%</code></p>
+                  <p><code>Vlimit = Vmax</code>, the specified maximum continuous working voltage.</p>
+                  <p><code>Vstress = |V| / Vmax × 100%</code><br />Without Vmax, voltage stress is not assessed. Current remains an operating-point result.</p>
                   <p>Nominal DC operating point with independent tolerance intervals for VTOP, R1, R2, and RL. Catalog parts use the allowed power at their selected ambient; manual ratings are used as entered. Transients and independent datasheet current limits are not modeled.</p>
                 </div>
               </div>
               <p class="note">Inverse solutions use <code>g = VMID / VTOP</code>, <code>Rb = RTOP × g / (1 − g)</code>, <code>RTOP = Rb × (1 − g) / g</code>, and <code>RBOT = Rb / (1 − Rb / RL)</code> when loaded. A finite positive divider needs 0 &lt; g &lt; 1. RL may be open when the target equals the unloaded output.</p>
               <p class="note">Tolerance bounds evaluate the endpoint VTOP values with minimum gain (R1 high, R2/RL low) and maximum gain (R1 low, R2/RL high). Combination searches require this entire interval to fit the allowed target band. Single-resistor arms use analytic stress maxima, including interior power peaks; larger networks use conservative per-part interval bounds. Other analysis tabs show nominal stress.</p>
               <p class="note">Multiple-part arms support series, parallel and nested branches. Each physical part has its own rating, tolerance and working-voltage limit. Solving RTOP/RBOT in the ordinary calculator scales the existing resistances. Find real resistor combinations selects catalog parts for the construction and checks every physical resistor; ratings are not pooled into an arm rating.</p>
-              <p class="note">Working voltage follows the lower of the power-derived voltage and the component's maximum working voltage. See <a href="https://www.vishay.com/docs/49873/49873_sg2113.pdf" target="_blank" rel="noopener">Vishay's resistor technical guide</a>.</p>
+              <p class="note">Allowed power and maximum continuous working voltage are independent limits; both must be met. Power is adjusted for the selected catalog temperature and operating mode. See <a href="https://www.vishay.com/docs/49873/49873_sg2113.pdf" target="_blank" rel="noopener">Vishay's resistor technical guide</a>.</p>
               <p class="note" id="updateStatus" role="status" aria-live="polite">Ready to calculate.</p>
           </div>
         </section>
@@ -1021,10 +1021,12 @@
     }
 
     function percent(value) {
+      if (!Number.isFinite(value)) return "—";
       return value !== 0 && (value < 0.01 || value >= 1e6) ? `${value.toExponential(2)}%` : `${Number(value.toFixed(2))}%`;
     }
 
     function stressClass(value) {
+      if (!Number.isFinite(value)) return "warn";
       return value > 100 + 1e-9 ? "bad" : value >= 100 - 1e-9 ? "warn" : "ok";
     }
 
@@ -1100,7 +1102,7 @@
           <div class="field"><label for="${id}Power">Power rating (W)</label><input id="${id}Power" type="number" min="0" step="any" required /></div>
           <div class="field"><label for="${id}Tol">Tolerance ± (%)</label><input id="${id}Tol" type="number" min="0" max="99.999" step="any" required /></div>
         </div>
-        <div class="field" style="margin-top:10px"><label for="${id}Vmax">Max working voltage (V, optional)</label><input id="${id}Vmax" type="number" min="0" step="any" placeholder="Power-based" /></div></div>`;
+        <div class="field" style="margin-top:10px"><label for="${id}Vmax">Max working voltage (V, optional)</label><input id="${id}Vmax" type="number" min="0" step="any" placeholder="Not specified" /></div></div>`;
       byId(`${arm}Parts`).append(row);
       byId(`${id}R`).value = Number.isFinite(seed.resistance) ? seed.resistance / 1000 : "";
       byId(`${id}Power`).value = Number.isFinite(seed.rating) ? seed.rating : "";
@@ -1308,7 +1310,7 @@
           const circuit = { vin, rl, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance }, result = analyze(vin, circuit.r1, circuit.r2, rl);
           const measured = ARMS.flatMap(arm => analyzeParts(physical[arm], models[arm].connection, arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2));
           const powers = measured.filter(part => part.id !== trim.id).map(part => part.power), mean = powers.reduce((sum, power) => sum + power, 0) / powers.length;
-          return { assignment: new Map(assignment), circuit, result, physical, measured, safe: measured.every(part => [part.power, part.stress.p, part.stress.v, part.stress.i].every(Number.isFinite) && Math.max(part.stress.p, part.stress.v, part.stress.i) <= 100 + 1e-9), error: Math.abs((result.vout - target) / target) * 100, spread: powers.length < 2 ? 0 : (Math.max(...powers) - Math.min(...powers)) / mean * 100, distance: Math.abs(Math.log((circuit.r1 + circuit.r2) / scale)) };
+          return { assignment: new Map(assignment), circuit, result, physical, measured, safe: measured.every(part => [part.power, part.stress.p, part.stress.v].filter(value => value !== null).every(Number.isFinite) && Math.max(part.stress.p, part.stress.v) <= 100 + 1e-9), error: Math.abs((result.vout - target) / target) * 100, spread: powers.length < 2 ? 0 : (Math.max(...powers) - Math.min(...powers)) / mean * 100, distance: Math.abs(Math.log((circuit.r1 + circuit.r2) / scale)) };
         };
         // Prefer the requested nominal band, then equal non-trim power. Outside
         // the band, rank the closest VMID found and report the remaining error.
@@ -1571,9 +1573,16 @@
     }
 
     function stress(resistance, voltage, current, power, rating, vmax) {
-      const vlimit = Math.min(Math.sqrt(rating) * Math.sqrt(resistance), vmax === null ? Infinity : vmax);
-      const ilimit = vlimit / resistance;
-      return { p: power / rating * 100, v: Math.abs(voltage) / vlimit * 100, i: Math.abs(current) / ilimit * 100, vlimit, ilimit };
+      const vlimit = vmax ?? null;
+      return { p: power / rating * 100, v: vlimit === null ? null : Math.abs(voltage) / vlimit * 100, vlimit };
+    }
+
+    function maximumVoltageStress(parts) {
+      return parts.length && parts.every(part => Number.isFinite(part.stress.v)) ? Math.max(...parts.map(part => part.stress.v)) : null;
+    }
+
+    function partsMissingVoltage(state) {
+      return !!state && ARMS.some(arm => state.physical[arm].some(part => part.stress.v === null));
     }
 
     let schematicState = null;
@@ -1668,7 +1677,7 @@
         const physical = {}, networks = {};
         for (const arm of ARMS) {
           const side = arm === "r1" ? "Top" : "Bot", model = pairConstruction[arm];
-          physical[arm] = model.parts.map(part => ({ ...part, resistance: byId("pairValuePolicy").value === "fixed" && !part.automatic && Number.isFinite(part.resistance) ? part.resistance : NaN, tolerance: part.settings.tolerancePct ?? Number(byId(`pairTol${side}`).value), settings: { ...part.settings, package: part.settings.package ?? byId(`pairPackage${side}`).value }, rating: NaN, stress: { p: NaN, v: NaN, i: NaN } }));
+          physical[arm] = model.parts.map(part => ({ ...part, resistance: byId("pairValuePolicy").value === "fixed" && !part.automatic && Number.isFinite(part.resistance) ? part.resistance : NaN, tolerance: part.settings.tolerancePct ?? Number(byId(`pairTol${side}`).value), settings: { ...part.settings, package: part.settings.package ?? byId(`pairPackage${side}`).value }, rating: NaN, stress: { p: NaN, v: NaN } }));
           networks[arm] = model.parts.length > 1 ? { connection: displayNetworkConnection(model.connection), parts: physical[arm] } : null;
         }
         return { pairSetup: true, constructionSetup: true, circuit: { vin: number("pairVin"), rl: number("pairRl") }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical, networks, result: {}, bounds: {}, target: number("pairVmid"), allowedErrorPct: number("pairErrorPct"), analyzedAt: null };
@@ -1687,7 +1696,7 @@
       const physical = {}, networks = {};
       for (const arm of ARMS) {
         const index = arm === "r1" ? 1 : 2;
-        physical[arm] = byId(`${arm}Multiple`).checked ? [...byId(`${arm}Parts`).children].map(row => ({ id: row.id, name: row.dataset.name, resistance: byId(`${row.id}Auto`).checked ? automaticChoices.get(row.id)?.resistanceOhms ?? NaN : byId(`${row.id}R`).valueAsNumber * Number(byId(`${row.id}Unit`).value), tolerance: byId(`${row.id}Tol`).valueAsNumber, rating: byId(`${row.id}Power`).valueAsNumber, vmax: null, stress: { p: NaN, v: NaN, i: NaN } })) : [{ id: arm, name: arm.toUpperCase(), resistance: byId(arm).valueAsNumber * Number(byId(`${arm}Unit`).value), tolerance: byId(`tolR${index}`).valueAsNumber, rating: Number(byId(`p${index}`).value), vmax: null, stress: { p: NaN, v: NaN, i: NaN } }];
+        physical[arm] = byId(`${arm}Multiple`).checked ? [...byId(`${arm}Parts`).children].map(row => ({ id: row.id, name: row.dataset.name, resistance: byId(`${row.id}Auto`).checked ? automaticChoices.get(row.id)?.resistanceOhms ?? NaN : byId(`${row.id}R`).valueAsNumber * Number(byId(`${row.id}Unit`).value), tolerance: byId(`${row.id}Tol`).valueAsNumber, rating: byId(`${row.id}Power`).valueAsNumber, vmax: null, stress: { p: NaN, v: NaN } })) : [{ id: arm, name: arm.toUpperCase(), resistance: byId(arm).valueAsNumber * Number(byId(`${arm}Unit`).value), tolerance: byId(`tolR${index}`).valueAsNumber, rating: Number(byId(`p${index}`).value), vmax: null, stress: { p: NaN, v: NaN } }];
         networks[arm] = byId(`${arm}Multiple`).checked ? { connection: byId(`${arm}Connection`).value === "mixed" ? armTopology(arm) : byId(`${arm}Connection`).value, parts: physical[arm] } : null;
       }
       return { pending: true, physical, networks, circuit: { vin: byId("vin").valueAsNumber, r1: NaN, r2: NaN, rl: byId("rl").value === "" ? null : byId("rl").valueAsNumber * Number(byId("rlUnit").value) }, tolerances: { vin: byId("tolVin").valueAsNumber, rl: byId("tolRl").valueAsNumber }, result: {}, bounds: {}, target: byId("designTarget").valueAsNumber };
@@ -1839,6 +1848,31 @@
       return { text, lines };
     }
 
+    function operatingPointRows(state) {
+      const complete = !!state && !state.pairSetup && !state.pending;
+      return [["VMID", complete ? state.result.vout : null, "V", "vmid", "#75d5ff", "#12354b"], ["Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
+    }
+
+    function operatingPointHeight(width) {
+      return width >= 900 ? 134 : 234;
+    }
+
+    function renderOperatingPoint(host, state, x, y, width) {
+      const group = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "group", "aria-label": "Operating Point Information", "data-field": "operatingPointInformation", "data-state": state?.pair ? "preview" : !state || state.pairSetup || state.pending ? "awaiting" : "calculated" });
+      const heading = "Operating Point Information", columns = width >= 900 ? 4 : 2, gap = 12, cardWidth = (width - gap * (columns - 1)) / columns;
+      schematicText(group, 0, 20, heading, Math.min(18, width / (heading.length * 0.62)), "#eaf6ff");
+      operatingPointRows(state).forEach(([label, value, unit, key, accent, background], index) => {
+        const left = (index % columns) * (cardWidth + gap), top = 34 + Math.floor(index / columns) * 100;
+        const card = schematicShape(group, "g", { transform: `translate(${left} ${top})`, role: "group", "aria-label": `${label}: ${Number.isFinite(value) ? format(value, unit) : "unavailable"}${state?.pair ? "; selected preview, nominal" : "; nominal"}`, "data-operating-point": key });
+        schematicShape(card, "rect", { width: cardWidth, height: 88, rx: 12, fill: background });
+        schematicShape(card, "rect", { x: 0, y: 14, width: 4, height: 60, rx: 2, fill: accent });
+        schematicText(card, 14, 23, label, 13, accent);
+        const content = Number.isFinite(value) ? format(value, unit) : "—";
+        schematicText(card, 14, 66, content, Math.min(34, (cardWidth - 28) / (content.length * 0.62)), "#f4fbff", `operating${key}`);
+        schematicShape(card, "title").textContent = `${state?.pair ? "Selected combination preview; nominal" : "Nominal operating point"}${key === "rth" ? "; output source resistance, load excluded" : ""}.`;
+      });
+    }
+
     function circuitCharacteristics(state, mode) {
       const complete = !!state && !state.pairSetup && !state.pending, pair = state?.pair, target = state?.target;
       const value = (number, unit) => Number.isFinite(number) ? format(number, unit) : "—";
@@ -1864,8 +1898,9 @@
       if (["pairs", "tolerance"].includes(mode)) rows.push(["Allowed VMID error", Number.isFinite(state?.allowedErrorPct) ? `±${percent(state.allowedErrorPct)}` : "—", "allowedError"]);
       if (mode === "rl") rows.push(["Load power", complete ? value(state.result.pl, "W") : "—", "loadPower"]);
       const parts = complete ? ARMS.flatMap(arm => state.physical[arm]) : [];
+      if (complete && partsMissingVoltage(state)) rows.push(["Voltage ratings", `${parts.filter(part => part.stress.v !== null).length} / ${parts.length} specified`, "voltageRatings"]);
       rows.push([mode === "pairs" ? "Worst Pstress" : "Nominal Pstress", !complete ? "—" : percent(pair ? pair.pstress : Math.max(...parts.map(part => part.stress.p))), "pstress"],
-        [mode === "pairs" ? "Worst V/I stress" : "Nominal V/I stress", !complete ? "—" : percent(pair ? pair.vstress : Math.max(...parts.flatMap(part => [part.stress.v, part.stress.i]))), "vistress"],
+        [mode === "pairs" ? "Worst Vstress" : "Nominal Vstress", !complete ? "—" : percent(pair ? pair.vstress : maximumVoltageStress(parts)), "vstress"],
         ["Analyzed", state?.analyzedAt ? state.analyzedAt.slice(0, 16).replace("T", " ") + " UTC" : "—", "analyzedAt"],
         ["Calculator", "Voltage divider ↗", "calculator"]);
       return { rows, height: rows.length * 28 + 48, complete };
@@ -1889,7 +1924,7 @@
         if (field === "analyzedAt" && state?.analyzedAt) schematicShape(cell, "title").textContent = state.analyzedAt;
         if (["nominalError", "worstError"].includes(field)) schematicShape(cell, "title").textContent = targetErrorDescription(state?.target);
         if (field === "vmidAccuracy") schematicShape(cell, "title").textContent = "Worst tolerance deviation from nominal VMID; voltage units are used when nominal VMID is zero.";
-        if (["pstress", "vistress"].includes(field)) schematicShape(cell, "title").textContent = mode === "pairs" ? "Highest stress bound across all physical divider resistors, including source, load and component tolerance intervals." : "Highest nominal stress across all physical RTOP/RBOT resistors, using each part's own ratings.";
+        if (["pstress", "vstress"].includes(field)) schematicShape(cell, "title").textContent = field === "vstress" && partsMissingVoltage(state) ? "Voltage stress is not fully assessed: specify a maximum continuous working voltage for every resistor." : mode === "pairs" ? "Highest stress bound across all physical divider resistors, including source, load and component tolerance intervals." : "Highest nominal stress across all physical RTOP/RBOT resistors, using each part's own ratings.";
       }
       return "Circuit characteristics. " + rows.map(([label, value]) => `${label}: ${value}`).join(". ") + `. Calculator page: ${url}.`;
     }
@@ -1900,16 +1935,16 @@
 
     function renderSchematicTable(host, state, roles, x, y, width, alternativesByPart) {
       const narrow = width < 650, refWidth = 50, descriptionWidth = narrow ? 0 : width * 0.21, stressWidth = narrow ? 42 : 50;
-      const pnWidth = (width - (narrow ? 0 : refWidth + descriptionWidth) - 3 * stressWidth) / 2;
-      const widths = [refWidth, descriptionWidth, pnWidth, pnWidth, stressWidth, stressWidth, stressWidth];
-      const labels = ["Ref Des", "Description", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress"], offsets = [0];
+      const pnWidth = (width - (narrow ? 0 : refWidth + descriptionWidth) - 2 * stressWidth) / 2;
+      const widths = [refWidth, descriptionWidth, pnWidth, pnWidth, stressWidth, stressWidth];
+      const labels = ["Ref Des", "Description", "TNPW PN", "M55342 PN", "Pstress", "Vstress"], offsets = [0];
       for (const size of widths) offsets.push(offsets.at(-1) + size);
       // Narrow rows put the reference and description above the PN/stress cells.
-      if (narrow) offsets.splice(2, 5, 0, pnWidth, 2 * pnWidth, 2 * pnWidth + stressWidth, 2 * pnWidth + 2 * stressWidth);
+      if (narrow) offsets.splice(2, 4, 0, pnWidth, 2 * pnWidth, 2 * pnWidth + stressWidth);
       const entries = state ? ARMS.flatMap(arm => state.physical[arm].map(part => ({ arm, part }))) : [];
-      const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Istress", "Description", "Part status", "TNPW recommendation (not applied)", "M55342 recommendation (not applied)"]];
+      const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Description", "Part status", "TNPW recommendation (not applied)", "M55342 recommendation (not applied)"]];
       schematicBomChoices.clear(); schematicBomChoiceRevision++;
-      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor descriptions, part numbers and nominal stresses", "aria-colcount": 7, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
+      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor descriptions, part numbers and nominal power/voltage stresses", "aria-colcount": 6, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
       const title = schematicTableText(table, 0, 16, "Parts list and electrical part stress", width, 14, "#eaf6ff"), headerTop = title.lines * 15 + 15;
       const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = narrow ? 64 : 32;
       schematicInfoBox(head, 0, headerTop, width, headerHeight);
@@ -1936,7 +1971,7 @@
         const descriptionCell = schematicShape(row, "g", { role: "cell", "aria-colindex": 2 });
         const described = schematicTableText(descriptionCell, refWidth + 4, 21, actualDescription, narrow ? width - refWidth - 8 : descriptionWidth - 8, narrow ? 11 : 10, "#c6e3ff", "description");
         const recommendationText = family => { const match = matches.find(item => item.family === family && item.kind === "nearby"), delta = match ? (match.candidate.resistanceOhms / part.resistance - 1) * 100 : 0; return match ? `${match.candidate.mpn}; ${format(match.candidate.resistanceOhms, "Ω")}; ±${percent(match.candidate.tolerancePct)}; ${match.candidate.case}; ΔR ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "—"; };
-        bom.push([...["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil", "pstress", "vstress", "istress"].map(key => cells[key]), actualDescription, part.catalog ? "Applied" : candidates.length ? "Exact-value matches; not applied" : "Unassigned; recommendations are not applied", recommendationText("tnpw"), recommendationText("mil")]);
+        bom.push([...["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil", "pstress", "vstress"].map(key => cells[key]), actualDescription, part.catalog ? "Applied" : candidates.length ? "Exact-value matches; not applied" : "Unassigned; recommendations are not applied", recommendationText("tnpw"), recommendationText("mil")]);
         const partTop = narrow ? 21 + Math.max(reference.lines, described.lines) * 15 + 8 : 21;
         let rowBottom = Math.max(reference.lines, described.lines) * 15 + 15;
         for (const [column, family] of [[2, "tnpw"], [3, "mil"]]) {
@@ -1964,10 +1999,11 @@
           }
           rowBottom = Math.max(rowBottom, cellBottom);
         }
-        for (const [metricIndex, key] of ["p", "v", "i"].entries()) {
+        for (const [metricIndex, key] of ["p", "v"].entries()) {
           const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 5 }), value = part.stress[key], content = percent(value);
           const colors = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" };
           schematicText(cell, offsets[metricIndex + 4] + 4, partTop, content, Math.min(narrow ? 10 : 13, (stressWidth - 8) / (content.length * 0.62)), colors[stressClass(value)], key);
+          if (key === "v") schematicShape(cell, "title").textContent = value === null ? "Vstress not assessed: maximum continuous working voltage is not specified." : `Voltage drop / maximum continuous working voltage (${part.vmax} V).`;
         }
         const height = Math.max(36, rowBottom + 6); background.setAttribute("height", height); top += height + 6;
       }
@@ -2086,7 +2122,7 @@
       for (const line of [`Nominal ideal DC; tolerances, ratings and MPNs below are annotations, not simulation models.`, `VMID nominal=${state.result.vout} V; min=${state.bounds.min} V; max=${state.bounds.max} V`, `VTOP tolerance +/-${state.tolerances.vin}%; RL ${state.circuit.rl === null ? "open (omitted)" : state.circuit.rl + " ohm, +/-" + state.tolerances.rl + "%"}`]) text(64, y += 32, line);
       for (const edge of edges) {
         const p = edge.part;
-        text(64, y += 32, `${edge.name} (${p.name}): ${p.resistance} ohm; +/-${p.tolerance}%; ${p.catalog?.case || "footprint not set"}; ${p.rating} W allowed; Vmax ${p.vmax ?? "power-derived"}`);
+        text(64, y += 32, `${edge.name} (${p.name}): ${p.resistance} ohm; +/-${p.tolerance}%; ${p.catalog?.case || "footprint not set"}; ${p.rating} W allowed; Vmax ${p.vmax ?? "not specified"}`);
         if (p.mpn) text(64, y += 32, `${edge.name} selected MPN: ${p.mpn}`);
       }
       return ["Version 4", `SHEET 1 ${Math.max(1280, 256 + width + 512)} ${y + 96}`, ...wires, ...flags, ...symbols, ...texts, ""].join("\r\n");
@@ -2097,12 +2133,13 @@
       const cell = value => String(value ?? "—").replaceAll("|", "&#124;").replace(/[\r\n]/g, " ");
       const table = rows => rows.map((row, index) => "| " + row.map(cell).join(" | ") + " |" + (index === 0 ? "\n| " + row.map(() => "---").join(" | ") + " |" : "")).join("\n");
       const characteristics = circuitCharacteristics(state, mode).rows.map(([label, value]) => [label, value]);
+      const operatingPoint = operatingPointRows(state).map(([label, value, unit]) => [label, value === null ? "—" : format(value, unit)]);
       const connectivity = [["Reference", "LTspice name", "Arm", "From node", "To node", "Resistance (ohm)", "Tolerance (%)", "Allowed power (W)", "Working voltage (V)", "Selected MPN"]];
-      for (const edge of edges) connectivity.push([edge.part.name, edge.name, edge.arm === "r1" ? "RTOP" : "RBOT", edge.from, edge.to, edge.part.resistance, edge.part.tolerance, edge.part.rating, edge.part.vmax ?? "Power-derived", edge.part.mpn || "Unassigned"]);
+      for (const edge of edges) connectivity.push([edge.part.name, edge.name, edge.arm === "r1" ? "RTOP" : "RBOT", edge.from, edge.to, edge.part.resistance, edge.part.tolerance, edge.part.rating, edge.part.vmax ?? "Not specified", edge.part.mpn || "Unassigned"]);
       if (state.circuit.rl !== null) connectivity.push(["RL", "RL", "Load", "VMID", "0", state.circuit.rl, state.tolerances.rl, "Not checked", "Not checked", "Unassigned"]);
       const diagram = ["flowchart TB", '  GND(("GND"))', '  VTOP(("VTOP"))', '  VMID(("VMID"))', `  GND -->|"V1 ${state.circuit.vin} V"| VTOP`, ...edges.map(edge => `  ${edge.from === "0" ? "GND" : edge.from} -->|"${edge.name} ${edge.part.resistance} ohm"| ${edge.to === "0" ? "GND" : edge.to}`)];
       if (state.circuit.rl !== null) diagram.push(`  VMID -->|"RL ${state.circuit.rl} ohm"| GND`);
-      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Circuit connections", "", `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
+      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Operating Point Information", "", table([["Quantity", "Nominal value"], ...operatingPoint]), "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Circuit connections", "", `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Pstress is power / allowed power × 100%; Vstress is absolute voltage drop / specified maximum continuous working voltage × 100%. Both limits apply independently. A missing working-voltage rating is unassessed (—), not a power-derived limit. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
     }
 
     function updateCircuitDownloads(state, mode) {
@@ -2132,13 +2169,13 @@
       const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
       const searchOffset = mode === "pairs" ? 40 : 0;
       const stacked = width < 1050;
-      const characteristics = circuitCharacteristics(state, mode), analysisHeight = characteristics.height + 16;
-      const drawingY = 62 + searchOffset + (stacked ? analysisHeight : 0);
       const drawingWidth = stacked ? Math.min(680, width - 32) : Math.min(560, width * 0.42);
-      const drawingBottom = drawingY + drawingWidth * renderSchematicDrawing(state, roles) / 680;
       const detailsX = stacked ? 24 : drawingWidth + 40;
+      const detailsWidth = width - detailsX - 16, informationWidth = stacked ? width - 32 : detailsWidth;
+      const characteristics = circuitCharacteristics(state, mode), operatingHeight = operatingPointHeight(informationWidth), analysisHeight = operatingHeight + characteristics.height + 16;
+      const drawingY = 62 + searchOffset + (stacked ? analysisHeight : 0);
+      const drawingBottom = drawingY + drawingWidth * renderSchematicDrawing(state, roles) / 680;
       const detailsY = stacked ? drawingBottom + 22 : 30 + drawingY - 64 + analysisHeight;
-      const detailsWidth = width - detailsX - 16;
       const partsGroup = byId("schematicParts");
       partsGroup.replaceChildren();
       if (mode === "pairs") {
@@ -2148,7 +2185,9 @@
           if (resistorCatalog) { schematicEditable(control.pill, key, content); control.pill.setAttribute("aria-label", key === "search-run" ? "Find real resistor combinations" : "Edit combination search options"); }
         }
       }
-      const characteristicsDescription = renderCircuitCharacteristics(partsGroup, state, characteristics, mode, stacked ? 16 : detailsX, stacked ? 42 + searchOffset : detailsY - analysisHeight, stacked ? width - 32 : detailsWidth);
+      const informationX = stacked ? 16 : detailsX, informationY = stacked ? 42 + searchOffset : detailsY - analysisHeight;
+      renderOperatingPoint(partsGroup, state, informationX, informationY, informationWidth);
+      const characteristicsDescription = renderCircuitCharacteristics(partsGroup, state, characteristics, mode, informationX, informationY + operatingHeight, informationWidth);
       const alternativeParts = new Map();
       byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY}) scale(${drawingWidth / 680})`);
       byId("schematicR1Value").textContent = Number.isFinite(state?.circuit.r1) ? format(state.circuit.r1, "Ω") : "—";
@@ -2169,7 +2208,7 @@
       svg.setAttribute("width", width);
       svg.setAttribute("height", height);
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      const descriptions = state && !state.pending && !state.pairSetup ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}, Istress ${percent(part.stress.i)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
+      const descriptions = state && !state.pending && !state.pairSetup ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
       const roleDescription = `${solveLabel}. Yellow means missing or invalid input; green means known; red identifies the value to find. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
       const voltageDescription = state && !state.pairSetup && !state.pending ? `Nominal VMID ${format(state.result.vout, "V")}; minimum ${format(state.bounds.min, "V")}; maximum ${format(state.bounds.max, "V")}.${state.pair ? ` Target error ${percent(state.pair.error)}.` : ""} ` : "";
       const searchDescription = mode === "pairs" ? `Search target VMID ${byId("pairVmid").value || "not set"} V; allowed error ±${byId("pairErrorPct").value || "not set"}%. Edit the source, target, load, resistor constraints or Options; Find combinations runs the search. Found resistance and performance values are read-only. Circuit inputs and BOM change only on Apply. ` : "";
@@ -2414,9 +2453,9 @@
       const bounds = toleranceAnalysis(solved, tolerances, ranges);
       const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null)];
       for (const arm of ARMS) for (const item of analyzeParts(physical[arm], networks[arm]?.connection || "series", arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2)) {
-        if (assignment && item.id === part.id && Math.max(item.stress.p, item.stress.v, item.stress.i) > 100 + 1e-9) throw new Error("This part exceeds its power or working-voltage limit. Choose a larger footprint or change the circuit.");
-        numbers.push(item.resistance, item.voltage, item.current, item.power, ...Object.values(item.stress));
-        for (const rating of RATINGS) numbers.push(...Object.values(stress(item.resistance, item.voltage, item.current, item.power, rating.watts, item.vmax)));
+        if (assignment && item.id === part.id && Math.max(item.stress.p, item.stress.v) > 100 + 1e-9) throw new Error("This part exceeds its power or working-voltage limit. Choose a larger footprint or change the circuit.");
+        numbers.push(item.resistance, item.voltage, item.current, item.power, ...Object.values(item.stress).filter(value => value !== null));
+        for (const rating of RATINGS) numbers.push(...Object.values(stress(item.resistance, item.voltage, item.current, item.power, rating.watts, item.vmax)).filter(value => value !== null));
       }
       if (numbers.some(number => !Number.isFinite(number))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
       return { circuit: solved, tolerances, physical, networks, mode, target: value, assignment };
@@ -2494,7 +2533,7 @@
       rth: { label: "Rth (kΩ)", log: true, value: pair => pair.result.rth / 1000 },
       error: { label: "Worst error (%)", value: pair => pair.error },
       pstress: { label: "Worst Pstress (%)", value: pair => pair.pstress },
-      vstress: { label: "Worst V/I stress (%)", value: pair => pair.vstress },
+      vstress: { label: "Worst Vstress (%)", value: pair => pair.vstress },
       nominalError: { label: "Nominal error (%)", value: pair => pair.nominalError },
       vmid: { label: "Nominal VMID (V)", value: pair => pair.result.vout },
       powerSpread: { label: "Non-trim power spread (%)", value: pair => pair.powerSpread ?? 0 }
@@ -2505,7 +2544,7 @@
     const BOM_COLUMNS = [
       ["option", "Option", "base", "pair"], ["reference", "Reference", "base"], ["qty", "Qty", "base"], ["value", "Value", "base"], ["tolerance", "Tolerance", "base"], ["footprint", "Footprint", "base"], ["mpn", "Manufacturer part number", "base"],
       ["allowed", "Allowed power", "optional"], ["vmax", "Working voltage limit", "optional"], ["tcr", "TCR (ppm/°C)", "optional"], ["reliability", "Reliability", "optional"], ["conditions", "Conditions", "optional"],
-      ["voltage", "Part voltage", "optional"], ["current", "Part current", "optional"], ["power", "Part power", "optional"], ["pstress", "Pstress", "optional"], ["vstress", "Vstress", "optional"], ["istress", "Istress", "optional"],
+      ["voltage", "Part voltage", "optional"], ["current", "Part current", "optional"], ["power", "Part power", "optional"], ["pstress", "Pstress", "optional"], ["vstress", "Vstress", "optional"],
       ["vmid", "VMID", "optional", "pair"], ["range", "VMID range", "optional", "pair"], ["error", "Worst target error", "optional", "pair"], ["totalPower", "Nominal power", "optional", "pair"], ["worstPower", "Worst power", "optional", "pair"], ["inputI", "Nominal input I", "optional", "pair"], ["worstI", "Worst input I", "optional", "pair"], ["rth", "Rth", "optional", "pair"], ["search", "Search conditions", "optional", "pair"],
       ["powerSpread", "Non-trim power spread", "optional", "pair"], ["tnpw", "TNPW alternative", "optional"], ["mil", "M55342 alternative", "optional"]
     ];
@@ -2757,8 +2796,7 @@
           const interval = range(node);
           if (typeof node === "string") {
             const part = parts.get(node), power = Math.min(voltage * current, voltage * voltage / interval.min, current * current * interval.max);
-            const vlimit = Math.min(Math.sqrt(part.rating * interval.min), part.vmax), ilimit = Math.min(Math.sqrt(part.rating / interval.max), part.vmax / interval.max);
-            byPart[node] = { p: 100 * power / part.rating, v: 100 * voltage / vlimit, i: 100 * current / ilimit, power, voltage, current };
+            byPart[node] = { p: 100 * power / part.rating, v: 100 * voltage / part.vmax, power, voltage, current };
           } else for (const child of node.children) {
             const childRange = range(child);
             if (node.connection === "parallel") visit(child, voltage, Math.min(current, voltage / childRange.min));
@@ -2772,7 +2810,7 @@
         const connection = spec.construction[arm].connection;
         visit(connection, voltage, arm === "r1" ? maximum.i1 : voltage / range(connection).min);
         const limits = state.physical[arm].map(part => byPart[part.id]);
-        groups[arm] = { p: Math.max(...limits.map(limit => limit.p)), v: Math.max(...limits.flatMap(limit => [limit.v, limit.i])) };
+        groups[arm] = { p: Math.max(...limits.map(limit => limit.p)), v: Math.max(...limits.map(limit => limit.v)) };
       }
       return { top: groups.r1, bot: groups.r2, byPart, power: maximum.total, current: maximum.i1, conservative: true };
     }
@@ -2873,7 +2911,7 @@
       const botThevenin = loadMax === null ? a : parallel(a, loadMax);
       const pBot = analyze(v, a, clamp(botThevenin, c, d), loadMax).p2;
       const vTop = v * b / (b + lowerMin), vBot = v * lowerMax / (a + lowerMax);
-      const stressFor = (part, power, voltage) => ({ p: 100 * power / part.powerW, v: 100 * Math.max(Math.sqrt(power / part.powerW), voltage / part.workingVoltageV) });
+      const stressFor = (part, power, voltage) => ({ p: 100 * power / part.powerW, v: 100 * voltage / part.workingVoltageV });
       return { top: stressFor(top, pTop, vTop), bot: stressFor(bot, pBot, vBot), power: v * v / (a + lowerMin), current: v / (a + lowerMin) };
     }
 
@@ -2983,7 +3021,7 @@
       }
       byId("pairPage").textContent = pairView.length ? `${start + 1}–${end} of ${pairView.length.toLocaleString()} combinations${pairFilterActive() ? ` (${pairItems.length.toLocaleString()} total)` : ""}` : "No combinations in this selection";
       byId("pairPrevious").disabled = pairPage === 0; byId("pairNext").disabled = end >= pairView.length;
-      byId("pairTableCaption").textContent = `Nominal VMID, power, current and Rth; error and P/V/I stress use worst-case intervals. Showing ${PAIR_PAGE_SIZE} per page from ${pairView.length.toLocaleString()} visible combinations. Filtered CSV matches this table; all-combinations CSV retains all ${pairItems.length.toLocaleString()} matches.`;
+      byId("pairTableCaption").textContent = `Nominal VMID, power, current and Rth; error and P/V stress use worst-case intervals. Showing ${PAIR_PAGE_SIZE} per page from ${pairView.length.toLocaleString()} visible combinations. Filtered CSV matches this table; all-combinations CSV retains all ${pairItems.length.toLocaleString()} matches.`;
     }
 
     function selectPair(index) {
@@ -2998,7 +3036,7 @@
         const line = document.createElement("p"); line.className = "part-number";
         line.textContent = `${label}: ${part.mpn} · ${format(part.resistanceOhms, "Ω")} · ±${part.tolerancePct}% · ${format(part.powerW, "W")} allowed at ${part.temperatureC} °C · ${part.workingVoltageV} V max · ${part.tcrPpm} ppm/°C`; inspector.append(line);
       }
-      for (const text of [`VMID ${format(pair.result.vout, "V")}; range ${format(pair.bounds.min, "V")} to ${format(pair.bounds.max, "V")}. Worst target error ${percent(pair.error)}.`, `Total power ${format(pair.result.total, "W")} nominal / ${format(pair.worst.power, "W")} worst; input current ${format(Math.abs(pair.result.i1), "A")} nominal / ${format(pair.worst.current, "A")} worst. Rth ${format(pair.result.rth, "Ω")} (load excluded).`, `Worst stress RTOP: P ${percent(pair.worst.top.p)}, V/I ${percent(pair.worst.top.v)}; RBOT: P ${percent(pair.worst.bot.p)}, V/I ${percent(pair.worst.bot.v)}.`]) {
+      for (const text of [`VMID ${format(pair.result.vout, "V")}; range ${format(pair.bounds.min, "V")} to ${format(pair.bounds.max, "V")}. Worst target error ${percent(pair.error)}.`, `Total power ${format(pair.result.total, "W")} nominal / ${format(pair.worst.power, "W")} worst; input current ${format(Math.abs(pair.result.i1), "A")} nominal / ${format(pair.worst.current, "A")} worst. Rth ${format(pair.result.rth, "Ω")} (load excluded).`, `Worst stress RTOP: P ${percent(pair.worst.top.p)}, V ${percent(pair.worst.top.v)}; RBOT: P ${percent(pair.worst.bot.p)}, V ${percent(pair.worst.bot.v)}.`]) {
         const line = document.createElement("p"); line.className = "hint"; line.textContent = text; inspector.append(line);
       }
       byId("pairApply").disabled = false;
@@ -3022,7 +3060,7 @@
       host.innerHTML = `<details><summary>Columns and performance filters</summary><fieldset><legend>Show optional columns</legend><div class="bom-column-options"></div></fieldset><div class="rating-fields">
         <div class="field"><label for="${prefix}Query">Search ${name}</label><input id="${prefix}Query" type="search" placeholder="Reference, part number, footprint…" /></div>
         <div class="field"><label for="${prefix}MaxP">Maximum ${pair ? "worst " : ""}Pstress (%)</label><input id="${prefix}MaxP" type="number" min="0" step="any" placeholder="No limit" /></div>
-        <div class="field"><label for="${prefix}MaxVI">Maximum ${pair ? "worst " : ""}V/I stress (%)</label><input id="${prefix}MaxVI" type="number" min="0" step="any" placeholder="No limit" /></div>
+        <div class="field"><label for="${prefix}MaxV">Maximum ${pair ? "worst " : ""}Vstress (%)</label><input id="${prefix}MaxV" type="number" min="0" step="any" placeholder="No limit" /></div>
         <div class="field"><label for="${prefix}MaxPower">Maximum ${pair ? "worst total" : "part"} power (mW)</label><input id="${prefix}MaxPower" type="number" min="0" step="any" placeholder="No limit" /></div>
         </div><button id="${prefix}Reset" class="btn" type="button">Clear table filters</button></details>`;
       const options = host.querySelector(".bom-column-options");
@@ -3043,7 +3081,7 @@
 
     function readBomFilters(prefix) {
       const filters = { query: byId(`${prefix}Query`).value.trim().toLowerCase() };
-      for (const name of ["MaxP", "MaxVI", "MaxPower"]) {
+      for (const name of ["MaxP", "MaxV", "MaxPower"]) {
         const input = byId(`${prefix}${name}`); input.removeAttribute("aria-invalid");
         const value = input.value === "" && !input.validity.badInput ? null : input.valueAsNumber;
         if (value !== null && (!Number.isFinite(value) || value < 0)) { input.setAttribute("aria-invalid", "true"); filters.error = "Enter nonnegative finite performance limits or leave them blank."; }
@@ -3054,14 +3092,14 @@
     }
 
     function bomMatches(cells, metrics, filters) {
-      const under = (value, limit) => limit === null || value <= limit + 1e-9 * Math.max(1, limit);
-      return !filters.error && (!filters.query || cells.join(" ").toLowerCase().includes(filters.query)) && under(metrics.p, filters.MaxP) && under(metrics.vi, filters.MaxVI) && under(metrics.power * 1000, filters.MaxPower);
+      const under = (value, limit) => limit === null || Number.isFinite(value) && value <= limit + 1e-9 * Math.max(1, limit);
+      return !filters.error && (!filters.query || cells.join(" ").toLowerCase().includes(filters.query)) && under(metrics.p, filters.MaxP) && under(metrics.v, filters.MaxV) && under(metrics.power * 1000, filters.MaxPower);
     }
 
     function bomPartCells(part, chosen = part.catalog, alternatives = {}) {
       return { reference: part.name, qty: "1", value: format(part.resistance, "Ω"), tolerance: `±${percent(part.tolerance)}`, footprint: chosen?.case || "Not set", mpn: chosen?.mpn || "Unassigned",
-        allowed: format(part.rating, "W"), vmax: part.vmax === null ? "Power-based" : format(part.vmax, "V"), tcr: chosen ? `±${chosen.tcrPpm}` : "Not set", reliability: chosen ? chosen.failureRate || "N/A" : "Not set", conditions: chosen ? `${chosen.temperatureC} °C · ${chosen.mode}` : "Manual",
-        voltage: format(part.voltage, "V"), current: format(Math.abs(part.current), "A"), power: format(part.power, "W"), pstress: percent(part.stress.p), vstress: percent(part.stress.v), istress: percent(part.stress.i), tnpw: alternatives.tnpw || "—", mil: alternatives.mil || "—" };
+        allowed: format(part.rating, "W"), vmax: part.vmax === null ? "Not specified" : format(part.vmax, "V"), tcr: chosen ? `±${chosen.tcrPpm}` : "Not set", reliability: chosen ? chosen.failureRate || "N/A" : "Not set", conditions: chosen ? `${chosen.temperatureC} °C · ${chosen.mode}` : "Manual",
+        voltage: format(part.voltage, "V"), current: format(Math.abs(part.current), "A"), power: format(part.power, "W"), pstress: percent(part.stress.p), vstress: percent(part.stress.v), tnpw: alternatives.tnpw || "—", mil: alternatives.mil || "—" };
     }
 
     function appendBomCells(row, cells, columns) {
@@ -3069,7 +3107,7 @@
         const cell = parts2Cell(row, cells[key] ?? "—", key === "reference" ? "th" : "td"); cell.dataset.bomColumn = key;
         if (key === "reference") cell.scope = "row";
         if (["mpn", "tnpw", "mil"].includes(key)) cell.className = "part-number";
-        if (["pstress", "vstress", "istress"].includes(key)) cell.className = stressClass(Number.parseFloat(cells[key]));
+        if (["pstress", "vstress"].includes(key)) cell.className = stressClass(Number.parseFloat(cells[key]));
         if (["search", "conditions"].includes(key)) cell.className = "pair-comparison-conditions";
       }
     }
@@ -3087,10 +3125,10 @@
         })) : [["Top", pair.top, "r1"], ["Bot", pair.bot, "r2"]].map(([side, chosen, arm]) => {
           const limits = pair.worst[side === "Top" ? "top" : "bot"], alternatives = {};
           for (const option of [chosen, ...pairAlternativeParts(pair, side)]) alternatives[option.familyId.includes("m55342") ? "mil" : "tnpw"] = option.mpn;
-          const part = { name: arm.toUpperCase(), resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV, voltage: arm === "r1" ? pair.result.v1 : pair.result.vout, current: arm === "r1" ? pair.result.i1 : pair.result.i2, power: arm === "r1" ? pair.result.p1 : pair.result.p2, stress: { p: limits.p, v: limits.v, i: limits.v } };
+          const part = { name: arm.toUpperCase(), resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV, voltage: arm === "r1" ? pair.result.v1 : pair.result.vout, current: arm === "r1" ? pair.result.i1 : pair.result.i2, power: arm === "r1" ? pair.result.p1 : pair.result.p2, stress: { p: limits.p, v: limits.v } };
           return { ...bomPartCells(part, chosen, alternatives), option: String(index + 1), vmid: format(pair.result.vout, "V"), range: `${format(pair.bounds.min, "V")} … ${format(pair.bounds.max, "V")}`, error: percent(pair.error), totalPower: format(pair.result.total, "W"), worstPower: format(pair.worst.power, "W"), inputI: format(Math.abs(pair.result.i1), "A"), worstI: format(pair.worst.current, "A"), rth: format(pair.result.rth, "Ω"), search };
         });
-        if (bomMatches(rows.flatMap(Object.values), { p: pair.pstress, vi: pair.vstress, power: pair.worst.power }, filters)) groups.push({ pair, rows });
+        if (bomMatches(rows.flatMap(Object.values), { p: pair.pstress, v: pair.vstress, power: pair.worst.power }, filters)) groups.push({ pair, rows });
       }
       return { columns, filters, groups };
     }
@@ -3657,11 +3695,11 @@
       const items = filtered ? pairView : pairItems;
       if (!pairSpec || !items.length) return "";
       if (pairSpec.construction) {
-        const rows = [["Combination", "Arm", "Reference", "Manufacturer part number", "Resistance (ohm)", "Tolerance (%)", "Footprint", "TCR (ppm/C)", "Ambient (C)", "Power mode", "Reliability", "Source", "Allowed power (W)", "Working voltage (V)", "Nominal part voltage (V)", "Nominal part current (A)", "Nominal part power (W)", "Pstress bound (%)", "Vstress bound (%)", "Istress bound (%)", "VTOP (V)", "Target VMID (V)", "Nominal VMID (V)", "Minimum VMID (V)", "Maximum VMID (V)", "Worst target error (%)", "Non-trim power spread (%)", "Stress method", "RTOP topology", "RBOT topology", "Analysis performed (UTC)", "Calculator", "Stock"]];
-        for (const [index, item] of items.entries()) for (const arm of ARMS) for (const part of item.physical[arm]) { const limits = item.worst.byPart[part.id]; rows.push([index + 1, arm === "r1" ? "RTOP" : "RBOT", part.name, part.mpn, part.resistance, part.tolerance, part.catalog.case, part.catalog.tcrPpm, part.catalog.temperatureC, part.catalog.mode, part.catalog.failureRate || "N/A", part.catalog.sourceUrl, part.rating, part.vmax, part.voltage, part.current, part.power, limits.p, limits.v, limits.i, pairSpec.vin, pairSpec.target, item.result.vout, item.bounds.min, item.bounds.max, item.error, item.powerSpread, "Conservative interval bounds", JSON.stringify(pairSpec.construction.r1.connection), JSON.stringify(pairSpec.construction.r2.connection), pairSpec.analyzedAt, "https://www.minipcb.com/calculators/voltage_divider.html", "Not checked"]); }
+        const rows = [["Combination", "Arm", "Reference", "Manufacturer part number", "Resistance (ohm)", "Tolerance (%)", "Footprint", "TCR (ppm/C)", "Ambient (C)", "Power mode", "Reliability", "Source", "Allowed power (W)", "Working voltage (V)", "Nominal part voltage (V)", "Nominal part current (A)", "Nominal part power (W)", "Pstress bound (%)", "Vstress bound (%)", "VTOP (V)", "Target VMID (V)", "Nominal VMID (V)", "Minimum VMID (V)", "Maximum VMID (V)", "Worst target error (%)", "Non-trim power spread (%)", "Stress method", "RTOP topology", "RBOT topology", "Analysis performed (UTC)", "Calculator", "Stock"]];
+        for (const [index, item] of items.entries()) for (const arm of ARMS) for (const part of item.physical[arm]) { const limits = item.worst.byPart[part.id]; rows.push([index + 1, arm === "r1" ? "RTOP" : "RBOT", part.name, part.mpn, part.resistance, part.tolerance, part.catalog.case, part.catalog.tcrPpm, part.catalog.temperatureC, part.catalog.mode, part.catalog.failureRate || "N/A", part.catalog.sourceUrl, part.rating, part.vmax, part.voltage, part.current, part.power, limits.p, limits.v, pairSpec.vin, pairSpec.target, item.result.vout, item.bounds.min, item.bounds.max, item.error, item.powerSpread, "Conservative interval bounds", JSON.stringify(pairSpec.construction.r1.connection), JSON.stringify(pairSpec.construction.r2.connection), pairSpec.analyzedAt, "https://www.minipcb.com/calculators/voltage_divider.html", "Not checked"]); }
         return rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(",")).join("\r\n") + "\r\n";
       }
-      const rows = [["RTOP part", "RBOT part", "RTOP (ohm)", "RBOT (ohm)", "RTOP tolerance (%)", "RBOT tolerance (%)", "VTOP (V)", "VTOP tolerance (%)", "Target VMID (V)", "Allowed error (%)", "RL (ohm)", "RL tolerance (%)", "Nominal VMID (V)", "Minimum VMID (V)", "Maximum VMID (V)", "Worst target error (%)", "Nominal power (W)", "Worst power (W)", "Nominal input current (A)", "Worst input current (A)", "Rth (ohm)", "Worst RTOP Pstress (%)", "Worst RBOT Pstress (%)", "Worst RTOP V/I stress (%)", "Worst RBOT V/I stress (%)", "RTOP allowed power (W)", "RBOT allowed power (W)", "Ambient (C)", "TCR (ppm/C)", "RTOP mode", "RBOT mode", "RTOP source", "RBOT source", "Stock"]];
+      const rows = [["RTOP part", "RBOT part", "RTOP (ohm)", "RBOT (ohm)", "RTOP tolerance (%)", "RBOT tolerance (%)", "VTOP (V)", "VTOP tolerance (%)", "Target VMID (V)", "Allowed error (%)", "RL (ohm)", "RL tolerance (%)", "Nominal VMID (V)", "Minimum VMID (V)", "Maximum VMID (V)", "Worst target error (%)", "Nominal power (W)", "Worst power (W)", "Nominal input current (A)", "Worst input current (A)", "Rth (ohm)", "Worst RTOP Pstress (%)", "Worst RBOT Pstress (%)", "Worst RTOP Vstress (%)", "Worst RBOT Vstress (%)", "RTOP allowed power (W)", "RBOT allowed power (W)", "Ambient (C)", "TCR (ppm/C)", "RTOP mode", "RBOT mode", "RTOP source", "RBOT source", "Stock"]];
       for (const pair of items) rows.push([pair.top.mpn, pair.bot.mpn, pair.top.resistanceOhms, pair.bot.resistanceOhms, pair.top.tolerancePct, pair.bot.tolerancePct, pairSpec.vin, pairSpec.sourceTolerance, pairSpec.target, pairSpec.errorPct, pairSpec.rl ?? "Open", pairSpec.loadTolerance, pair.result.vout, pair.bounds.min, pair.bounds.max, pair.error, pair.result.total, pair.worst.power, Math.abs(pair.result.i1), pair.worst.current, pair.result.rth, pair.worst.top.p, pair.worst.bot.p, pair.worst.top.v, pair.worst.bot.v, pair.top.powerW, pair.bot.powerW, pairSpec.temperatureC, pairSpec.tcrPpm, pair.top.mode, pair.bot.mode, pair.top.sourceUrl, pair.bot.sourceUrl, "Not checked"]);
       return rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(",")).join("\r\n") + "\r\n";
     }
@@ -3780,7 +3818,7 @@
             if (chosen?.mpn === candidate.mpn || preview.highest <= 100 + 1e-9) matches[entry.key] = { candidate, preview };
           } catch (_) { /* No supported exact-value alternative under these conditions. */ }
         }
-        parts2BomEntries.push({ part, cells: bomPartCells(part, chosen, { tnpw: matches.tnpw?.candidate.mpn, mil: matches.mil?.candidate.mpn }), metrics: { p: part.stress.p, vi: Math.max(part.stress.v, part.stress.i), power: part.power } });
+        parts2BomEntries.push({ part, cells: bomPartCells(part, chosen, { tnpw: matches.tnpw?.candidate.mpn, mil: matches.mil?.candidate.mpn }), metrics: { p: part.stress.p, v: part.stress.v, power: part.power } });
       }
       renderCircuitBomView();
     }
@@ -3925,7 +3963,7 @@
       const tolerances = { ...state.tolerances, r1: equivalents.r1.tolerance, r2: equivalents.r2.tolerance };
       const bounds = toleranceAnalysis(circuit, tolerances, Object.fromEntries(ARMS.map(arm => [arm, [equivalents[arm].min, equivalents[arm].max]])));
       const part = analyzeParts(physical[targetArm], state.networks[targetArm]?.connection || "series", targetArm === "r1" ? result.v1 : result.vout, targetArm === "r1" ? result.i1 : result.i2).find(p => p.id === targetId);
-      const highest = Math.max(part.stress.p, part.stress.v, part.stress.i);
+      const highest = Math.max(part.stress.p, part.stress.v);
       if (![result.vout, bounds.min, bounds.max, highest].every(Number.isFinite)) throw new Error("Candidate exceeds the numeric range.");
       return { result, bounds, highest, targetArm };
     }
@@ -4068,7 +4106,7 @@
       for (const arm of ARMS) byId(`${arm}Summary`).textContent = "Enter valid part values to calculate the equivalent arm.";
       byId("operatingRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate.</td></tr>';
       byId("toleranceRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate tolerance bounds.</td></tr>';
-      byId("ratingRows").innerHTML = '<tr><td colspan="7">Enter valid circuit data to compare ratings.</td></tr>';
+      byId("ratingRows").innerHTML = '<tr><td colspan="5">Enter valid circuit data to compare ratings.</td></tr>';
       byId("stressCards").replaceChildren();
       byId("loadSummary").textContent = "—";
       byId("inputError").textContent = message;
@@ -4085,7 +4123,7 @@
     }
 
     function stressCard(name, resistance, rating, values, vmax, catalogPart = null) {
-      const highest = Math.max(values.p, values.v, values.i);
+      const highest = Math.max(values.p, values.v);
       const state = stressClass(highest);
       const status = state === "bad" ? "Rating exceeded" : state === "warn" ? "At limit" : vmax === null ? "Within power limit" : "Within entered limits";
       return `<article class="stress-card">
@@ -4093,12 +4131,11 @@
         <div class="stress-values">
           <div><span>Pstress</span><output class="${stressClass(values.p)}">${percent(values.p)}</output></div>
           <div><span>Vstress</span><output class="${stressClass(values.v)}">${percent(values.v)}</output></div>
-          <div><span>Istress</span><output class="${stressClass(values.i)}">${percent(values.i)}</output></div>
         </div>
         <div class="stress-bar" aria-hidden="true"><span class="${stressClass(values.p)}" style="width:${Math.min(100, values.p)}%"></span></div>
         <p class="hint">Power utilization of ${format(rating, "W")} ${catalogPart ? `allowed at ${catalogPart.temperatureC} °C · ${catalogPart.mode} mode` : "rating"}</p>
         ${catalogPart ? `<p class="limits">${catalogPart.mpn} · P70 ${format(catalogPart.ratedPowerW, "W")}</p>` : ""}
-        <p class="limits">Vlimit ${format(values.vlimit, "V")} · Ilimit ${format(values.ilimit, "A")}<br />${vmax === null ? "Power-derived limits; Vmax not specified." : `Vmax entered: ${format(vmax, "V")}.`}</p>
+        <p class="limits">${vmax === null ? "Voltage stress not assessed: specify Vmax." : `Maximum continuous working voltage: ${format(vmax, "V")}.`}</p>
       </article>`;
     }
 
@@ -4171,7 +4208,7 @@
           r2: stress(selected2.resistance, selected2.voltage, selected2.current, selected2.power, rating.watts, selected2.vmax)
         }));
         const allParts = [...physical.r1, ...physical.r2];
-        const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null), ...allParts.flatMap(part => [part.resistance, part.voltage, part.current, part.power, ...Object.values(part.stress)]), ...comparisons.flatMap(row => [...Object.values(row.r1), ...Object.values(row.r2)])];
+        const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null), ...allParts.flatMap(part => [part.resistance, part.voltage, part.current, part.power, ...Object.values(part.stress).filter(value => value !== null)]), ...comparisons.flatMap(row => [...Object.values(row.r1).filter(value => value !== null), ...Object.values(row.r2).filter(value => value !== null)])];
         if (numbers.some(value => !Number.isFinite(value))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
 
         byId("inputError").hidden = true;
@@ -4223,8 +4260,8 @@
         byId("loadSummary").textContent = `Unloaded VMID: ${format(result.unloaded, "V")} · Rth: ${format(result.rth, "Ω")} · ${rl === null ? "Open load (IL = 0 A)." : `RL = ${format(rl, "Ω")}; output magnitude reduced by ${percent(Math.max(0, loading))}.`}`;
         byId("stressCards").innerHTML = allParts.map(part => stressCard(part.name, part.resistance, part.rating, part.stress, part.vmax, part.catalog)).join("");
         byId("ratingRows").innerHTML = comparisons.map(({ rating, r1: a, r2: b }) => {
-          const cells = [a.p, a.v, a.i, b.p, b.v, b.i].map((value, index) => {
-            const selected = rating.watts === (index < 3 ? p1 : p2);
+          const cells = [a.p, a.v, b.p, b.v].map((value, index) => {
+            const selected = rating.watts === (index < 2 ? p1 : p2);
             return `<td class="${stressClass(value)}${selected ? " chosen" : ""}">${percent(value)}${selected ? '<span class="chosen-label" aria-label="selected rating"> *</span>' : ""}</td>`;
           }).join("");
           return `<tr><th scope="row">${rating.label}</th>${cells}</tr>`;

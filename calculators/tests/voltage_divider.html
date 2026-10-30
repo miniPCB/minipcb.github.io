@@ -51,13 +51,13 @@
         valid("Initial calculation");
         assert(schematicField("r1", "footprint") === "Not set" && get("liveSchematic").querySelectorAll('.schematic-pill[data-schematic-edit][role="button"]').length === 4, "SVG shows editable tolerance/package pills and leaves manual packages explicitly unset");
         assert(text("vout") === "6 V" && text("iin") === "600 µA" && text("ptotal") === "7.2 mW", "Original default operating point");
-        assert(stressOutputs().join(",") === "1.44,12,12,1.44,12,12", "Original default resistor stresses");
+        assert(stressOutputs().join(",") === "1.44,NaN,1.44,NaN", "Original default resistor stresses");
         assert(text("voutMin") === "5.94 V" && text("voutMax") === "6.06 V" && text("voutError") === "1%", "Default ±1% resistor output bounds");
         assert(get("targetVout").readOnly && !get("vin").readOnly, "VMID mode marks the calculated field");
-        assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 6, "Fifteen common ratings retain selected highlights");
+        assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 4, "Fifteen common ratings retain selected highlights");
         assert(text("schematicVtop") === "VTOP 12 V ±0%" && text("schematicVmid") === "VMID 6 V", "Schematic shows the default source, tolerance, and midpoint");
         assert(schematicField("r1", "resistance") === "10 kΩ" && schematicField("r1", "tolerance") === "±1%" && schematicField("r1", "rating") === "Rated 250 mW", "Schematic shows actual resistance, tolerance, and rating");
-        assert(["p", "v", "i"].map(field => schematicField("r1", field)).join(",") === "1.44%,12%,12%", "Schematic shows default Pstress, Vstress, and Istress");
+        assert(["p", "v"].map(field => schematicField("r1", field)).join(",") === "1.44%,—", "Schematic shows default Pstress and unassessed voltage stress");
 
         set("rl", "100");
         valid("Loaded forward solution");
@@ -173,15 +173,15 @@
         }
 
         await reset(); set("p1", "0.0625"); set("p2", "2");
-        assert(stressOutputs().join(",") === "5.76,24,24,0.18,4.24,4.24", "Independent power rating regressions");
+        assert(stressOutputs().join(",") === "5.76,NaN,0.18,NaN", "Independent power rating regressions");
         await reset(); set("p1", "0.03"); set("p2", "50"); valid("Smallest and largest power presets");
-        assert(stressOutputs().join(",") === "12,34.64,34.64,0.0072,0.85,0.85", "30 mW and 50 W presets use their actual ratings");
+        assert(stressOutputs().join(",") === "12,NaN,0.0072,NaN", "30 mW and 50 W presets use their actual ratings");
         await reset(); set("vmax1", "3");
-        assert(stressOutputs().slice(0, 3).join(",") === "1.44,200,200", "Working voltage stress cap retained");
+        assert(stressOutputs().slice(0, 2).join(",") === "1.44,200", "Working voltage stress cap retained");
         await reset(); set("vin", "100");
-        assert(stressOutputs().every(value => value === 100), "Exact power limit remains 100% stress");
+        assert(stressOutputs().every((value, index) => index % 2 ? Number.isNaN(value) : value === 100), "Exact power limit remains 100% stress");
         set("vin", "200");
-        assert(stressOutputs().join(",") === "400,200,200,400,200,200", "Overload stress scaling retained");
+        assert(stressOutputs().join(",") === "400,NaN,400,NaN", "Overload stress scaling retained");
 
         for (const [id, value] of [["r1", "0"], ["r2", "-1"], ["rl", "0"], ["vin", ""], ["tolR1", "-1"], ["tolR2", "100"], ["tolVin", ""], ["vmax1", "0"], ["vin", "1e309"]]) {
           await reset(); set(id, value); invalid(`Invalid ${id}=${value}`);
@@ -231,12 +231,12 @@
         const seriesBounds = w.networkEquivalent(w.readNetwork("r1", "vout").parts, "series");
         near(seriesBounds.min, 9750, "Series minimum sums individual limits");
         near(seriesBounds.max, 10250, "Series maximum sums individual limits");
-        assert(stressOutputs().filter((value, index) => index % 3 === 0).join(",") === "0.72,0.9,1.44,0.45,1.44", "Each part uses its unique power rating");
+        assert(stressOutputs().filter((value, index) => index % 2 === 0).join(",") === "0.72,0.9,1.44,0.45,1.44", "Each part uses its unique power rating");
         assert(ids("r1").map(id => schematicField(id, "rating")).join(",") === "Rated 125 mW,Rated 100 mW,Rated 62.5 mW,Rated 200 mW", "Schematic retains unique physical power ratings");
         assert(ids("r1").map(id => schematicField(id, "tolerance")).join(",") === "±1%,±2%,±3%,±4%", "Schematic retains unique physical tolerances");
         set(`${ids("r1")[0]}Vmax`, "1");
-        assert(stressOutputs().slice(0, 3).join(",") === "0.72,150,150", "Per-part working voltage caps stress");
-        assert(schematicField(ids("r1")[0], "v") === "150%" && schematicField(ids("r1")[0], "i") === "150%", "Schematic includes each part's working-voltage limit");
+        assert(stressOutputs().slice(0, 2).join(",") === "0.72,150", "Per-part working voltage caps stress");
+        assert(schematicField(ids("r1")[0], "v") === "150%" && !schematicPart(ids("r1")[0]).querySelector('[data-field="i"]'), "Schematic includes each part's independent voltage stress without redundant current stress");
         const snapshotLink = get("schematicDownload");
         const snapshot = new DOMParser().parseFromString(await (await fetch(snapshotLink.href)).text(), "image/svg+xml");
         assert(!snapshot.querySelector("parsererror") && snapshot.documentElement.namespaceURI === "http://www.w3.org/2000/svg", "SVG download is well-formed standalone XML");
@@ -244,7 +244,7 @@
         assert(!snapshot.querySelector("image, script, link") && !get("schematicViewport").querySelector('a[target="_blank"], a[href$=".svg"]') && snapshotLink.download === "voltage_divider.svg" && !snapshotLink.target, "Schematic has no separate image-opening links and retains a self-contained SVG download");
         choosePart("r1", ids("r1")[3]);
         assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 16, "Comparison selector includes custom individual power rating");
-        assert(get("ratingRows").querySelectorAll(".chosen").length === 6, "Custom and standard chosen ratings are highlighted");
+        assert(get("ratingRows").querySelectorAll(".chosen").length === 4, "Custom and standard chosen ratings are highlighted");
 
         await reset(); enableParts("r1"); split("r1");
         for (const [index, id] of ids("r1").entries()) { set(`${id}R`, index + 1); set(`${id}Power`, index === 3 ? 0.01 : 0.125); }
@@ -252,7 +252,7 @@
         const unequalParts = armParts("r1");
         for (const [index, part] of unequalParts.entries()) near(part.power, [0.025, 0.05, 0.075, 0.1][index], "Unequal series power distribution");
         near(unequalParts.reduce((sum, part) => sum + part.power, 0), 0.25, "Physical powers sum to arm power");
-        assert(get("stressCards").querySelectorAll(".badge.bad").length === 1 && stressOutputs()[9] === 1000, "Weak part overload is not hidden by total available wattage");
+        assert(get("stressCards").querySelectorAll(".badge.bad").length === 1 && stressOutputs()[6] === 1000, "Weak part overload is not hidden by total available wattage");
         assert(schematicField(ids("r1")[3], "p") === "1000%" && schematicPart(ids("r1")[3]).querySelector('[data-field="p"]').getAttribute("fill") === "#ff8e8e", "Schematic identifies an overloaded individual resistor");
         set("vin", "12"); set("solveFor", "r1"); set("targetVout", "4");
         valid("Inverse solve scales a series arm");
@@ -275,7 +275,7 @@
           near(part.current, 0.00015, "Equal parallel part current");
           near(part.power, 0.0009, "Equal parallel part dissipation");
         }
-        assert(ids("r1").every(id => schematicField(id, "resistance") === "40 kΩ" && schematicField(id, "p") === "0.36%" && schematicField(id, "v") === "6%"), "Parallel schematic uses individual branch resistance and stress");
+        assert(ids("r1").every(id => schematicField(id, "resistance") === "40 kΩ" && schematicField(id, "p") === "0.36%" && schematicField(id, "v") === "—"), "Parallel schematic uses individual branch resistance and power stress without inventing voltage ratings");
 
         await reset(); enableParts("r1"); set("r1Connection", "parallel");
         set(`${ids("r1")[0]}R`, "2"); set(`${ids("r1")[0]}Tol`, "10");
@@ -288,7 +288,7 @@
         assert(text("voutMin") === w.format(5583600 / 544500, "V") && text("voutMax") === w.format(1333200 / 125500, "V"), "Output uses exact asymmetric network bounds");
         const physicalParallel = armParts("r1");
         near(physicalParallel[0].power / physicalParallel[1].power, 3, "Unequal parallel power follows inverse resistance");
-        assert(physicalParallel.every(part => ["p", "v", "i"].every(field => schematicField(part.id, field) === w.percent(part.stress[field]))), "Unequal parallel schematic follows each branch's actual stress");
+        assert(physicalParallel.every(part => ["p", "v"].every(field => schematicField(part.id, field) === w.percent(part.stress[field]))), "Unequal parallel schematic follows each branch's actual power and voltage stress");
         set("vin", "-12");
         assert(text("voutMin") === w.format(-1333200 / 125500, "V") && text("voutMax") === w.format(-5583600 / 544500, "V"), "Negative source reverses network output bounds");
         enableParts("r2"); click('[data-add-part="r2"]');

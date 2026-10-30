@@ -99,7 +99,7 @@
         near(Number(get("p1").value), 0.14, "Applying a single resistor imports its actual P70 rating");
         near(get("vmax1").valueAsNumber, 150, "Applying a part imports its working-voltage limit");
         assert(get("vout").textContent === "6 V" && get("catalogApplied").textContent.includes("TNPW080510K0FEEA"), "Applying an exact-value candidate preserves VMID and associates the MPN");
-        assert(get("liveSchematic").querySelector('[data-schematic-part="r1"] [data-family="tnpw"] [data-field="mpn"]').textContent === "TNPW080510K0FEEA" && [...get("schematicParts").querySelectorAll('[role="columnheader"]')].map(node => node.textContent).join("|") === "Ref Des|Description|TNPW PN|M55342 PN|Pstress|Vstress|Istress", "Applied MPN appears under its family beside the description in the SVG table");
+        assert(get("liveSchematic").querySelector('[data-schematic-part="r1"] [data-family="tnpw"] [data-field="mpn"]').textContent === "TNPW080510K0FEEA" && [...get("schematicParts").querySelectorAll('[role="columnheader"]')].map(node => node.textContent).join("|") === "Ref Des|Description|TNPW PN|M55342 PN|Pstress|Vstress", "Applied MPN appears under its family beside the description in the SVG table");
         const exportedSvg = await (await fetch(get("schematicDownload").href)).text();
         assert(exportedSvg.includes("TNPW080510K0FEEA"), "Downloaded SVG captures the applied MPN");
         assert(w.catalogBomCsv().includes('"TNPW080510K0FEEA"') && w.catalogBomCsv().includes('"Unassigned"') && w.catalogBomCsv().includes('"Not checked"'), "BOM distinguishes applied and unassigned parts and unknown stock");
@@ -176,8 +176,8 @@
         assert(bomCell("r1", "qty").textContent === "1" && bomCell("r1", "value").textContent === "10 kΩ" && bomCell("r1", "footprint").textContent === "0805" && get("liveSchematic").querySelector('[data-schematic-symbol="r1"] [data-field="footprint"]').textContent === "0805", "Standard BOM and SVG show the applied physical footprint and quantity");
         set("parts2BomMaxP", "2.5");
         assert(get("parts2BomRows").rows.length === 1 && bomRow("r2") && w.parts2BomTsv().trim().split("\r\n").length === 2, "Nominal Pstress filtering retains only the qualifying resistor and copied row");
-        get("parts2BomReset").click(); set("parts2BomMaxVI", "15.6");
-        assert(get("parts2BomRows").rows.length === 1 && bomRow("r2"), "Nominal V/I stress filtering uses actual independent part limits");
+        get("parts2BomReset").click(); set("parts2BomMaxV", "8");
+        assert(get("parts2BomRows").rows.length === 1 && bomRow("r1"), "Nominal voltage stress filtering uses each part maximum continuous voltage");
         get("parts2BomReset").click(); set("parts2BomMaxPower", "3.5");
         assert(get("parts2BomRows").rows.length === 0 && get("parts2Copy").disabled && w.parts2BomTsv() === "" && get("inputError").hidden, "Part-power filtering clears copied rows without invalidating the circuit");
         get("parts2BomReset").click(); set("parts2BomQuery", bomCell("r1", "mpn").textContent);

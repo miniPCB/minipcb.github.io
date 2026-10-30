@@ -33,7 +33,7 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
   const parts=Object.values(item.physical).flat();let safe=true;
   for(let mask=0;mask<(1<<parts.length);mask++){
    const resistance=part=>part.resistance*(1+((mask>>parts.indexOf(part))&1?1:-1)*part.tolerance/100),top=item.physical.r1.reduce((sum,part)=>sum+resistance(part),0),bottom=resistance(item.physical.r2[0]),result=w.analyze(Math.abs(spec().vin)*(1+spec().sourceTolerance/100),top,bottom,null);
-   for(const part of parts){const r=resistance(part),current=part===item.physical.r2[0]?result.i2:result.i1,stress=w.stress(r,current*r,current,current*current*r,part.rating,part.vmax),limit=item.worst.byPart[part.id];safe&&=stress.p<=limit.p+1e-8&&stress.v<=limit.v+1e-8&&stress.i<=limit.i+1e-8;}
+   for(const part of parts){const r=resistance(part),current=part===item.physical.r2[0]?result.i2:result.i1,stress=w.stress(r,current*r,current,current*current*r,part.rating,part.vmax),limit=item.worst.byPart[part.id];safe&&=stress.p<=limit.p+1e-8&&stress.v<=limit.v+1e-8&&Math.abs(current)<=limit.current+1e-8;}
   }
   assert(safe,"Conservative per-part bounds contain every physical-resistor tolerance corner for a sampled combination");
  }
@@ -69,7 +69,7 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  const loaded=selected(),all=Object.values(loaded.physical).flat(),left=loaded.physical.r1[0].id,right=loaded.physical.r1[1].id;let containsCorners=true;
  for(let mask=0;mask<(1<<all.length);mask++)for(const direction of [-1,1]){
   const r=new Map(all.map((part,index)=>[part.id,part.resistance*(1+((mask>>index)&1?1:-1)*part.tolerance/100)])),par=w.parallel(r.get(left),r.get(right)),top=par+loaded.physical.r1.slice(2).reduce((sum,part)=>sum+r.get(part.id),0),bottom=r.get(loaded.physical.r2[0].id),load=spec().rl*(1+direction*spec().loadTolerance/100),a=w.analyze(-Math.abs(spec().vin)*(1+spec().sourceTolerance/100),top,bottom,load);
-  for(const part of all){const resistance=r.get(part.id),current=part===loaded.physical.r2[0]?a.i2:[left,right].includes(part.id)?a.i1*par/resistance:a.i1,stress=w.stress(resistance,current*resistance,current,current*current*resistance,part.rating,part.vmax),limits=loaded.worst.byPart[part.id];containsCorners&&=stress.p<=limits.p+1e-8&&stress.v<=limits.v+1e-8&&stress.i<=limits.i+1e-8;}
+  for(const part of all){const resistance=r.get(part.id),current=part===loaded.physical.r2[0]?a.i2:[left,right].includes(part.id)?a.i1*par/resistance:a.i1,stress=w.stress(resistance,current*resistance,current,current*current*resistance,part.rating,part.vmax),limits=loaded.worst.byPart[part.id];containsCorners&&=stress.p<=limits.p+1e-8&&stress.v<=limits.v+1e-8&&Math.abs(current)<=limits.current+1e-8;}
  }
  assert(containsCorners,"Conservative bounds contain every loaded mixed-network resistance/load corner, with unique tolerances and a negative source");
  const beforeFailure=circuit();template().r1.parts[0].resistance=1234.567;get("pairForm").requestSubmit();await w.pairSearchReady;assert(!items().length&&!get("pairError").hidden&&circuit()===beforeFailure,"A fixed non-catalog value gives an explicit no-part result without fabricating a PN or modifying the circuit");

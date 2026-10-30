@@ -103,7 +103,7 @@ values. Calculated voltages are read-only; an entered VMID target remains editab
 in inverse modes. The readouts retain their role colors and appear in the
 standalone SVG download.
 Each physical RTOP/RBOT resistor is annotated with its resistance, tolerance,
-footprint size, power rating, Pstress, Vstress, and Istress. The drawing contains
+footprint size, power rating, Pstress and Vstress. The drawing contains
 one symbol per physical RTOP/RBOT resistor in the work form, wired as a series
 chain or a parallel bank. A finite RL adds its load symbol; an open RL has no
 resistor symbol. Each drawn part shows its value and two small filled pills for
@@ -117,7 +117,7 @@ input; calculated arm values are read-only.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
 connections visible. The **Parts list and electrical part stress** table contains **Ref Des**,
-**Description**, **TNPW PN**, **M55342 PN**, **Pstress**, **Vstress** and **Istress**
+**Description**, **TNPW PN**, **M55342 PN**, **Pstress** and **Vstress**
 columns and one row per physical resistor. The description shows actual resistance,
 tolerance and footprint; unassigned footprints read **Footprint not set**. On
 smaller screens, each reference and description sit above the part-number and
@@ -147,7 +147,7 @@ Part-number tooltips include resistance alongside the part's operating limits;
 both graph hover readouts also show the resistance of each part. The **Copy BOM**
 pill below the SVG parts table copies the displayed physical resistors as a
 spreadsheet-ready table, including quantity, resistance, tolerance, footprint,
-selected part number, both family part numbers and nominal P/V/I stress. In combination
+selected part number, both family part numbers and nominal P/V stress. In combination
 mode it copies the preview without applying it to the circuit. If clipboard
 access is unavailable, the text is selected below the diagram for manual copying.
 
@@ -230,13 +230,22 @@ Selecting a candidate preserves the applied circuit inputs and BOM. The heading
 identifies the preview, and Download SVG captures it. Leaving the visualization
 or selecting an empty region restores the combination-search input display.
 
+Four large, colorful **Operating Point Information** boxes show nominal **VMID**,
+**total power**, **input current** (magnitude) and **Rth** above Circuit
+characteristics. Rth is the divider's source resistance, excluding RL. The boxes
+follow the active Find mode or selected combination preview, clear unavailable
+values, reflow on small screens and remain in the SVG download. The current
+Markdown export includes the same operating-point table.
+
 The common **Circuit characteristics** table appears in every Find mode, beside
 the circuit on larger screens and above it on smaller screens. It identifies the
 calculated quantity and lists nominal total power, input current and source
-resistance Rth. Ordinary modes show the highest nominal Pstress and V/I stress
+resistance Rth. Ordinary modes show the highest nominal Pstress and Vstress
 among all physical RTOP/RBOT parts; combination previews retain their validated worst-case
 stress values. Find RL also shows load power; tolerance analysis shows the found
-per-resistor tolerance and allowed VMID error.
+per-resistor tolerance and allowed VMID error. If any part lacks a working-voltage
+rating, the overall Vstress is unassessed and the table lists how many parts have
+specified ratings. An explicit maximum Vstress filter excludes unassessed parts.
 
 Where an independent VMID target exists (inverse modes and combination searches),
 **Nominal target error** is the absolute output error divided by the target
@@ -278,7 +287,7 @@ old candidate annotations and leaves its inputs editable. Use the existing
 
 Below the circuit, the same SVG contains a **Combination performance** explorer. Six
 two-ended sliders filter total power, input current, output Rth, target error,
-Pstress and V/I stress. Networks add a seventh slider for non-trim power spread.
+Pstress and Vstress. Networks add a seventh slider for non-trim power spread.
 Power/current/Rth are nominal; error uses the full output interval. Network
 stress uses conservative per-part interval bounds; the two-part variant retains
 its analytic stress maxima. Positive power, current and Rth ranges
@@ -634,9 +643,9 @@ The **Circuit BOM** starts with standard reference, quantity, value, tolerance,
 footprint and manufacturer-part-number columns, with one row per physical
 RTOP/RBOT resistor. Unassigned parts show **Unassigned** and **Not set** for the
 MPN and footprint. **Columns and performance filters** can add ratings,
-TCR/reliability, part voltage/current/power, nominal P/V/I stress, conditions and
+TCR/reliability, part voltage/current/power, nominal P/V stress, conditions and
 both exact-value family alternatives. Text search and maximum nominal Pstress,
-V/I stress and per-part power narrow the visible rows without changing the circuit.
+Vstress and per-part power narrow the visible rows without changing the circuit.
 Clear table filters restores all rows; column choices persist.
 
 Applied parts retain their actual package, ambient, TCR and mode when catalog
@@ -654,11 +663,15 @@ data clears the BOM; manual part edits and reset clear stale assignments.
 
 | Result | Definition |
 | --- | --- |
-| Pstress | `P / Prated × 100%` |
-| Vlimit | `√(Prated × R)`, capped by the entered maximum working voltage, if any |
-| Ilimit | `Vlimit / R` (a derived limit, not an independent datasheet current rating) |
-| Vstress | `abs(Vdrop) / Vlimit × 100%` |
-| Istress | `abs(I) / Ilimit × 100%` |
+| Pstress | `P / Pallowed × 100%` |
+| Vstress | `abs(Vdrop) / Vmax × 100%` |
+
+`Pallowed` is the allowed power at the selected operating temperature; manual
+ratings are used as entered. `Vmax` is the specified maximum continuous working
+voltage. These limits are independent: changing the power rating changes Pstress,
+and changing the working-voltage rating changes Vstress. Both must meet any
+selected search stress limit. Actual resistor current remains available as an
+operating-point value; there is no derived current-stress percentage.
 
 The comparison and single-resistor selectors offer 15 presets: 0.03, 0.05,
 0.0625, 0.1, 0.125, 0.25, 0.5, 0.75, 1, 2, 3, 5, 10, 25, and 50 W.
@@ -668,13 +681,15 @@ and [Vishay RH/NH power resistor datasheet](https://www.vishay.com/docs/30201/rh
 Use the actual component's rating for its temperature and mounting; some
 high-power ratings require a specified heat sink.
 
-At the defaults, each 1/4 W resistor has Pstress = 1.44%, Vstress = 12%, and
-Istress = 12% when no maximum working voltage is entered.
+At the defaults, each 1/4 W resistor has Pstress = 1.44%. Vstress is unassessed
+(a dash) until a maximum working voltage is entered or supplied by a catalog
+part. For example, a 150 V working-voltage rating gives Vstress = 4% at a 6 V
+drop, independent of the resistor's power rating.
 
 Values above 100% exceed the applicable limit. With no maximum working voltage,
-Vstress and Istress are power-equivalent calculations, not independent checks
-against a component's actual voltage or current rating. The working voltage is
-limited by both power and maximum working voltage; see
+the calculator still checks power but cannot assess the independent voltage
+limit. It does not infer a voltage rating from power. The permissible operating
+voltage must satisfy both power and maximum working-voltage limits; see
 [Vishay's resistor technical guide](https://www.vishay.com/docs/49873/49873_sg2113.pdf).
 
 The calculator uses nominal, positive, finite resistances and an ideal DC source.
