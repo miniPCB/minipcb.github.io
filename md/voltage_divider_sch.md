@@ -2,9 +2,26 @@
 
 miniPCB · Circuit boards for electronics education
 
-This hand-authored reference describes the calculator's ideal DC circuit; it is
-not an EAGLE board export. The downloadable LTspice file contains the default
-values below. Calculator edits do not modify these reference files.
+This hand-authored guide documents the calculator and includes default circuit
+examples; it is not an export of the current calculator session.
+
+The calculator toolbar's **LTspice .asc** and **Markdown** downloads are generated
+from the same complete circuit currently shown in its SVG. They include every
+physical resistor and its actual series/parallel/nested connections, source,
+open/finite load, values, selected MPNs and analysis date. A selected combination
+preview is exported as shown, without applying it to the work form. Undefined or
+invalid circuits and search setup without a valid preview have no download links;
+old files are cleared instead of falling back to the default circuit.
+
+The LTspice schematic uses standard voltage/resistor symbols and an ideal nominal
+DC operating-point analysis (`.op`). An open load is omitted. Values use full
+numeric precision in ohms/volts, avoiding SPICE suffix ambiguity. Tolerances,
+ratings and selected part numbers appear as annotations; they do not implement
+tolerance sweeps, temperature drift, derating or failure models in LTspice.
+The Markdown download contains the current characteristics, date/calculator link,
+physical connection table, Mermaid connection diagram, SVG BOM with separately
+labeled unapplied alternatives/recommendations, and the matching nominal netlist.
+These generated files are snapshots; later calculator edits require a new download.
 
 After circuit edits or resistor-combination searches, leaving, refreshing or closing the
 page requests the browser's standard confirmation so you can stay and keep your
@@ -197,10 +214,11 @@ tolerances. Individual SVG rows edit just that physical resistor. Invalid edits
 remain in the editor with an error and leave the applied circuit unchanged.
 
 The SVG reflows for smaller screens and stays on the calculator page.
-**Download SVG** captures the current annotations in a standalone SVG. The image
-below and the LTspice/Markdown downloads remain the default circuit references;
-the calculator keeps its live SVG, editor, styling, and logic in the one HTML
-file. Downloads are static annotated images without calculator editing controls.
+**Download SVG** captures the current annotations in a standalone SVG. LTspice and
+Markdown downloads capture that same complete circuit. The image below remains
+a default reference. The calculator keeps its live SVG, editor, styling, logic
+and export generators in the one HTML file. Downloads are snapshots without
+calculator editing controls.
 
 In the resistor-combination visualization, selecting a point or table row previews that
 combination in the top SVG, including VMID bounds, error, power, current, Rth and worst
@@ -293,7 +311,7 @@ selected part numbers and range annotations with live controls removed.
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
 
 [Calculator](../calculators/voltage_divider.html) ·
-[LTspice schematic](../ltspice/voltage_divider.asc)
+[Default LTspice reference (not a current-circuit export)](../ltspice/voltage_divider.asc)
 
 ## Circuit data
 

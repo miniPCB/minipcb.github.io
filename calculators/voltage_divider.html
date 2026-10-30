@@ -375,8 +375,8 @@
         <button id="circuitReset" class="btn" type="button">Reset</button>
         <div class="resource-links">
           <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
-          <a class="btn" href="../ltspice/voltage_divider.asc" download>LTspice .asc ↓</a>
-          <a class="btn" href="../md/voltage_divider_sch.md">Schematic Markdown ↗</a>
+          <a id="ltspiceDownload" class="btn" download="voltage_divider.asc" hidden>LTspice .asc ↓</a>
+          <a id="markdownDownload" class="btn" download="voltage_divider.md" hidden>Markdown ↓</a>
         </div>
       </div>
       <p id="schematicFeedback" class="hint" role="status" hidden></p>
@@ -595,7 +595,7 @@
               <button id="calculateButton" class="btn btn-accent" type="submit">Calculate VMID</button>
               <button class="btn" type="reset">Reset defaults</button>
             </div>
-            <p class="hint">Results update as you edit. Reference downloads contain the default 12 V, 10 kΩ / 10 kΩ circuit.</p>
+            <p class="hint">Results update as you edit. Downloads capture the complete circuit currently shown in the SVG.</p>
           </form>
           <form id="pairForm" class="panel-body form-grid" novalidate hidden>
             <div class="mode-context"><p class="solve-target">Find RTOP + RBOT</p><h3>Find real resistor combinations</h3><p class="hint">Set your target and tolerances, then find catalog parts for the selected construction. Preview, compare and apply complete combinations to the circuit and BOM.</p></div>
@@ -1580,6 +1580,7 @@
     let pairPreviewState = null;
     let schematicUrl = null;
     let schematicMarkup = "";
+    const circuitDownloads = new Map();
     let schematicEditContext = null;
     let schematicBomData = [];
     let schematicBomCopyGeneration = 0;
@@ -2005,6 +2006,117 @@
       status.hidden = false;
     }
 
+    function circuitExportModel(state, mode) {
+      if (!state || state.pending || state.pairSetup || !Number.isFinite(state.circuit.vin) || state.circuit.rl !== null && (!Number.isFinite(state.circuit.rl) || state.circuit.rl <= 0)) return null;
+      const edges = [], trees = {}, names = new Set(["V1", "RL"]), ids = new Set();
+      for (const arm of ARMS) {
+        const parts = state.physical[arm], values = new Map(parts.map(part => [part.id, part]));
+        if (!parts.length) return null;
+        const connection = state.networks[arm]?.connection || "series";
+        trees[arm] = ["series", "parallel"].includes(connection) ? { connection, children: parts.map(part => part.id) } : connection;
+        let nextNode = 0;
+        const visit = (node, from, to) => {
+          if (typeof node === "string") {
+            const part = values.get(node);
+            if (!part || ids.has(node) || !Number.isFinite(part.resistance) || part.resistance <= 0 || !Number.isFinite(part.tolerance) || !Number.isFinite(part.rating)) throw new Error("Incomplete export part");
+            let name = part.name.replace(/[^a-zA-Z0-9_.]/g, "_"); if (!/^r/i.test(name)) name = "R_" + name;
+            const base = name; let suffix = 1; while (names.has(name.toUpperCase())) name = base + "_" + suffix++;
+            names.add(name.toUpperCase()); ids.add(node); edges.push({ arm, part, name, from, to });
+          } else {
+            if (!node || !["series", "parallel"].includes(node.connection) || !node.children?.length) throw new Error("Incomplete export connection");
+            let start = from;
+            node.children.forEach((child, index) => {
+              const end = node.connection === "parallel" || index === node.children.length - 1 ? to : `N_${arm === "r1" ? "TOP" : "BOT"}_${++nextNode}`;
+              visit(child, start, end); if (node.connection === "series") start = end;
+            });
+          }
+        };
+        visit(trees[arm], arm === "r1" ? "VTOP" : "VMID", arm === "r1" ? "VMID" : "0");
+        if (parts.some(part => !ids.has(part.id))) return null;
+      }
+      if (![state.result.vout, state.bounds.min, state.bounds.max].every(Number.isFinite)) return null;
+      const netlist = ["* miniPCB - " + (state.pair ? "selected combination preview" : "displayed circuit"), `V1 VTOP 0 DC ${state.circuit.vin}`, ...edges.map(edge => `${edge.name} ${edge.from} ${edge.to} ${edge.part.resistance}`)];
+      if (state.circuit.rl !== null) netlist.push(`RL VMID 0 ${state.circuit.rl}`);
+      netlist.push(".op", ".end");
+      return { state, mode, trees, edges, netlist: netlist.join("\r\n") + "\r\n", bom: schematicBomData.map(row => [...row]) };
+    }
+
+    function circuitLtspice(model) {
+      const { state, trees, edges } = model, wires = [], flags = [], symbols = [], texts = [], points = new Map(), parts = new Map(edges.map(edge => [edge.part.id, edge]));
+      const wire = (x1, y1, x2, y2) => { if (x1 !== x2 || y1 !== y2) wires.push(`WIRE ${x2} ${y2} ${x1} ${y1}`); };
+      const text = (x, y, value, directive = false) => texts.push(`TEXT ${x} ${y} Left 2 ${directive ? "!" : ";"}${String(value).replace(/[\r\n]/g, " ")}`);
+      const measure = node => {
+        if (typeof node === "string") return { width: 256, height: 160 };
+        const children = node.children.map(measure);
+        return node.connection === "series" ? { width: Math.max(...children.map(child => child.width)), height: children.reduce((sum, child) => sum + child.height, 0) } : { width: children.reduce((sum, child) => sum + child.width, 0) + (children.length - 1) * 64, height: Math.max(...children.map(child => child.height)) };
+      };
+      const resistor = (name, resistance, x, y, height) => {
+        const offset = Math.floor((height - 160) / 32) * 16;
+        wire(x, y, x, y + offset + 32); wire(x, y + offset + 112, x, y + height);
+        symbols.push(`SYMBOL res ${x - 16} ${y + offset + 16} R0`, `SYMATTR InstName ${name}`, `SYMATTR Value ${resistance}`);
+      };
+      const draw = (node, x, y, width, height) => {
+        if (typeof node === "string") {
+          const edge = parts.get(node), center = x + width / 2;
+          resistor(edge.name, edge.part.resistance, center, y, height);
+          if (!points.has(edge.from)) points.set(edge.from, [center, y]);
+          if (!points.has(edge.to)) points.set(edge.to, [center, y + height]);
+        } else if (node.connection === "series") {
+          let top = y;
+          for (const child of node.children) { const size = measure(child); draw(child, x + (width - size.width) / 2, top, size.width, size.height); top += size.height; }
+          wire(x + width / 2, top, x + width / 2, y + height);
+        } else {
+          let left = x; const centers = [];
+          for (const child of node.children) { const size = measure(child); centers.push(left + size.width / 2); draw(child, left, y, size.width, height); left += size.width + 64; }
+          wire(centers[0], y, centers.at(-1), y); wire(centers[0], y + height, centers.at(-1), y + height);
+        }
+      };
+      const top = measure(trees.r1), bot = measure(trees.r2), width = Math.max(top.width, bot.width), center = 256 + width / 2, middle = 96 + top.height + 32, bottom = middle + 32 + bot.height;
+      draw(trees.r1, 256 + (width - top.width) / 2, 96, top.width, top.height);
+      draw(trees.r2, 256 + (width - bot.width) / 2, middle + 32, bot.width, bot.height);
+      wire(96, 96, center, 96); wire(96, 96, 96, 208); wire(96, 288, 96, bottom);
+      wire(center, middle - 32, center, middle + 32);
+      symbols.unshift("SYMBOL voltage 96 192 R0", "WINDOW 123 0 0 Left 0", "WINDOW 39 0 0 Left 0", "SYMATTR InstName V1", `SYMATTR Value ${state.circuit.vin}`);
+      flags.push("FLAG 96 96 VTOP", `FLAG ${center} ${middle} VMID`, `FLAG 96 ${bottom} 0`, `FLAG ${center} ${bottom} 0`);
+      for (const [name, [x, y]] of points) if (name.startsWith("N_")) flags.push(`FLAG ${x} ${y} ${name}`);
+      if (state.circuit.rl !== null) { const loadX = 256 + width + 192; wire(center, middle, loadX, middle); resistor("RL", state.circuit.rl, loadX, middle, 160); flags.push(`FLAG ${loadX} ${middle + 160} 0`); }
+      text(48, 16, "miniPCB - " + (state.pair ? "selected combination preview (not applied)" : "displayed circuit"));
+      text(48, 48, "Analyzed: " + state.analyzedAt + " | https://www.minipcb.com/calculators/voltage_divider.html");
+      let y = bottom + 64; text(64, y, ".op", true);
+      for (const line of [`Nominal ideal DC; tolerances, ratings and MPNs below are annotations, not simulation models.`, `VMID nominal=${state.result.vout} V; min=${state.bounds.min} V; max=${state.bounds.max} V`, `VTOP tolerance +/-${state.tolerances.vin}%; RL ${state.circuit.rl === null ? "open (omitted)" : state.circuit.rl + " ohm, +/-" + state.tolerances.rl + "%"}`]) text(64, y += 32, line);
+      for (const edge of edges) {
+        const p = edge.part;
+        text(64, y += 32, `${edge.name} (${p.name}): ${p.resistance} ohm; +/-${p.tolerance}%; ${p.catalog?.case || "footprint not set"}; ${p.rating} W allowed; Vmax ${p.vmax ?? "power-derived"}`);
+        if (p.mpn) text(64, y += 32, `${edge.name} selected MPN: ${p.mpn}`);
+      }
+      return ["Version 4", `SHEET 1 ${Math.max(1280, 256 + width + 512)} ${y + 96}`, ...wires, ...flags, ...symbols, ...texts, ""].join("\r\n");
+    }
+
+    function circuitMarkdown(model) {
+      const { state, mode, edges } = model;
+      const cell = value => String(value ?? "—").replaceAll("|", "&#124;").replace(/[\r\n]/g, " ");
+      const table = rows => rows.map((row, index) => "| " + row.map(cell).join(" | ") + " |" + (index === 0 ? "\n| " + row.map(() => "---").join(" | ") + " |" : "")).join("\n");
+      const characteristics = circuitCharacteristics(state, mode).rows.map(([label, value]) => [label, value]);
+      const connectivity = [["Reference", "LTspice name", "Arm", "From node", "To node", "Resistance (ohm)", "Tolerance (%)", "Allowed power (W)", "Working voltage (V)", "Selected MPN"]];
+      for (const edge of edges) connectivity.push([edge.part.name, edge.name, edge.arm === "r1" ? "RTOP" : "RBOT", edge.from, edge.to, edge.part.resistance, edge.part.tolerance, edge.part.rating, edge.part.vmax ?? "Power-derived", edge.part.mpn || "Unassigned"]);
+      if (state.circuit.rl !== null) connectivity.push(["RL", "RL", "Load", "VMID", "0", state.circuit.rl, state.tolerances.rl, "Not checked", "Not checked", "Unassigned"]);
+      const diagram = ["flowchart TB", '  GND(("GND"))', '  VTOP(("VTOP"))', '  VMID(("VMID"))', `  GND -->|"V1 ${state.circuit.vin} V"| VTOP`, ...edges.map(edge => `  ${edge.from === "0" ? "GND" : edge.from} -->|"${edge.name} ${edge.part.resistance} ohm"| ${edge.to === "0" ? "GND" : edge.to}`)];
+      if (state.circuit.rl !== null) diagram.push(`  VMID -->|"RL ${state.circuit.rl} ohm"| GND`);
+      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Circuit connections", "", `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
+    }
+
+    function updateCircuitDownloads(state, mode) {
+      const files = [["ltspiceDownload", "text/plain;charset=utf-8", circuitLtspice], ["markdownDownload", "text/markdown;charset=utf-8", circuitMarkdown]];
+      let model = null; try { model = circuitExportModel(state, mode); } catch (_) { /* Incomplete displayed circuits have no matching export. */ }
+      for (const [id, type, generate] of files) {
+        const link = byId(id), previous = circuitDownloads.get(id);
+        let content = ""; try { if (model) content = generate(model); } catch (_) { /* Never offer a stale or partial file. */ }
+        if (!content) { link.hidden = true; link.removeAttribute("href"); if (previous) URL.revokeObjectURL(previous.url); circuitDownloads.delete(id); continue; }
+        if (content !== previous?.content) { const url = URL.createObjectURL(new Blob([content], { type })); link.href = url; circuitDownloads.set(id, { content, url }); if (previous) URL.revokeObjectURL(previous.url); }
+        link.hidden = false; link.title = state.pair ? "Download the selected combination preview shown in the SVG" : "Download the circuit shown in the SVG";
+      }
+    }
+
     function renderSchematic() {
       const svg = byId("liveSchematic");
       const mode = byId("solveFor").value, state = mode === "pairs" ? pairSchematicState() : schematicState || pendingConstructionState();
@@ -2082,6 +2194,7 @@
         byId("schematicDownload").href = schematicUrl;
         if (previousUrl) URL.revokeObjectURL(previousUrl);
       }
+      updateCircuitDownloads(state, mode);
       refreshSchematicControls();
     }
 
