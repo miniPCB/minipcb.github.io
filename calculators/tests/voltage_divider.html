@@ -362,13 +362,14 @@
         const pick = mode => d.querySelector(`[data-solve-mode="${mode}"]`).click();
         const resultTabs = [...get("resultTabs").querySelectorAll('[role="tab"]')];
         const activeView = () => d.querySelector('[role="tab"][aria-selected="true"]')?.id;
+        w.openCalculatorDetails("results");
         assert(activeView() === "overviewTab" && visible("overviewPanel") && !visible("catalogPanel"), "Results start with only the operating overview visible");
         const circuitBeforeTabs = [...get("dividerForm").elements].map(input => input.value).join("|");
         for (const tab of resultTabs) {
           tab.click();
           assert(d.querySelectorAll('[role="tabpanel"]:not([hidden])').length === 1 && visible(tab.getAttribute("aria-controls")), `${tab.textContent}: shows only the selected result panel`);
           assert(tab.getAttribute("aria-selected") === "true" && resultTabs.filter(item => item.tabIndex === 0).length === 1 && tab.tabIndex === 0, `${tab.textContent}: selection and keyboard tab stop agree`);
-          assert(visible("solutionValue") && visible("vin") && visible("liveSchematic"), `${tab.textContent}: solved value, inputs, and circuit reference remain visible`);
+          assert(visible("solutionValue") && !visible("vin") && visible("liveSchematic"), `${tab.textContent}: detailed results keep input forms out of view and preserve the circuit reference`);
         }
         assert([...get("dividerForm").elements].map(input => input.value).join("|") === circuitBeforeTabs, "Browsing every results tab preserves all circuit inputs");
         const key = value => d.activeElement.dispatchEvent(new w.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true }));
@@ -382,18 +383,19 @@
         assert(activeView() === "toleranceTab" && d.activeElement === get("toleranceTab"), "Home and right arrow activate the expected result view");
         get("overviewTab").click(); get("catalogFamily").focus();
         assert(d.activeElement !== get("catalogFamily") && !visible("catalogCandidates"), "Inactive parts controls are hidden and cannot receive focus");
-        get("toleranceTab").click(); get("vin").focus(); set("vin", "24");
+        get("toleranceTab").click(); w.openCalculatorDetails("inputs", "vin"); get("vin").focus(); set("vin", "24");
         assert(activeView() === "toleranceTab" && d.activeElement === get("vin") && text("voutMin") === "11.88 V", "Live edits update a selected view without changing tabs or input focus");
-        get("methodTab").click(); set("r1", "0");
+        get("methodTab").click(); set("r1", "0"); w.openCalculatorDetails("results");
         assert(visible("inputError") && activeView() === "methodTab" && text("solutionValue") === "—", "Validation errors and cleared solved values remain visible from every tab");
-        await reset(); pick("pairs");
-        assert(activeView() === "pairTab" && visible("pairVin") && !visible("dividerForm"), "Choosing real resistor pairs opens its focused form and result view");
+        await reset(); pick("pairs"); w.openCalculatorDetails("inputs");
+        assert(activeView() === "pairTab" && visible("pairVin") && !visible("dividerForm"), "Combination options expose the focused search form without the circuit form");
         get("partsTab").click(); get("pairForm").requestSubmit(); await w.pairSearchReady;
         assert(activeView() === "pairTab", "Finding pairs returns to the performance chart");
         pick("vout");
         assert(activeView() === "overviewTab", "Choosing a voltage calculation returns to the overview");
         get("methodTab").click(); get("dividerForm").requestSubmit();
         assert(activeView() === "overviewTab", "Calculate VMID returns to the overview");
+        w.openCalculatorDetails("results");
         for (const width of [320, 390, 768, 900, 1440]) {
           frame.style.width = `${width}px`; await new Promise(resolve => setTimeout(resolve, 5));
           for (const tab of resultTabs) {
@@ -402,6 +404,7 @@
           }
         }
         await reset();
+        w.openCalculatorDetails("inputs");
         assert(activeView() === "overviewTab", "Reset restores the default results tab");
         assert(d.querySelector(".live-tag").textContent === "DC analysis · Online calculator", "Header uses the requested calculator label");
         const views = [

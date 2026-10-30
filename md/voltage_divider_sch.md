@@ -65,6 +65,17 @@ The calculation choices appear above the live circuit SVG. Each choice lists
 **Given** inputs and the value to **Find**; the form and diagram use the same
 **Find** wording. The SVG updates VTOP, VMID, the equivalent arm resistances,
 and the open/finite RL value as you edit.
+The main page ends at the circuit region: the former lower forms, result panels,
+instructions and footer no longer appear beneath the SVG. Click diagram inputs
+and pills for their focused editors. The toolbar's **Options** opens circuit or
+combination settings; **Details & tables** opens the existing analysis, catalog
+and BOM tabs. **Choose values** appears when automatic resistors are present and
+opens their catalog-selection settings. These dialogs reuse the original state
+and controls; they do not create a second circuit or change the analysis rules.
+Done or Escape returns to the diagram, and calculation/search submission returns
+to the SVG. **Reset** restores defaults for the current circuit/search mode.
+Errors, search progress/results and automatic-value status remain visible above
+the SVG. Reference/download links also sit above the drawing.
 Voltage readouts are part of the circuit drawing: VTOP and source tolerance sit
 beside the source, and VMID sits at the end of a blue output wire extending just
 past the RL branch. A separate, spaced VMID readout lists **Nominal**, **Min** and
@@ -267,10 +278,12 @@ table lists all physical MPNs for a selected combination. Click a point to updat
 table selection; clicking overlapping points cycles their actual combinations.
 Dragging either plot adds its data-space bounds to the shared filters.
 
-**Axes**, **View table**, **Compare combination**, **Copy comparison** and **Apply combination**
+**Axes**, **View table**, **Compare combination**, **View comparison**, **Copy comparison** and **Apply combination**
 are available beside the plots. Comparison membership survives performance
 filtering, and copying uses the existing standard comparison table and its column
-and performance filters. Only Apply changes the circuit/BOM. Controls reflow on
+and performance filters. View table and View comparison open the detailed result
+dialog; clipboard failure opens and selects the manual-copy fallback there.
+Only Apply changes the circuit/BOM. Controls reflow on
 small screens and support mouse, touch and keyboard. Slider arrows change the
 range; PageUp/PageDown use larger steps, Home/End reach the endpoints, and Escape
 cancels a drag or clears filters. Plot arrows select real combinations and Enter
@@ -333,11 +346,11 @@ or RL while the remaining nominal quantities are held at their entered values.
 Choose a calculation button at the top of the page. The sixth button,
 **Find real resistor combinations**, searches actual catalog parts for a target VMID.
 Each circuit-analysis view names the goal, explains its inputs, and shows a
-matching equation and Calculate action. Only known quantities appear as primary
-inputs; the calculated quantity appears in the result banner. Switching views
+matching equation and Calculate action in the Options dialog. Only known quantities
+appear as primary inputs; the SVG and detailed result banner show the calculated quantity. Switching views
 preserves circuit data.
 
-The result area uses **Overview**, **Tolerances**, **Stress**,
+The **Details & tables** dialog uses **Overview**, **Tolerances**, **Stress**,
 **Ratings**, **Parts**, **Parts (2)**, **Resistor combinations**, and **Method** tabs to show
 one focused panel at a time.
 The solved value stays visible above the tabs; all results continue updating as
@@ -345,7 +358,8 @@ you edit. Switching result tabs preserves circuit data and selected parts.
 Combination searches open **Resistor combinations**; circuit calculation choices open
 **Overview**. The Calculate action opens the relevant result view, and Reset
 restores **Overview**. Use Left/Right Arrow, Home, or End to navigate the tabs
-with a keyboard. Printing includes all result panels.
+with a keyboard. The main page and its print view keep the circuit SVG prominent;
+closed dialogs do not add the old lower panels to the printout.
 
 Output load and tolerance/rating settings are collapsible. Combination searches have
 their own target and tolerance form. An invalid setting automatically opens its
