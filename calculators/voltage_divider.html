@@ -145,7 +145,8 @@
     .schematic-editor { width: min(440px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; padding: 22px; border: 0; border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
     .schematic-editor::backdrop { background: rgba(3, 10, 16, 0.75); }
     .schematic-editor h3 { margin: 0; font-size: 1.1rem; }
-    .circuit-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 20px 14px; }
+    .circuit-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; }
+    .circuit-toolbar h2 { flex: 1 1 420px; min-width: 0; padding: 0; line-height: 1.5; }
     .circuit-toolbar .resource-links { margin: 0 0 0 auto; }
     #schematicFeedback { margin: 0 20px 14px; overflow-wrap: anywhere; }
     .calculator-details { width: min(1120px, calc(100% - 24px)); padding: 16px; }
@@ -366,13 +367,10 @@
       </div>
     </section>
     <section id="circuitReference" class="panel circuit-reference" aria-labelledby="schematicHeading">
-      <h2 id="schematicHeading">Circuit reference</h2>
       <div class="circuit-toolbar">
-        <button id="circuitOptions" class="btn" type="button" aria-haspopup="dialog" aria-controls="calculatorDetails">Options</button>
-        <button id="circuitDetails" class="btn" type="button" aria-haspopup="dialog" aria-controls="calculatorDetails">Details &amp; tables</button>
+        <h2 id="schematicHeading">VTOP 12 V → VMID 6 V · 2 resistors · no load</h2>
         <button id="circuitChoose" class="btn btn-accent" type="button" aria-haspopup="dialog" aria-controls="calculatorDetails" hidden>Choose values</button>
         <button id="circuitCancelSearch" class="btn" type="button" hidden>Cancel search</button>
-        <button id="circuitReset" class="btn" type="button">Reset</button>
         <div class="resource-links">
           <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
           <a id="ltspiceDownload" class="btn" download="voltage_divider.asc" hidden>LTspice .asc ↓</a>
@@ -561,12 +559,12 @@
                   <div id="sourceToleranceHome">
                     <div id="sourceTolerances" class="rating-fields source-tolerances">
                       <div class="field"><label for="tolVin">VTOP tolerance (%)</label><input id="tolVin" name="tolVin" type="number" min="0" max="99.999" step="any" value="0" /></div>
-                      <div class="field"><label for="tolRl">RL tolerance (%)</label><input id="tolRl" name="tolRl" type="number" min="0" max="99.999" step="any" value="0" /></div>
+                      <div class="field"><label for="tolRl">RL tolerance (%)</label><input id="tolRl" name="tolRl" type="number" min="0" max="99.999" step="any" value="0.1" /></div>
                     </div>
                   </div>
                   <div id="resistorToleranceFields" class="rating-fields">
-                    <div class="field"><label for="tolR1" id="tolR1Label">R1 tolerance (%)</label><input id="tolR1" name="tolR1" type="number" min="0" max="99.999" step="any" value="1" /></div>
-                    <div class="field"><label for="tolR2" id="tolR2Label">R2 tolerance (%)</label><input id="tolR2" name="tolR2" type="number" min="0" max="99.999" step="any" value="1" /></div>
+                    <div class="field"><label for="tolR1" id="tolR1Label">R1 tolerance (%)</label><input id="tolR1" name="tolR1" type="number" min="0" max="99.999" step="any" value="0.1" /></div>
+                    <div class="field"><label for="tolR2" id="tolR2Label">R2 tolerance (%)</label><input id="tolR2" name="tolR2" type="number" min="0" max="99.999" step="any" value="0.1" /></div>
                   </div>
                   <p class="hint">Independent component limits, from 0 to 99.999%. For multiple parts, the equivalent tolerance shows the largest deviation; output bounds use each part's actual limits, including asymmetric parallel-bank bounds. RL tolerance applies only when a load is connected.</p>
                 </fieldset>
@@ -630,7 +628,7 @@
             </div><p class="hint">Per-resistor catalog range. Single-resistor arms are exhaustive; larger networks use a bounded similar-power search, including mixed families.</p></details>
             <details><summary>Load, temperature, and stress limits</summary><div class="rating-fields">
               <div class="field"><label for="pairRl">Optional RL (Ω)</label><input id="pairRl" type="number" placeholder="Open circuit" min="0" step="any" /></div>
-              <div class="field"><label for="pairLoadTol">RL tolerance · ± (%)</label><input id="pairLoadTol" type="number" value="0" min="0" max="99.999" step="any" /></div>
+              <div class="field"><label for="pairLoadTol">RL tolerance · ± (%)</label><input id="pairLoadTol" type="number" value="0.1" min="0" max="99.999" step="any" /></div>
               <div class="field"><label for="pairTemperature">Selection ambient (°C)</label><input id="pairTemperature" type="number" value="70" step="any" /></div>
               <div class="field"><label for="pairTcr">TCR (ppm/°C)</label><select id="pairTcr"></select></div>
               <div class="field"><label for="pairMaxStress">Maximum P/V stress (%)</label><input id="pairMaxStress" type="number" value="100" min="0" max="100" step="any" /></div>
@@ -950,7 +948,7 @@
       byId("calculatorDetails").close();
       const target = calculatorDetailsFocus;
       calculatorDetailsFocus = null;
-      (target?.isConnected && target.getClientRects().length ? target : byId("circuitDetails")).focus({ preventScroll: true });
+      (target?.isConnected && target.getClientRects().length ? target : document.querySelector('.mode-choice[aria-pressed="true"]') || byId("schematicDownload")).focus({ preventScroll: true });
     }
 
     function refreshSchematicControls() {
@@ -2154,6 +2152,17 @@
       }
     }
 
+    function schematicSummary(state, mode) {
+      const value = (number, unit) => Number.isFinite(number) ? format(number, unit) : "—";
+      const count = state ? ARMS.reduce((total, arm) => total + state.physical[arm].length, 0) : 0;
+      if (mode === "pairs" && !state?.pair) {
+        return `Find VMID ${value(state?.target, "V")} ±${percent(state?.allowedErrorPct)} from VTOP ${value(state?.circuit.vin, "V")} · ${count || 2} resistors · ${value(byId("pairMinR").valueAsNumber, "Ω")}–${value(byId("pairMaxR").valueAsNumber, "Ω")} each`;
+      }
+      if (!state) return `Find ${MODE_DETAILS[mode].symbol} · enter valid circuit values`;
+      if (state.pending) return `Choose ${count} resistor values for VMID ${value(state.target, "V")} from VTOP ${value(state.circuit.vin, "V")}`;
+      return `${state.pair ? "Combination preview · " : ""}VTOP ${value(state.circuit.vin, "V")} → VMID ${value(state.result.vout, "V")} · ${count} resistors · ${state.circuit.rl === null ? "no load" : `RL ${value(state.circuit.rl, "Ω")}`}`;
+    }
+
     function renderSchematic() {
       const svg = byId("liveSchematic");
       const mode = byId("solveFor").value, state = mode === "pairs" ? pairSchematicState() : schematicState || pendingConstructionState();
@@ -2164,7 +2173,7 @@
       byId("schematicSolveStatus").textContent = solveLabel;
       byId("schematicSolveStatus").setAttribute("fill", SOLVE_ROLES.solving.color);
       for (const node of svg.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
-      byId("schematicHeading").textContent = pairPreviewState ? "Circuit reference · selected combination preview" : mode === "pairs" ? "Circuit reference · combination search inputs" : "Circuit reference";
+      byId("schematicHeading").textContent = schematicSummary(state, mode);
       byId("liveSchematicTitle").textContent = pairPreviewState ? "Voltage divider · selected resistor combination preview" : mode === "pairs" ? "Voltage divider · combination search inputs" : "Voltage divider · live circuit values";
       const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
       const searchOffset = mode === "pairs" ? 40 : 0;
@@ -2629,7 +2638,7 @@
       for (const side of ["Top", "Bot"]) {
         catalogOptions(`pairFamily${side}`, families, "all");
         catalogOptions(`pairPackage${side}`, sizes.map(value => ({ value, label: value })), "0805");
-        catalogOptions(`pairTol${side}`, tolerances.map(value => ({ value, label: `±${value}%` })), "1");
+        catalogOptions(`pairTol${side}`, tolerances.map(value => ({ value, label: `±${value}%` })), "0.1");
       }
       catalogOptions("pairTcr", tcrs.map(value => ({ value, label: `±${value} ppm/°C` })), "25");
       for (const select of byId("pairForm").querySelectorAll("select")) for (const option of select.options) option.defaultSelected = option.selected;
@@ -4439,11 +4448,8 @@
     byId("schematicEditValue").addEventListener("input", updateSchematicCatalogPreview);
     byId("schematicEditCancel").addEventListener("click", closeSchematicEditor);
     byId("schematicEditor").addEventListener("cancel", event => { event.preventDefault(); closeSchematicEditor(); });
-    byId("circuitOptions").addEventListener("click", () => openCalculatorDetails("inputs"));
-    byId("circuitDetails").addEventListener("click", () => openCalculatorDetails("results"));
     byId("circuitChoose").addEventListener("click", () => openCalculatorDetails("design"));
     byId("circuitCancelSearch").addEventListener("click", () => byId("pairCancel").click());
-    byId("circuitReset").addEventListener("click", () => byId(byId("solveFor").value === "pairs" ? "pairForm" : "dividerForm").reset());
     byId("calculatorDetailsClose").addEventListener("click", closeCalculatorDetails);
     byId("calculatorDetails").addEventListener("cancel", event => { event.preventDefault(); closeCalculatorDetails(); });
     for (const id of ["dividerForm", "pairForm", "automaticDesign"]) byId(id).addEventListener("submit", () => { if (byId("calculatorDetails").open) closeCalculatorDetails(); });

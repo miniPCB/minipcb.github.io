@@ -41,8 +41,8 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   assert(items.length>50&&!get('pairResults').hidden,'Default search returns more than one page of real pairs');
   assert(items.some(p=>p.top.familyId!==p.bot.familyId)&&items.some(p=>p.top.familyId===tid&&p.bot.familyId===tid)&&items.some(p=>p.top.familyId===mid&&p.bot.familyId===mid),'Both same-family and mixed-family combinations are included');
   assert(items.every(p=>p.error<=5+1e-9&&p.pstress<=100+1e-9&&p.vstress<=100+1e-9),'Every result satisfies the full target band and worst-case stress limits');
-  assert(items[0].error===1&&items[0].top.resistanceOhms===100000&&items[0].bot.resistanceOhms===100000,'Equal-error combinations use power as a stable secondary ranking');
-  assert(items.every(p=>api.decode(catalog,p.top.familyId,p.top.mpn).resistanceOhms===p.top.resistanceOhms&&api.decode(catalog,p.bot.familyId,p.bot.mpn).tolerancePct===1),'Every output pair contains decodable real-family part numbers');
+  assert(Math.abs(items[0].error-0.1)<1e-9&&items[0].top.resistanceOhms===100000&&items[0].bot.resistanceOhms===100000,'Equal-error combinations use power as a stable secondary ranking');
+  assert(items.every(p=>api.decode(catalog,p.top.familyId,p.top.mpn).resistanceOhms===p.top.resistanceOhms&&api.decode(catalog,p.bot.familyId,p.bot.mpn).tolerancePct===0.1),'Every output pair contains decodable real-family part numbers');
   const csv=w.pairSearchCsv();
   assert(csv.trim().split('\r\n').length===items.length+1&&get('pairRows').rows.length===50,'CSV includes all combinations while the table paginates fifty rows');
   assert(csv.includes('Worst target error (%)')&&csv.includes('Worst RTOP Pstress (%)')&&csv.includes('Not checked'),'CSV includes performance parameters and unknown stock');
@@ -73,10 +73,10 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   for(const toggle of get('pairBomControls').querySelectorAll('[data-bom-column-toggle]')){toggle.checked=true;toggle.dispatchEvent(new w.Event('input',{bubbles:true}));}
   const comparisonTsv=w.pairComparisonTsv(),grid=comparisonTsv.trim().split('\r\n').map(line=>line.split('\t')),column=name=>grid[0].indexOf(name);
   assert(grid.length===7&&grid.every(row=>row.length===grid[0].length)&&grid[1][column('Manufacturer part number')]===compareA.top.mpn&&grid[6][column('Manufacturer part number')]===compareC.bot.mpn,'Copy data contains rectangular physical BOM rows, both exact MPNs and no button labels');
-  assert(grid[1][column('Footprint')]===compareA.top.case&&grid[1][column('TCR (ppm/°C)')].includes('25')&&grid[1][column('Tolerance')]==='±1%'&&grid[1][column('Allowed power')].includes('W')&&grid[1][column('Working voltage limit')].includes('V'),'Comparison uses separate footprint, tolerance, TCR, reliability and rating columns');
+  assert(grid[1][column('Footprint')]===compareA.top.case&&grid[1][column('TCR (ppm/°C)')].includes('25')&&grid[1][column('Tolerance')]==='±0.1%'&&grid[1][column('Allowed power')].includes('W')&&grid[1][column('Working voltage limit')].includes('V'),'Comparison uses separate footprint, tolerance, TCR, reliability and rating columns');
   const sumR=compareA.top.resistanceOhms+compareA.bot.resistanceOhms;
   assert(grid[1][column('VMID')]===w.format(12*compareA.bot.resistanceOhms/sumR,'V')&&grid[1][column('Nominal power')]===w.format(144/sumR,'W')&&grid[1][column('Nominal input I')]===w.format(12/sumR,'A'),'Copied nominal voltage, power and current agree with independent unloaded-divider calculations');
-  assert(grid[1][column('Worst power')]===w.format(144/(0.99*sumR),'W')&&grid[1][column('Worst input I')]===w.format(12/(0.99*sumR),'A')&&grid[1][column('Pstress')]===w.percent(compareA.worst.top.p)&&grid[2][column('Vstress')]===w.percent(compareA.worst.bot.v),'Comparison retains worst-case power/current and individual-arm stress metrics');
+  assert(grid[1][column('Worst power')]===w.format(144/(0.999*sumR),'W')&&grid[1][column('Worst input I')]===w.format(12/(0.999*sumR),'A')&&grid[1][column('Pstress')]===w.percent(compareA.worst.top.p)&&grid[2][column('Vstress')]===w.percent(compareA.worst.bot.v),'Comparison retains worst-case power/current and individual-arm stress metrics');
   assert(grid[1][column('Search conditions')].includes('VTOP 12 V')&&grid[1][column('Search conditions')].includes('target VMID 6 V')&&grid[1][column('Search conditions')].includes('RL Open'),'Copied table carries source, target, load and search conditions');
   const clipboardDescriptor=Object.getOwnPropertyDescriptor(w.navigator,'clipboard');let copied='';
   Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async value=>{copied=value;}}});get('pairComparisonCopy').click();await pause();
@@ -194,7 +194,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   const loadedStress={...stressSpec,rl:12000,loadTolerance:5};const loadedWorst=w.pairWorstStress(loadedStress,top,bot);let sampledTop=0,sampledBot=0;
   for(let a=0;a<=20;a++)for(let b=0;b<=20;b++)for(const load of [-1,1]){const point=w.analyze(peakVoltage,9900+a*10,9900+b*10,12000*(1+load*0.05));sampledTop=Math.max(sampledTop,point.p1);sampledBot=Math.max(sampledBot,point.p2);}
   assert(loadedWorst.top.p*top.powerW/100>=sampledTop-1e-12&&loadedWorst.bot.p*bot.powerW/100>=sampledBot-1e-12,'Loaded analytical stress bounds enclose an independent resistance grid');
-  await reset();set('pairMinR','10000');set('pairMaxR','10000');set('pairErrorPct','0.5');
+  await reset();set('pairMinR','10000');set('pairMaxR','10000');set('pairErrorPct','0.05');
   assert((await run()).length===0,'A nominally perfect ratio is rejected when its tolerance interval exceeds the target budget');
   set('pairErrorPct','5');set('pairSourceTol','6');assert((await run()).length===0,'Source tolerance consumes the allowed VMID target error');
   await reset();set('pairSourceTol','1');set('pairRl','100000');set('pairLoadTol','2');items=await run();
@@ -224,7 +224,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   await reset();items=await run();get('pairCompareAdd').click();w.selectPair(1);get('pairCompareAdd').click();
   for(const width of [320,390,768,900,1440]){frame.style.width=width+'px';await pause();assert(d.documentElement.scrollWidth<=width&&get('pairChart').getBoundingClientRect().width<=get('pairPanel').getBoundingClientRect().width&&get('pairComparisonTable').closest('.table-wrap').clientWidth<=get('pairPanel').clientWidth,`Focused search, chart and populated comparison fit at ${width}px`);const svgBounds=get('liveSchematic').getBoundingClientRect();assert([...get('liveSchematic').querySelectorAll('text')].every(node=>{const box=node.getBoundingClientRect();return box.left>=svgBounds.left-1&&box.right<=svgBounds.right+1&&box.top>=svgBounds.top-1&&box.bottom<=svgBounds.bottom+1;}),`Selected-pair SVG and both family numbers fit at ${width}px`);}
   assert(errors.length===0,'No browser runtime errors during chart/search interactions: '+errors.join('; '));
-  await reset();assert(get('pairPackageTop').value==='0805'&&get('pairTolTop').value==='1'&&get('pairTcr').value==='25'&&get('pairResults').hidden&&comparisonRows().length===0&&w.pairComparisonTsv()==='','Search reset restores catalog defaults and clears results and comparison');
+  await reset();assert(get('pairPackageTop').value==='0805'&&get('pairTolTop').value==='0.1'&&get('pairTcr').value==='25'&&get('pairResults').hidden&&comparisonRows().length===0&&w.pairComparisonTsv()==='','Search reset restores catalog defaults and clears results and comparison');
  }catch(error){failures.push(error.stack);}
  document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);document.body.dataset.status=failures.length?'FAIL':'PASS';
 });

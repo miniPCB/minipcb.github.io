@@ -84,13 +84,17 @@ The calculation choices appear above the live circuit SVG. Each choice lists
 and the open/finite RL value as you edit.
 The main page ends at the circuit region: the former lower forms, result panels,
 instructions and footer no longer appear beneath the SVG. Click diagram inputs
-and pills for their focused editors. The toolbar's **Options** opens circuit or
-combination settings; **Details & tables** opens the existing analysis, catalog
-and BOM tabs. **Choose values** appears when automatic resistors are present and
+and pills for their focused editors. The header summarizes the displayed source,
+output, physical resistor count and load. During search setup it shows the target,
+allowed VMID error and per-resistor resistance range; selected combinations are
+labeled as previews. The general Options, Details & tables and Reset toolbar
+buttons are removed. Search options and table/comparison actions remain in the
+SVG, alongside the unchanged Download SVG button above it.
+**Choose values** appears when automatic resistors are present and
 opens their catalog-selection settings. These dialogs reuse the original state
 and controls; they do not create a second circuit or change the analysis rules.
 Done or Escape returns to the diagram, and calculation/search submission returns
-to the SVG. **Reset** restores defaults for the current circuit/search mode.
+to the SVG. Form reset actions restore defaults for the current circuit/search mode.
 Errors, search progress/results and automatic-value status remain visible above
 the SVG. Reference/download links also sit above the drawing.
 Voltage readouts are part of the circuit drawing: VTOP and source tolerance sit
@@ -456,8 +460,9 @@ in parallel give the same 10 kΩ arm, with 6 V and 0.15 mA per upper part.
 ## Tolerance analysis
 
 Independent VTOP, R1, R2, and RL tolerances range from 0 to 99.999 percent. Each
-input varies over `nominal ± abs(nominal) × tolerance / 100`. Defaults are ±1%
-for R1/R2 and 0% for VTOP/RL. Open loads ignore RL tolerance.
+input varies over `nominal ± abs(nominal) × tolerance / 100`. Defaults are ±0.1%
+for R1/R2, RL and both catalog-search arms, and 0% for VTOP. New physical
+resistors inherit the current arm tolerance. Open loads ignore RL tolerance.
 
 Minimum gain uses R1 high, R2 low, and RL low. Maximum gain uses R1 low, R2 high,
 and RL high. Combining these gains with both VTOP endpoints gives exact
@@ -465,7 +470,7 @@ worst-case VMID bounds for the ideal resistive model, including negative sources
 Largest deviation is the larger endpoint distance from nominal VMID, divided by
 `abs(nominal VMID)`. It is undefined for zero nominal output.
 
-At the defaults, ±1% R1/R2 gives VMID from 5.94 to 6.06 V. A ±5% output error
+At the defaults, ±0.1% R1/R2 gives VMID from 5.994 to 6.006 V. A ±5% output error
 band around a 6 V target therefore includes that divider. The combination search checks
 the full interval against the target band, including any nominal output mismatch.
 The other operating-point and stress tabs continue to use nominal values.

@@ -52,11 +52,11 @@
         assert(schematicField("r1", "footprint") === "Not set" && get("liveSchematic").querySelectorAll('.schematic-pill[data-schematic-edit][role="button"]').length === 4, "SVG shows editable tolerance/package pills and leaves manual packages explicitly unset");
         assert(text("vout") === "6 V" && text("iin") === "600 µA" && text("ptotal") === "7.2 mW", "Original default operating point");
         assert(stressOutputs().join(",") === "1.44,NaN,1.44,NaN", "Original default resistor stresses");
-        assert(text("voutMin") === "5.94 V" && text("voutMax") === "6.06 V" && text("voutError") === "1%", "Default ±1% resistor output bounds");
+        assert(text("voutMin") === "5.994 V" && text("voutMax") === "6.006 V" && text("voutError") === "0.1%", "Default ±0.1% resistor output bounds");
         assert(get("targetVout").readOnly && !get("vin").readOnly, "VMID mode marks the calculated field");
         assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 4, "Fifteen common ratings retain selected highlights");
         assert(text("schematicVtop") === "VTOP 12 V ±0%" && text("schematicVmid") === "VMID 6 V", "Schematic shows the default source, tolerance, and midpoint");
-        assert(schematicField("r1", "resistance") === "10 kΩ" && schematicField("r1", "tolerance") === "±1%" && schematicField("r1", "rating") === "Rated 250 mW", "Schematic shows actual resistance, tolerance, and rating");
+        assert(schematicField("r1", "resistance") === "10 kΩ" && schematicField("r1", "tolerance") === "±0.1%" && schematicField("r1", "rating") === "Rated 250 mW", "Schematic shows actual resistance, tolerance, and rating");
         assert(["p", "v"].map(field => schematicField("r1", field)).join(",") === "1.44%,—", "Schematic shows default Pstress and unassessed voltage stress");
 
         set("rl", "100");
@@ -192,7 +192,7 @@
         get("vin").value = "24"; get("dividerForm").requestSubmit();
         assert(text("vout") === "12 V", "Calculate submit updates in place");
         await reset();
-        assert(get("solveFor").value === "vout" && get("tolR1").valueAsNumber === 1 && get("rl").value === "" && text("vout") === "6 V", "Reset restores original mode and defaults");
+        assert(get("solveFor").value === "vout" && get("tolR1").valueAsNumber === 0.1 && get("tolR2").valueAsNumber === 0.1 && get("tolRl").valueAsNumber === 0.1 && get("rl").value === "" && text("vout") === "6 V", "Reset restores original mode and 0.1% resistor defaults");
         const enableParts = arm => { get(`${arm}Multiple`).checked = true; get(`${arm}Multiple`).dispatchEvent(new w.Event("input", { bubbles: true })); };
         const ids = arm => [...get(`${arm}Parts`).children].map(row => row.dataset.part);
         const split = arm => get(`${arm}Split`).click();
@@ -277,7 +277,7 @@
         }
         assert(ids("r1").every(id => schematicField(id, "resistance") === "40 kΩ" && schematicField(id, "p") === "0.36%" && schematicField(id, "v") === "—"), "Parallel schematic uses individual branch resistance and power stress without inventing voltage ratings");
 
-        await reset(); enableParts("r1"); set("r1Connection", "parallel");
+        await reset(); set("tolR2", "1"); enableParts("r1"); set("r1Connection", "parallel");
         set(`${ids("r1")[0]}R`, "2"); set(`${ids("r1")[0]}Tol`, "10");
         click('[data-add-part="r1"]'); set(`${ids("r1")[1]}R`, "6"); set(`${ids("r1")[1]}Tol`, "20");
         const parallelNetwork = w.readNetwork("r1", "vout");
@@ -384,7 +384,7 @@
         get("overviewTab").click(); get("catalogFamily").focus();
         assert(d.activeElement !== get("catalogFamily") && !visible("catalogCandidates"), "Inactive parts controls are hidden and cannot receive focus");
         get("toleranceTab").click(); w.openCalculatorDetails("inputs", "vin"); get("vin").focus(); set("vin", "24");
-        assert(activeView() === "toleranceTab" && d.activeElement === get("vin") && text("voutMin") === "11.88 V", "Live edits update a selected view without changing tabs or input focus");
+        assert(activeView() === "toleranceTab" && d.activeElement === get("vin") && text("voutMin") === "11.99 V", "Live edits update a selected view without changing tabs or input focus");
         get("methodTab").click(); set("r1", "0"); w.openCalculatorDetails("results");
         assert(visible("inputError") && activeView() === "methodTab" && text("solutionValue") === "—", "Validation errors and cleared solved values remain visible from every tab");
         await reset(); pick("pairs"); w.openCalculatorDetails("inputs");
