@@ -18,6 +18,21 @@ DC operating-point analysis (`.op`). An open load is omitted. Values use full
 numeric precision in ohms/volts, avoiding SPICE suffix ambiguity. Tolerances,
 ratings and selected part numbers appear as annotations; they do not implement
 tolerance sweeps, temperature drift, derating or failure models in LTspice.
+Its **Operating Point Report** lists VTOP, VMID, equivalent RTOP and RBOT,
+total operating power (including a connected load), and nominal Pstress/Vstress.
+Each aggregate stress is the highest utilization among the physical RTOP/RBOT
+parts; the load's rating is not assessed. Individual stresses appear beside
+each resistor. Missing voltage ratings are labeled **not assessed**, and a
+partial set of ratings is not presented as a complete Vstress result.
+
+Run `.op` and open **View > SPICE Error Log** for the measured report and
+individual part stresses. Measurement names ending in `_pct` contain percentages.
+The measurements use simulated node voltages and resistor currents; RTOP/RBOT
+use the exported nominal equivalents when the source is zero. If any working
+voltage rating is missing, `Vstress_unassessed_parts` reports that count instead
+of a misleading aggregate percentage. The native `.op` node/current dialog
+continues to show electrical quantities.
+
 The Markdown download contains the current characteristics, date/calculator link,
 physical connection table, Mermaid connection diagram, SVG BOM with separately
 labeled unapplied alternatives/recommendations, and the matching nominal netlist.
@@ -199,11 +214,13 @@ parts reopen with their reliability, TCR, tolerance, footprint and conditions.
 
 For an unassigned resistor, **Manual · keep current limits** preserves its current
 power rating and offers a tolerance dropdown and optional working-voltage input.
-Choose a family to enable catalog footprint, TCR and reliability choices. Manual
-mode permits custom values and clears a prior catalog assignment when explicitly
-selected. Source/load tolerances retain numeric entry. Saving updates the existing
-forms and recalculates the selected result and stress while preserving the active
-Find mode. Cancel or Escape leaves the circuit unchanged.
+The **Not set** footprint pill opens an enabled size dropdown. Choosing a size
+previews a compatible catalog family and its actual limits; the selected family
+remains editable. A family can also be selected first for its footprint, TCR and
+reliability choices. Manual mode permits custom values and clears a prior catalog
+assignment when explicitly selected. Source/load tolerances retain numeric entry.
+Saving updates the existing forms and recalculates the selected result and stress
+while preserving the active Find mode. Cancel or Escape leaves the circuit unchanged.
 
 In inverse modes, click VMID to edit the entered target and choose whether VTOP,
 RTOP, RBOT or RL should be found. Every value in the Find state has no edit link

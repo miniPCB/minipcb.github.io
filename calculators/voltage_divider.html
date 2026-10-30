@@ -2075,6 +2075,39 @@
       return { state, mode, trees, edges, netlist: netlist.join("\r\n") + "\r\n", bom: schematicBomData.map(row => [...row]) };
     }
 
+    function circuitLtspiceReport(model) {
+      const { state, edges } = model, measurements = [], powerNames = [], voltageNames = [], usedNames = new Set();
+      const add = (name, expression) => measurements.push(`.meas op ${name} PARAM ${expression}`);
+      const maximum = names => names.reduce((left, right) => `max(${left},${right})`);
+      const bottomCurrent = "(" + edges.filter(edge => edge.arm === "r2" && edge.from === "VMID").map(edge => `I(${edge.name})`).join("+") + ")";
+      add("VTOP_V", "V(VTOP)"); add("VMID_V", "V(VMID)");
+      add("RTOP_ohm", `if(abs(I(V1))>0,abs(V(VTOP,VMID)/I(V1)),${state.circuit.r1})`);
+      add("RBOT_ohm", `if(abs(${bottomCurrent})>0,abs(V(VMID)/${bottomCurrent}),${state.circuit.r2})`);
+      add("Operating_power_W", "-V(VTOP)*I(V1)");
+      for (const edge of edges) {
+        const base = edge.name.replace(/[^a-zA-Z0-9_]/g, "_"); let name = base, suffix = 1;
+        while (usedNames.has(name.toLowerCase())) name = base + "_" + suffix++;
+        usedNames.add(name.toLowerCase());
+        const voltage = edge.to === "0" ? `V(${edge.from})` : `V(${edge.from},${edge.to})`, powerName = `Pstress_${name}_pct`;
+        add(powerName, `100*abs(${voltage}*I(${edge.name}))/${edge.part.rating}`); powerNames.push(powerName);
+        if (Number.isFinite(edge.part.vmax) && edge.part.vmax > 0) {
+          const voltageName = `Vstress_${name}_pct`; add(voltageName, `100*abs(${voltage})/${edge.part.vmax}`); voltageNames.push(voltageName);
+        }
+      }
+      add("Pstress_pct", maximum(powerNames));
+      if (voltageNames.length === edges.length) add("Vstress_pct", maximum(voltageNames));
+      else add("Vstress_unassessed_parts", String(edges.length - voltageNames.length));
+      const parts = edges.map(edge => edge.part);
+      const rows = [
+        ["VTOP", format(state.circuit.vin, "V")], ["VMID", format(state.result.vout, "V")],
+        ["RTOP equivalent", format(state.circuit.r1, "ohm")], ["RBOT equivalent", format(state.circuit.r2, "ohm")],
+        ["Operating power (including load)", format(state.result.total, "W")],
+        ["Pstress (highest divider part)", percent(Math.max(...parts.map(part => part.stress.p)))],
+        ["Vstress (highest divider part)", voltageNames.length === edges.length ? percent(maximumVoltageStress(parts)) : `not assessed (${voltageNames.length}/${edges.length} parts rated)`]
+      ];
+      return { rows, measurements };
+    }
+
     function circuitLtspice(model) {
       const { state, trees, edges } = model, wires = [], flags = [], symbols = [], texts = [], points = new Map(), parts = new Map(edges.map(edge => [edge.part.id, edge]));
       const wire = (x1, y1, x2, y2) => { if (x1 !== x2 || y1 !== y2) wires.push(`WIRE ${x2} ${y2} ${x1} ${y1}`); };
@@ -2117,12 +2150,20 @@
       text(48, 16, "miniPCB - " + (state.pair ? "selected combination preview (not applied)" : "displayed circuit"));
       text(48, 48, "Analyzed: " + state.analyzedAt + " | https://www.minipcb.com/calculators/voltage_divider.html");
       let y = bottom + 64; text(64, y, ".op", true);
+      const report = circuitLtspiceReport(model);
+      text(64, y += 32, "Operating Point Report - nominal exported design");
+      for (const [label, value] of report.rows) text(64, y += 32, `${label}: ${value.replaceAll("µ", "u")}`);
+      text(64, y += 32, "Stresses are nominal maxima across physical RTOP/RBOT parts. RL rating is not checked.");
+      text(64, y += 32, "Run .op, then View > SPICE Error Log for the measured report. Values ending _pct are percentages.");
+      text(64, y += 32, "RTOP/RBOT measurements use exported nominal equivalents at zero drive.");
       for (const line of [`Nominal ideal DC; tolerances, ratings and MPNs below are annotations, not simulation models.`, `VMID nominal=${state.result.vout} V; min=${state.bounds.min} V; max=${state.bounds.max} V`, `VTOP tolerance +/-${state.tolerances.vin}%; RL ${state.circuit.rl === null ? "open (omitted)" : state.circuit.rl + " ohm, +/-" + state.tolerances.rl + "%"}`]) text(64, y += 32, line);
       for (const edge of edges) {
         const p = edge.part;
-        text(64, y += 32, `${edge.name} (${p.name}): ${p.resistance} ohm; +/-${p.tolerance}%; ${p.catalog?.case || "footprint not set"}; ${p.rating} W allowed; Vmax ${p.vmax ?? "not specified"}`);
+        text(64, y += 32, `${edge.name} (${p.name}): ${p.resistance} ohm; +/-${p.tolerance}%; ${p.catalog?.case || "footprint not set"}; ${p.rating} W allowed; Vmax ${p.vmax ?? "not specified"}; Pstress ${percent(p.stress.p)}; Vstress ${p.stress.v === null ? "not assessed" : percent(p.stress.v)}`);
         if (p.mpn) text(64, y += 32, `${edge.name} selected MPN: ${p.mpn}`);
       }
+      text(64, y += 32, ".options numdgt=15", true);
+      for (const measurement of report.measurements) text(64, y += 32, measurement, true);
       return ["Version 4", `SHEET 1 ${Math.max(1280, 256 + width + 512)} ${y + 96}`, ...wires, ...flags, ...symbols, ...texts, ""].join("\r\n");
     }
 
@@ -2250,7 +2291,10 @@
       const context = schematicEditContext; if (context?.kind !== "part") return;
       const familyId = byId("schematicEditFamily").value, chosen = context.part.catalog;
       if (!familyId) {
-        for (const [id, label] of [["Footprint", "Unspecified (manual)"], ["Tcr", "Unspecified (manual)"], ["Reliability", "Not specified (manual)"]]) {
+        const sizes = [...new Set(resistorCatalog?.families.flatMap(family => family.packages.map(pkg => pkg.case)) || [])].sort();
+        catalogOptions("schematicEditFootprint", [{ value: "", label: "Not set (manual)" }, ...sizes.map(size => ({ value: size, label: size }))], "");
+        byId("schematicEditFootprint").disabled = !sizes.length;
+        for (const [id, label] of [["Tcr", "Unspecified (manual)"], ["Reliability", "Not specified (manual)"]]) {
           catalogOptions(`schematicEdit${id}`, [{ value: "", label }], ""); byId(`schematicEdit${id}`).disabled = true;
         }
         const tolerances = [...new Set([0, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, context.part.tolerance])].sort((a, b) => a - b);
@@ -2270,6 +2314,20 @@
         byId("schematicEditReliability").disabled = !family.failureRates?.length;
       }
       updateSchematicCatalogPreview();
+    }
+
+    function changeSchematicFootprint() {
+      const size = byId("schematicEditFootprint").value;
+      if (!byId("schematicEditFamily").value && size && resistorCatalog) {
+        const families = resistorCatalog.families.filter(family => family.packages.some(pkg => pkg.case === size && pkg.powerW[family.defaults.mode]));
+        const family = families.find(family => family.id === byId("catalogFamily").value) || families[0];
+        if (family) {
+          byId("schematicEditFamily").value = family.id;
+          configureSchematicCatalog(true);
+          byId("schematicEditFootprint").value = family.packages.find(pkg => pkg.case === size).code;
+        }
+      }
+      configureSchematicCatalog();
     }
 
     function schematicCatalogCandidate(resistanceOhms) {
@@ -2299,7 +2357,7 @@
         byId("schematicEditPower").value = candidate?.powerW ?? context.part.rating;
         byId("schematicEditPowerLabel").textContent = candidate ? `Allowed power at ${candidate.temperatureC} °C (W)` : "Current power rating (W)";
         if (candidate) byId("schematicEditVmax").value = candidate.workingVoltageV;
-        byId("schematicEditPartStatus").textContent = candidate ? `${candidate.mpn} · ${candidate.temperatureC} °C · ${candidate.mode} mode. Power and voltage limits come from the catalog.` : `${resistorCatalog ? "Select a family for footprint, TCR and reliability options." : "Catalog options are unavailable."} Manual mode retains the current power rating.`;
+        byId("schematicEditPartStatus").textContent = candidate ? `${candidate.mpn} · ${candidate.temperatureC} °C · ${candidate.mode} mode. Power and voltage limits come from the catalog.` : `${resistorCatalog ? "Choose a footprint or family to preview a catalog part." : "Catalog options are unavailable."} Manual mode retains the current power rating.`;
       } catch (error) {
         byId("schematicEditPartStatus").textContent = error.message;
         byId("schematicEditPower").value = byId("schematicEditFamily").value ? "" : context.part.rating;
@@ -2399,7 +2457,7 @@
       byId("schematicEditValue").readOnly = locks.value;
       byId("schematicEditUnit").disabled = locks.value;
       byId("schematicEditPartTolerance").disabled = locks.tolerance;
-      const help = kind === "target" ? "Choose which parameter to adjust to reach the requested VMID." : kind === "arm" ? "Edit the arm connection or its equivalent resistance when it is an input. Individual SVG rows edit independent part settings." : kind === "part" ? "Choose a family for catalog footprint, TCR, tolerance and reliability options. Power and voltage limits follow that part. Manual mode keeps the current power rating." : "Saving recalculates the selected result and all stresses from the edited inputs.";
+      const help = kind === "target" ? "Choose which parameter to adjust to reach the requested VMID." : kind === "arm" ? "Edit the arm connection or its equivalent resistance when it is an input. Individual SVG rows edit independent part settings." : kind === "part" ? "Choose a footprint to preview a compatible catalog part, or select its family first. Power and voltage limits follow that part. Manual mode keeps the current power rating." : "Saving recalculates the selected result and all stresses from the edited inputs.";
       byId("schematicEditHelp").textContent = help + (locks.value ? " Resistance is calculated in this Find mode; edit its specifications here." : " The selected Find mode is preserved.");
       byId("schematicEditSave").textContent = "Save changes";
       byId("schematicEditError").hidden = true;
@@ -4443,7 +4501,8 @@
     byId("liveSchematic").addEventListener("keydown", schematicPairKeydown);
     byId("schematicEditForm").addEventListener("submit", saveSchematicEditor);
     byId("schematicEditFamily").addEventListener("change", () => configureSchematicCatalog(true));
-    for (const id of ["schematicEditFootprint", "schematicEditTcr"]) byId(id).addEventListener("change", () => configureSchematicCatalog());
+    byId("schematicEditFootprint").addEventListener("change", changeSchematicFootprint);
+    byId("schematicEditTcr").addEventListener("change", () => configureSchematicCatalog());
     for (const id of ["schematicEditPartTolerance", "schematicEditReliability", "schematicEditUnit"]) byId(id).addEventListener("change", updateSchematicCatalogPreview);
     byId("schematicEditValue").addEventListener("input", updateSchematicCatalogPreview);
     byId("schematicEditCancel").addEventListener("click", closeSchematicEditor);
