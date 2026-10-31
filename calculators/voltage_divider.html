@@ -1548,6 +1548,8 @@
       for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolR1", "tolR2"]) {
         byId(id).readOnly = id === mode || (id === "targetVout" && ["vout", "tolerance"].includes(mode)) || (["tolR1", "tolR2"].includes(id) && mode === "tolerance");
       }
+      byId("tolVin").readOnly = schematicEditLocks("source").tolerance;
+      byId("targetError").readOnly = mode === "vout";
       for (const arm of ARMS) {
         const active = byId(`${arm}Multiple`).checked;
         const index = arm === "r1" ? "1" : "2";
@@ -1570,7 +1572,8 @@
       byId("singleRatingFields").hidden = bothMultiple;
       byId("singleVoltageOptions").hidden = bothMultiple;
       byId("targetVoutLabel").textContent = `Output voltage · VMID (${["vout", "tolerance"].includes(mode) ? "calculated" : "target"})`;
-      byId("targetErrorField").hidden = mode !== "tolerance";
+      byId("targetErrorField").hidden = mode === "vout";
+      byId("targetErrorHelp").textContent = mode === "tolerance" ? "The calculated tolerance applies to every physical RTOP/RBOT part. VTOP and RL variations are included." : "Allowed deviation from the VMID target. The actual output interval includes VTOP, resistor and load variations.";
       configureFocusedForm(mode);
       refreshAutomaticDesign();
       return mode;
@@ -1633,7 +1636,7 @@
       const mode = byId("solveFor").value, state = pairPreviewState || schematicState;
       const arm = ARMS.find(arm => key === arm || state?.physical[arm].some(part => part.id === key) || mode === "pairs" && pairConstruction?.[arm].parts.some(part => part.id === key));
       const property = { source: "vin", target: "vout", load: "rl" }[key] || arm;
-      return { value: mode === property || mode === "tolerance" && property === "vout" || mode === "pairs" && !!arm || !!byId(`${key}Auto`)?.checked, tolerance: mode === "tolerance" && !!arm };
+      return { value: mode === property || mode === "tolerance" && property === "vout" || mode === "pairs" && !!arm || !!byId(`${key}Auto`)?.checked, tolerance: property === "vin" && mode === "vin" || property === "vout" && ["vout", "tolerance"].includes(mode) || mode === "tolerance" && !!arm };
     }
 
     function schematicEditable(node, key, label, focus = "value") {
@@ -1772,11 +1775,11 @@
 
     function schematicNetPanel(parent, state, roles, key, x, y) {
       const source = key === "vin", mode = byId("solveFor").value, pairMode = mode === "pairs";
-      const name = source ? "VTOP" : "VMID", actual = source ? state?.circuit.vin : state?.result.vout;
-      const target = source ? actual : pairMode ? byId("pairVmid").valueAsNumber : state?.target;
-      const hasTarget = source ? roles.vin === "defined" : pairMode || roles.vout === "defined" && Number.isFinite(target);
-      const targetLimits = !source && pairMode;
-      const tolerance = source ? state?.tolerances.vin : targetLimits ? byId("pairErrorPct").valueAsNumber : state?.bounds.deviation;
+      const name = source ? "VTOP" : "VMID", actual = source ? state?.circuit.vin ?? (mode !== "vin" ? byId(pairMode ? "pairVin" : "vin").valueAsNumber : NaN) : state?.result.vout;
+      const target = source ? actual : byId(pairMode ? "pairVmid" : "targetVout").valueAsNumber;
+      const hasTarget = source ? mode !== "vin" : !["vout", "tolerance"].includes(mode);
+      const targetLimits = !source && hasTarget;
+      const tolerance = source ? state?.tolerances.vin ?? byId(pairMode ? "pairSourceTol" : "tolVin").valueAsNumber : targetLimits ? byId(pairMode ? "pairErrorPct" : "targetError").valueAsNumber : state?.bounds.deviation;
       const center = targetLimits ? target : actual, spread = Math.abs(center) * tolerance / 100;
       const min = source || targetLimits ? center - spread : state?.bounds.min, max = source || targetLimits ? center + spread : state?.bounds.max;
       const value = number => Number.isFinite(number) ? format(number, "V") : "—";
@@ -1795,7 +1798,7 @@
       rows.forEach((row, index) => {
         const rowY = y + 48 + index * 36;
         schematicText(panel, x + 14, rowY + 20, row.label, 14, "#a8bece");
-        schematicField(panel, x + 114, rowY, row.content, row.field, row.id, key, roles, state ? row.edit : null, row.focus || "value");
+        schematicField(panel, x + 114, rowY, row.content, row.field, row.id, key, roles, row.edit, row.focus || "value");
       });
       return height;
     }
@@ -1865,7 +1868,7 @@
       const mainX = 284 + Math.max(arms.r1.model.port, arms.r2.model.port), topY = pairMode ? 204 : 132;
       const mid = topY + arms.r1.model.height + 52, botY = mid + 72, bottom = botY + arms.r2.model.height;
       const right = Math.max(...ARMS.map(arm => mainX - arms[arm].model.port + arms[arm].model.width));
-      const readoutX = right + 64, loadX = readoutX + 112, loadY = (botY + bottom) / 2, readoutHeight = pairMode || roles.vout === "defined" && Number.isFinite(state?.target) ? 244 : 208, readoutY = mid - readoutHeight - 24;
+      const readoutX = right + 64, loadX = readoutX + 112, loadY = (botY + bottom) / 2, readoutHeight = !["vout", "tolerance"].includes(mode) ? 244 : 208, readoutY = mid - readoutHeight - 24;
       const wires = schematicShape(drawing, "g", { fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" });
       const supply = schematicShape(drawing, "g", { "data-supply-net": "VTOP" });
       schematicRole(schematicShape(supply, "path", { d: `M${mainX} ${topY}V${topY - 62}m-10 14 10 -14 10 14`, fill: "none", "stroke-width": 3, "stroke-linejoin": "round" }), "vin", roles, "stroke");
@@ -1972,7 +1975,7 @@
           ["Nominal target error", accuracy(Math.abs(state?.result.vout - target)), "nominalError"],
           ["Worst target error", accuracy(Math.max(Math.abs(state?.bounds.min - target), Math.abs(state?.bounds.max - target))), "worstError"]);
       } else rows.push(["VMID accuracy", !complete ? "—" : state.bounds.deviation === null ? value(Math.max(Math.abs(state.bounds.min - state.result.vout), Math.abs(state.bounds.max - state.result.vout)), "V") : `±${percent(state.bounds.deviation)}`, "vmidAccuracy"]);
-      if (["pairs", "tolerance"].includes(mode)) rows.push(["Allowed VMID error", Number.isFinite(state?.allowedErrorPct) ? `±${percent(state.allowedErrorPct)}` : "—", "allowedError"]);
+      if (mode !== "vout") rows.push(["Allowed VMID error", Number.isFinite(state?.allowedErrorPct) ? `±${percent(state.allowedErrorPct)}` : "—", "allowedError"]);
       if (mode === "rl") rows.push(["Load power", complete ? value(state.result.pl, "W") : "—", "loadPower"]);
       const parts = complete ? ARMS.flatMap(arm => state.physical[arm]) : [];
       if (complete && partsMissingVoltage(state)) rows.push(["Voltage ratings", `${parts.filter(part => part.stress.v !== null).length} / ${parts.length} specified`, "voltageRatings"]);
@@ -2516,6 +2519,7 @@
           const field = focus === "tolerance" ? `${key}Tol` : focus === "power" ? "designPackage" : byId(`${key}Auto`).checked ? `${key}Auto` : `${key}R`;
           openCalculatorDetails(focus === "power" ? "design" : "inputs", field);
         } else if (key === "source") openCalculatorDetails("inputs", focus === "tolerance" ? "tolVin" : "vin");
+        else if (key === "target") openCalculatorDetails("inputs", focus === "tolerance" ? "targetError" : "targetVout");
         else if (key === "load") openCalculatorDetails("inputs", focus === "tolerance" ? "tolRl" : "rl");
         return;
       }
@@ -2527,7 +2531,7 @@
       schematicEditContext = { state, key, focus, arm: kind === "arm" ? key : arm, part, kind, mode: byId("solveFor").value, locks };
       const name = kind === "part" ? part.name : kind === "arm" ? key === "r1" ? "RTOP equivalent" : "RBOT equivalent" : { source: "VTOP", target: "VMID target", load: "RL" }[kind];
       const resistance = ["part", "arm", "load"].includes(kind);
-      const value = kind === "part" ? part.resistance : kind === "arm" ? state.circuit[key] : kind === "source" ? state.circuit.vin : kind === "target" ? state.result.vout : state.circuit.rl;
+      const value = kind === "part" ? part.resistance : kind === "arm" ? state.circuit[key] : kind === "source" ? state.circuit.vin : kind === "target" ? state.target ?? state.result.vout : state.circuit.rl;
       const unit = resistance ? value >= 1e6 ? 1e6 : value >= 1000 ? 1000 : 1 : 1;
       byId("schematicEditHeading").textContent = `Edit ${name}`;
       byId("schematicEditValueLabel").textContent = resistance ? `${name} resistance${kind === "load" ? " (blank = open)" : ""}` : `${name} (V)`;
@@ -2535,12 +2539,16 @@
       byId("schematicEditValue").required = kind !== "load";
       byId("schematicEditUnit").value = unit; byId("schematicEditUnit").hidden = !resistance;
       byId("schematicEditVolts").hidden = resistance;
-      byId("schematicEditSolveField").hidden = kind !== "target";
+      byId("schematicEditSolveField").hidden = kind !== "target" || focus === "tolerance";
       byId("schematicEditSolve").value = ["vin", "r1", "r2", "rl"].includes(byId("solveFor").value) ? byId("solveFor").value : "r1";
       byId("schematicEditConnectionField").hidden = kind !== "arm";
       if (kind === "arm") { byId("schematicEditConnection").querySelector('[value="mixed"]').disabled = typeof state.networks[key].connection !== "object"; byId("schematicEditConnection").value = connectionLabel(state.networks[key].connection); }
-      byId("schematicEditToleranceField").hidden = kind !== "source" && kind !== "load";
-      byId("schematicEditTolerance").value = kind === "part" ? part.tolerance : kind === "source" ? state.tolerances.vin : state.tolerances.rl;
+      byId("schematicEditToleranceField").hidden = !["source", "target", "load"].includes(kind);
+      byId("schematicEditTolerance").value = kind === "part" ? part.tolerance : kind === "source" ? state.tolerances.vin : kind === "target" ? state.allowedErrorPct : state.tolerances.rl;
+      byId("schematicEditTolerance").readOnly = locks.tolerance;
+      byId("schematicEditTolerance").labels[0].textContent = kind === "target" ? "Allowed VMID error · ± (%)" : "Tolerance · ± (%)";
+      if (kind === "target") byId("schematicEditTolerance").removeAttribute("max");
+      else byId("schematicEditTolerance").max = "99.999";
       byId("schematicEditPowerField").hidden = kind !== "part"; byId("schematicEditVmaxField").hidden = kind !== "part";
       byId("schematicEditPowerLabel").textContent = part?.catalog ? `Allowed power at ${part.catalog.temperatureC} °C (W)` : "Power rating (W)";
       byId("schematicEditPower").value = part?.rating ?? ""; byId("schematicEditVmax").value = part?.vmax ?? "";
@@ -2554,7 +2562,7 @@
       byId("schematicEditValue").readOnly = locks.value;
       byId("schematicEditUnit").disabled = locks.value;
       byId("schematicEditPartTolerance").disabled = locks.tolerance;
-      const help = kind === "target" ? "Choose which parameter to adjust to reach the requested VMID." : kind === "arm" ? "Edit the arm connection or its equivalent resistance when it is an input. Individual SVG rows edit independent part settings." : kind === "part" ? "Choose a footprint to preview a compatible catalog part, or select its family first. Power and voltage limits follow that part. Manual mode keeps the current power rating." : "Saving recalculates the selected result and all stresses from the edited inputs.";
+      const help = kind === "target" ? focus === "tolerance" ? "Set the allowed deviation from the VMID target. This specifies the required band; the actual circuit tolerance is calculated separately." : "Choose which parameter to adjust to reach the requested VMID." : kind === "arm" ? "Edit the arm connection or its equivalent resistance when it is an input. Individual SVG rows edit independent part settings." : kind === "part" ? "Choose a footprint to preview a compatible catalog part, or select its family first. Power and voltage limits follow that part. Manual mode keeps the current power rating." : "Saving recalculates the selected result and all stresses from the edited inputs.";
       byId("schematicEditHelp").textContent = help + (locks.value ? `${kind === "source" ? " VTOP" : " Resistance"} is calculated in this Find mode; edit its specifications here.` : " The selected Find mode is preserved.");
       byId("schematicEditSave").textContent = "Save changes";
       byId("schematicEditError").hidden = true;
@@ -2585,7 +2593,8 @@
       const resistance = ["part", "arm", "load"].includes(kind);
       const value = context.locks.value ? kind === "part" ? part.resistance : kind === "source" ? circuit.vin : circuit[arm] : readInput("schematicEditValue", byId("schematicEditValueLabel").textContent, kind === "load", resistance, resistance ? Number(byId("schematicEditUnit").value) : 1);
       let mode = context.mode, assignment = null;
-      if (kind === "source") { circuit.vin = value; tolerances.vin = readTolerance("schematicEditTolerance", "VTOP tolerance"); }
+      let allowedErrorPct = state.allowedErrorPct;
+      if (kind === "source") { circuit.vin = value; if (!context.locks.tolerance) tolerances.vin = readTolerance("schematicEditTolerance", "VTOP tolerance"); }
       else if (kind === "load") { circuit.rl = value; tolerances.rl = readTolerance("schematicEditTolerance", "RL tolerance"); }
       else if (kind === "part") {
         assignment = schematicCatalogCandidate(value);
@@ -2596,7 +2605,11 @@
         networks[arm].connection = byId("schematicEditConnection").value === "mixed" ? networks[arm].connection : byId("schematicEditConnection").value;
         const scale = value / networkEquivalent(physical[arm], networks[arm].connection).resistance;
         for (const item of physical[arm]) item.resistance *= scale;
-      } else mode = byId("schematicEditSolve").value;
+      } else {
+        if (context.focus !== "tolerance") mode = byId("schematicEditSolve").value;
+        allowedErrorPct = readInput("schematicEditTolerance", "Allowed VMID error");
+        if (allowedErrorPct < 0) throw new Error("Allowed VMID error must be zero or greater.");
+      }
       for (const arm of ARMS) {
         const equivalent = networkEquivalent(physical[arm], networks[arm]?.connection || "series");
         circuit[arm] = equivalent.resistance; tolerances[arm] = equivalent.tolerance;
@@ -2622,7 +2635,7 @@
         for (const rating of RATINGS) numbers.push(...Object.values(stress(item.resistance, item.voltage, item.current, item.power, rating.watts, item.vmax)).filter(value => value !== null));
       }
       if (numbers.some(number => !Number.isFinite(number))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
-      return { circuit: solved, tolerances, physical, networks, mode, target: value, assignment };
+      return { circuit: solved, tolerances, physical, networks, mode, target: value, allowedErrorPct, assignment };
     }
 
     function saveSchematicEditor(event) {
@@ -2670,7 +2683,7 @@
           if (draft.assignment) appliedCatalogParts.set(context.part.id, { ...draft.assignment });
           else appliedCatalogParts.delete(context.part.id);
         }
-        if (context.kind === "target") byId("targetVout").value = draft.target;
+        if (context.kind === "target") { byId("targetVout").value = draft.target; byId("targetError").value = draft.allowedErrorPct; }
         designGeneration++;
         if (automaticRows().length) invalidateAutomaticDesign();
         catalogDesignVmid = null; update(); selectResultTab("overviewTab"); closeSchematicEditor();
@@ -4404,6 +4417,11 @@
           rl: mode === "rl" ? null : readInput("rl", "Load resistance", true, true, Number(byId("rlUnit").value))
         };
         const target = ["vout", "tolerance"].includes(mode) ? null : readInput("targetVout", "Target VMID");
+        const allowedErrorPct = mode === "vout" ? null : readInput("targetError", "Allowed VMID error");
+        if (allowedErrorPct !== null && allowedErrorPct < 0) {
+          byId("targetError").setAttribute("aria-invalid", "true");
+          throw new Error("Allowed VMID error must be zero or greater.");
+        }
         const circuit = solveCircuit(mode, inputs, target);
         const { vin, r1, r2, rl } = circuit;
         for (const arm of ARMS) {
@@ -4421,12 +4439,7 @@
           rl: rl === null ? 0 : readTolerance("tolRl", "RL tolerance")
         };
         if (mode === "tolerance") {
-          const allowedError = readInput("targetError", "Allowed VMID error");
-          if (allowedError < 0) {
-            byId("targetError").setAttribute("aria-invalid", "true");
-            throw new Error("Allowed VMID error must be zero or greater.");
-          }
-          tolerances.r1 = tolerances.r2 = solveTolerance(circuit, tolerances, allowedError);
+          tolerances.r1 = tolerances.r2 = solveTolerance(circuit, tolerances, allowedErrorPct);
           for (const arm of ARMS) {
             if (networks[arm]) {
               networks[arm].parts = networks[arm].parts.map(part => ({ ...part, tolerance: tolerances[arm] }));
@@ -4519,7 +4532,7 @@
           return `<tr><th scope="row">${rating.label}</th>${cells}</tr>`;
         }).join("");
         byId("updateStatus").textContent = `Results updated. Output ${format(result.vout, "V")}; input current ${format(result.i1, "A")}.`;
-        schematicState = { circuit, tolerances, networks, physical, result, bounds, target: mode === "vout" ? catalogDesignVmid : target, allowedErrorPct: mode === "tolerance" ? byId("targetError").valueAsNumber : null, analyzedAt: new Date().toISOString() };
+        schematicState = { circuit, tolerances, networks, physical, result, bounds, target: mode === "vout" ? catalogDesignVmid : target, allowedErrorPct, analyzedAt: new Date().toISOString() };
         renderSchematic();
         renderCatalogMatches();
       } catch (error) {

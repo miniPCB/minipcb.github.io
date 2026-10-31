@@ -117,11 +117,12 @@ name, followed by **Target** (or **Calculated** for a solved voltage),
 **Tolerance**, **Max** and **Min**. A VMID target also retains a **Nominal** row
 so the selected design's actual output can be compared with its target.
 VTOP bounds use the entered source tolerance, including correctly ordered bounds
-for negative sources. In combination searches, VMID Target and Tolerance are
-editable specifications, and Max/Min show that required band; the actual nominal
+for negative sources. In inverse modes and combination searches, VMID Target and
+Tolerance are editable specifications, and Max/Min show that required band; the actual nominal
 output remains separate, with its actual tolerance interval available in the panel
-tooltip, result tables and SVG description. Other calculated net panels show the
-computed tolerance and interval. The target-error budget is also reported above VMID.
+tooltip, result tables and SVG description. Calculated VMID shows the computed
+tolerance and interval. Combination searches also report the target-error budget
+above VMID.
 Editable values have brighter borders and shading; calculated fields have quieter
 borders. The old dotted underlines and small Find labels in these panels are removed.
 VMID sits
@@ -253,6 +254,12 @@ or keyboard button, including individual resistances in a calculated multi-part
 arm. Other specification editors keep calculated values and units read-only;
 calculated tolerance selections are disabled in tolerance analysis. Known inputs
 remain editable, and their changes recalculate the selected result.
+Voltage tolerances follow the same known/calculated role in the SVG and input form:
+VTOP tolerance is locked in Find VTOP; VMID tolerance is locked in Find VMID.
+In inverse modes, VMID tolerance edits the allowed target-error band, preserving
+the nominal circuit and Find mode. Its Max/Min are acceptance limits; the actual
+output interval remains a separate calculated result. Known voltage fields remain
+reachable from the SVG when invalid circuit inputs need repair.
 For a multi-resistor input arm, clicking its equivalent value or connection
 opens an editor that scales all part resistances together for the requested
 equivalent and series/parallel connection, preserving independent ratings and
