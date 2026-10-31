@@ -136,7 +136,12 @@
     .pair-svg-action:hover rect, .pair-svg-action:focus-visible rect { fill: #2b465b; }
     .pair-svg-action:focus-visible { outline: none; }
     .pair-svg-action:focus-visible rect, .pair-svg-handle:focus-visible [data-thumb] { stroke: #eaf6ff; stroke-width: 2; }
-    .pair-svg-action[data-pair-action="compare"][aria-pressed="true"] rect { fill: #1b5b56; }
+    .pair-svg-axis { cursor: context-menu; }
+    .pair-svg-axis [data-axis-label] { text-decoration: underline dotted; text-underline-offset: 3px; }
+    .pair-svg-axis:hover text, .pair-svg-axis:focus-visible text { fill: #fff; }
+    .pair-svg-axis:focus-visible { outline: none; }
+    .pair-axis-menu { max-height: calc(100vh - 24px); overflow-y: auto; }
+    .pair-axis-menu [aria-checked="true"] { color: #6ee7ac; background: #203d42; }
     .pair-svg-range, .pair-svg-chart { touch-action: none; }
     .pair-svg-range { cursor: ew-resize; }
     .pair-svg-chart { cursor: crosshair; }
@@ -406,6 +411,7 @@
       <button type="button" role="menuitem" data-resistor-action="trim">Use this resistor as ratio trim</button>
       <button type="button" role="menuitem" data-resistor-action="fixed">Keep the current value fixed</button>
     </div>
+    <div id="pairAxisMenu" class="resistor-menu pair-axis-menu" role="menu" aria-label="Choose graph axis" hidden></div>
     <dialog id="schematicEditor" class="schematic-editor" aria-labelledby="schematicEditHeading" aria-describedby="schematicEditHelp">
       <form id="schematicEditForm" class="form-grid" novalidate>
         <h3 id="schematicEditHeading">Edit circuit value</h3>
@@ -2205,6 +2211,7 @@
     }
 
     function renderSchematic() {
+      closePairAxisMenu();
       const svg = byId("liveSchematic");
       const mode = byId("solveFor").value, state = mode === "pairs" ? pairSchematicState() : schematicState || pendingConstructionState();
       if (mode !== "pairs") { pairSvgGesture = null; pairSvgPlots = []; }
@@ -2271,8 +2278,9 @@
       for (const node of snapshot.querySelectorAll("[data-schematic-symbol]")) for (const attribute of ["tabindex", "role", "aria-label"]) node.removeAttribute(attribute);
       for (const node of snapshot.querySelectorAll("[data-schematic-controls]")) node.remove();
       for (const node of snapshot.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
-      for (const node of snapshot.querySelectorAll("[data-pair-slider], [data-pair-chart], [data-pair-action]")) {
-        for (const attribute of ["role", "tabindex", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext", "aria-pressed", "data-pair-action"]) node.removeAttribute(attribute);
+      for (const node of snapshot.querySelectorAll("[data-pair-slider], [data-pair-chart], [data-pair-action], [data-pair-axis]")) {
+        if (node.hasAttribute("data-pair-axis")) { node.querySelector("title")?.remove(); node.removeAttribute("aria-label"); }
+        for (const attribute of ["role", "tabindex", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext", "aria-pressed", "aria-haspopup", "aria-controls", "aria-expanded", "data-pair-action", "data-pair-axis", "data-axis-plot"]) node.removeAttribute(attribute);
         if (node.hasAttribute("data-pair-chart")) node.setAttribute("aria-label", node.getAttribute("aria-label").split(". Click")[0]);
       }
       const markup = new XMLSerializer().serializeToString(snapshot);
@@ -2383,9 +2391,9 @@
       const armKey = key.startsWith("arm-") ? key.slice(4) : key;
       const partArm = byId("pairConstructionMode").value === "configured" && ARMS.find(arm => pairConstruction?.[arm].parts.some(part => part.id === key)), part = partArm && pairConstruction[partArm].parts.find(part => part.id === key);
       const side = (partArm || armKey) === "r1" ? "Top" : "Bot";
-      const ids = { source: ["pairVin", "pairSourceTol"], target: ["pairVmid", "pairErrorPct"], load: ["pairRl", "pairLoadTol"], "plot-axes": ["pairAxisX", "pairAxisY"], "search-options": ["pairMinR", "pairMaxR", "pairTemperature", "pairTcr", "pairMaxStress", "pairMaxPower"] }[key] || (ARMS.includes(armKey) || part) && [`pairFamily${side}`, `pairPackage${side}`, `pairTol${side}`, "pairTcr"];
+      const ids = { source: ["pairVin", "pairSourceTol"], target: ["pairVmid", "pairErrorPct"], load: ["pairRl", "pairLoadTol"], "search-options": ["pairMinR", "pairMaxR", "pairTemperature", "pairTcr", "pairMaxStress", "pairMaxPower"] }[key] || (ARMS.includes(armKey) || part) && [`pairFamily${side}`, `pairPackage${side}`, `pairTol${side}`, "pairTcr"];
       if (!ids) return;
-      const name = { source: "VTOP", target: "VMID target", load: "RL", r1: "RTOP search constraints", r2: "RBOT search constraints", "search-options": "combination search options", "plot-axes": "performance axes" }[armKey];
+      const name = { source: "VTOP", target: "VMID target", load: "RL", r1: "RTOP search constraints", r2: "RBOT search constraints", "search-options": "combination search options" }[armKey];
       const fields = {};
       byId("schematicCircuitFields").hidden = true; byId("schematicPairFields").hidden = false; byId("schematicPairFields").replaceChildren();
       for (const id of ids) {
@@ -2395,10 +2403,10 @@
         label.htmlFor = input.id; label.textContent = original.labels[0].textContent;
         field.className = "field"; field.append(label, input); byId("schematicPairFields").append(field); fields[id] = input;
       }
-      schematicEditContext = { pairSearch: true, pairPartId: part?.id, pairPartArm: partArm, presentation: key === "plot-axes", mode: "pairs", key, focus, fields, fingerprint: pairFormFingerprint() };
+      schematicEditContext = { pairSearch: true, pairPartId: part?.id, pairPartArm: partArm, mode: "pairs", key, focus, fields, fingerprint: pairFormFingerprint() };
       byId("schematicEditHeading").textContent = `Edit ${part ? part.name + " catalog limits" : name}`;
-      byId("schematicEditHelp").textContent = key === "plot-axes" ? "Choose axes for the first SVG plot and the detailed chart. Other performance filters remain in effect." : part ? "These limits apply to this physical resistor. Saving finds new combinations; Apply changes the circuit and BOM." : "These settings belong to the combination search. Saving searches again; Apply changes the circuit and BOM. The shared TCR applies unless a resistor has an override.";
-      byId("schematicEditSave").textContent = key === "plot-axes" ? "Update axes" : "Save & find combinations"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
+      byId("schematicEditHelp").textContent = part ? "These limits apply to this physical resistor. Saving finds new combinations; Apply changes the circuit and BOM." : "These settings belong to the combination search. Saving searches again; Apply changes the circuit and BOM. The shared TCR applies unless a resistor has an override.";
+      byId("schematicEditSave").textContent = "Save & find combinations"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
       byId("schematicEditor").showModal();
       schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
       const selected = fields[focus === "tolerance" ? `pairTol${side}` : focus === "power" ? `pairPackage${side}` : ids[0]] || fields[ids[0]];
@@ -2470,7 +2478,7 @@
     }
 
     function focusSchematicEditorTarget(context) {
-      const target = context?.presentation ? byId("liveSchematic").querySelector('[data-pair-action="axes"]') : context && [...byId("liveSchematic").querySelectorAll("[data-schematic-edit]")].find(node => node.dataset.schematicEdit === context.key && node.dataset.editFocus === context.focus);
+      const target = context && [...byId("liveSchematic").querySelectorAll("[data-schematic-edit]")].find(node => node.dataset.schematicEdit === context.key && node.dataset.editFocus === context.focus);
       target?.focus({ preventScroll: true });
     }
 
@@ -2536,10 +2544,6 @@
         if (byId("solveFor").value !== context.mode) throw new Error("The Find mode changed while this editor was open. Cancel and reopen it.");
         if (context.pairSearch) {
           if (context.fingerprint !== pairFormFingerprint()) throw new Error("The search settings changed while this editor was open. Cancel and reopen it.");
-          if (context.presentation) {
-            for (const [id, field] of Object.entries(context.fields)) byId(id).value = field.value;
-            resetPairFilterInputs(true); closeSchematicEditor(); filterPairItems(); focusSchematicEditorTarget(context); return;
-          }
           readPairSpec(context.fields);
           if (context.pairPartId) {
             const side = context.pairPartArm === "r1" ? "Top" : "Bot", part = pairConstruction[context.pairPartArm].parts.find(part => part.id === context.pairPartId);
@@ -2593,6 +2597,8 @@
     let pairConstruction = null, pairConstructionNext = 0;
     let pairPlot = null, pairBrush = null, pairIgnoreClick = false;
     let pairPerformanceBounds = {}, pairSvgPlots = [], pairSvgGesture = null, pairSvgIgnoreClick = false, pairSvgLayout = null;
+    let pairAxisMenuContext = null;
+    const pairSecondaryAxes = { X: "rth", Y: "pstress" };
     const pairSvgDomains = new Map();
     const PAIR_METRICS = {
       power: { label: "Total power (mW)", log: true, value: pair => pair.result.total * 1000 },
@@ -3119,7 +3125,6 @@
       const added = pairSelected && pairComparisons.has(pairSelected);
       byId("pairCompareAdd").disabled = !pairSelected || added;
       byId("pairCompareAdd").textContent = added ? "Added to comparison" : "Add preview to comparison";
-      updatePairSvgComparisonControls();
     }
 
     function initializeBomControls(prefix, pair, render) {
@@ -3420,6 +3425,46 @@
       return result;
     }
 
+    function closePairAxisMenu(restoreFocus = false) {
+      const context = pairAxisMenuContext;
+      byId("pairAxisMenu").hidden = true; pairAxisMenuContext = null;
+      const target = context && byId("liveSchematic").querySelector(`[data-axis-plot="${context.index}"][data-pair-axis="${context.axis}"]`);
+      target?.setAttribute("aria-expanded", "false");
+      if (restoreFocus) target?.focus({ preventScroll: true });
+    }
+
+    function openPairAxisMenu(event) {
+      const target = event.target.closest("[data-pair-axis]"); if (!target) return;
+      event.preventDefault(); closeResistorMenu(); closePairAxisMenu();
+      const index = Number(target.dataset.axisPlot), axis = target.dataset.pairAxis, menu = byId("pairAxisMenu");
+      const current = index === 0 ? byId(`pairAxis${axis}`).value : pairSecondaryAxes[axis];
+      const heading = document.createElement("p"); heading.className = "hint"; heading.textContent = `Plot ${index + 1} · ${axis} axis`;
+      menu.replaceChildren(heading);
+      for (const option of byId(`pairAxis${axis}`).options) {
+        const button = document.createElement("button"); button.type = "button"; button.dataset.axisMetric = option.value;
+        button.setAttribute("role", "menuitemradio"); button.setAttribute("aria-checked", String(option.value === current));
+        button.textContent = option.textContent; menu.append(button);
+      }
+      pairAxisMenuContext = { index, axis }; target.setAttribute("aria-expanded", "true");
+      const box = target.getBoundingClientRect(); menu.hidden = false;
+      menu.style.left = Math.max(12, Math.min(event.clientX || box.left, innerWidth - menu.offsetWidth - 12)) + "px";
+      menu.style.top = Math.max(12, Math.min(event.clientY || box.bottom, innerHeight - menu.offsetHeight - 12)) + "px";
+      menu.querySelector('[aria-checked="true"]')?.focus({ preventScroll: true });
+    }
+
+    function choosePairAxis(metric) {
+      const context = pairAxisMenuContext; if (!context) return;
+      closePairAxisMenu();
+      if (context.index === 0) {
+        byId(`pairAxis${context.axis}`).value = metric; resetPairFilterInputs(true);
+      } else {
+        for (const key of Object.values(pairSecondaryAxes)) setPairMetricBounds(key, null, null);
+        pairSecondaryAxes[context.axis] = metric;
+      }
+      activateSchematicPairResults(); filterPairItems();
+      byId("liveSchematic").querySelector(`[data-axis-plot="${context.index}"][data-pair-axis="${context.axis}"]`)?.focus({ preventScroll: true });
+    }
+
     function renderPairSvgSlider(parent, key, x, y, width) {
       const domain = pairSvgDomain(key), bounds = pairMetricBounds(key), start = x + 12, end = x + width - 12;
       const group = schematicShape(parent, "g", { class: "pair-svg-range", "data-pair-range": key, "data-range-start": start, "data-range-end": end, "data-range-y": y + 48 });
@@ -3436,18 +3481,36 @@
         schematicShape(handle, "circle", { cx: positions[bound], cy: y + 48, r: 16, fill: "transparent" });
         schematicShape(handle, "circle", { cx: positions[bound], cy: y + 48, r: 7, fill: bound === "min" ? "#c6e3ff" : "#54d2ff", stroke: "#101823", "stroke-width": 2, "data-thumb": "" });
       }
+      if (pairSelected) {
+        const value = pairMetric(pairSelected, key), position = start + pairDomainFraction(value, domain) * (end - start), label = `Selected ${pairSvgNumber(value)}`;
+        const marker = schematicShape(group, "g", { "data-pair-selection": key, "data-selected-value": value, "pointer-events": "none" });
+        schematicShape(marker, "title").textContent = `Selected combination · ${PAIR_METRICS[key].label}: ${pairSvgNumber(value)}`;
+        schematicShape(marker, "path", { d: `M${position} ${y + 40}V${y + 61}m0 0l-5 6 5 6 5-6z`, fill: "#ffdf8a", stroke: "#ffdf8a", "stroke-width": 2, "data-selection-position": position });
+        const half = label.length * 10 * 0.62 / 2;
+        schematicText(marker, Math.max(x + half + 4, Math.min(x + width - half - 4, position)), y + 87, label, 10, "#ffdf8a").setAttribute("text-anchor", "middle");
+      }
     }
 
     function renderPairSvgPlot(parent, x, y, width, height, xKey, yKey, indices) {
-      const index = pairSvgPlots.length, group = schematicShape(parent, "g", { class: "pair-svg-chart", transform: `translate(${x} ${y})`, "data-pair-chart": index, role: "img", tabindex: 0, "aria-label": `${PAIR_METRICS[xKey].label} versus ${PAIR_METRICS[yKey].label}; ${pairView.length} real resistor combinations. Click to preview, drag to filter, arrow keys to select, Enter to compare, Escape to clear filters.` });
+      const index = pairSvgPlots.length, group = schematicShape(parent, "g", { class: "pair-svg-chart", transform: `translate(${x} ${y})`, "data-pair-chart": index, role: "group", tabindex: 0, "aria-label": `${PAIR_METRICS[xKey].label} versus ${PAIR_METRICS[yKey].label}; ${pairView.length} real resistor combinations. Click to preview, drag to filter, arrow keys to select, Escape to clear filters. Activate an axis to choose its metric.` });
       schematicShape(group, "rect", { x: 0, y: 0, width, height, rx: 10, fill: "#142535", stroke: "none" });
       const left = 52, right = width - 16, top = 34, bottom = height - 45;
       const labelSize = Math.min(11, (width - 16) / (PAIR_METRICS[yKey].label.length * 0.62));
-      schematicText(group, 10, 18, PAIR_METRICS[yKey].label, labelSize, "#c6e3ff");
-      schematicText(group, width / 2, height - 10, `${PAIR_METRICS[xKey].label}${PAIR_METRICS[xKey].log ? " · log" : ""}`, 11, "#c6e3ff").setAttribute("text-anchor", "middle");
+      const axes = {};
+      for (const axis of ["X", "Y"]) {
+        const key = axis === "X" ? xKey : yKey;
+        axes[axis] = schematicShape(group, "g", { class: "pair-svg-axis", "data-pair-axis": axis, "data-axis-plot": index, role: "button", tabindex: 0, "aria-haspopup": "menu", "aria-controls": "pairAxisMenu", "aria-expanded": "false", "aria-label": `${axis} axis: ${PAIR_METRICS[key].label}. Right-click or press Enter to change.` });
+        schematicShape(axes[axis], "title").textContent = "Choose axis · right-click, click the label, or press Enter";
+      }
+      schematicShape(axes.Y, "rect", { x: 0, y: 0, width: width - 12, height: 28, fill: "transparent" });
+      schematicShape(axes.Y, "rect", { x: 0, y: 28, width: left, height: bottom - 28, fill: "transparent" });
+      schematicShape(axes.X, "rect", { x: 0, y: bottom + 3, width, height: height - bottom - 3, fill: "transparent" });
+      schematicText(axes.Y, 10, 18, PAIR_METRICS[yKey].label, labelSize, "#c6e3ff").setAttribute("data-axis-label", "");
+      const xLabel = schematicText(axes.X, width / 2, height - 10, `${PAIR_METRICS[xKey].label}${PAIR_METRICS[xKey].log ? " · log" : ""}`, 11, "#c6e3ff");
+      xLabel.setAttribute("text-anchor", "middle"); xLabel.setAttribute("data-axis-label", "");
       if (!pairView.length) {
         pairSvgPlots.push({ index, x, y, left: x + left, right: x + right, top: y + top, bottom: y + bottom, xKey, yKey, points: [] });
-        schematicTableText(group, 12, 66, "No combinations in this selection. Widen the ranges or Clear filters.", width - 24, 12, "#ffba52");
+        schematicTableText(group, 12, 66, "No combinations in this selection. Widen the ranges or press Escape to reset filters.", width - 24, 12, "#ffba52");
         return;
       }
       const log = PAIR_METRICS[xKey].log;
@@ -3461,8 +3524,8 @@
         const tx = left + (right - left) * tick / 4, ty = bottom - (bottom - top) * tick / 4;
         schematicShape(group, "path", { d: `M${tx} ${top}V${bottom}M${left} ${ty}H${right}`, fill: "none", stroke: "#a8bece", "stroke-opacity": 0.12 });
         const rawX = xMin + (xMax - xMin) * tick / 4;
-        schematicText(group, tx, bottom + 16, pairSvgNumber(log ? Math.pow(10, rawX) : rawX), 9, "#a8bece").setAttribute("text-anchor", "middle");
-        schematicText(group, left - 6, ty + 3, pairSvgNumber(yMin + (yMax - yMin) * tick / 4), 9, "#a8bece").setAttribute("text-anchor", "end");
+        schematicText(axes.X, tx, bottom + 16, pairSvgNumber(log ? Math.pow(10, rawX) : rawX), 9, "#a8bece").setAttribute("text-anchor", "middle");
+        schematicText(axes.Y, left - 6, ty + 3, pairSvgNumber(yMin + (yMax - yMin) * tick / 4), 9, "#a8bece").setAttribute("text-anchor", "end");
       }
       const paths = { tnpw: [], mil: [], mixed: [] };
       for (const pair of pairView) {
@@ -3474,6 +3537,35 @@
       const selected = plot.points.find(point => pairItems[point.index] === pairSelected);
       if (selected) schematicShape(group, "circle", { cx: selected.x - x, cy: selected.y - y, r: 6, stroke: "#fff", "stroke-width": 2, fill: "none", "pointer-events": "none", "data-selected-pair": "" });
       schematicShape(group, "rect", { "data-pair-brush": index, x: left, y: top, width: 0, height: 0, fill: "#54d2ff", "fill-opacity": 0.1, stroke: "#eaf6ff", "stroke-dasharray": "5 4", "pointer-events": "none" });
+    }
+
+    function renderPairSvgSummary(parent, x, y, width) {
+      const group = schematicShape(parent, "g", { "data-pair-summary": "", role: "group", "aria-label": "Selected combination accuracy and resistor arms" });
+      const label = schematicText(group, x, y + 16, "Selected combination", 13, "#c6e3ff"); label.id = "schematicPairReadoutLabel";
+      const stacked = width < 760, gap = 12, cardTop = y + 30, errorWidth = stacked ? width : (width - gap * 2) / 3;
+      const errorX = stacked ? x : x + width - errorWidth, errorHeight = 144;
+      const error = schematicShape(group, "g", { "data-pair-error-card": "" });
+      schematicShape(error, "rect", { x: errorX, y: cardTop, width: errorWidth, height: errorHeight, rx: 12, fill: "#17342e", stroke: "#6ee7ac", "stroke-opacity": 0.55 });
+      schematicText(error, errorX + 16, cardTop + 22, "WORST-CASE VMID ERROR", 11, "#c6e3ff");
+      const value = schematicText(error, errorX + 16, cardTop + 66, "—", 36, "#6ee7ac"); value.id = "schematicPairErrorValue";
+      const nominal = schematicText(error, errorX + 16, cardTop + 91, "", 11, "#eaf6ff"); nominal.id = "schematicPairNominalError";
+      const allowed = schematicText(error, errorX + 16, cardTop + 111, "", 10, "#c6d7e5"); allowed.id = "schematicPairAllowedError"; allowed.dataset.maxWidth = errorWidth - 32;
+      schematicShape(error, "rect", { x: errorX + 16, y: cardTop + 127, width: errorWidth - 32, height: 4, rx: 2, fill: "#314558" });
+      const budget = schematicShape(error, "rect", { x: errorX + 16, y: cardTop + 127, width: 0, height: 4, rx: 2, fill: "#6ee7ac", "data-error-budget": "", "data-budget-width": errorWidth - 32 });
+      schematicShape(budget, "title").textContent = "Fraction of the allowed VMID error used by this combination";
+      const armColumns = stacked ? width >= 500 ? 2 : 1 : 2, armWidth = stacked ? (width - (armColumns - 1) * gap) / armColumns : errorWidth, armHeight = stacked ? 92 : errorHeight;
+      const armTop = stacked ? cardTop + errorHeight + gap : cardTop;
+      for (const [index, side] of ["top", "bot"].entries()) {
+        const left = x + (index % armColumns) * (armWidth + gap), top = armTop + Math.floor(index / armColumns) * (armHeight + gap), color = side === "top" ? "#54d2ff" : "#ffba52";
+        const card = schematicShape(group, "g", { "data-pair-arm": side });
+        schematicShape(card, "rect", { x: left, y: top, width: armWidth, height: armHeight, rx: 12, fill: side === "top" ? "#163345" : "#342e24" });
+        schematicShape(card, "rect", { x: left, y: top + 14, width: 3, height: armHeight - 28, rx: 1.5, fill: color });
+        schematicText(card, left + 16, top + 22, side === "top" ? "RTOP" : "RBOT", 12, color);
+        const text = schematicText(card, left + 16, top + (stacked ? 49 : 66), "", 21, "#eaf6ff");
+        text.id = `schematicPair${side === "top" ? "Top" : "Bot"}Number`; text.dataset.maxWidth = armWidth - 32; text.dataset.detailY = top + (stacked ? 73 : 96);
+      }
+      updateSchematicPairHover(pairSelected);
+      return stacked ? armTop + Math.ceil(2 / armColumns) * (armHeight + gap) : cardTop + errorHeight + gap;
     }
 
     function renderSchematicPairExplorer(parent, x, y, width) {
@@ -3495,44 +3587,37 @@
       top += 48;
       const columns = width >= 1000 ? 3 : width >= 600 ? 2 : 1, gap = 20, cellWidth = (width - (columns - 1) * gap) / columns;
       const sliderKeys = pairSpec?.construction ? [...PAIR_SLIDER_KEYS, "powerSpread"] : PAIR_SLIDER_KEYS;
-      sliderKeys.forEach((key, index) => renderPairSvgSlider(host, key, x + (index % columns) * (cellWidth + gap), top + Math.floor(index / columns) * 72, cellWidth));
-      top += Math.ceil(sliderKeys.length / columns) * 72 + 8;
+      sliderKeys.forEach((key, index) => renderPairSvgSlider(host, key, x + (index % columns) * (cellWidth + gap), top + Math.floor(index / columns) * 96, cellWidth));
+      top += Math.ceil(sliderKeys.length / columns) * 96 + 8;
       const plotColumns = width >= 760 ? 2 : 1, plotWidth = (width - (plotColumns - 1) * 16) / plotColumns, plotHeight = 270;
       const indices = new Map(pairItems.map((pair, index) => [pair, index]));
-      for (const [index, [xKey, yKey]] of [[byId("pairAxisX").value, byId("pairAxisY").value], ["rth", "pstress"]].entries()) renderPairSvgPlot(host, x + (index % plotColumns) * (plotWidth + 16), top + Math.floor(index / plotColumns) * (plotHeight + 16), plotWidth, plotHeight, xKey, yKey, indices);
+      for (const [index, [xKey, yKey]] of [[byId("pairAxisX").value, byId("pairAxisY").value], [pairSecondaryAxes.X, pairSecondaryAxes.Y]].entries()) renderPairSvgPlot(host, x + (index % plotColumns) * (plotWidth + 16), top + Math.floor(index / plotColumns) * (plotHeight + 16), plotWidth, plotHeight, xKey, yKey, indices);
       top += Math.ceil(2 / plotColumns) * (plotHeight + 16);
-      const help = schematicTableText(host, x, top + 12, "Click a point to preview; click again to cycle overlapping part numbers. Drag either plot to filter. Sliders use the full search range. Arrow keys adjust a slider or select a combination; Enter on a plot compares it.", width, 11, "#a8bece"); top += help.lines * 15 + 20;
+      const help = schematicTableText(host, x, top + 12, "Click to preview · drag to filter · right-click an axis to change it · Esc resets filters. Gold markers locate the selected combination.", width, 11, "#a8bece"); top += help.lines * 15 + 24;
       help.text.setAttribute("data-schematic-controls", "");
-      const readoutLabel = schematicText(host, x, top, "Selected combination", 12, "#a8bece"); readoutLabel.id = "schematicPairReadoutLabel"; top += 20;
-      for (const [index, side] of ["top", "bot"].entries()) {
-        const text = schematicText(host, x, top + index * 20, "", 12, "#c6e3ff"); text.id = `schematicPair${side === "top" ? "Top" : "Bot"}Number`; text.dataset.maxWidth = width;
-      }
-      updateSchematicPairHover(pairSelected); top += 44;
-      actionX = x;
-      for (const [label, action] of [["Axes", "axes"], ["Clear filters", "clear"], ["View table", "table"], ["Compare combination", "compare"], ["View comparison", "comparison"], ["Copy comparison", "copy"], ["Apply combination", "apply"]]) {
-        const estimated = label.length * 14 * 0.62 + 18;
-        if (actionX > x && actionX + estimated > x + width) { top += 34; actionX = x; }
-        const control = pairSvgAction(host, actionX, top, label, action, { disabled: ["compare", "apply"].includes(action) && !pairSelected || action === "copy" && byId("pairComparisonCopy").disabled, pressed: action === "compare" ? pairComparisons.has(pairSelected) : undefined, maxWidth: width }); actionX += control.width + 8;
-      }
-      return top + 44;
+      return renderPairSvgSummary(host, x, top, width);
     }
 
     function updateSchematicPairHover(pair) {
       const label = byId("schematicPairReadoutLabel"); if (label) label.textContent = pair && pair !== pairSelected ? "Hover · click to preview" : "Selected combination";
       for (const side of ["top", "bot"]) {
         const text = byId(`schematicPair${side === "top" ? "Top" : "Bot"}Number`); if (!text) continue;
-        text.textContent = pair ? `${side === "top" ? "RTOP" : "RBOT"}: ${pair[side].mpn} · ${format(pair[side].resistanceOhms, "Ω")}` : side === "top" ? "No combination selected." : "Widen a range or Clear filters to restore combinations.";
-        if (pair?.combination) { text.textContent = `${side === "top" ? "RTOP" : "RBOT"}: ${pair[side].parts.length} real parts · ${format(pair[side].resistanceOhms, "Ω")} equivalent`; schematicShape(text, "title").textContent = pair[side].mpn; }
-        text.setAttribute("font-size", Math.min(12, Number(text.dataset.maxWidth) / ((text.firstChild?.textContent.length || 1) * 0.62)));
+        const value = pair ? format(pair[side].resistanceOhms, "Ω") : "—", count = pair?.[side].parts?.length;
+        const detail = !pair ? "No combination selected" : pair.combination ? `${count} real ${count === 1 ? "part" : "parts"} · equivalent` : pair[side].mpn;
+        text.replaceChildren(); text.setAttribute("font-size", Math.min(21, Number(text.dataset.maxWidth) / (value.length * 0.62)));
+        schematicShape(text, "tspan", { x: text.getAttribute("x"), y: text.getAttribute("y") }).textContent = value;
+        schematicShape(text, "tspan", { x: text.getAttribute("x"), y: text.dataset.detailY, "font-size": Math.min(12, Number(text.dataset.maxWidth) / (detail.length * 0.62)), fill: "#c6d7e5" }).textContent = detail;
+        if (pair) schematicShape(text, "title").textContent = pair[side].mpn;
       }
-    }
-
-    function updatePairSvgComparisonControls() {
-      for (const node of byId("liveSchematic").querySelectorAll('[data-pair-action="compare"], [data-pair-action="copy"]')) {
-        const compare = node.dataset.pairAction === "compare", disabled = compare ? !pairSelected : byId("pairComparisonCopy").disabled;
-        node.setAttribute("aria-disabled", String(disabled)); node.setAttribute("opacity", disabled ? "0.55" : "1");
-        if (compare) node.setAttribute("aria-pressed", String(pairComparisons.has(pairSelected)));
-      }
+      const value = byId("schematicPairErrorValue"); if (!value) return;
+      const limit = pairSpec?.errorPct ?? 0, color = !pair ? "#a8bece" : pair.error > limit + 1e-9 ? "#ff8e8e" : pair.error > limit * 0.75 ? "#ffba52" : "#6ee7ac";
+      value.textContent = pair ? percent(pair.error) : "—"; value.setAttribute("fill", color);
+      value.parentElement.querySelector("rect").setAttribute("stroke", color);
+      byId("schematicPairNominalError").textContent = pair ? `Nominal error ${percent(pair.nominalError < 1e-10 ? 0 : pair.nominalError)}` : "Choose a combination in either plot";
+      const allowed = byId("schematicPairAllowedError"); allowed.textContent = pair ? `Allowed ±${percent(limit)} · VMID ${format(pair.result.vout, "V")}` : "";
+      allowed.setAttribute("font-size", Math.min(10, Number(allowed.dataset.maxWidth) / (Math.max(1, allowed.textContent.length) * 0.62)));
+      const budget = byId("liveSchematic").querySelector("[data-error-budget]");
+      if (budget) { budget.setAttribute("width", Number(budget.dataset.budgetWidth) * (pair ? limit > 0 ? Math.min(1, pair.error / limit) : pair.error === 0 ? 0 : 1 : 0)); budget.setAttribute("fill", color); }
     }
 
     function schematicPointer(event) {
@@ -3628,17 +3713,15 @@
       if (action.startsWith("bom-use:")) { useSchematicBomPart(action); return; }
       activateSchematicPairResults();
       if (action.startsWith("family:")) pairFamilyToggles.find(input => input.dataset.pairFamily === action.split(":")[1])?.click();
-      else if (action === "clear") byId("pairClearFilters").click();
-      else if (action === "axes") openPairSchematicEditor("plot-axes", "value");
-      else if (action === "compare" && pairSelected) setPairCompared(pairSelected, !pairComparisons.has(pairSelected));
-      else if (action === "copy") byId("pairComparisonCopy").click();
-      else if (action === "apply") applySelectedPair();
-      else if (action === "table") openCalculatorDetails("results", "pairTab");
-      else if (action === "comparison") openCalculatorDetails("results", "pairComparisonHeading");
-      if (!["axes", "copy", "table", "comparison"].includes(action)) byId("liveSchematic").querySelector(`[data-pair-action="${action}"]`)?.focus({ preventScroll: true });
+      byId("liveSchematic").querySelector(`[data-pair-action="${action}"]`)?.focus({ preventScroll: true });
     }
 
     function schematicPairKeydown(event) {
+      const axis = event.target.closest("[data-pair-axis]");
+      if (axis) {
+        if (["Enter", " ", "ContextMenu"].includes(event.key) || event.key === "F10" && event.shiftKey) openPairAxisMenu(event);
+        return;
+      }
       const slider = event.target.closest("[data-pair-slider]"), chart = event.target.closest("[data-pair-chart]"), action = event.target.closest("[data-pair-action]");
       if (!slider && !chart && !action) return;
       if (event.key === "Escape") {
@@ -3652,10 +3735,9 @@
         const step = event.shiftKey || event.key.startsWith("Page") ? 0.1 : 0.01, direction = ["ArrowRight", "ArrowUp", "PageUp"].includes(event.key) ? 1 : -1;
         const next = event.key === "Home" ? 0 : event.key === "End" ? 1 : Math.max(0, Math.min(1, fraction + step * direction));
         setPairSvgSlider({ key, bound, domain, start: 0, end: 1 }, { x: next }); focusPairSvgSlider(key, bound);
-      } else if (chart && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter", " "].includes(event.key)) {
+      } else if (chart && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault(); const index = Number(chart.dataset.pairChart); activateSchematicPairResults();
-        if (["Enter", " "].includes(event.key)) { if (pairSelected) setPairCompared(pairSelected, !pairComparisons.has(pairSelected)); }
-        else if (pairView.length) { const offset = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1; selectPair(pairItems.indexOf(pairView[(pairView.indexOf(pairSelected) + offset + pairView.length) % pairView.length])); }
+        if (pairView.length) { const offset = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1; selectPair(pairItems.indexOf(pairView[(pairView.indexOf(pairSelected) + offset + pairView.length) % pairView.length])); }
         byId("liveSchematic").querySelector(`[data-pair-chart="${index}"]`)?.focus({ preventScroll: true });
       }
     }
@@ -4413,6 +4495,7 @@
     byId("pairUseCircuit").addEventListener("click", () => importPairConstruction());
     byId("pairForm").addEventListener("submit", event => { event.preventDefault(); window.pairSearchReady = searchResistorPairs(); });
     byId("pairForm").addEventListener("reset", () => setTimeout(() => {
+      pairSecondaryAxes.X = "rth"; pairSecondaryAxes.Y = "pstress";
       pairConstruction = null; pairConstructionNext = 0; refreshPairConstruction();
       invalidatePairSearch("Search defaults restored. Enter a target and find resistor combinations.");
       for (const details of byId("pairForm").querySelectorAll("details")) details.open = false;
@@ -4493,12 +4576,28 @@
     for (const type of ["pointercancel", "lostpointercapture"]) byId("liveSchematic").addEventListener(type, event => finishSchematicPairGesture(event, true));
     byId("liveSchematic").addEventListener("click", event => {
       if (pairSvgIgnoreClick) { pairSvgIgnoreClick = false; return; }
+      if (event.target.closest("[data-pair-axis]")) { openPairAxisMenu(event); return; }
       const action = event.target.closest("[data-pair-action]");
       if (action) { if (action.getAttribute("aria-disabled") !== "true") runSchematicPairAction(action.dataset.pairAction); return; }
       const chart = event.target.closest("[data-pair-chart]");
       if (chart) { const point = nearestSchematicPair(pairSvgPlots[Number(chart.dataset.pairChart)], schematicPointer(event), true); if (point) { activateSchematicPairResults(); selectPair(point.index); } }
     });
     byId("liveSchematic").addEventListener("keydown", schematicPairKeydown);
+    byId("liveSchematic").addEventListener("contextmenu", openPairAxisMenu);
+    byId("pairAxisMenu").addEventListener("click", event => {
+      const metric = event.target.closest("[data-axis-metric]")?.dataset.axisMetric;
+      if (metric) choosePairAxis(metric);
+    });
+    byId("pairAxisMenu").addEventListener("keydown", event => {
+      const buttons = [...byId("pairAxisMenu").querySelectorAll("button")], index = buttons.indexOf(document.activeElement);
+      if (event.key === "Escape" || event.key === "Tab") { if (event.key === "Escape") event.preventDefault(); closePairAxisMenu(true); }
+      else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault(); buttons[event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length].focus();
+      }
+    });
+    document.addEventListener("pointerdown", event => { if (!byId("pairAxisMenu").hidden && !event.target.closest("#pairAxisMenu")) closePairAxisMenu(); });
+    for (const type of ["wheel", "touchmove"]) window.addEventListener(type, event => { if (!event.target.closest?.("#pairAxisMenu")) closePairAxisMenu(); }, { passive: true });
+    window.addEventListener("resize", () => closePairAxisMenu());
     byId("schematicEditForm").addEventListener("submit", saveSchematicEditor);
     byId("schematicEditFamily").addEventListener("change", () => configureSchematicCatalog(true));
     byId("schematicEditFootprint").addEventListener("change", changeSchematicFootprint);

@@ -103,8 +103,8 @@ and pills for their focused editors. The header summarizes the displayed source,
 output, physical resistor count and load. During search setup it shows the target,
 allowed VMID error and per-resistor resistance range; selected combinations are
 labeled as previews. The general Options, Details & tables and Reset toolbar
-buttons are removed. Search options and table/comparison actions remain in the
-SVG, alongside the unchanged Download SVG button above it.
+buttons are removed. Search options and graph-axis choices are integrated into
+the SVG, with download links above it.
 **Choose values** appears when automatic resistors are present and
 opens their catalog-selection settings. These dialogs reuse the original state
 and controls; they do not create a second circuit or change the analysis rules.
@@ -313,29 +313,47 @@ Power/current/Rth are nominal; error uses the full output interval. Network
 stress uses conservative per-part interval bounds; the two-part variant retains
 its analytic stress maxima. Positive power, current and Rth ranges
 use logarithmic interpolation. The slider domains stay at the full search range
-so filtered-out values can be restored. Sliders, numeric chart bounds, family
-toggles, result rows and filtered CSV share one result selection; filters across
+so filtered-out values can be restored. A gold marker on each slider shows
+the currently selected combination's actual metric value and its position in
+the full search range. Markers update with the selection and disappear when
+no combination is selected. Sliders, numeric chart bounds, family toggles,
+result rows and filtered CSV share one result selection; filters across
 different metrics intersect. Axis changes clear the old coordinate bounds while
-retaining other performance filters. Clear filters restores every range/family.
+retaining other performance filters. Escape restores every range and family
+when no drag is active.
 
 Two native SVG scatter plots show actual part-number combinations, with both axes
 rescaled to the currently filtered combinations. The first uses the detailed chart's
-selectable axes; the second plots Rth against Pstress. Disabled families and
-filtered-out combinations are omitted. Hover identifies each arm; the SVG parts
-table lists all physical MPNs for a selected combination. Click a point to update the circuit preview and
+selectable axes; the second starts with Rth against Pstress. Right-click either
+axis or its tick labels on either plot to choose another metric. Clicking or
+tapping an axis label also opens the menu; Enter, Space and Shift+F10 provide
+keyboard access. Arrow keys navigate the menu, and Escape cancels without
+changing the axis. The second plot's choices are independent of the first.
+Disabled families and filtered-out combinations are omitted. Hover identifies
+each arm; the SVG parts table lists all physical MPNs for a selected combination.
+Click a point to update the circuit preview and
 table selection; clicking overlapping points cycles their actual combinations.
 Dragging either plot adds its data-space bounds to the shared filters.
 
-**Axes**, **View table**, **Compare combination**, **View comparison**, **Copy comparison** and **Apply combination**
-are available beside the plots. Comparison membership survives performance
-filtering, and copying uses the existing standard comparison table and its column
-and performance filters. View table and View comparison open the detailed result
-dialog; clipboard failure opens and selects the manual-copy fallback there.
+The bottom action row has been removed, along with its SVG-only handlers and
+the former Axes dialog. Shared detailed-table, comparison, copying and Apply
+features retain their existing behavior. Plot Enter no longer adds hidden
+comparisons.
+
+The **Selected combination** summary uses separate colored RTOP and RBOT cards,
+with large equivalent resistance values and real part counts or selected MPNs.
+The accuracy card prominently shows **worst-case VMID error**, with nominal error,
+allowed error and a bar showing the share of the error budget used. Green indicates
+margin; amber identifies combinations using most of the allowed error. Hovering
+a graph point previews its summary without changing the selected design; the
+heading identifies the hover state. The cards and markers are retained in SVG
+downloads without live axis menus or buttons.
+
 Only Apply changes the circuit/BOM. Controls reflow on
 small screens and support mouse, touch and keyboard. Slider arrows change the
 range; PageUp/PageDown use larger steps, Home/End reach the endpoints, and Escape
-cancels a drag or clears filters. Plot arrows select real combinations and Enter
-toggles their comparison membership. The standalone SVG retains native plots,
+cancels a drag or clears filters. Plot arrows select real combinations.
+The standalone SVG retains native plots,
 selected part numbers and range annotations with live controls removed.
 
 ![Voltage divider with optional output load](../images/voltage_divider.svg)
