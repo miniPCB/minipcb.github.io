@@ -300,9 +300,10 @@ tolerance pill or package pill to choose a physical resistor's family, package,
 catalog tolerance and TCR. In the two-part variant these use arm defaults; network
 parts can have independent overrides. The arm heading edits shared defaults.
 The SVG's red **Unknown** and green **Known** tiles explain its circuit colors.
-Below the circuit ground symbol, **Options** opens the resistance range, ambient
-temperature, shared TCR, maximum stress and optional total-power limit.
-The larger **Find Design Solutions** button runs the search directly from the diagram.
+Beside the color tiles, the neutral **Options** button opens the resistance range,
+ambient temperature, shared TCR, maximum stress and optional total-power limit.
+Below the ground symbol, **Find Design Solutions** runs the combination search
+directly from the diagram.
 It is red when a search is needed, amber while searching and green when the results
 match the current specifications, including a completed search with zero matches.
 All these controls use the same settings and
