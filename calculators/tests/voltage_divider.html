@@ -37,7 +37,7 @@
         };
         const valid = label => {
           assert(get("inputError").hidden, `${label}: ${text("inputError")}`);
-          assert(text("schematicVmid") === `VMID ${text("vout")}`, `${label}: schematic follows the solved midpoint`);
+          assert(text("schematicVmid") === text("vout"), `${label}: schematic follows the solved midpoint`);
           const symbols = [...get("liveSchematic").querySelectorAll("[data-schematic-symbol]")].map(node => node.dataset.schematicSymbol).sort();
           const physical = [...get("liveSchematic").querySelectorAll("[data-schematic-part]")].map(node => node.dataset.schematicPart).sort();
           assert(symbols.join(",") === physical.join(",") && symbols.length > 0, `${label}: drawn resistor symbols match every physical work-form part`);
@@ -45,7 +45,7 @@
         const invalid = label => {
           assert(!get("inputError").hidden, `${label}: visible error`);
           assert(text("vout") === "—" && text("voutMin") === "—" && text("solutionValue") === "—", `${label}: stale results cleared`);
-          assert(text("schematicVmid") === "VMID —" && !d.querySelector('[data-schematic-part]'), `${label}: schematic clears stale values and stresses`);
+          assert(text("schematicVmid") === "—" && !d.querySelector('[data-schematic-part]'), `${label}: schematic clears stale values and stresses`);
         };
 
         valid("Initial calculation");
@@ -55,7 +55,7 @@
         assert(text("voutMin") === "5.994 V" && text("voutMax") === "6.006 V" && text("voutError") === "0.1%", "Default ±0.1% resistor output bounds");
         assert(get("targetVout").readOnly && !get("vin").readOnly, "VMID mode marks the calculated field");
         assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 4, "Fifteen common ratings retain selected highlights");
-        assert(text("schematicVtop") === "VTOP 12 V ±0%" && text("schematicVmid") === "VMID 6 V", "Schematic shows the default source, tolerance, and midpoint");
+        assert(text("schematicVtop") === "12 V" && text("schematicVmid") === "6 V", "Schematic shows the default source, tolerance, and midpoint");
         assert(schematicField("r1", "resistance") === "10 kΩ" && schematicField("r1", "tolerance") === "±0.1%" && schematicField("r1", "rating") === "Rated 250 mW", "Schematic shows actual resistance, tolerance, and rating");
         assert(["p", "v"].map(field => schematicField("r1", field)).join(",") === "1.44%,—", "Schematic shows default Pstress and unassessed voltage stress");
 
@@ -72,7 +72,7 @@
         await reset(); set("solveFor", "vin"); set("targetVout", "5");
         valid("VTOP solution");
         near(get("vin").valueAsNumber, 10, "VTOP = 10 V for 5 V unloaded target");
-        assert(text("schematicVtop") === "VTOP 10 V ±0%", "Schematic shows a solved source voltage");
+        assert(text("schematicVtop") === "10 V", "Schematic shows a solved source voltage");
         assert(get("vin").readOnly && !get("targetVout").readOnly, "VTOP mode field states");
         set("rl", "10");
         near(get("vin").valueAsNumber, 15, "VTOP = 15 V for 5 V target with 10 kΩ load");
@@ -240,7 +240,7 @@
         const snapshotLink = get("schematicDownload");
         const snapshot = new DOMParser().parseFromString(await (await fetch(snapshotLink.href)).text(), "image/svg+xml");
         assert(!snapshot.querySelector("parsererror") && snapshot.documentElement.namespaceURI === "http://www.w3.org/2000/svg", "SVG download is well-formed standalone XML");
-        assert(snapshot.querySelectorAll('[data-schematic-part]').length === 5 && snapshot.getElementById("schematicVmid").textContent === "VMID 6 V" && snapshot.querySelector(`[data-schematic-part="${ids("r1")[0]}"] [data-field="v"]`).textContent === "150.00%", "SVG download captures all current values and stresses");
+        assert(snapshot.querySelectorAll('[data-schematic-part]').length === 5 && snapshot.getElementById("schematicVmid").textContent === "6 V" && snapshot.querySelector(`[data-schematic-part="${ids("r1")[0]}"] [data-field="v"]`).textContent === "150.00%", "SVG download captures all current values and stresses");
         assert(!snapshot.querySelector("image, script, link") && !get("schematicViewport").querySelector('a[target="_blank"], a[href$=".svg"]') && snapshotLink.download === "voltage_divider.svg" && !snapshotLink.target, "Schematic has no separate image-opening links and retains a self-contained SVG download");
         choosePart("r1", ids("r1")[3]);
         assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 16, "Comparison selector includes custom individual power rating");

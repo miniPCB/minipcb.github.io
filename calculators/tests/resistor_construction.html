@@ -12,6 +12,8 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  const action=(id,name)=>{open(id);get("resistorMenu").querySelector(`[data-resistor-action="${name}"]`).click();};
  const choose=async()=>{get("automaticDesign").requestSubmit();await w.automaticDesignReady;await pause();};
  const leaves=arm=>[...get(`${arm}Parts`).children].map(row=>row.id),choices=()=>w.eval("automaticChoices"),pn=id=>choices().get(id)?.mpn;
+ const vertical=()=>[...svg().querySelectorAll('[data-resistor-body]')].every(node=>{const box=node.getBBox(),matrix=node.getScreenCTM();return node.dataset.orientation==="vertical"&&box.height>=140&&box.width<=22&&near(matrix.a,1)&&near(matrix.d,1);});
+ assert(svg().querySelector('[data-supply-net="VTOP"]')&&!svg().querySelector('circle[r="34"]')&&vertical(),"The circuit uses a VTOP supply net and full-size vertical resistor symbols");
  const assertElectrical=label=>{
   const s=state();assert(!!s,label+": circuit computes");if(!s)return;
   for(const arm of ["r1","r2"]){const parts=s.physical[arm],sum=parts.reduce((n,p)=>n+p.power,0);assert(near(sum,arm==="r1"?s.result.p1:s.result.p2),label+": "+arm+" per-part power sums to arm power");assert(parts.every(part=>near(part.power,part.voltage*part.current)&&near(part.voltage,part.current*part.resistance)),label+": "+arm+" follows Ohm's law for every part");}
@@ -45,6 +47,7 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  assertElectrical("Opposite-arm trim");
  action(first,"parallel");top=leaves("r1");const parallelPart=top[1];
  assert(get("r1Connection").value==="mixed"&&get("r1Parts").dataset.topology&&svg().querySelector('[data-mixed-network="r1"]'),"Parallel insertion around one series member creates and renders a mixed network");
+ assert(vertical(),"Nested parallel branches retain full-size vertical resistors without scaling");
  assert(svg().querySelectorAll('[data-schematic-symbol][data-arm="r1"]').length===3,"Mixed construction draws one resistor per physical work-form row");
  assert(hit(first),"Mixed-network resistors retain a complete pointer target for native right-clicks");
  set("designTrim",bottom);await choose();assertElectrical("Mixed trim");

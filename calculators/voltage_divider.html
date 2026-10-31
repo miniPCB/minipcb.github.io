@@ -118,7 +118,14 @@
     .panel-body { padding: 16px; }
     figure { margin: 0; }
     .schematic { display: block; width: 100%; height: auto; background: #101823; }
-    .schematic-editable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 4px; }
+    #schematicViewport { overflow-x: auto; overscroll-behavior-x: contain; }
+    #liveSchematic { width: auto; max-width: none; }
+    .schematic-editable { cursor: pointer; text-decoration: none; }
+    .schematic-field.schematic-editable:hover > rect, .schematic-field.schematic-editable:focus-visible > rect,
+    .schematic-edit-surface:hover, .schematic-edit-surface.is-focused { fill: #29445a; stroke: #8addff; }
+    .schematic-field.schematic-editable:focus-visible { outline: none; }
+    .schematic-field.schematic-editable:focus-visible > rect { stroke-width: 2; }
+    .schematic-edit-surface { cursor: pointer; }
     .resistor-menu { position: fixed; z-index: 20; padding: 8px; min-width: 230px; max-width: calc(100vw - 24px); border: 0; border-radius: 12px; background: #1a2939; color: var(--text); box-shadow: 0 12px 36px #0008; }
     .resistor-menu button { display: block; width: 100%; min-height: 40px; border: 0; border-radius: 7px; padding: 9px 12px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
     .resistor-menu button:hover, .resistor-menu button:focus-visible { background: #29445a; }
@@ -143,7 +150,7 @@
     .pair-svg-action:focus-visible { outline: none; }
     .pair-svg-action:focus-visible rect, .pair-svg-handle:focus-visible [data-thumb] { stroke: #eaf6ff; stroke-width: 2; }
     .pair-svg-axis { cursor: context-menu; }
-    .pair-svg-axis [data-axis-label] { text-decoration: underline dotted; text-underline-offset: 3px; }
+    .pair-svg-axis:hover [data-axis-edit-surface], .pair-svg-axis:focus-visible [data-axis-edit-surface] { fill: #29445a; stroke: #8addff; }
     .pair-svg-axis:hover text, .pair-svg-axis:focus-visible text { fill: #fff; }
     .pair-svg-axis:focus-visible { outline: none; }
     .pair-axis-menu { max-height: calc(100vh - 24px); overflow-y: auto; }
@@ -389,7 +396,7 @@
       </div>
       <p id="schematicFeedback" class="hint" role="status" hidden></p>
       <figure class="circuit-reference-body">
-        <div id="schematicViewport">
+        <div id="schematicViewport" tabindex="0" role="region" aria-label="Circuit schematic; scroll horizontally to view larger circuits">
           <div>
             <img id="schematicFallback" class="schematic" src="../images/voltage_divider.svg" width="640" height="370" alt="DC source VTOP supplies R1 in series with R2 to ground. VMID is the junction of R1 and R2. Optional load RL connects from VMID to ground, in parallel with R2." />
             <svg id="liveSchematic" class="schematic" xmlns="http://www.w3.org/2000/svg" width="1120" height="370" viewBox="0 0 1120 370" role="group" aria-labelledby="liveSchematicTitle liveSchematicDesc" font-family="Consolas, 'Courier New', monospace" hidden="">
@@ -1636,11 +1643,19 @@
       node.classList.add("schematic-editable");
       node.setAttribute("role", "button"); node.setAttribute("tabindex", "0");
       node.setAttribute("aria-label", `Edit ${label}`);
+      if (node.classList.contains("schematic-field")) {
+        node.querySelector("rect").setAttribute("fill", "#1e3547");
+        node.querySelector("rect").setAttribute("stroke", "#6a8ca5");
+      }
     }
 
     function clearSchematicEditorAttributes(node) {
       node.classList.remove("schematic-editable");
       for (const attribute of ["role", "tabindex", "aria-label", "data-schematic-edit", "data-edit-focus"]) node.removeAttribute(attribute);
+      if (node.classList.contains("schematic-field")) {
+        node.querySelector("rect").setAttribute("fill", "#142535");
+        node.querySelector("rect").setAttribute("stroke", "#2b4152");
+      }
     }
 
     function schematicText(parent, x, y, content, size = 14, color = "#eaf6ff", field = null) {
@@ -1728,149 +1743,171 @@
       return { pending: true, physical, networks, circuit: { vin: byId("vin").valueAsNumber, r1: NaN, r2: NaN, rl: byId("rl").value === "" ? null : byId("rl").valueAsNumber * Number(byId("rlUnit").value) }, tolerances: { vin: byId("tolVin").valueAsNumber, rl: byId("tolRl").valueAsNumber }, result: {}, bounds: {}, target: byId("designTarget").valueAsNumber };
     }
 
-    function renderMixedArm(drawing, wires, arm, tree, parts, start, end, roles) {
-      const values = new Map(parts.map(part => [part.id, part]));
-      const measure = node => typeof node === "string" ? { width: 160, height: 116 } : node.children.map(measure).reduce((a, b) => node.connection === "series" ? { width: a.width + b.width, height: Math.max(a.height, b.height) } : { width: Math.max(a.width, b.width), height: a.height + b.height });
-      const dimensions = measure(tree), scale = Math.min(1, 310 / dimensions.width), center = (start + end) / 2;
-      const group = schematicShape(drawing, "g", { transform: `translate(170 ${center - dimensions.height / 2}) scale(${scale} 1)`, "data-mixed-network": arm });
-      const visit = (node, x, y, width, height) => {
-        if (typeof node === "string") {
-          const part = values.get(node), symbol = schematicShape(group, "g", { "data-schematic-symbol": part.id, "data-arm": arm, "data-connection": "mixed", tabindex: 0, role: "group", "aria-label": `${part.name}; right-click or press Shift+F10 for construction` }), middle = y + height / 2;
-          schematicShape(symbol, "rect", { x, y, width, height, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
-          schematicRole(schematicShape(symbol, "path", { d: `M${x} ${middle}H${x + width / 2 - 25}l5 -10 10 20 10 -20 10 20 10 -20 5 10H${x + width}`, fill: "none", "stroke-width": 3 }), arm, roles, "stroke");
-          const info = schematicShape(symbol, "g", { "data-schematic-info": part.id });
-          const name = schematicText(info, x + width / 2, middle - 22, part.name, 14); name.setAttribute("text-anchor", "middle");
-          if (byId("solveFor").value === "pairs") schematicEditable(name, part.id, `${part.name} search constraints`, "specifications");
-          const content = Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : "Auto · undefined";
-          const value = schematicText(info, x + width / 2, middle + 26, content, 13); value.setAttribute("text-anchor", "middle"); schematicEditable(value, part.id, `${part.name} resistance`);
-          const tol = schematicPill(info, x + 10, middle + 38, `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`, "#c6d7e5", 65, "tolerance"); schematicEditable(tol.pill, part.id, `${part.name} tolerance`, "tolerance");
-          const footprint = schematicPill(info, x + 83, middle + 38, part.catalog?.case || part.settings?.package || "Not set", part.catalog || part.settings?.package ? "#6ee7ac" : "#f6d365", 68, "footprint"); schematicEditable(footprint.pill, part.id, `${part.name} footprint`, "power");
-          return;
-        }
-        const sizes = node.children.map(measure);
-        if (node.connection === "series") {
-          let nextX = x;
-          const totalWidth = sizes.reduce((sum, size) => sum + size.width, 0);
-          node.children.forEach((child, index) => { const childWidth = width * sizes[index].width / totalWidth; visit(child, nextX, y, childWidth, height); nextX += childWidth; });
-        } else {
-          const top = y + (height - sizes.reduce((sum, size) => sum + size.height, 0)) / 2;
-          let nextY = top;
-          const centers = sizes.map(size => { const at = nextY + size.height / 2; nextY += size.height; return at; });
-          schematicShape(group, "path", { d: `M${x} ${centers[0]}V${centers.at(-1)}M${x + width} ${centers[0]}V${centers.at(-1)}`, fill: "none", stroke: "#a8bece", "stroke-width": 3 });
-          nextY = top;
-          node.children.forEach((child, index) => { visit(child, x, nextY, width, sizes[index].height); nextY += sizes[index].height; });
-        }
-      };
-      visit(tree, 0, 0, dimensions.width, dimensions.height);
-      schematicShape(wires, "path", { d: `M260 ${start}H160V${center}H170M${170 + dimensions.width * scale} ${center}H490V${end}H260` });
+    const schematicEditSurfaces = new WeakMap();
+
+    function decorateSchematicEditors(svg) {
+      for (const node of svg.querySelectorAll('text[data-schematic-edit]')) {
+        const box = node.getBBox();
+        const surface = schematicShape(node.parentNode, "rect", { x: box.x - 5, y: box.y - 3, width: box.width + 10, height: box.height + 6, rx: 5, fill: "#1e3547", "fill-opacity": 0.65, stroke: "#6a8ca5", "stroke-width": 1, class: "schematic-edit-surface", "data-edit-surface": "", "aria-hidden": "true" });
+        node.before(surface); schematicEditSurfaces.set(surface, node);
+        node.addEventListener("focus", () => surface.classList.add("is-focused"));
+        node.addEventListener("blur", () => surface.classList.remove("is-focused"));
+      }
+      for (const node of svg.querySelectorAll('[data-axis-label]')) {
+        const box = node.getBBox();
+        const surface = schematicShape(node.parentNode, "rect", { x: box.x - 4, y: box.y - 2, width: box.width + 8, height: box.height + 4, rx: 4, fill: "#1e3547", stroke: "#6a8ca5", "data-axis-edit-surface": "" });
+        node.before(surface);
+      }
     }
 
-    function schematicVoltageRows(parent, nominal, x, y, width, rows, compact = false) {
-      for (const [index, [label, value, field]] of rows.entries()) {
-        const rowY = y + index * (compact ? 27 : 30), content = Number.isFinite(value) ? format(value, "V") : "—";
-        schematicText(parent, x + 12, rowY, label, compact ? 14 : 16, "#a8bece");
-        const attributes = { x: x + width - 10, y: rowY, "font-size": Math.min(18, (compact ? 62 : 82) / (content.length * 0.62)), "text-anchor": "end", "data-field": field };
-        const text = index === 0 ? schematicShape(nominal, "tspan", attributes) : schematicShape(parent, "text", { ...attributes, fill: "#c6e3ff" });
-        text.textContent = content;
+    function schematicField(parent, x, y, content, field, id, roleKey, roles, editKey = null, focus = "value") {
+      const group = schematicShape(parent, "g", { class: "schematic-field", "data-field": field });
+      if (id) group.id = id;
+      schematicShape(group, "rect", { x, y, width: 96, height: 28, rx: 6, fill: "#142535", stroke: "#2b4152" });
+      schematicText(group, x + 88, y + 20, content, Math.min(18, 80 / (content.length * 0.62)), SOLVE_ROLES[roles[roleKey]].color).setAttribute("text-anchor", "end");
+      schematicRole(group, roleKey, roles);
+      if (editKey) schematicEditable(group, editKey, `${roleKey === "vin" ? "VTOP" : "VMID"} ${focus === "tolerance" ? "tolerance" : "value"}`, focus);
+      return group;
+    }
+
+    function schematicNetPanel(parent, state, roles, key, x, y) {
+      const source = key === "vin", mode = byId("solveFor").value, pairMode = mode === "pairs";
+      const name = source ? "VTOP" : "VMID", actual = source ? state?.circuit.vin : state?.result.vout;
+      const target = source ? actual : pairMode ? byId("pairVmid").valueAsNumber : state?.target;
+      const hasTarget = source ? roles.vin === "defined" : pairMode || roles.vout === "defined" && Number.isFinite(target);
+      const targetLimits = !source && pairMode;
+      const tolerance = source ? state?.tolerances.vin : targetLimits ? byId("pairErrorPct").valueAsNumber : state?.bounds.deviation;
+      const center = targetLimits ? target : actual, spread = Math.abs(center) * tolerance / 100;
+      const min = source || targetLimits ? center - spread : state?.bounds.min, max = source || targetLimits ? center + spread : state?.bounds.max;
+      const value = number => Number.isFinite(number) ? format(number, "V") : "—";
+      const rows = [{ label: hasTarget ? "Target" : "Calculated", content: value(hasTarget ? target : actual), field: source ? "vtopNominal" : hasTarget ? "vmidTarget" : "vmidNominal", id: source ? "schematicVtop" : hasTarget ? "schematicVmidTarget" : "schematicVmid", edit: source ? "source" : hasTarget ? "target" : null }];
+      if (!source && hasTarget) rows.push({ label: "Nominal", content: value(actual), field: "vmidNominal", id: "schematicVmid" });
+      rows.push({ label: "Tolerance", content: Number.isFinite(tolerance) ? `±${percent(tolerance)}` : !source && Number.isFinite(min) && Number.isFinite(max) ? `±${format(Math.max(Math.abs(max - actual), Math.abs(actual - min)), "V")}` : "—", field: source ? "vtopTolerance" : "vmidTolerance", edit: source ? "source" : targetLimits ? "target" : null, focus: "tolerance" },
+        { label: "Max", content: value(max), field: source ? "vtopMax" : "vmidMax" },
+        { label: "Min", content: value(min), field: source ? "vtopMin" : "vmidMin" });
+      const panel = schematicShape(parent, "g", { "data-field": source ? "vtopReadout" : "vmidReadout", ...(source ? { "data-schematic-info": "source" } : {}) });
+      if (targetLimits) schematicShape(panel, "title").textContent = `Target, tolerance and limits specify the required VMID band. Nominal is the selected design's actual output. Actual output interval: ${value(state?.bounds.min)} to ${value(state?.bounds.max)}.`;
+      const height = 64 + rows.length * 36;
+      const background = schematicInfoBox(panel, x, y, 224, height);
+      background.setAttribute("stroke", roles[key] === "solving" ? "#ff8e8e" : "#2b4152");
+      if (roles[key] === "solving") background.setAttribute("fill", "#33252d");
+      schematicText(panel, x + 14, y + 28, name, 22, SOLVE_ROLES[roles[key]].color);
+      rows.forEach((row, index) => {
+        const rowY = y + 48 + index * 36;
+        schematicText(panel, x + 14, rowY + 20, row.label, 14, "#a8bece");
+        schematicField(panel, x + 114, rowY, row.content, row.field, row.id, key, roles, state ? row.edit : null, row.focus || "value");
+      });
+      return height;
+    }
+
+    function schematicNetworkModel(tree) {
+      if (typeof tree === "string") return { tree, width: 264, height: 144, port: 28 };
+      const children = tree.children.map(schematicNetworkModel);
+      if (children.length === 1) return children[0];
+      if (tree.connection === "series") {
+        const port = Math.max(...children.map(child => child.port));
+        return { tree, children, port, width: port + Math.max(...children.map(child => child.width - child.port)), height: children.reduce((sum, child) => sum + child.height, 0) + (children.length - 1) * 24 };
+      }
+      let left = 0;
+      const positions = children.map(child => { const position = left; left += child.width + 32; return position; });
+      const port = (children[0].port + positions.at(-1) + children.at(-1).port) / 2;
+      return { tree, children, positions, port, width: left - 32, height: Math.max(...children.map(child => child.height)) + 80 };
+    }
+
+    function renderVerticalNetwork(parent, model, parts, arm, connection, x, y, roles, state) {
+      const wire = d => schematicShape(parent, "path", { d, fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" });
+      if (!model.children) {
+        const part = parts.get(model.tree), pairMode = byId("solveFor").value === "pairs", side = arm === "r1" ? "Top" : "Bot";
+        const symbol = schematicShape(parent, "g", { "data-schematic-symbol": part.id, "data-arm": arm, "data-connection": connection, tabindex: 0, role: "group", "aria-label": `${part.name}; right-click or press Shift+F10 for construction` });
+        schematicShape(symbol, "rect", { x: x + 8, y: y + 16, width: 240, height: 112, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
+        schematicRole(schematicShape(symbol, "path", { d: `M${x + 28} ${y}v26l-10 5 20 10 -20 10 20 10 -20 10 10 7V${y + 144}`, fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round", "data-resistor-body": "", "data-orientation": "vertical" }), arm, roles, "stroke");
+        const info = schematicShape(symbol, "g", { "data-schematic-info": part.id });
+        schematicInfoBox(info, x + 56, y + 24, 192, 104);
+        const reference = schematicRole(schematicText(info, x + 68, y + 46, part.name, 18), arm, roles);
+        if (state && pairMode && resistorCatalog) schematicEditable(reference, state.constructionSetup || state.pair?.combination ? part.id : arm, `${part.name} search constraints`, "specifications");
+        const content = Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : pairMode ? "Find" : "Auto · undefined";
+        const value = schematicRole(schematicText(info, x + 68, y + 72, content, 18, "#eaf6ff", "resistance"), arm, roles);
+        if (state) schematicEditable(value, part.id, `${part.name} resistance`);
+        const tolerance = `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`;
+        const tol = schematicPill(info, x + 68, y + 90, tolerance, "#c6d7e5", 80, "tolerance");
+        const footprint = part.catalog?.case || (pairMode ? part.settings?.package || byId(`pairPackage${side}`).value : null) || "Not set";
+        const size = schematicPill(info, x + 76 + tol.width, y + 90, footprint, SOLVE_ROLES[part.catalog || pairMode && footprint !== "Not set" ? "defined" : "undefined"].color, 88, "footprint");
+        if (state) { schematicEditable(tol.pill, part.id, `${part.name} tolerance ${tolerance}`, "tolerance"); schematicEditable(size.pill, part.id, `${part.name} footprint`, "power"); }
+        return;
+      }
+      if (model.tree.connection === "series") {
+        let nextY = y;
+        model.children.forEach((child, index) => {
+          renderVerticalNetwork(parent, child, parts, arm, connection, x + model.port - child.port, nextY, roles, state);
+          nextY += child.height;
+          if (index < model.children.length - 1) { wire(`M${x + model.port} ${nextY}v24`); nextY += 24; }
+        });
+      } else {
+        const ports = model.children.map((child, index) => x + model.positions[index] + child.port), lower = y + model.height - 20;
+        wire(`M${x + model.port} ${y}v20M${ports[0]} ${y + 20}H${ports.at(-1)}M${ports[0]} ${lower}H${ports.at(-1)}M${x + model.port} ${lower}v20`);
+        model.children.forEach((child, index) => {
+          wire(`M${ports[index]} ${y + 20}v20M${ports[index]} ${y + 40 + child.height}V${lower}`);
+          renderVerticalNetwork(parent, child, parts, arm, connection, x + model.positions[index], y + 40, roles, state);
+        });
       }
     }
 
     function renderSchematicDrawing(state, roles) {
       const drawing = byId("schematicDrawing"); drawing.replaceChildren();
-      const findVmid = byId("solveFor").value === "vout", netColor = findVmid ? SOLVE_ROLES.solving.color : "#54d2ff";
-      const count = arm => Math.max(1, Math.ceil((state?.physical[arm].length || 0) * (typeof state?.networks[arm]?.connection === "object" ? 1.2 : 1)));
-      const top = 80, mid = top + count("r1") * 110 + 44, botStart = mid + 78, bottom = botStart + count("r2") * 110 + 24;
-      const wires = schematicShape(drawing, "g", { fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" });
-      const sourceY = mid + 18;
-      schematicShape(wires, "path", { d: `M55 ${sourceY - 34}V${top - 24}H${state?.networks.r1?.connection === "parallel" ? 170 : 260}V${top}M55 ${sourceY + 34}V${bottom}H260M260 ${bottom}v28m-20 0h40m-32 10h24m-16 10h8` });
-      schematicRole(schematicShape(wires, "circle", { cx: 55, cy: sourceY, r: 34 }), "vin", roles, "stroke");
-      schematicRole(schematicShape(wires, "path", { d: `M44 ${sourceY - 12}h22m-11 -11v22m-11 14h22` }), "vin", roles, "stroke");
-      const sourceInfo = schematicShape(drawing, "g", { "data-schematic-info": "source" });
-      const sourceTop = mid - 54, sourceBox = schematicInfoBox(sourceInfo, 96, sourceTop, 148, 132);
-      if (roles.vin === "solving") { sourceBox.setAttribute("fill", "#33252d"); sourceBox.setAttribute("stroke", SOLVE_ROLES.solving.color); sourceBox.setAttribute("stroke-opacity", 0.55); }
-      const sourceNominal = schematicText(sourceInfo, 108, sourceTop + 26, "", 20); sourceNominal.id = "schematicVtop";
-      schematicShape(sourceNominal, "tspan", { x: 108, y: sourceTop + 26 }).textContent = "VTOP ";
-      const sourceVoltage = state?.circuit.vin, sourceTolerance = state?.tolerances.vin, sourceSpread = Math.abs(sourceVoltage) * sourceTolerance / 100;
-      schematicVoltageRows(sourceInfo, sourceNominal, 96, sourceTop + 54, 148, [["Nominal", sourceVoltage, "vtopNominal"], ["Min", sourceVoltage - sourceSpread, "vtopMin"], ["Max", sourceVoltage + sourceSpread, "vtopMax"]], true);
-      if (state) {
-        const tolerance = ` ±${percent(sourceTolerance)}`;
-        schematicShape(sourceNominal, "tspan", { x: 234, y: sourceTop + 26, "font-size": Math.min(12, 62 / (tolerance.length * 0.62)), "text-anchor": "end" }).textContent = tolerance;
+      const mode = byId("solveFor").value, pairMode = mode === "pairs", netColor = mode === "vout" ? SOLVE_ROLES.solving.color : "#54d2ff";
+      const arms = Object.fromEntries(ARMS.map(arm => {
+        const side = arm === "r1" ? "Top" : "Bot", connection = state?.networks[arm]?.connection || "series";
+        let parts = state?.physical[arm] || [];
+        if (!parts.length) parts = [{ id: arm, name: arm.toUpperCase(), resistance: NaN, tolerance: pairMode ? Number(byId(`pairTol${side}`).value) : NaN }];
+        const tree = typeof connection === "object" ? connection : { connection, children: parts.map(part => part.id) };
+        return [arm, { parts, connection, model: schematicNetworkModel(tree) }];
+      }));
+      const mainX = 284 + Math.max(arms.r1.model.port, arms.r2.model.port), topY = pairMode ? 204 : 132;
+      const mid = topY + arms.r1.model.height + 52, botY = mid + 72, bottom = botY + arms.r2.model.height;
+      const right = Math.max(...ARMS.map(arm => mainX - arms[arm].model.port + arms[arm].model.width));
+      const readoutX = right + 64, loadX = readoutX + 112, loadY = (botY + bottom) / 2, readoutHeight = pairMode || roles.vout === "defined" && Number.isFinite(state?.target) ? 244 : 208, readoutY = mid - readoutHeight - 24;
+      const wires = schematicShape(drawing, "g", { fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" });
+      const supply = schematicShape(drawing, "g", { "data-supply-net": "VTOP" });
+      schematicRole(schematicShape(supply, "path", { d: `M${mainX} ${topY}V${topY - 62}m-10 14 10 -14 10 14`, fill: "none", "stroke-width": 3, "stroke-linejoin": "round" }), "vin", roles, "stroke");
+      schematicText(supply, mainX, topY - 80, "VTOP", 20, SOLVE_ROLES[roles.vin].color).setAttribute("text-anchor", "middle");
+      schematicNetPanel(drawing, state, roles, "vin", 16, topY - 40);
+      for (const [arm, y] of [["r1", topY], ["r2", botY]]) {
+        const { parts, connection, model } = arms[arm], x = mainX - model.port;
+        const group = schematicShape(drawing, "g", { ...(typeof connection === "object" ? { "data-mixed-network": arm } : {}) });
+        const headingX = mainX + 28;
+        const heading = schematicRole(schematicText(group, headingX, y - 32, `${arm === "r1" ? "RTOP" : "RBOT"} · ${connectionLabel(connection)} × ${parts.length}`, 16), arm, roles);
+        if (state?.networks[arm]) schematicEditable(heading, pairMode ? `arm-${arm}` : arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
+        const equivalent = schematicRole(schematicText(group, headingX, y - 6, "—", 18), arm, roles); equivalent.id = arm === "r1" ? "schematicR1Value" : "schematicR2Value";
+        if (state && !state.pending && !pairMode) schematicEditable(equivalent, arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent resistance`);
+        renderVerticalNetwork(group, model, new Map(parts.map(part => [part.id, part])), arm, typeof connection === "object" ? "mixed" : connection, x, y, roles, state);
       }
-      if (roles.vin !== "defined") schematicRole(schematicText(sourceInfo, 108, sourceTop + 125, SOLVE_ROLES[roles.vin].short, 10), "vin", roles);
-      schematicText(drawing, 285, bottom + 55, "GND", 18, "#a8bece");
-      for (const [arm, start, end] of [["r1", top, mid - 44], ["r2", botStart, bottom - 24]]) {
-        const pairMode = byId("solveFor").value === "pairs", side = arm === "r1" ? "Top" : "Bot";
-        const connection = state?.networks[arm]?.connection || "series", parts = state?.pairSetup && !state.constructionSetup ? [{ id: arm, name: arm === "r1" ? "R1" : "R2", tolerance: Number(byId(`pairTol${side}`).value) }] : state?.physical[arm] || [];
-        const armHeading = schematicRole(schematicText(drawing, 300, start - 28, `${roles[arm] === "defined" ? "" : SOLVE_ROLES[roles[arm]].short + " "}${arm === "r1" ? "RTOP" : "RBOT"}${pairMode ? "" : ` · ${connectionLabel(connection)} × ${parts.length || "—"}`}`, 16), arm, roles);
-        if (state?.networks[arm]) schematicEditable(armHeading, pairMode ? `arm-${arm}` : arm, pairMode ? `${arm === "r1" ? "RTOP" : "RBOT"} default catalog limits` : `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
-        const equivalent = schematicText(drawing, 300, start - 4, "—", 18, "#a8bece"); equivalent.id = arm === "r1" ? "schematicR1Value" : "schematicR2Value";
-        if (connection === "parallel") schematicShape(wires, "path", { d: `${arm === "r1" ? `M170 ${start}` : `M260 ${start}H170`}V${end - 30}M480 ${start + 48}V${end}H260` });
-        if (typeof connection === "object") renderMixedArm(drawing, wires, arm, connection, parts, start, end, roles);
-        for (const [index, part] of (typeof connection === "object" ? [] : parts).entries()) {
-          const symbol = schematicShape(drawing, "g"); symbol.dataset.schematicSymbol = part.id; symbol.dataset.connection = connection; symbol.dataset.arm = arm;
-          symbol.setAttribute("tabindex", "0"); symbol.setAttribute("role", "group"); symbol.setAttribute("aria-label", `${part.name}; right-click or press Shift+F10 for construction`);
-          const y = start + index * 110, parallelArm = connection === "parallel";
-          schematicShape(symbol, "rect", { x: parallelArm ? 168 : 240, y, width: parallelArm ? 314 : 250, height: 110, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
-          const info = schematicShape(symbol, "g", { "data-schematic-info": part.id });
-          schematicInfoBox(info, parallelArm ? 192 : 290, y + (parallelArm ? 6 : 8), parallelArm ? 282 : 190, parallelArm ? 88 : 96);
-          const line = schematicRole(schematicShape(symbol, "g", { fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" }), arm, roles, "stroke");
-          if (parallelArm) schematicShape(line, "path", { d: `M170 ${y + 48}H270l5 -10 10 20 10 -20 10 20 10 -20 10 20 5 -10H480` });
-          else schematicShape(line, "path", { d: `M260 ${y}v20l-10 5 20 10 -20 10 20 10 -20 10 10 7V${y + 110}` });
-          const value = state?.pairSetup ? Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : "Find" : Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : "Auto · undefined", tolerance = `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`, footprint = pairMode ? part.catalog?.case || part.settings?.package || byId(`pairPackage${side}`).value || "Not set" : part.catalog?.case || "Not set";
-          const reference = schematicRole(schematicText(info, parallelArm ? 205 : 300, y + 28, part.name, 18), arm, roles);
-          if (pairMode && resistorCatalog) schematicEditable(reference, state?.constructionSetup || state?.pair?.combination ? part.id : arm, `${part.name} search constraints`, "specifications");
-          schematicEditable(schematicRole(schematicText(info, parallelArm ? 340 : 300, y + (parallelArm ? 28 : 51), value, Math.min(18, (parallelArm ? 124 : 170) / (value.length * 0.62)), "#eaf6ff", "resistance"), arm, roles), part.id, `${part.name} resistance`);
-          const pillX = parallelArm ? 205 : 300, pillY = y + (parallelArm ? 62 : 66);
-          const tolerancePill = schematicPill(info, pillX, pillY, tolerance, "#c6d7e5", 80, "tolerance");
-          schematicEditable(tolerancePill.pill, part.id, `${part.name} tolerance ${tolerance}`, "tolerance");
-          const footprintPill = schematicPill(info, parallelArm ? 340 : pillX + tolerancePill.width + 8, pillY, footprint, SOLVE_ROLES[part.catalog || pairMode && byId(`pairPackage${side}`).value ? "defined" : "undefined"].color, parallelArm ? 124 : 82, "footprint");
-          schematicEditable(footprintPill.pill, part.id, `${part.name} footprint ${footprint}`, "power");
-        }
-        const junction = schematicShape(wires, "path", { d: arm === "r1" ? `M260 ${end}V${mid}` : `M260 ${mid}V${start}` });
-        if (findVmid) junction.setAttribute("stroke", netColor);
-        if (arm === "r2") schematicShape(wires, "path", { d: `M260 ${end}V${bottom}` });
-      }
-      const loadY = (mid + bottom) / 2, load = schematicShape(drawing, "g", { id: "schematicLoad", fill: "none", stroke: "#a8bece", "stroke-width": 2.5, "stroke-linejoin": "round", "stroke-dasharray": "7 6" });
-      const loadFeed = schematicShape(load, "path", { d: `M260 ${mid}H560V${loadY - 26}` });
-      if (findVmid) loadFeed.setAttribute("stroke", netColor);
-      schematicShape(load, "path", { d: `M560 ${loadY + 26}V${bottom}` });
-      schematicShape(load, "path", { d: `M560 ${bottom}v28m-20 0h40m-32 10h24m-16 10h8`, "stroke-dasharray": "none" });
-      schematicText(load, 585, bottom + 55, "GND", 18, "#a8bece").setAttribute("stroke", "none");
-      if (state?.circuit.rl !== null && state) { schematicRole(schematicShape(load, "rect", { x: 549, y: loadY - 26, width: 22, height: 52, rx: 2 }), "rl", roles, "stroke"); load.dataset.schematicLoadSymbol = "rl"; }
-      const loadInfo = schematicShape(drawing, "g", { "data-schematic-info": "load" }), hasLoad = state && state.circuit.rl !== null;
-      schematicInfoBox(loadInfo, 578, loadY - 42, 92, hasLoad ? 104 : 78);
-      schematicRole(schematicText(loadInfo, 586, loadY - 20, "RL", 20), "rl", roles);
-      const loadContent = state ? hasLoad ? Number.isFinite(state.circuit.rl) ? format(state.circuit.rl, "Ω") : "—" : "Open" : "—";
-      const loadValue = schematicText(loadInfo, 586, loadY + 6, loadContent, Math.min(17, 76 / (loadContent.length * 0.62)), "#a8bece"); loadValue.id = "schematicLoadValue";
-      if (roles.rl !== "defined") schematicRole(schematicText(loadInfo, 586, loadY + 27, SOLVE_ROLES[roles.rl].short, 12), "rl", roles);
-      if (hasLoad) {
-        const tolerance = `±${percent(state.tolerances.rl)}`;
-        schematicText(loadInfo, 586, loadY + 48, tolerance, Math.min(14, 76 / (tolerance.length * 0.62)), "#a8bece");
-      }
-      schematicShape(drawing, "path", { d: `M260 ${mid}H654`, fill: "none", stroke: netColor, "stroke-width": findVmid ? 4 : 3 });
-      for (const x of [260, 560]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor });
-      schematicShape(drawing, "circle", { cx: 660, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3 });
-      const pairMode = byId("solveFor").value === "pairs", readout = schematicShape(drawing, "g", { "data-field": "vmidReadout" });
-      const readoutTop = mid - (pairMode ? 198 : 166), readoutBox = schematicInfoBox(readout, 490, readoutTop, 180, pairMode ? 164 : 156);
-      if (findVmid) { readoutBox.setAttribute("fill", "#33252d"); readoutBox.setAttribute("stroke", netColor); readoutBox.setAttribute("stroke-opacity", 0.55); }
-      const nominal = schematicText(readout, 502, mid - (pairMode ? 172 : 140), "", 20); nominal.id = "schematicVmid";
-      schematicShape(nominal, "tspan", { x: 502, y: mid - (pairMode ? 172 : 140) }).textContent = "VMID ";
+      schematicShape(wires, "path", { d: `M${mainX} ${topY + arms.r1.model.height}V${mid}M${mainX} ${mid}V${botY}`, stroke: mode === "vout" ? netColor : "#a8bece" });
+      schematicShape(wires, "path", { d: `M${mainX} ${bottom}v24m-20 0h40m-32 10h24m-16 10h8` });
+      schematicText(drawing, mainX + 28, bottom + 46, "GND", 16, "#a8bece");
+      const load = schematicShape(drawing, "g", { id: "schematicLoad", fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-dasharray": "7 6" });
+      schematicShape(load, "path", { d: `M${mainX} ${mid}H${loadX}V${loadY - 30}`, stroke: netColor });
+      schematicShape(load, "path", { d: `M${loadX} ${loadY + 30}V${bottom + 24}m-20 0h40m-32 10h24m-16 10h8` });
+      const hasLoad = !!state && state.circuit.rl !== null;
+      if (hasLoad) { schematicRole(schematicShape(load, "rect", { x: loadX - 11, y: loadY - 30, width: 22, height: 60, rx: 2 }), "rl", roles, "stroke"); load.dataset.schematicLoadSymbol = "rl"; }
+      const loadInfo = schematicShape(drawing, "g", { "data-schematic-info": "load" });
+      schematicInfoBox(loadInfo, loadX + 36, loadY - 42, 148, hasLoad ? 112 : 78);
+      schematicText(loadInfo, loadX + 48, loadY - 18, "RL", 20, SOLVE_ROLES[roles.rl].color);
+      const loadValue = schematicText(loadInfo, loadX + 48, loadY + 10, state ? hasLoad ? Number.isFinite(state.circuit.rl) ? format(state.circuit.rl, "Ω") : "—" : "Open" : "—", 18, "#a8bece"); loadValue.id = "schematicLoadValue";
+      if (hasLoad) schematicText(loadInfo, loadX + 48, loadY + 44, `±${percent(state.tolerances.rl)}`, 16, "#a8bece");
+      if (state && !state.pending) schematicEditable(loadValue, "load", "RL and load tolerance");
+      schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${readoutX + 210}`, fill: "none", stroke: netColor, "stroke-width": mode === "vout" ? 4 : 3, "data-output-net": "VMID" });
+      for (const x of [mainX, loadX]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor });
+      schematicShape(drawing, "circle", { cx: readoutX + 216, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3 });
+      schematicNetPanel(drawing, state, roles, "vout", readoutX, readoutY);
       if (pairMode) {
-        schematicText(readout, 502, mid - 140, "Target", 16, "#a8bece");
-        const value = byId("pairVmid").valueAsNumber, content = Number.isFinite(value) ? format(value, "V") : "—";
-        const target = schematicText(readout, 660, mid - 140, content, Math.min(18, 82 / (content.length * 0.62)), SOLVE_ROLES[roles.vout].color, "vmidTarget");
-        target.id = "schematicVmidTarget"; target.setAttribute("text-anchor", "end"); schematicEditable(target, "target", "VMID target and allowed error");
         const error = state?.pair?.error, allowed = byId("pairErrorPct").valueAsNumber;
         const color = !Number.isFinite(error) ? "#a8bece" : error > allowed + 1e-9 ? "#ff8e8e" : error > allowed * 0.75 ? "#ffba52" : "#6ee7ac";
-        const errorInfo = schematicShape(drawing, "g", { "data-field": "vmidError" });
-        schematicText(errorInfo, 490, readoutTop - 66, "WORST-CASE VMID ERROR", 12, "#c6d7e5");
-        const errorText = Number.isFinite(error) ? percent(error) : "—";
-        schematicText(errorInfo, 490, readoutTop - 30, errorText, Math.min(34, 180 / (errorText.length * 0.62)), color, "vmidBounds");
-        schematicText(errorInfo, 490, readoutTop - 10, Number.isFinite(allowed) ? `Allowed ±${percent(allowed)}` : "Set error band", 12, "#a8bece");
+        const info = schematicShape(drawing, "g", { "data-field": "vmidError" });
+        schematicText(info, readoutX, readoutY - 66, "WORST-CASE VMID ERROR", 12, "#c6d7e5");
+        schematicText(info, readoutX, readoutY - 30, Number.isFinite(error) ? percent(error) : "—", 34, color, "vmidBounds");
+        schematicText(info, readoutX, readoutY - 10, Number.isFinite(allowed) ? `Allowed ±${percent(allowed)}` : "Set error band", 12, "#a8bece");
       }
-      schematicVoltageRows(readout, nominal, 490, mid - 110, 180, [["Nominal", state?.result.vout, "vmidNominal"], ["Min", state?.bounds.min, "vmidMin"], ["Max", state?.bounds.max, "vmidMax"]]);
-      if (roles.vout !== "defined") schematicRole(schematicText(readout, 502, mid - 22, SOLVE_ROLES[roles.vout].short, 12), "vout", roles);
-      return bottom + 80;
+      return { width: readoutX + 316, height: bottom + 80 };
     }
 
     function schematicTableText(parent, x, y, content, width, size, color, field = null) {
@@ -2267,14 +2304,15 @@
       for (const node of svg.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
       byId("schematicHeading").textContent = schematicSummary(state, mode);
       byId("liveSchematicTitle").textContent = pairPreviewState ? "Voltage divider · selected resistor combination preview" : mode === "pairs" ? "Voltage divider · combination search inputs" : "Voltage divider · live circuit values";
-      const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
-      const stacked = width < 1050;
-      const drawingWidth = stacked ? Math.min(680, width - 32) : Math.min(560, width * 0.42);
+      const viewportWidth = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
+      const drawing = renderSchematicDrawing(state, roles), width = Math.max(viewportWidth, drawing.width + 32);
+      const stacked = viewportWidth < drawing.width + 480;
+      const drawingWidth = drawing.width;
       const detailsX = stacked ? 24 : drawingWidth + 40;
-      const detailsWidth = width - detailsX - 16, informationWidth = stacked ? width - 32 : detailsWidth;
+      const detailsWidth = (stacked ? viewportWidth : width) - detailsX - 16, informationWidth = stacked ? viewportWidth - 32 : detailsWidth;
       const characteristics = circuitCharacteristics(state, mode), operatingHeight = operatingPointHeight(informationWidth), analysisHeight = operatingHeight + characteristics.height + 16;
       const drawingY = 62 + (stacked ? analysisHeight : 0);
-      const drawingBottom = drawingY + drawingWidth * renderSchematicDrawing(state, roles) / 680;
+      const drawingBottom = drawingY + drawing.height;
       const partsGroup = byId("schematicParts");
       partsGroup.replaceChildren();
       let controlsBottom = drawingBottom;
@@ -2283,7 +2321,7 @@
         const controls = schematicShape(partsGroup, "g", { "data-schematic-controls": "", "data-circuit-search-controls": "" });
         const options = schematicPill(controls, 218, 13, "Options", "#c6e3ff", 100);
         schematicEditable(options.pill, "search-options", "design search options");
-        const buttonWidth = drawingWidth - (drawingWidth < 440 ? 0 : 100), buttonX = left + (drawingWidth - buttonWidth) / 2;
+        const buttonWidth = 460, buttonX = left + (drawingWidth - buttonWidth) / 2;
         const button = schematicShape(controls, "g", { id: "schematicDesignSearch" });
         schematicShape(button, "rect", { x: buttonX, y: top, width: buttonWidth, height: 50, rx: 12, fill: "#462b32", stroke: "#ff8e8e" });
         schematicText(button, buttonX + buttonWidth / 2, top + 31, "Find Design Solutions", Math.min(18, (buttonWidth - 24) / (21 * 0.62)), "#ff8e8e").setAttribute("text-anchor", "middle");
@@ -2295,21 +2333,20 @@
       renderOperatingPoint(partsGroup, state, informationX, informationY, informationWidth);
       const characteristicsDescription = renderCircuitCharacteristics(partsGroup, state, characteristics, mode, informationX, informationY + operatingHeight, informationWidth);
       const alternativeParts = new Map();
-      byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY}) scale(${drawingWidth / 680})`);
+      byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY})`);
       byId("schematicR1Value").textContent = Number.isFinite(state?.circuit.r1) ? format(state.circuit.r1, "Ω") : "—";
       byId("schematicR2Value").textContent = Number.isFinite(state?.circuit.r2) ? format(state.circuit.r2, "Ω") : "—";
       byId("schematicLoadValue").textContent = state ? state.circuit.rl === null ? "Open" : Number.isFinite(state.circuit.rl) ? format(state.circuit.rl, "Ω") : "—" : "—";
-      for (const [id, key] of [["schematicVtop", "vin"], ["schematicVmid", "vout"], ["schematicR1Value", "r1"], ["schematicR2Value", "r2"], ["schematicLoadValue", "rl"]]) schematicRole(byId(id), key, roles);
+      for (const [id, key] of [["schematicR1Value", "r1"], ["schematicR2Value", "r2"], ["schematicLoadValue", "rl"]]) schematicRole(byId(id), key, roles);
       byId("schematicLoad").setAttribute("opacity", roles.rl === "solving" || state && state.circuit.rl !== null ? "1" : "0.35");
-      if (state && !state.pending) for (const [id, key, label] of [["schematicVtop", "source", "VTOP and source tolerance"], ...(mode === "pairs" ? [] : [["schematicVmid", "target", "VMID target"]]), ["schematicR1Value", "r1", "RTOP"], ["schematicR2Value", "r2", "RBOT"], ["schematicLoadValue", "load", "RL and load tolerance"]]) schematicEditable(byId(id), key, label);
       const bottom = renderSchematicTable(partsGroup, state?.pending || state?.constructionSetup ? null : state, roles, detailsX, detailsY, detailsWidth, alternativeParts);
       let contentBottom = Math.max(controlsBottom + 20, bottom);
       if (mode === "pairs" && pairItems.length) {
-        const key = `${pairGeneration}:${width}`;
+        const key = `${pairGeneration}:${viewportWidth}:${width}`;
         if (pairSvgLayout?.key !== key) pairSvgLayout = { key, bottom: contentBottom };
         contentBottom = pairSvgLayout.bottom = Math.max(pairSvgLayout.bottom, contentBottom);
       } else pairSvgLayout = null;
-      if (mode === "pairs") contentBottom = renderSchematicPairExplorer(partsGroup, 16, contentBottom + 12, width - 32);
+      if (mode === "pairs") contentBottom = renderSchematicPairExplorer(partsGroup, 16, contentBottom + 12, viewportWidth - 32);
       const height = Math.ceil(contentBottom);
       svg.setAttribute("width", width);
       svg.setAttribute("height", height);
@@ -2318,14 +2355,16 @@
       const roleDescription = `${solveLabel}. Yellow means missing or invalid input; green means known; red identifies the value to find. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
       const voltageDescription = state && !state.pairSetup && !state.pending ? `Nominal VMID ${format(state.result.vout, "V")}; minimum ${format(state.bounds.min, "V")}; maximum ${format(state.bounds.max, "V")}.${state.pair ? ` Target error ${percent(state.pair.error)}.` : ""} ` : "";
       const searchDescription = mode === "pairs" ? `Search target VMID ${byId("pairVmid").value || "not set"} V; allowed error ±${byId("pairErrorPct").value || "not set"}%. Edit the source, target, load, resistor constraints or Options; Find combinations runs the search. Found resistance and performance values are read-only. Circuit inputs and BOM change only on Apply. ` : "";
-      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor combination preview; circuit inputs and BOM change only on Apply. " : ""}${byId("schematicVtop").textContent}. ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.") + " " + characteristicsDescription;
+      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor combination preview; circuit inputs and BOM change only on Apply. " : ""}VTOP ${byId("schematicVtop").textContent}. VMID ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.") + " " + characteristicsDescription;
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
+      decorateSchematicEditors(svg);
       // The download is a self-contained snapshot of the live SVG.
       const snapshot = svg.cloneNode(true); snapshot.setAttribute("role", "img");
       for (const node of snapshot.querySelectorAll("[data-resistor-hit]")) node.remove();
       for (const node of snapshot.querySelectorAll("[data-schematic-symbol]")) for (const attribute of ["tabindex", "role", "aria-label"]) node.removeAttribute(attribute);
       for (const node of snapshot.querySelectorAll("[data-schematic-controls]")) node.remove();
+      for (const node of snapshot.querySelectorAll("[data-edit-surface], [data-axis-edit-surface]")) node.remove();
       for (const node of snapshot.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
       for (const node of snapshot.querySelectorAll("[data-pair-slider], [data-pair-chart], [data-pair-action], [data-pair-axis]")) {
         if (node.hasAttribute("data-pair-axis")) { node.querySelector("title")?.remove(); node.removeAttribute("aria-label"); }
@@ -2458,7 +2497,8 @@
       byId("schematicEditSave").textContent = "Save specifications"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
       byId("schematicEditor").showModal();
       schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
-      const selected = fields[focus === "tolerance" ? `pairTol${side}` : focus === "power" ? `pairPackage${side}` : ids[0]] || fields[ids[0]];
+      const toleranceId = { source: "pairSourceTol", target: "pairErrorPct", load: "pairLoadTol" }[key] || `pairTol${side}`;
+      const selected = fields[focus === "tolerance" ? toleranceId : focus === "power" ? `pairPackage${side}` : ids[0]] || fields[ids[0]];
       selected.focus(); if (selected.tagName === "INPUT") selected.select();
     }
 
@@ -2475,8 +2515,8 @@
           byId(`${arm}PartsOptions`).open = true; row.open = true;
           const field = focus === "tolerance" ? `${key}Tol` : focus === "power" ? "designPackage" : byId(`${key}Auto`).checked ? `${key}Auto` : `${key}R`;
           openCalculatorDetails(focus === "power" ? "design" : "inputs", field);
-        } else if (key === "source") openCalculatorDetails("inputs", "vin");
-        else if (key === "load") openCalculatorDetails("inputs", "rl");
+        } else if (key === "source") openCalculatorDetails("inputs", focus === "tolerance" ? "tolVin" : "vin");
+        else if (key === "load") openCalculatorDetails("inputs", focus === "tolerance" ? "tolRl" : "rl");
         return;
       }
       byId("schematicCircuitFields").hidden = false; byId("schematicPairFields").hidden = true; byId("schematicPairFields").replaceChildren();
@@ -2515,7 +2555,7 @@
       byId("schematicEditUnit").disabled = locks.value;
       byId("schematicEditPartTolerance").disabled = locks.tolerance;
       const help = kind === "target" ? "Choose which parameter to adjust to reach the requested VMID." : kind === "arm" ? "Edit the arm connection or its equivalent resistance when it is an input. Individual SVG rows edit independent part settings." : kind === "part" ? "Choose a footprint to preview a compatible catalog part, or select its family first. Power and voltage limits follow that part. Manual mode keeps the current power rating." : "Saving recalculates the selected result and all stresses from the edited inputs.";
-      byId("schematicEditHelp").textContent = help + (locks.value ? " Resistance is calculated in this Find mode; edit its specifications here." : " The selected Find mode is preserved.");
+      byId("schematicEditHelp").textContent = help + (locks.value ? `${kind === "source" ? " VTOP" : " Resistance"} is calculated in this Find mode; edit its specifications here.` : " The selected Find mode is preserved.");
       byId("schematicEditSave").textContent = "Save changes";
       byId("schematicEditError").hidden = true;
       for (const input of byId("schematicEditForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
@@ -2543,7 +2583,7 @@
       const physical = Object.fromEntries(ARMS.map(arm => [arm, state.physical[arm].map(part => ({ ...part }))]));
       const networks = Object.fromEntries(ARMS.map(arm => [arm, state.networks[arm] ? { ...state.networks[arm], parts: physical[arm] } : null]));
       const resistance = ["part", "arm", "load"].includes(kind);
-      const value = context.locks.value ? kind === "part" ? part.resistance : circuit[arm] : readInput("schematicEditValue", byId("schematicEditValueLabel").textContent, kind === "load", resistance, resistance ? Number(byId("schematicEditUnit").value) : 1);
+      const value = context.locks.value ? kind === "part" ? part.resistance : kind === "source" ? circuit.vin : circuit[arm] : readInput("schematicEditValue", byId("schematicEditValueLabel").textContent, kind === "load", resistance, resistance ? Number(byId("schematicEditUnit").value) : 1);
       let mode = context.mode, assignment = null;
       if (kind === "source") { circuit.vin = value; tolerances.vin = readTolerance("schematicEditTolerance", "VTOP tolerance"); }
       else if (kind === "load") { circuit.rl = value; tolerances.rl = readTolerance("schematicEditTolerance", "RL tolerance"); }
@@ -4598,7 +4638,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     byId("liveSchematic").addEventListener("click", event => {
-      const node = event.target.closest("[data-schematic-edit]"); if (node) openSchematicEditor(node);
+      const node = event.target.closest("[data-schematic-edit]") || schematicEditSurfaces.get(event.target); if (node) openSchematicEditor(node);
     });
     byId("liveSchematic").addEventListener("contextmenu", openResistorMenu);
     byId("liveSchematic").addEventListener("keydown", event => { if (event.key === "ContextMenu" || event.key === "F10" && event.shiftKey) openResistorMenu(event); });

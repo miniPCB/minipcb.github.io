@@ -112,10 +112,19 @@ to the SVG. Form reset actions restore defaults for the current circuit/search m
 Errors, search progress/results and automatic-value status remain in their
 existing dialogs and accessible status announcements, without visible paragraphs
 above the SVG. Download links sit above the drawing.
-Voltage readouts are part of the circuit drawing: VTOP has a panel beside the
-source with the same **Nominal**, **Min** and **Max** row format as VMID. Its
-bounds use the entered source tolerance, including correctly ordered bounds for
-negative sources; the heading retains the editable source tolerance. VMID sits
+Voltage readouts are part of the circuit drawing. Both panels start with the net
+name, followed by **Target** (or **Calculated** for a solved voltage),
+**Tolerance**, **Max** and **Min**. A VMID target also retains a **Nominal** row
+so the selected design's actual output can be compared with its target.
+VTOP bounds use the entered source tolerance, including correctly ordered bounds
+for negative sources. In combination searches, VMID Target and Tolerance are
+editable specifications, and Max/Min show that required band; the actual nominal
+output remains separate, with its actual tolerance interval available in the panel
+tooltip, result tables and SVG description. Other calculated net panels show the
+computed tolerance and interval. The target-error budget is also reported above VMID.
+Editable values have brighter borders and shading; calculated fields have quieter
+borders. The old dotted underlines and small Find labels in these panels are removed.
+VMID sits
 at the end of an output wire extending just past the RL branch. In **Find VMID**,
 this net and its junctions are red, with
 matching warm accents on the VMID readout and operating-point card. Other modes
@@ -129,10 +138,15 @@ voltage-readout box. Invalid circuit data clears all three
 values. Calculated voltages are read-only; an entered VMID target remains editable
 in inverse modes. The readouts retain their role colors and appear in the
 standalone SVG download.
+VTOP is drawn as a positive supply-net symbol named **VTOP**, with RTOP below it
+and the divider returning to ground through RBOT. The displayed supply symbol
+does not change the DC source used in the circuit calculation or LTspice export.
 Each physical RTOP/RBOT resistor is annotated with its resistance, tolerance,
 footprint size, power rating, Pstress and Vstress. The drawing contains
-one symbol per physical RTOP/RBOT resistor in the work form, wired as a series
-chain or a parallel bank. A finite RL adds its load symbol; an open RL has no
+one vertical symbol per physical RTOP/RBOT resistor in the work form. Series
+parts stack vertically; parallel branches sit side by side, with every resistor
+still vertical. Nested networks use the same layout without rotating or squeezing
+their symbols. A finite RL adds its load symbol; an open RL has no
 resistor symbol. Each drawn part shows its value and two small filled pills for
 tolerance (for example, **±1%**) and package size (for example, **0805**), without
 repeating Tol. or Footprint labels. The pills have no outlines and their entire
@@ -164,8 +178,8 @@ limit when entered. Invalid circuit data clears the live values and stresses.
 
 The components use **yellow** for missing/invalid inputs or an unspecified
 footprint, **green** for known information, and **red** for the value to find.
-A **Find** heading and target labels identify the active calculation without relying on
-color; known components omit repeated status labels. The selected calculation,
+The active mode and **Target**/**Calculated** labels identify the calculation
+without relying on color; the net panels do not repeat a small Find label. The selected calculation,
 form inputs and result use the same cues; a calculated value stays red to identify
 its role. A blank optional RL is a known open circuit. Multi-part arms highlight
 all resistors being scaled. Combination previews highlight the candidate RTOP/RBOT in
@@ -208,7 +222,7 @@ in separate **recommendation (not applied)** columns, preserving the actual
 values and selected PN until adoption. Static SVG downloads keep descriptions
 and recommendation labels while removing live adoption controls.
 
-Click an underlined SVG value or a pill, or focus it and press Enter/Space, to
+Click a bordered SVG value or a pill, or focus it and press Enter/Space, to
 edit the circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
 tolerance (blank resistance means open circuit). Each physical resistor opens
 its resistance and dropdowns for family, footprint, TCR (ppm/°C), tolerance and
@@ -245,7 +259,11 @@ equivalent and series/parallel connection, preserving independent ratings and
 tolerances. Individual SVG rows edit just that physical resistor. Invalid edits
 remain in the editor with an error and leave the applied circuit unchanged.
 
-The SVG reflows for smaller screens and stays on the calculator page.
+The schematic grows to accommodate the circuit at normal size. Its drawing area
+scrolls horizontally on smaller screens or with wide parallel networks; resistor
+symbols and labels are not scaled down. Operating information, the parts list and
+solution plots continue using the available viewport width. The SVG download
+includes the complete circuit at its natural dimensions.
 **Download SVG** captures the current annotations in a standalone SVG. LTspice and
 Markdown downloads capture that same complete circuit. The image below remains
 a default reference. The calculator keeps its live SVG, editor, styling, logic
