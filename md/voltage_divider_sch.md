@@ -113,8 +113,10 @@ Errors, search progress/results and automatic-value status remain in their
 existing dialogs and accessible status announcements, without visible paragraphs
 above the SVG. Download links sit above the drawing.
 Voltage readouts are part of the circuit drawing: VTOP and source tolerance sit
-beside the source, and VMID sits at the end of a blue output wire extending just
-past the RL branch. A separate, spaced VMID readout lists **Nominal**, **Min** and
+beside the source, and VMID sits at the end of an output wire extending just
+past the RL branch. In **Find VMID**, this net and its junctions are red, with
+matching warm accents on the VMID readout and operating-point card. Other modes
+retain the blue output wire. A separate, spaced VMID readout lists **Nominal**, **Min** and
 **Max** voltages for both normal calculations and combination previews. Its minimum and
 maximum use the same entered tolerance limits as the analysis results; combination
 previews also show their target error. Invalid circuit data clears all three

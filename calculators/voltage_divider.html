@@ -1778,6 +1778,7 @@
 
     function renderSchematicDrawing(state, roles) {
       const drawing = byId("schematicDrawing"); drawing.replaceChildren();
+      const findVmid = byId("solveFor").value === "vout", netColor = findVmid ? SOLVE_ROLES.solving.color : "#54d2ff";
       const count = arm => Math.max(1, Math.ceil((state?.physical[arm].length || 0) * (typeof state?.networks[arm]?.connection === "object" ? 1.2 : 1)));
       const top = 80, mid = top + count("r1") * 110 + 44, botStart = mid + 78, bottom = botStart + count("r2") * 110 + 24;
       const wires = schematicShape(drawing, "g", { fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" });
@@ -1818,10 +1819,14 @@
           const footprintPill = schematicPill(info, parallelArm ? 340 : pillX + tolerancePill.width + 8, pillY, footprint, SOLVE_ROLES[part.catalog || pairMode && byId(`pairPackage${side}`).value ? "defined" : "undefined"].color, parallelArm ? 124 : 82, "footprint");
           schematicEditable(footprintPill.pill, part.id, `${part.name} footprint ${footprint}`, "power");
         }
-        schematicShape(wires, "path", { d: arm === "r1" ? `M260 ${end}V${mid}` : `M260 ${mid}V${start}M260 ${end}V${bottom}` });
+        const junction = schematicShape(wires, "path", { d: arm === "r1" ? `M260 ${end}V${mid}` : `M260 ${mid}V${start}` });
+        if (findVmid) junction.setAttribute("stroke", netColor);
+        if (arm === "r2") schematicShape(wires, "path", { d: `M260 ${end}V${bottom}` });
       }
       const loadY = (mid + bottom) / 2, load = schematicShape(drawing, "g", { id: "schematicLoad", fill: "none", stroke: "#a8bece", "stroke-width": 2.5, "stroke-linejoin": "round", "stroke-dasharray": "7 6" });
-      schematicShape(load, "path", { d: `M260 ${mid}H560V${loadY - 26}M560 ${loadY + 26}V${bottom}` });
+      const loadFeed = schematicShape(load, "path", { d: `M260 ${mid}H560V${loadY - 26}` });
+      if (findVmid) loadFeed.setAttribute("stroke", netColor);
+      schematicShape(load, "path", { d: `M560 ${loadY + 26}V${bottom}` });
       schematicShape(load, "path", { d: `M560 ${bottom}v28m-20 0h40m-32 10h24m-16 10h8`, "stroke-dasharray": "none" });
       schematicText(load, 585, bottom + 55, "GND", 18, "#a8bece").setAttribute("stroke", "none");
       if (state?.circuit.rl !== null && state) { schematicRole(schematicShape(load, "rect", { x: 549, y: loadY - 26, width: 22, height: 52, rx: 2 }), "rl", roles, "stroke"); load.dataset.schematicLoadSymbol = "rl"; }
@@ -1835,11 +1840,12 @@
         const tolerance = `±${percent(state.tolerances.rl)}`;
         schematicText(loadInfo, 586, loadY + 48, tolerance, Math.min(14, 76 / (tolerance.length * 0.62)), "#a8bece");
       }
-      schematicShape(drawing, "path", { d: `M260 ${mid}H654`, fill: "none", stroke: "#54d2ff", "stroke-width": 3 });
-      for (const x of [260, 560]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: "#54d2ff" });
-      schematicShape(drawing, "circle", { cx: 660, cy: mid, r: 6, fill: "#101823", stroke: "#54d2ff", "stroke-width": 3 });
+      schematicShape(drawing, "path", { d: `M260 ${mid}H654`, fill: "none", stroke: netColor, "stroke-width": findVmid ? 4 : 3 });
+      for (const x of [260, 560]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor });
+      schematicShape(drawing, "circle", { cx: 660, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3 });
       const pairMode = byId("solveFor").value === "pairs", readout = schematicShape(drawing, "g", { "data-field": "vmidReadout" });
-      schematicInfoBox(readout, 490, mid - (pairMode ? 198 : 166), 180, pairMode ? 188 : 156);
+      const readoutBox = schematicInfoBox(readout, 490, mid - (pairMode ? 198 : 166), 180, pairMode ? 188 : 156);
+      if (findVmid) { readoutBox.setAttribute("fill", "#33252d"); readoutBox.setAttribute("stroke", netColor); readoutBox.setAttribute("stroke-opacity", 0.55); }
       const nominal = schematicText(readout, 502, mid - (pairMode ? 172 : 140), "", 20); nominal.id = "schematicVmid";
       schematicShape(nominal, "tspan", { x: 502, y: mid - (pairMode ? 172 : 140) }).textContent = "VMID ";
       if (pairMode) {
@@ -1876,7 +1882,8 @@
 
     function operatingPointRows(state) {
       const complete = !!state && !state.pairSetup && !state.pending;
-      return [["VMID", complete ? state.result.vout : null, "V", "vmid", "#75d5ff", "#12354b"], ["Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
+      const findVmid = byId("solveFor").value === "vout";
+      return [["VMID", complete ? state.result.vout : null, "V", "vmid", findVmid ? "#ff8e8e" : "#75d5ff", findVmid ? "#3b2530" : "#12354b"], ["Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
     }
 
     function operatingPointHeight(width) {
