@@ -321,9 +321,11 @@ preserve the current settings and applied circuit. A search with no matches clea
 old candidate annotations and leaves its inputs editable. Use the existing
 **Apply** action to transfer a chosen combination into the circuit and BOM.
 
-Below the circuit, a compact colored **Design Solutions** heading separates the
-design space from the circuit. It has no explanatory sentences or result counts;
-detailed search counts and bounded-network limits remain in the results dialog.
+Below the circuit, a compact colored **Design Solutions (showing # of #)** heading
+separates the design space from the circuit. It shows the number remaining after
+filters out of the total valid designs found, with comma-separated counts. The
+count wraps below the title on narrow screens. Detailed search counts and
+bounded-network limits remain in the results dialog.
 Six two-ended sliders filter total power, input current, output Rth, target error,
 Pstress and Vstress. Networks add a seventh slider for non-trim power spread.
 Power/current/Rth are nominal; error uses the full output interval. Network

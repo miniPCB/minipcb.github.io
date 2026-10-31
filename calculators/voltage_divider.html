@@ -3621,9 +3621,13 @@
       const host = schematicShape(parent, "g", { "data-pair-explorer": "", role: "group", "aria-label": "Filter real resistor combinations by performance" });
       schematicShape(host, "path", { d: `M${x} ${y + 12}H${x + width}`, stroke: "#54d2ff", "stroke-opacity": 0.5 });
       const heading = schematicShape(host, "g", { "data-design-solutions-heading": "" });
-      schematicShape(heading, "rect", { x, y: y + 32, width, height: 60, rx: 14, fill: "#163345" });
-      schematicText(heading, x + 18, y + 68, "Design Solutions", 28, "#eaf6ff");
-      let top = y + 116;
+      const total = pairItems.length.toLocaleString(), count = ` (showing ${pairView.length.toLocaleString()} of ${total})`;
+      const wrapCount = 16 * 28 * 0.62 + ` (showing ${total} of ${total})`.length * 16 * 0.62 > width - 36;
+      const headingHeight = wrapCount ? 88 : 60;
+      schematicShape(heading, "rect", { x, y: y + 32, width, height: headingHeight, rx: 14, fill: "#163345" });
+      const title = schematicText(heading, x + 18, y + 68, "Design Solutions", 28, "#eaf6ff");
+      schematicShape(title, "tspan", { ...(wrapCount ? { x: x + 18, y: y + 92 } : {}), "font-size": Math.min(16, (width - 36) / (count.length * 0.62)), fill: "#c6d7e5" }).textContent = count;
+      let top = y + headingHeight + 56;
       if (!pairItems.length) return top;
       let actionX = x;
       for (const input of pairFamilyToggles) {
