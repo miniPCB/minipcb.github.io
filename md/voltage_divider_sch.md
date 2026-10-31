@@ -167,6 +167,10 @@ unassessed voltage stress remains a dash. The description shows actual resistanc
 tolerance and footprint; unassigned footprints read **Footprint not set**. On
 smaller screens, each reference and description sit above the part-number and
 stress cells so the table stays readable without horizontal scrolling.
+Table type scales with the available table width, from 12 px in compact layouts
+to 16 px in wider layouts. Headings, secondary text, column spacing and row
+heights follow the same scale; long part numbers wrap at a readable size.
+The SVG download retains this typography and spacing.
 An asterisk marks the selected
 part number; stress uses the current circuit or preview part's own ratings.
 A dash means no assigned or qualifying part number for that family. Click a

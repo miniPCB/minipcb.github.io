@@ -1913,13 +1913,13 @@
       return { width: readoutX + 316, height: bottom + 80 };
     }
 
-    function schematicTableText(parent, x, y, content, width, size, color, field = null) {
+    function schematicTableText(parent, x, y, content, width, size, color, field = null, lineHeight = 15) {
       const text = schematicText(parent, x, y, "", size, color, field), count = Math.max(1, Math.floor(width / (size * 0.62)));
       let start = 0, lines = 0;
       while (start < content.length) {
         let end = Math.min(content.length, start + count);
         if (end < content.length) { const space = content.lastIndexOf(" ", end - 1); if (space >= start) end = space + 1; }
-        schematicShape(text, "tspan", { x, y: y + lines * 15 }).textContent = content.slice(start, end);
+        schematicShape(text, "tspan", { x, y: y + lines * lineHeight }).textContent = content.slice(start, end);
         start = end; lines++;
       }
       return { text, lines };
@@ -2022,7 +2022,9 @@
     }
 
     function renderSchematicTable(host, state, roles, x, y, width, alternativesByPart) {
-      const narrow = width < 650, refWidth = 50, descriptionWidth = narrow ? 0 : width * 0.21, stressWidth = narrow ? 42 : 50;
+      const fontSize = Math.max(12, Math.min(16, Math.round(12 + (width - 320) / 160))), detailSize = Math.max(12, fontSize - 2), lineHeight = Math.ceil(fontSize * 1.45), baseline = fontSize + 10;
+      const tableText = (parent, x, y, content, width, size, color, field = null) => schematicTableText(parent, x, y, content, width, size, color, field, lineHeight);
+      const narrow = width < 720, refWidth = Math.max(64, fontSize * 5), descriptionWidth = narrow ? 0 : width * 0.21, stressWidth = Math.ceil(fontSize * 0.62 * 7) + 12;
       const pnWidth = (width - (narrow ? 0 : refWidth + descriptionWidth) - 2 * stressWidth) / 2;
       const widths = [refWidth, pnWidth, pnWidth, descriptionWidth, stressWidth, stressWidth];
       const labels = ["Ref Des", "TNPW PN", "M55342 PN", "Description", "Pstress", "Vstress"], offsets = [0];
@@ -2033,24 +2035,24 @@
       const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Description", "Pstress", "Vstress", "Part status", "TNPW recommendation (not applied)", "M55342 recommendation (not applied)"]];
       schematicBomChoices.clear(); schematicBomChoiceRevision++;
       const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor descriptions, part numbers and nominal power/voltage stresses", "aria-colcount": 6, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
-      const title = schematicTableText(table, 0, 16, "Parts list and electrical part stress", width, 14, "#eaf6ff"), headerTop = title.lines * 15 + 15;
-      const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = narrow ? 64 : 32;
+      const title = tableText(table, 0, fontSize + 4, "Parts list and electrical part stress", width, fontSize + 4, "#eaf6ff"), headerTop = title.lines * lineHeight + 18;
+      const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = (narrow ? 3 : 1) * lineHeight + 16;
       schematicInfoBox(head, 0, headerTop, width, headerHeight);
       labels.forEach((label, index) => {
         const cell = schematicShape(head, "g", { role: "columnheader", "aria-colindex": index + 1 });
         const lower = index !== 0 && index !== 3;
         const lines = narrow && lower ? index < 3 ? label.split(" ") : [label[0], "stress"] : [label];
-        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, headerTop + (narrow && lower ? 42 : 19) + i * 14, line, narrow ? 9 : Math.min(11, (widths[index] - 8) / (line.length * 0.62)), "#a8bece"));
+        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, headerTop + baseline + (narrow && lower ? lineHeight : 0) + i * lineHeight, line, Math.max(12, fontSize - 1), "#a8bece"));
       });
       let top = headerTop + headerHeight + 6;
       for (const [index, { arm, part }] of entries.entries()) {
         const row = schematicShape(table, "g", { transform: `translate(0 ${top})`, role: "row", "aria-rowindex": index + 2, "data-schematic-part": part.id });
-        const background = schematicInfoBox(row, 0, 0, width, 0), fontSize = narrow ? 10 : 11;
+        const background = schematicInfoBox(row, 0, 0, width, 0);
         const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
         const description = `${part.name}; ${format(part.resistance, "Ω")}; Tolerance ±${percent(part.tolerance)}; Footprint ${part.catalog?.case || "Not set"}; ${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`;
         schematicShape(row, "title").textContent = description;
         const refCell = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
-        const reference = schematicTableText(refCell, 4, 21, part.name, refWidth - 8, narrow ? 10 : 13, SOLVE_ROLES[roles[arm]].color), ref = reference.text;
+        const reference = tableText(refCell, 4, baseline, part.name, refWidth - 8, fontSize, SOLVE_ROLES[roles[arm]].color), ref = reference.text;
         schematicEditable(schematicRole(ref, arm, roles), part.id, `${description}; catalog specifications`, "specifications");
         const matches = schematicPartMatches(part, arm, state), candidates = matches.filter(match => match.kind !== "nearby").map(match => match.candidate);
         alternativesByPart.set(part.id, candidates.filter(candidate => candidate.mpn !== part.mpn));
@@ -2058,25 +2060,25 @@
         const cells = bomPartCells(part, part.catalog, familyNumbers);
         const actualDescription = `${cells.value} · ${cells.tolerance} · ${part.catalog?.case || "Footprint not set"}`;
         const descriptionCell = schematicShape(row, "g", { role: "cell", "aria-colindex": 4 });
-        const described = schematicTableText(descriptionCell, offsets[3] + 4, 21, actualDescription, narrow ? width - refWidth - 8 : descriptionWidth - 8, narrow ? 11 : 10, "#c6e3ff", "description");
+        const described = tableText(descriptionCell, offsets[3] + 4, baseline, actualDescription, narrow ? width - refWidth - 8 : descriptionWidth - 8, fontSize, "#c6e3ff", "description");
         const recommendationText = family => { const match = matches.find(item => item.family === family && item.kind === "nearby"), delta = match ? (match.candidate.resistanceOhms / part.resistance - 1) * 100 : 0; return match ? `${match.candidate.mpn}; ${format(match.candidate.resistanceOhms, "Ω")}; ±${percent(match.candidate.tolerancePct)}; ${match.candidate.case}; ΔR ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "—"; };
         bom.push([...["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil"].map(key => cells[key]), actualDescription, partStressPercent(part.stress.p), partStressPercent(part.stress.v), part.catalog ? "Applied" : candidates.length ? "Exact-value matches; not applied" : "Unassigned; recommendations are not applied", recommendationText("tnpw"), recommendationText("mil")]);
-        const partTop = narrow ? 21 + Math.max(reference.lines, described.lines) * 15 + 8 : 21;
-        let rowBottom = Math.max(reference.lines, described.lines) * 15 + 15;
+        const partTop = narrow ? baseline + Math.max(reference.lines, described.lines) * lineHeight + 8 : baseline;
+        let rowBottom = baseline + (Math.max(reference.lines, described.lines) - 1) * lineHeight + 10;
         for (const [column, family] of [[1, "tnpw"], [2, "mil"]]) {
           const match = matches.find(item => item.family === family), candidate = match?.candidate, selected = match?.kind === "selected", nearby = match?.kind === "nearby";
           const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": column + 1, "data-family": family === "mil" ? "m55342" : family });
           if (candidate) cell.dataset.partMatch = match.kind;
           const content = candidate?.mpn || "—", field = candidate ? selected ? "mpn" : nearby ? "mpnRecommendation" : "mpnAlternative" : null;
-          const wrapped = schematicTableText(cell, offsets[column] + (selected ? 14 : 4), partTop, content, pnWidth - (selected ? 18 : 8), fontSize, candidate ? selected ? "#54d2ff" : nearby ? "#ffba52" : "#6ee7ac" : "#a8bece", field);
-          let cellBottom = partTop + wrapped.lines * 15;
+          const wrapped = tableText(cell, offsets[column] + (selected ? 14 : 4), partTop, content, pnWidth - (selected ? 18 : 8), fontSize, candidate ? selected ? "#54d2ff" : nearby ? "#ffba52" : "#6ee7ac" : "#a8bece", field);
+          let cellBottom = partTop + wrapped.lines * lineHeight;
           if (selected) schematicText(cell, offsets[column] + 4, partTop, "*", fontSize, "#54d2ff");
           if (candidate) schematicShape(cell, "title", selected ? {} : { "data-field": nearby ? "recommendationLimits" : "alternativeLimits" }).textContent = `${selected ? "Selected" : nearby ? "Recommendation; not applied" : "Exact-value match; not applied"} ${candidate.mpn}; ${format(candidate.resistanceOhms, "Ω")}; ±${percent(candidate.tolerancePct)}; ${candidate.case}; ${format(candidate.powerW, "W")} allowed; ${candidate.workingVoltageV} V; ${candidate.temperatureC} °C; ${candidate.mode}; ±${candidate.tcrPpm} ppm/°C; reliability ${candidate.failureRate || "N/A"}${match.preview ? `; using this part gives VMID ${format(match.preview.result.vout, "V")}, selected-part maximum stress ${percent(match.preview.highest)}` : match.previewError ? `; cannot use: ${match.previewError}` : ""}`;
           if (candidate && !selected) {
             const delta = (candidate.resistanceOhms / part.resistance - 1) * 100;
             const label = nearby ? catalogSame(candidate.resistanceOhms, part.resistance) ? "Tolerance change" : `Nearest · ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "Exact value";
-            const note = schematicTableText(cell, offsets[column] + 4, cellBottom, label, pnWidth - 8, 10, nearby ? "#ffba52" : "#6ee7ac", "matchStatus"); cellBottom += note.lines * 15;
-            const specs = schematicTableText(cell, offsets[column] + 4, cellBottom, `${nearby ? format(candidate.resistanceOhms, "Ω") + " · " : ""}±${percent(candidate.tolerancePct)} · ${candidate.case}`, pnWidth - 8, 10, "#c6d7e5", "candidateDescription"); cellBottom += specs.lines * 15;
+            const note = tableText(cell, offsets[column] + 4, cellBottom, label, pnWidth - 8, detailSize, nearby ? "#ffba52" : "#6ee7ac", "matchStatus"); cellBottom += note.lines * lineHeight;
+            const specs = tableText(cell, offsets[column] + 4, cellBottom, `${nearby ? format(candidate.resistanceOhms, "Ω") + " · " : ""}±${percent(candidate.tolerancePct)} · ${candidate.case}`, pnWidth - 8, detailSize, "#c6d7e5", "candidateDescription"); cellBottom += specs.lines * lineHeight;
             const locks = schematicEditLocks(part.id), locked = locks.value && !catalogSame(part.resistance, candidate.resistanceOhms) || locks.tolerance && (!catalogSame(part.tolerance, candidate.tolerancePct) || !catalogSame(part.resistance, candidate.resistanceOhms));
             const disabled = !!state.pair ? !match.pair : locked || !match.preview || match.preview.highest > 100 + 1e-9;
             if (!match.displayOnly) {
@@ -2092,12 +2094,13 @@
         for (const [metricIndex, key] of ["p", "v"].entries()) {
           const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 5 }), value = part.stress[key], content = partStressPercent(value);
           const colors = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" };
-          schematicText(cell, offsets[metricIndex + 4] + 4, partTop, content, Math.min(narrow ? 10 : 13, (stressWidth - 8) / (content.length * 0.62)), colors[stressClass(value)], key);
+          const wrapped = tableText(cell, offsets[metricIndex + 4] + 4, partTop, content, stressWidth - 8, fontSize, colors[stressClass(value)], key);
+          rowBottom = Math.max(rowBottom, partTop + wrapped.lines * lineHeight);
           if (key === "v") schematicShape(cell, "title").textContent = value === null ? "Vstress not assessed: maximum continuous working voltage is not specified." : `Voltage drop / maximum continuous working voltage (${part.vmax} V).`;
         }
         const height = Math.max(36, rowBottom + 6); background.setAttribute("height", height); top += height + 6;
       }
-      if (!entries.length) { const note = schematicTableText(table, 4, top + 20, state?.pairSetup ? "Set inputs in the diagram, then Find Design Solutions." : "Enter valid circuit data.", width - 8, 12, "#ffba52"); top += Math.max(38, note.lines * 15 + 18); }
+      if (!entries.length) { const note = tableText(table, 4, top + baseline, state?.pairSetup ? "Set inputs in the diagram, then Find Design Solutions." : "Enter valid circuit data.", width - 8, fontSize, "#ffba52"); top += Math.max(38, note.lines * lineHeight + 18); }
       const previousBom = schematicBomTsv(); schematicBomData = bom;
       if (previousBom !== schematicBomTsv()) {
         schematicBomCopyGeneration++;
