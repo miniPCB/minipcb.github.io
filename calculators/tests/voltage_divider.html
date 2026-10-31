@@ -236,11 +236,11 @@
         assert(ids("r1").map(id => schematicField(id, "tolerance")).join(",") === "±1%,±2%,±3%,±4%", "Schematic retains unique physical tolerances");
         set(`${ids("r1")[0]}Vmax`, "1");
         assert(stressOutputs().slice(0, 2).join(",") === "0.72,150", "Per-part working voltage caps stress");
-        assert(schematicField(ids("r1")[0], "v") === "150%" && !schematicPart(ids("r1")[0]).querySelector('[data-field="i"]'), "Schematic includes each part's independent voltage stress without redundant current stress");
+        assert(schematicField(ids("r1")[0], "v") === "150.00%" && !schematicPart(ids("r1")[0]).querySelector('[data-field="i"]'), "Schematic includes each part's independent voltage stress without redundant current stress");
         const snapshotLink = get("schematicDownload");
         const snapshot = new DOMParser().parseFromString(await (await fetch(snapshotLink.href)).text(), "image/svg+xml");
         assert(!snapshot.querySelector("parsererror") && snapshot.documentElement.namespaceURI === "http://www.w3.org/2000/svg", "SVG download is well-formed standalone XML");
-        assert(snapshot.querySelectorAll('[data-schematic-part]').length === 5 && snapshot.getElementById("schematicVmid").textContent === "VMID 6 V" && snapshot.querySelector(`[data-schematic-part="${ids("r1")[0]}"] [data-field="v"]`).textContent === "150%", "SVG download captures all current values and stresses");
+        assert(snapshot.querySelectorAll('[data-schematic-part]').length === 5 && snapshot.getElementById("schematicVmid").textContent === "VMID 6 V" && snapshot.querySelector(`[data-schematic-part="${ids("r1")[0]}"] [data-field="v"]`).textContent === "150.00%", "SVG download captures all current values and stresses");
         assert(!snapshot.querySelector("image, script, link") && !get("schematicViewport").querySelector('a[target="_blank"], a[href$=".svg"]') && snapshotLink.download === "voltage_divider.svg" && !snapshotLink.target, "Schematic has no separate image-opening links and retains a self-contained SVG download");
         choosePart("r1", ids("r1")[3]);
         assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 16, "Comparison selector includes custom individual power rating");
@@ -253,7 +253,7 @@
         for (const [index, part] of unequalParts.entries()) near(part.power, [0.025, 0.05, 0.075, 0.1][index], "Unequal series power distribution");
         near(unequalParts.reduce((sum, part) => sum + part.power, 0), 0.25, "Physical powers sum to arm power");
         assert(get("stressCards").querySelectorAll(".badge.bad").length === 1 && stressOutputs()[6] === 1000, "Weak part overload is not hidden by total available wattage");
-        assert(schematicField(ids("r1")[3], "p") === "1000%" && schematicPart(ids("r1")[3]).querySelector('[data-field="p"]').getAttribute("fill") === "#ff8e8e", "Schematic identifies an overloaded individual resistor");
+        assert(schematicField(ids("r1")[3], "p") === "1000.00%" && schematicPart(ids("r1")[3]).querySelector('[data-field="p"]').getAttribute("fill") === "#ff8e8e", "Schematic identifies an overloaded individual resistor");
         set("vin", "12"); set("solveFor", "r1"); set("targetVout", "4");
         valid("Inverse solve scales a series arm");
         near(get("r1").valueAsNumber, 20, "Solved series equivalent is 20 kΩ");
@@ -460,7 +460,7 @@
             const knownArm = mode === "r1" ? "r2" : "r1";
             assert(get(knownArm).getBoundingClientRect().width >= 100, `Usable known resistance input: ${mode} at ${width}px`);
             const schematicBounds = get("liveSchematic").getBoundingClientRect();
-            assert([...get("liveSchematic").querySelectorAll("text")].every(node => { const bounds = node.getBoundingClientRect(); return bounds.left >= schematicBounds.left - 1 && bounds.right <= schematicBounds.right + 1 && bounds.top >= schematicBounds.top - 1 && bounds.bottom <= schematicBounds.bottom + 1; }), `Schematic annotations fit: ${mode} at ${width}px`);
+            assert([...get("liveSchematic").querySelectorAll("text")].filter(node=>node.getBoundingClientRect().width>0).every(node => { const bounds = node.getBoundingClientRect(); return bounds.left >= schematicBounds.left - 1 && bounds.right <= schematicBounds.right + 1 && bounds.top >= schematicBounds.top - 1 && bounds.bottom <= schematicBounds.bottom + 1; }), `Schematic annotations fit: ${mode} at ${width}px`);
           }
         }
         await reset();

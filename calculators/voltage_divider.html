@@ -132,6 +132,12 @@
     .schematic-pill.schematic-editable:hover text, .schematic-pill.schematic-editable:focus-visible text { fill: #fff; }
     .schematic-pill.schematic-editable:focus-visible { outline: none; }
     .schematic-pill.schematic-editable:focus-visible rect { stroke: #54d2ff; stroke-width: 1.5; }
+    #schematicDesignSearch, [data-pair-action="characteristics"] { cursor: pointer; }
+    #schematicDesignSearch { text-decoration: none; font-weight: 600; }
+    #schematicDesignSearch:hover rect { fill-opacity: 0.75; }
+    #schematicDesignSearch:focus { outline: none; }
+    #schematicDesignSearch:focus-visible rect { stroke-width: 3; }
+    #schematicDesignSearch[aria-disabled="true"] { cursor: wait; }
     .pair-svg-action { cursor: pointer; }
     .pair-svg-action:hover rect, .pair-svg-action:focus-visible rect { fill: #2b465b; }
     .pair-svg-action:focus-visible { outline: none; }
@@ -391,7 +397,12 @@
               <title id="liveSchematicTitle">Voltage divider · live circuit values</title>
               <desc id="liveSchematicDesc">VTOP supplies RTOP and RBOT; VMID is their junction. Values and nominal per-part stress update with the calculator.</desc>
               <rect width="100%" height="100%" fill="#101823" />
-              <text id="schematicSolveStatus" x="16" y="27" font-size="13" fill="#ff8e8e">Find VMID</text>
+              <g id="schematicSolveStatus" aria-label="Circuit color key: red is unknown, green is known">
+                <rect x="16" y="12" width="100" height="28" rx="8" fill="#462b32"/>
+                <text x="28" y="31" font-size="14" fill="#ff8e8e">Unknown</text>
+                <rect x="124" y="12" width="86" height="28" rx="8" fill="#173b31"/>
+                <text x="136" y="31" font-size="14" fill="#6ee7ac">Known</text>
+              </g>
               <g id="schematicDrawing" />
               <g id="schematicParts" />
             </svg>
@@ -959,6 +970,18 @@
 
     function refreshSchematicControls() {
       const searching = byId("solveFor").value === "pairs", automatic = !byId("automaticDesign").hidden;
+      const search = byId("schematicDesignSearch");
+      if (search) {
+        const busy = !byId("pairCancel").hidden, current = !!pairSpec;
+        const color = busy ? "#ffba52" : current ? "#6ee7ac" : "#ff8e8e";
+        search.dataset.searchState = busy ? "searching" : current ? "current" : "needed";
+        search.setAttribute("aria-disabled", String(byId("pairFind").disabled));
+        search.setAttribute("aria-label", busy ? "Finding design solutions" : current ? "Find Design Solutions; results match the current specifications" : "Find Design Solutions; run search for the current specifications");
+        search.querySelector("rect").setAttribute("fill", busy ? "#493622" : current ? "#173b31" : "#462b32");
+        search.querySelector("rect").setAttribute("stroke", color);
+        search.querySelector("text").setAttribute("fill", color);
+        search.querySelector("text").textContent = busy ? "Finding solutions…" : "Find Design Solutions";
+      }
       byId("circuitChoose").hidden = !automatic;
       byId("circuitChoose").disabled = byId("designChoose").disabled;
       byId("circuitCancelSearch").hidden = !searching || byId("pairCancel").hidden;
@@ -1877,6 +1900,8 @@
       });
     }
 
+    let schematicCharacteristicsExpanded = false;
+
     function circuitCharacteristics(state, mode) {
       const complete = !!state && !state.pairSetup && !state.pending, pair = state?.pair, target = state?.target;
       const value = (number, unit) => Number.isFinite(number) ? format(number, unit) : "—";
@@ -1907,7 +1932,7 @@
         [mode === "pairs" ? "Worst Vstress" : "Nominal Vstress", !complete ? "—" : percent(pair ? pair.vstress : maximumVoltageStress(parts)), "vstress"],
         ["Analyzed", state?.analyzedAt ? state.analyzedAt.slice(0, 16).replace("T", " ") + " UTC" : "—", "analyzedAt"],
         ["Calculator", "Voltage divider ↗", "calculator"]);
-      return { rows, height: rows.length * 28 + 48, complete };
+      return { rows, height: schematicCharacteristicsExpanded ? rows.length * 28 + 48 : 44, complete };
     }
 
     function renderCircuitCharacteristics(host, state, characteristics, mode, x, y, width) {
@@ -1915,8 +1940,12 @@
       const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Circuit characteristics", "aria-colcount": 2, "aria-rowcount": rows.length, "data-field": "circuitCharacteristics", "data-analysis-mode": mode, "data-analysis-state": complete ? state.pair ? "preview" : "calculated" : "awaiting", "data-analyzed-at": state?.analyzedAt || "" });
       schematicInfoBox(table, 0, 0, width, height);
       schematicText(table, 12, 24, "Circuit characteristics", 14, "#eaf6ff");
+      const toggle = schematicShape(table, "g", { role: "button", tabindex: 0, "data-pair-action": "characteristics", "aria-label": "Circuit characteristics", "aria-expanded": String(schematicCharacteristicsExpanded), "aria-controls": "schematicCharacteristicsBody", "data-schematic-controls": "" });
+      schematicShape(toggle, "rect", { width, height: 38, fill: "transparent" });
+      schematicText(toggle, width - 24, 24, schematicCharacteristicsExpanded ? "−" : "+", 18, "#54d2ff");
+      const body = schematicShape(table, "g", { id: "schematicCharacteristicsBody", role: "rowgroup", display: schematicCharacteristicsExpanded ? "inline" : "none" });
       for (const [index, [label, value, field]] of rows.entries()) {
-        const metadata = index >= rows.length - 2, row = schematicShape(table, "g", { role: "row", "aria-rowindex": index + 1 }), top = 52 + index * 28 + (metadata ? 8 : 0);
+        const metadata = index >= rows.length - 2, row = schematicShape(body, "g", { role: "row", "aria-rowindex": index + 1 }), top = 52 + index * 28 + (metadata ? 8 : 0);
         const labelSize = width < 420 ? 11 : 12, valueSize = Math.min(metadata ? 11 : 13, (width - 36 - label.length * labelSize * 0.62) / (value.length * 0.62));
         const name = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
         schematicText(name, 12, top, label, labelSize, "#a8bece");
@@ -1937,16 +1966,20 @@
       return target === 0 ? "Absolute voltage error; percent error is undefined for a zero target." : "Absolute percent error relative to the target VMID; 0% means on target. Worst error includes the full tolerance interval.";
     }
 
+    function partStressPercent(value) {
+      return Number.isFinite(value) ? Math.max(0, value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false }) + "%" : "—";
+    }
+
     function renderSchematicTable(host, state, roles, x, y, width, alternativesByPart) {
       const narrow = width < 650, refWidth = 50, descriptionWidth = narrow ? 0 : width * 0.21, stressWidth = narrow ? 42 : 50;
       const pnWidth = (width - (narrow ? 0 : refWidth + descriptionWidth) - 2 * stressWidth) / 2;
-      const widths = [refWidth, descriptionWidth, pnWidth, pnWidth, stressWidth, stressWidth];
-      const labels = ["Ref Des", "Description", "TNPW PN", "M55342 PN", "Pstress", "Vstress"], offsets = [0];
+      const widths = [refWidth, pnWidth, pnWidth, descriptionWidth, stressWidth, stressWidth];
+      const labels = ["Ref Des", "TNPW PN", "M55342 PN", "Description", "Pstress", "Vstress"], offsets = [0];
       for (const size of widths) offsets.push(offsets.at(-1) + size);
       // Narrow rows put the reference and description above the PN/stress cells.
-      if (narrow) offsets.splice(2, 4, 0, pnWidth, 2 * pnWidth, 2 * pnWidth + stressWidth);
+      if (narrow) offsets.splice(0, 6, 0, 0, pnWidth, refWidth, 2 * pnWidth, 2 * pnWidth + stressWidth);
       const entries = state ? ARMS.flatMap(arm => state.physical[arm].map(part => ({ arm, part }))) : [];
-      const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Pstress", "Vstress", "Description", "Part status", "TNPW recommendation (not applied)", "M55342 recommendation (not applied)"]];
+      const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Description", "Pstress", "Vstress", "Part status", "TNPW recommendation (not applied)", "M55342 recommendation (not applied)"]];
       schematicBomChoices.clear(); schematicBomChoiceRevision++;
       const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor descriptions, part numbers and nominal power/voltage stresses", "aria-colcount": 6, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
       const title = schematicTableText(table, 0, 16, "Parts list and electrical part stress", width, 14, "#eaf6ff"), headerTop = title.lines * 15 + 15;
@@ -1954,8 +1987,9 @@
       schematicInfoBox(head, 0, headerTop, width, headerHeight);
       labels.forEach((label, index) => {
         const cell = schematicShape(head, "g", { role: "columnheader", "aria-colindex": index + 1 });
-        const lines = narrow && index >= 2 ? index < 4 ? label.split(" ").map((word, i) => i ? word : word + " ") : [label[0], "stress"] : [label];
-        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, headerTop + (narrow && index >= 2 ? 42 : 19) + i * 14, line, narrow ? 9 : Math.min(11, (widths[index] - 8) / (line.length * 0.62)), "#a8bece"));
+        const lower = index !== 0 && index !== 3;
+        const lines = narrow && lower ? index < 3 ? label.split(" ") : [label[0], "stress"] : [label];
+        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, headerTop + (narrow && lower ? 42 : 19) + i * 14, line, narrow ? 9 : Math.min(11, (widths[index] - 8) / (line.length * 0.62)), "#a8bece"));
       });
       let top = headerTop + headerHeight + 6;
       for (const [index, { arm, part }] of entries.entries()) {
@@ -1972,13 +2006,13 @@
         const familyNumbers = { tnpw: candidates.find(item => item.familyId.includes("tnpw"))?.mpn, mil: candidates.find(item => item.familyId.includes("m55342"))?.mpn };
         const cells = bomPartCells(part, part.catalog, familyNumbers);
         const actualDescription = `${cells.value} · ${cells.tolerance} · ${part.catalog?.case || "Footprint not set"}`;
-        const descriptionCell = schematicShape(row, "g", { role: "cell", "aria-colindex": 2 });
-        const described = schematicTableText(descriptionCell, refWidth + 4, 21, actualDescription, narrow ? width - refWidth - 8 : descriptionWidth - 8, narrow ? 11 : 10, "#c6e3ff", "description");
+        const descriptionCell = schematicShape(row, "g", { role: "cell", "aria-colindex": 4 });
+        const described = schematicTableText(descriptionCell, offsets[3] + 4, 21, actualDescription, narrow ? width - refWidth - 8 : descriptionWidth - 8, narrow ? 11 : 10, "#c6e3ff", "description");
         const recommendationText = family => { const match = matches.find(item => item.family === family && item.kind === "nearby"), delta = match ? (match.candidate.resistanceOhms / part.resistance - 1) * 100 : 0; return match ? `${match.candidate.mpn}; ${format(match.candidate.resistanceOhms, "Ω")}; ±${percent(match.candidate.tolerancePct)}; ${match.candidate.case}; ΔR ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "—"; };
-        bom.push([...["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil", "pstress", "vstress"].map(key => cells[key]), actualDescription, part.catalog ? "Applied" : candidates.length ? "Exact-value matches; not applied" : "Unassigned; recommendations are not applied", recommendationText("tnpw"), recommendationText("mil")]);
+        bom.push([...["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil"].map(key => cells[key]), actualDescription, partStressPercent(part.stress.p), partStressPercent(part.stress.v), part.catalog ? "Applied" : candidates.length ? "Exact-value matches; not applied" : "Unassigned; recommendations are not applied", recommendationText("tnpw"), recommendationText("mil")]);
         const partTop = narrow ? 21 + Math.max(reference.lines, described.lines) * 15 + 8 : 21;
         let rowBottom = Math.max(reference.lines, described.lines) * 15 + 15;
-        for (const [column, family] of [[2, "tnpw"], [3, "mil"]]) {
+        for (const [column, family] of [[1, "tnpw"], [2, "mil"]]) {
           const match = matches.find(item => item.family === family), candidate = match?.candidate, selected = match?.kind === "selected", nearby = match?.kind === "nearby";
           const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": column + 1, "data-family": family === "mil" ? "m55342" : family });
           if (candidate) cell.dataset.partMatch = match.kind;
@@ -2003,15 +2037,16 @@
           }
           rowBottom = Math.max(rowBottom, cellBottom);
         }
+        row.append(descriptionCell);
         for (const [metricIndex, key] of ["p", "v"].entries()) {
-          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 5 }), value = part.stress[key], content = percent(value);
+          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 5 }), value = part.stress[key], content = partStressPercent(value);
           const colors = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" };
           schematicText(cell, offsets[metricIndex + 4] + 4, partTop, content, Math.min(narrow ? 10 : 13, (stressWidth - 8) / (content.length * 0.62)), colors[stressClass(value)], key);
           if (key === "v") schematicShape(cell, "title").textContent = value === null ? "Vstress not assessed: maximum continuous working voltage is not specified." : `Voltage drop / maximum continuous working voltage (${part.vmax} V).`;
         }
         const height = Math.max(36, rowBottom + 6); background.setAttribute("height", height); top += height + 6;
       }
-      if (!entries.length) { const note = schematicTableText(table, 4, top + 20, state?.pairSetup ? "Set inputs in the diagram, then Find combinations." : "Enter valid circuit data.", width - 8, 12, "#ffba52"); top += Math.max(38, note.lines * 15 + 18); }
+      if (!entries.length) { const note = schematicTableText(table, 4, top + 20, state?.pairSetup ? "Set inputs in the diagram, then Find Design Solutions." : "Enter valid circuit data.", width - 8, 12, "#ffba52"); top += Math.max(38, note.lines * 15 + 18); }
       const previousBom = schematicBomTsv(); schematicBomData = bom;
       if (previousBom !== schematicBomTsv()) {
         schematicBomCopyGeneration++;
@@ -2218,31 +2253,34 @@
       const roles = solverRoles(state);
       const solveLabel = mode === "pairs" ? `Find RTOP + RBOT${state?.pair ? " · preview" : ""}` : `Find ${MODE_DETAILS[mode].symbol}`;
       byId("formSolveTarget").textContent = mode === "pairs" ? "Find RTOP + RBOT" : `Find ${MODE_DETAILS[mode].symbol}`;
-      byId("schematicSolveStatus").textContent = solveLabel;
-      byId("schematicSolveStatus").setAttribute("fill", SOLVE_ROLES.solving.color);
       for (const node of svg.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
       byId("schematicHeading").textContent = schematicSummary(state, mode);
       byId("liveSchematicTitle").textContent = pairPreviewState ? "Voltage divider · selected resistor combination preview" : mode === "pairs" ? "Voltage divider · combination search inputs" : "Voltage divider · live circuit values";
       const width = Math.max(320, Math.round(byId("schematicViewport").clientWidth));
-      const searchOffset = mode === "pairs" ? 40 : 0;
       const stacked = width < 1050;
       const drawingWidth = stacked ? Math.min(680, width - 32) : Math.min(560, width * 0.42);
       const detailsX = stacked ? 24 : drawingWidth + 40;
       const detailsWidth = width - detailsX - 16, informationWidth = stacked ? width - 32 : detailsWidth;
       const characteristics = circuitCharacteristics(state, mode), operatingHeight = operatingPointHeight(informationWidth), analysisHeight = operatingHeight + characteristics.height + 16;
-      const drawingY = 62 + searchOffset + (stacked ? analysisHeight : 0);
+      const drawingY = 62 + (stacked ? analysisHeight : 0);
       const drawingBottom = drawingY + drawingWidth * renderSchematicDrawing(state, roles) / 680;
-      const detailsY = stacked ? drawingBottom + 22 : 30 + drawingY - 64 + analysisHeight;
       const partsGroup = byId("schematicParts");
       partsGroup.replaceChildren();
+      let controlsBottom = drawingBottom;
       if (mode === "pairs") {
-        const controls = schematicShape(partsGroup, "g", { "data-schematic-controls": "" });
-        for (const [x, content, key] of [[16, "Options", "search-options"], [108, "Find combinations", "search-run"]]) {
-          const control = schematicPill(controls, x, 39, content, key === "search-run" ? "#ff8e8e" : "#c6e3ff", width - x - 16);
-          if (resistorCatalog) { schematicEditable(control.pill, key, content); control.pill.setAttribute("aria-label", key === "search-run" ? "Find real resistor combinations" : "Edit combination search options"); }
-        }
+        const left = stacked ? (width - drawingWidth) / 2 : 12, top = drawingBottom + 6, small = drawingWidth < 440;
+        const controls = schematicShape(partsGroup, "g", { "data-schematic-controls": "", "data-circuit-search-controls": "" });
+        const options = schematicPill(controls, left + (small ? (drawingWidth - 80) / 2 : 0), top + (small ? 60 : 12), "Options", "#c6e3ff", 100);
+        schematicEditable(options.pill, "search-options", "design search options");
+        const buttonX = left + (small ? 0 : 100), buttonWidth = drawingWidth - (small ? 0 : 100);
+        const button = schematicShape(controls, "g", { id: "schematicDesignSearch" });
+        schematicShape(button, "rect", { x: buttonX, y: top, width: buttonWidth, height: 50, rx: 12, fill: "#462b32", stroke: "#ff8e8e" });
+        schematicText(button, buttonX + buttonWidth / 2, top + 31, "Find Design Solutions", Math.min(18, (buttonWidth - 24) / (21 * 0.62)), "#ff8e8e").setAttribute("text-anchor", "middle");
+        schematicEditable(button, "search-run", "Find Design Solutions");
+        controlsBottom = top + (small ? 94 : 58);
       }
-      const informationX = stacked ? 16 : detailsX, informationY = stacked ? 42 + searchOffset : detailsY - analysisHeight;
+      const detailsY = stacked ? controlsBottom + 22 : 28 + analysisHeight;
+      const informationX = stacked ? 16 : detailsX, informationY = stacked ? 48 : 28;
       renderOperatingPoint(partsGroup, state, informationX, informationY, informationWidth);
       const characteristicsDescription = renderCircuitCharacteristics(partsGroup, state, characteristics, mode, informationX, informationY + operatingHeight, informationWidth);
       const alternativeParts = new Map();
@@ -2254,7 +2292,7 @@
       byId("schematicLoad").setAttribute("opacity", roles.rl === "solving" || state && state.circuit.rl !== null ? "1" : "0.35");
       if (state && !state.pending) for (const [id, key, label] of [["schematicVtop", "source", "VTOP and source tolerance"], ...(mode === "pairs" ? [] : [["schematicVmid", "target", "VMID target"]]), ["schematicR1Value", "r1", "RTOP"], ["schematicR2Value", "r2", "RBOT"], ["schematicLoadValue", "load", "RL and load tolerance"]]) schematicEditable(byId(id), key, label);
       const bottom = renderSchematicTable(partsGroup, state?.pending || state?.constructionSetup ? null : state, roles, detailsX, detailsY, detailsWidth, alternativeParts);
-      let contentBottom = Math.max(drawingBottom + 20, bottom);
+      let contentBottom = Math.max(controlsBottom + 20, bottom);
       if (mode === "pairs" && pairItems.length) {
         const key = `${pairGeneration}:${width}`;
         if (pairSvgLayout?.key !== key) pairSvgLayout = { key, bottom: contentBottom };
@@ -2405,8 +2443,8 @@
       }
       schematicEditContext = { pairSearch: true, pairPartId: part?.id, pairPartArm: partArm, mode: "pairs", key, focus, fields, fingerprint: pairFormFingerprint() };
       byId("schematicEditHeading").textContent = `Edit ${part ? part.name + " catalog limits" : name}`;
-      byId("schematicEditHelp").textContent = part ? "These limits apply to this physical resistor. Saving finds new combinations; Apply changes the circuit and BOM." : "These settings belong to the combination search. Saving searches again; Apply changes the circuit and BOM. The shared TCR applies unless a resistor has an override.";
-      byId("schematicEditSave").textContent = "Save & find combinations"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
+      byId("schematicEditHelp").textContent = (part ? "These limits apply to this physical resistor." : "These settings define the design search. The shared TCR applies unless a resistor has an override.") + " Save your specifications, then use Find Design Solutions below the circuit. Changed specifications clear the previous results.";
+      byId("schematicEditSave").textContent = "Save specifications"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
       byId("schematicEditor").showModal();
       schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
       const selected = fields[focus === "tolerance" ? `pairTol${side}` : focus === "power" ? `pairPackage${side}` : ids[0]] || fields[ids[0]];
@@ -2414,7 +2452,7 @@
     }
 
     function openSchematicEditor(node) {
-      if (!node.hasAttribute("data-schematic-edit") || byId("schematicEditor").open) return;
+      if (!node.hasAttribute("data-schematic-edit") || node.getAttribute("aria-disabled") === "true" || byId("schematicEditor").open) return;
       const key = node.dataset.schematicEdit, focus = node.dataset.editFocus, locks = schematicEditLocks(key);
       if (focus === "value" && locks.value || focus === "tolerance" && locks.tolerance) return;
       if (byId("solveFor").value === "pairs") { openPairSchematicEditor(key, focus); return; }
@@ -2548,10 +2586,13 @@
           if (context.pairPartId) {
             const side = context.pairPartArm === "r1" ? "Top" : "Bot", part = pairConstruction[context.pairPartArm].parts.find(part => part.id === context.pairPartId);
             part.settings = { family: context.fields[`pairFamily${side}`].value, package: context.fields[`pairPackage${side}`].value, tolerancePct: Number(context.fields[`pairTol${side}`].value), tcrPpm: Number(context.fields.pairTcr.value) };
-            closeSchematicEditor(); findPairsFromSchematic(context); return;
+          } else {
+            for (const [id, field] of Object.entries(context.fields)) byId(id).value = field.value;
           }
-          for (const [id, field] of Object.entries(context.fields)) byId(id).value = field.value;
-          closeSchematicEditor(); findPairsFromSchematic(context);
+          const changed = context.fingerprint !== pairFormFingerprint();
+          closeSchematicEditor();
+          if (changed) invalidatePairSearch();
+          focusSchematicEditorTarget(context);
           return;
         }
         if (context.state !== (pairPreviewState || schematicState)) throw new Error("The circuit changed while this editor was open. Cancel and reopen it.");
@@ -3494,7 +3535,8 @@
     function renderPairSvgPlot(parent, x, y, width, height, xKey, yKey, indices) {
       const index = pairSvgPlots.length, group = schematicShape(parent, "g", { class: "pair-svg-chart", transform: `translate(${x} ${y})`, "data-pair-chart": index, role: "group", tabindex: 0, "aria-label": `${PAIR_METRICS[xKey].label} versus ${PAIR_METRICS[yKey].label}; ${pairView.length} real resistor combinations. Click to preview, drag to filter, arrow keys to select, Escape to clear filters. Activate an axis to choose its metric.` });
       schematicShape(group, "rect", { x: 0, y: 0, width, height, rx: 10, fill: "#142535", stroke: "none" });
-      const left = 52, right = width - 16, top = 34, bottom = height - 45;
+      schematicText(group, 12, 25, "Valid Resistor Combinations", Math.min(16, (width - 24) / (26 * 0.62)), "#eaf6ff").setAttribute("data-chart-title", "");
+      const left = 52, right = width - 16, top = 64, bottom = height - 45;
       const labelSize = Math.min(11, (width - 16) / (PAIR_METRICS[yKey].label.length * 0.62));
       const axes = {};
       for (const axis of ["X", "Y"]) {
@@ -3502,15 +3544,15 @@
         axes[axis] = schematicShape(group, "g", { class: "pair-svg-axis", "data-pair-axis": axis, "data-axis-plot": index, role: "button", tabindex: 0, "aria-haspopup": "menu", "aria-controls": "pairAxisMenu", "aria-expanded": "false", "aria-label": `${axis} axis: ${PAIR_METRICS[key].label}. Right-click or press Enter to change.` });
         schematicShape(axes[axis], "title").textContent = "Choose axis · right-click, click the label, or press Enter";
       }
-      schematicShape(axes.Y, "rect", { x: 0, y: 0, width: width - 12, height: 28, fill: "transparent" });
-      schematicShape(axes.Y, "rect", { x: 0, y: 28, width: left, height: bottom - 28, fill: "transparent" });
+      schematicShape(axes.Y, "rect", { x: 0, y: 30, width: width - 12, height: 28, fill: "transparent" });
+      schematicShape(axes.Y, "rect", { x: 0, y: 58, width: left, height: bottom - 58, fill: "transparent" });
       schematicShape(axes.X, "rect", { x: 0, y: bottom + 3, width, height: height - bottom - 3, fill: "transparent" });
-      schematicText(axes.Y, 10, 18, PAIR_METRICS[yKey].label, labelSize, "#c6e3ff").setAttribute("data-axis-label", "");
+      schematicText(axes.Y, 10, 48, PAIR_METRICS[yKey].label, labelSize, "#c6e3ff").setAttribute("data-axis-label", "");
       const xLabel = schematicText(axes.X, width / 2, height - 10, `${PAIR_METRICS[xKey].label}${PAIR_METRICS[xKey].log ? " · log" : ""}`, 11, "#c6e3ff");
       xLabel.setAttribute("text-anchor", "middle"); xLabel.setAttribute("data-axis-label", "");
       if (!pairView.length) {
         pairSvgPlots.push({ index, x, y, left: x + left, right: x + right, top: y + top, bottom: y + bottom, xKey, yKey, points: [] });
-        schematicTableText(group, 12, 66, "No combinations in this selection. Widen the ranges or press Escape to reset filters.", width - 24, 12, "#ffba52");
+        schematicTableText(group, 12, 96, "No combinations in this selection. Widen the ranges or press Escape to reset filters.", width - 24, 12, "#ffba52");
         return;
       }
       const log = PAIR_METRICS[xKey].log;
@@ -3541,12 +3583,11 @@
 
     function renderPairSvgSummary(parent, x, y, width) {
       const group = schematicShape(parent, "g", { "data-pair-summary": "", role: "group", "aria-label": "Selected combination accuracy and resistor arms" });
-      const label = schematicText(group, x, y + 16, "Selected combination", 13, "#c6e3ff"); label.id = "schematicPairReadoutLabel";
-      const stacked = width < 760, gap = 12, cardTop = y + 30, errorWidth = stacked ? width : (width - gap * 2) / 3;
+      const stacked = width < 760, gap = 12, cardTop = y, errorWidth = stacked ? width : (width - gap * 2) / 3;
       const errorX = stacked ? x : x + width - errorWidth, errorHeight = 144;
       const error = schematicShape(group, "g", { "data-pair-error-card": "" });
       schematicShape(error, "rect", { x: errorX, y: cardTop, width: errorWidth, height: errorHeight, rx: 12, fill: "#17342e", stroke: "#6ee7ac", "stroke-opacity": 0.55 });
-      schematicText(error, errorX + 16, cardTop + 22, "WORST-CASE VMID ERROR", 11, "#c6e3ff");
+      schematicText(error, errorX + 16, cardTop + 22, "WORST-CASE VMID ERROR", 11, "#c6e3ff").id = "schematicPairErrorCaption";
       const value = schematicText(error, errorX + 16, cardTop + 66, "—", 36, "#6ee7ac"); value.id = "schematicPairErrorValue";
       const nominal = schematicText(error, errorX + 16, cardTop + 91, "", 11, "#eaf6ff"); nominal.id = "schematicPairNominalError";
       const allowed = schematicText(error, errorX + 16, cardTop + 111, "", 10, "#c6d7e5"); allowed.id = "schematicPairAllowedError"; allowed.dataset.maxWidth = errorWidth - 32;
@@ -3571,12 +3612,20 @@
     function renderSchematicPairExplorer(parent, x, y, width) {
       pairSvgPlots = [];
       const host = schematicShape(parent, "g", { "data-pair-explorer": "", role: "group", "aria-label": "Filter real resistor combinations by performance" });
-      schematicText(host, x, y + 18, "Combination performance", 18);
-      const status = pairItems.length ? `${pairView.length.toLocaleString()} / ${pairItems.length.toLocaleString()} combinations · plots fit the selection` : "Find combinations to enable performance sliders and plots.";
-      let top = y + 45;
-      const note = schematicTableText(host, x, top, status, width, 12, "#a8bece"); top += Math.max(note.lines, width < 600 ? 2 : 1) * 15 + 8;
-      if (!pairItems.length) return top + 18;
-      const basis = schematicTableText(host, x, top, pairSpec?.construction ? "Nominal power/current/Rth; full-interval target error; conservative per-part stress bounds." : "Power, current and Rth are nominal; error and stress are worst-case.", width, 11, "#a8bece"); top += basis.lines * 15 + 8;
+      schematicShape(host, "path", { d: `M${x} ${y + 12}H${x + width}`, stroke: "#54d2ff", "stroke-opacity": 0.5 });
+      const heading = schematicShape(host, "g", { "data-design-solutions-heading": "" });
+      const background = schematicShape(heading, "rect", { x, y: y + 32, width, height: 0, rx: 14, fill: "#163345" });
+      schematicText(heading, x + 18, y + 68, "Design Solutions", 28, "#eaf6ff");
+      let top = y + 95;
+      for (const [content, color] of [["Real catalog parts that meet your design specifications.", "#6ee7ac"], ["Select a solution to preview its circuit, copy the BOM, or download the design.", "#c6d7e5"]]) {
+        const line = schematicTableText(heading, x + 18, top, content, width - 36, 13, color); top += line.lines * 15 + 8;
+      }
+      const status = pairSpec ? `${pairItems.length.toLocaleString()} valid designs${pairView.length !== pairItems.length ? ` · ${pairView.length.toLocaleString()} shown` : ""} · ${pairSpec.construction ? "Bounded network search" : "Complete two-resistor search"}` : "Set the known specifications above, then Find Design Solutions.";
+      const note = schematicTableText(heading, x + 18, top, status, width - 36, 12, "#a8bece"); top += note.lines * 15 + 18;
+      background.setAttribute("height", top - y - 32);
+      schematicShape(heading, "title").textContent = pairSpec?.construction ? "The network search checks a bounded set of catalog assignments; additional valid designs may exist. Full-interval target error and conservative per-part stress bounds determine validity." : "All supported two-resistor catalog pairings within the specified search range are checked. Target error and stress include tolerance bounds.";
+      top += 24;
+      if (!pairItems.length) return top;
       let actionX = x;
       for (const input of pairFamilyToggles) {
         const key = input.dataset.pairFamily, label = `${input.checked ? "✓" : "○"} ${input.nextElementSibling.textContent}`;
@@ -3589,7 +3638,7 @@
       const sliderKeys = pairSpec?.construction ? [...PAIR_SLIDER_KEYS, "powerSpread"] : PAIR_SLIDER_KEYS;
       sliderKeys.forEach((key, index) => renderPairSvgSlider(host, key, x + (index % columns) * (cellWidth + gap), top + Math.floor(index / columns) * 96, cellWidth));
       top += Math.ceil(sliderKeys.length / columns) * 96 + 8;
-      const plotColumns = width >= 760 ? 2 : 1, plotWidth = (width - (plotColumns - 1) * 16) / plotColumns, plotHeight = 270;
+      const plotColumns = width >= 760 ? 2 : 1, plotWidth = (width - (plotColumns - 1) * 16) / plotColumns, plotHeight = 300;
       const indices = new Map(pairItems.map((pair, index) => [pair, index]));
       for (const [index, [xKey, yKey]] of [[byId("pairAxisX").value, byId("pairAxisY").value], [pairSecondaryAxes.X, pairSecondaryAxes.Y]].entries()) renderPairSvgPlot(host, x + (index % plotColumns) * (plotWidth + 16), top + Math.floor(index / plotColumns) * (plotHeight + 16), plotWidth, plotHeight, xKey, yKey, indices);
       top += Math.ceil(2 / plotColumns) * (plotHeight + 16);
@@ -3599,7 +3648,7 @@
     }
 
     function updateSchematicPairHover(pair) {
-      const label = byId("schematicPairReadoutLabel"); if (label) label.textContent = pair && pair !== pairSelected ? "Hover · click to preview" : "Selected combination";
+      const caption = byId("schematicPairErrorCaption"); if (caption) caption.textContent = pair && pair !== pairSelected ? "HOVER · WORST-CASE ERROR" : "WORST-CASE VMID ERROR";
       for (const side of ["top", "bot"]) {
         const text = byId(`schematicPair${side === "top" ? "Top" : "Bot"}Number`); if (!text) continue;
         const value = pair ? format(pair[side].resistanceOhms, "Ω") : "—", count = pair?.[side].parts?.length;
@@ -3709,6 +3758,12 @@
     }
 
     function runSchematicPairAction(action) {
+      if (action === "characteristics") {
+        schematicCharacteristicsExpanded = !schematicCharacteristicsExpanded; pairSvgLayout = null;
+        renderSchematic();
+        byId("liveSchematic").querySelector('[data-pair-action="characteristics"]')?.focus({ preventScroll: true });
+        return;
+      }
       if (action === "copy-bom") { copySchematicBom(); return; }
       if (action.startsWith("bom-use:")) { useSchematicBomPart(action); return; }
       activateSchematicPairResults();
@@ -4613,7 +4668,7 @@
     for (const id of ["dividerForm", "pairForm", "automaticDesign"]) byId(id).addEventListener("submit", () => { if (byId("calculatorDetails").open) closeCalculatorDetails(); });
     byId("pairApply").addEventListener("click", () => { if (byId("calculatorDetails").open) closeCalculatorDetails(); });
     const schematicFeedbackObserver = new MutationObserver(refreshSchematicControls);
-    for (const id of ["inputError", "pairError", "pairStatus", "pairCatalogStatus", "designStatus", "pairComparisonCopyStatus", "pairCancel", "automaticDesign", "designChoose"]) schematicFeedbackObserver.observe(byId(id), { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled"] });
+    for (const id of ["inputError", "pairError", "pairStatus", "pairCatalogStatus", "designStatus", "pairComparisonCopyStatus", "pairCancel", "pairFind", "automaticDesign", "designChoose"]) schematicFeedbackObserver.observe(byId(id), { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled"] });
     window.addEventListener("resize", () => {
       if (pairSvgGesture) finishSchematicPairGesture({ pointerId: pairSvgGesture.pointerId }, true);
       renderSchematic();

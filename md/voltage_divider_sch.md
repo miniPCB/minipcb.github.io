@@ -136,8 +136,11 @@ input; calculated arm values are read-only.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
 connections visible. The **Parts list and electrical part stress** table contains **Ref Des**,
-**Description**, **TNPW PN**, **M55342 PN**, **Pstress** and **Vstress**
-columns and one row per physical resistor. The description shows actual resistance,
+**TNPW PN**, **M55342 PN**, **Description**, **Pstress** and **Vstress**
+columns and one row per physical resistor. The copied BOM also places Description
+after both family part numbers. Table and copied-BOM stress percentages use two
+decimal places, rounding tiny values to **0.00%** without scientific notation;
+unassessed voltage stress remains a dash. The description shows actual resistance,
 tolerance and footprint; unassigned footprints read **Footprint not set**. On
 smaller screens, each reference and description sit above the part-number and
 stress cells so the table stays readable without horizontal scrolling.
@@ -258,8 +261,10 @@ follow the active Find mode or selected combination preview, clear unavailable
 values, reflow on small screens and remain in the SVG download. The current
 Markdown export includes the same operating-point table.
 
-The common **Circuit characteristics** table appears in every Find mode, beside
-the circuit on larger screens and above it on smaller screens. It identifies the
+The common **Circuit characteristics** table starts collapsed in every Find mode,
+beside the circuit on larger screens and above it on smaller screens. Click its
+heading or press Enter/Space to expand it; this preserves the calculation and
+search selection. The expanded table identifies the
 calculated quantity and lists nominal total power, input current and source
 resistance Rth. Ordinary modes show the highest nominal Pstress and Vstress
 among all physical RTOP/RBOT parts; combination previews retain their validated worst-case
@@ -285,7 +290,8 @@ search date and time in UTC. Filtering, resizing or choosing another combination
 that timestamp; recalculating the circuit or running a new search records a new
 one. Missing/invalid inputs and combination setup keep the common table while clearing
 unavailable or stale results. The **Calculator** link opens the voltage divider
-page. The table, timestamp and link remain in the downloaded SVG in every mode.
+page. The downloaded SVG follows the current expanded/collapsed view; its accessible
+description and Markdown export retain all characteristics in either state.
 
 The SVG also sets up the combination search before any results exist. Click VTOP for the
 source and its tolerance, the separate **Target** row for VMID and its allowed
@@ -293,20 +299,32 @@ error, or RL for the optional load and its tolerance. Click a resistor reference
 tolerance pill or package pill to choose a physical resistor's family, package,
 catalog tolerance and TCR. In the two-part variant these use arm defaults; network
 parts can have independent overrides. The arm heading edits shared defaults.
-The SVG's **Options** control opens the resistance range, ambient temperature,
-shared TCR, maximum stress and optional total-power limit. **Find combinations** runs the
-search directly from the diagram. All these controls use the same settings and
+The SVG's red **Unknown** and green **Known** tiles explain its circuit colors.
+Below the circuit ground symbol, **Options** opens the resistance range, ambient
+temperature, shared TCR, maximum stress and optional total-power limit.
+The larger **Find Design Solutions** button runs the search directly from the diagram.
+It is red when a search is needed, amber while searching and green when the results
+match the current specifications, including a completed search with zero matches.
+All these controls use the same settings and
 validation as the combination-search form, including when the applied circuit is invalid.
 
 The combination diagram keeps entered targets separate from candidate nominal/min/max
 results. Resistor values and nominal performance are read-only. Saving an SVG
-search edit synchronizes the combination form and searches again; it does not apply a
-candidate or change the circuit/BOM. Canceling, invalid edits and stale editors
+search edit synchronizes the combination form, clears previous results when the
+specifications change and waits for **Find Design Solutions**. Saving unchanged
+specifications retains current results. Neither action applies a candidate or
+changes the circuit/BOM. Canceling, invalid edits and stale editors
 preserve the current settings and applied circuit. A search with no matches clears
 old candidate annotations and leaves its inputs editable. Use the existing
 **Apply** action to transfer a chosen combination into the circuit and BOM.
 
-Below the circuit, the same SVG contains a **Combination performance** explorer. Six
+Below the circuit, a colored **Design Solutions** introduction separates the design
+space from the circuit. It explains that catalog parts are searched against the
+known specifications and that a chosen design can be previewed, copied as a BOM
+or downloaded. Counts distinguish the valid designs found from the currently
+filtered selection. The two-resistor search checks all supported catalog pairings
+within the specified range; network searches are labeled bounded because additional
+valid designs may exist. Six
 two-ended sliders filter total power, input current, output Rth, target error,
 Pstress and Vstress. Networks add a seventh slider for non-trim power spread.
 Power/current/Rth are nominal; error uses the full output interval. Network
@@ -322,7 +340,8 @@ different metrics intersect. Axis changes clear the old coordinate bounds while
 retaining other performance filters. Escape restores every range and family
 when no drag is active.
 
-Two native SVG scatter plots show actual part-number combinations, with both axes
+Two native SVG scatter plots titled **Valid Resistor Combinations** show actual
+part-number combinations, with both axes
 rescaled to the currently filtered combinations. The first uses the detailed chart's
 selectable axes; the second starts with Rth against Pstress. Right-click either
 axis or its tick labels on either plot to choose another metric. Clicking or
@@ -340,13 +359,13 @@ the former Axes dialog. Shared detailed-table, comparison, copying and Apply
 features retain their existing behavior. Plot Enter no longer adds hidden
 comparisons.
 
-The **Selected combination** summary uses separate colored RTOP and RBOT cards,
+The summary uses separate colored RTOP and RBOT cards without a redundant heading,
 with large equivalent resistance values and real part counts or selected MPNs.
 The accuracy card prominently shows **worst-case VMID error**, with nominal error,
 allowed error and a bar showing the share of the error budget used. Green indicates
 margin; amber identifies combinations using most of the allowed error. Hovering
 a graph point previews its summary without changing the selected design; the
-heading identifies the hover state. The cards and markers are retained in SVG
+error caption identifies the hover state. The cards and markers are retained in SVG
 downloads without live axis menus or buttons.
 
 Only Apply changes the circuit/BOM. Controls reflow on

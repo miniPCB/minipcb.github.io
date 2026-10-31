@@ -7,6 +7,14 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));},reset=async()=>{get('dividerForm').reset();await pause();};
  const setup=async mode=>{await reset();set('solveFor',mode);if(['vin','r1','r2'].includes(mode))set('targetVout','5');if(mode==='rl')set('targetVout','4');if(mode==='tolerance')set('targetError','2');};
  assert(table().querySelector(':scope > text').textContent==='Circuit characteristics'&&svg().querySelector('[data-schematic-table]').textContent.includes('Parts list and electrical part stress'),'Both tables use the requested common headings');
+ const toggle=()=>svg().querySelector('[data-pair-action="characteristics"]'),body=()=>get('schematicCharacteristicsBody');
+ assert(toggle().getAttribute('aria-expanded')==='false'&&w.getComputedStyle(body()).display==='none','Circuit characteristics starts collapsed with its measurements hidden');
+ const originalStamp=table().dataset.analyzedAt,originalMode=get('solveFor').value;
+ toggle().dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+ assert(toggle().getAttribute('aria-expanded')==='true'&&w.getComputedStyle(body()).display!=='none'&&d.activeElement===toggle()&&table().dataset.analyzedAt===originalStamp&&get('solveFor').value===originalMode,'Keyboard expansion preserves analysis, mode and focus');
+ toggle().dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+ assert(toggle().getAttribute('aria-expanded')==='false'&&w.getComputedStyle(body()).display==='none','Click collapses the technical measurements again');
+ toggle().dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
  assert(field('nominalPower').textContent==='7.2 mW'&&field('nominalCurrent').textContent==='600 µA'&&field('rth').textContent==='5 kΩ'&&field('vmidAccuracy').textContent==='±0.1%'&&!field('targetVmid'),'Find VMID shows actual operating characteristics and the nominal tolerance band without inventing a target');
  const expected={vout:'6 V',vin:'10 V',r1:'14 kΩ',r2:'7.143 kΩ',rl:'10 kΩ',tolerance:'±2% each'};
  for(const mode of Object.keys(expected)){
