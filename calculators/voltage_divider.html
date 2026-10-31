@@ -141,10 +141,11 @@
     .schematic-pill.schematic-editable:focus-visible rect { stroke: #54d2ff; stroke-width: 1.5; }
     #schematicDesignSearch, [data-pair-action="characteristics"] { cursor: pointer; }
     #schematicDesignSearch { text-decoration: none; font-weight: 600; }
-    #schematicDesignSearch:hover rect { fill-opacity: 0.75; }
+    #schematicDesignSearch:not([aria-disabled="true"]):hover rect { fill-opacity: 0.75; }
     #schematicDesignSearch:focus { outline: none; }
     #schematicDesignSearch:focus-visible rect { stroke-width: 3; }
-    #schematicDesignSearch[aria-disabled="true"] { cursor: wait; }
+    #schematicDesignSearch[aria-disabled="true"] { cursor: default; }
+    #schematicDesignSearch[data-search-state="searching"] { cursor: wait; }
     .pair-svg-action { cursor: pointer; }
     .pair-svg-action:hover rect, .pair-svg-action:focus-visible rect { fill: #2b465b; }
     .pair-svg-action:focus-visible { outline: none; }
@@ -976,17 +977,19 @@
 
     function refreshSchematicControls() {
       const searching = byId("solveFor").value === "pairs", automatic = !byId("automaticDesign").hidden;
+      const busy = !byId("pairCancel").hidden, current = !!pairSpec;
+      const searchLabel = busy ? "Finding solutions…" : current ? `${pairItems.length.toLocaleString()} Design Solutions Found` : "Find Design Solutions";
+      if (byId("pairFind").textContent !== searchLabel) byId("pairFind").textContent = searchLabel;
       const search = byId("schematicDesignSearch");
       if (search) {
-        const busy = !byId("pairCancel").hidden, current = !!pairSpec;
         const color = busy ? "#ffba52" : current ? "#6ee7ac" : "#ff8e8e";
         search.dataset.searchState = busy ? "searching" : current ? "current" : "needed";
-        search.setAttribute("aria-disabled", String(byId("pairFind").disabled));
-        search.setAttribute("aria-label", busy ? "Finding design solutions" : current ? "Find Design Solutions; results match the current specifications" : "Find Design Solutions; run search for the current specifications");
+        search.setAttribute("aria-disabled", String(busy || current || byId("pairFind").disabled));
+        search.setAttribute("aria-label", busy ? "Finding design solutions" : current ? `${searchLabel}; change a specification or design input to search again` : "Find Design Solutions; run search for the current specifications");
         search.querySelector("rect").setAttribute("fill", busy ? "#493622" : current ? "#173b31" : "#462b32");
         search.querySelector("rect").setAttribute("stroke", color);
         search.querySelector("text").setAttribute("fill", color);
-        search.querySelector("text").textContent = busy ? "Finding solutions…" : "Find Design Solutions";
+        search.querySelector("text").textContent = searchLabel;
       }
       byId("circuitChoose").hidden = !automatic;
       byId("circuitChoose").disabled = byId("designChoose").disabled;
@@ -2839,6 +2842,7 @@
       byId("pairStatus").textContent = message;
       byId("pairError").hidden = true;
       updatePairSummary();
+      refreshSchematicControls();
     }
 
     function pairFamilyKey(pair) {
@@ -3154,7 +3158,8 @@
         for (const input of byId("pairForm").querySelectorAll('[aria-invalid="true"]')) for (let parent = input.parentElement; parent && parent !== byId("pairForm"); parent = parent.parentElement) if (parent.tagName === "DETAILS") parent.open = true;
         return [];
       } finally {
-        if (generation === pairGeneration) { byId("pairFind").disabled = false; byId("pairCancel").hidden = true; }
+        if (generation === pairGeneration) { byId("pairFind").disabled = !!pairSpec; byId("pairCancel").hidden = true; }
+        refreshSchematicControls();
         refreshLeaveWarning();
       }
     }

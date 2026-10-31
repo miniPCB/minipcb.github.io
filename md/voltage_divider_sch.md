@@ -343,6 +343,9 @@ Below the ground symbol, **Find Design Solutions** runs the combination search
 directly from the diagram.
 It is red when a search is needed, amber while searching and green when the results
 match the current specifications, including a completed search with zero matches.
+After completion, it reads **# Design Solutions Found** and stays disabled until a
+search specification or design input changes. The count is the total found by the
+search; filtering, previewing or changing chart axes does not enable another search.
 All these controls use the same settings and
 validation as the combination-search form, including when the applied circuit is invalid.
 
