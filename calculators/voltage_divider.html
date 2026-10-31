@@ -1765,15 +1765,14 @@
       schematicShape(wires, "path", { d: `M260 ${start}H160V${center}H170M${170 + dimensions.width * scale} ${center}H490V${end}H260` });
     }
 
-    function schematicVoltage(parent, id, x, y, name, value, tolerance = null, anchor = "start", maxWidth = 60) {
-      const text = schematicText(parent, x, y, "", 18); text.id = id; text.setAttribute("text-anchor", anchor);
-      const lines = [[0, `${name} `, 18], [24, value, 20]];
-      if (tolerance !== null) lines.push([44, ` ±${percent(tolerance)}`, 16]);
-      for (const [offset, content, size] of lines) {
-        const line = schematicShape(text, "tspan", { x, y: y + offset, "font-size": Math.min(size, maxWidth / (content.length * 0.62)) });
-        line.textContent = content;
+    function schematicVoltageRows(parent, nominal, x, y, width, rows, compact = false) {
+      for (const [index, [label, value, field]] of rows.entries()) {
+        const rowY = y + index * (compact ? 27 : 30), content = Number.isFinite(value) ? format(value, "V") : "—";
+        schematicText(parent, x + 12, rowY, label, compact ? 14 : 16, "#a8bece");
+        const attributes = { x: x + width - 10, y: rowY, "font-size": Math.min(18, (compact ? 62 : 82) / (content.length * 0.62)), "text-anchor": "end", "data-field": field };
+        const text = index === 0 ? schematicShape(nominal, "tspan", attributes) : schematicShape(parent, "text", { ...attributes, fill: "#c6e3ff" });
+        text.textContent = content;
       }
-      return text;
     }
 
     function renderSchematicDrawing(state, roles) {
@@ -1782,14 +1781,22 @@
       const count = arm => Math.max(1, Math.ceil((state?.physical[arm].length || 0) * (typeof state?.networks[arm]?.connection === "object" ? 1.2 : 1)));
       const top = 80, mid = top + count("r1") * 110 + 44, botStart = mid + 78, bottom = botStart + count("r2") * 110 + 24;
       const wires = schematicShape(drawing, "g", { fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" });
-      const sourceY = (top + bottom) / 2;
+      const sourceY = mid + 18;
       schematicShape(wires, "path", { d: `M55 ${sourceY - 34}V${top - 24}H${state?.networks.r1?.connection === "parallel" ? 170 : 260}V${top}M55 ${sourceY + 34}V${bottom}H260M260 ${bottom}v28m-20 0h40m-32 10h24m-16 10h8` });
       schematicRole(schematicShape(wires, "circle", { cx: 55, cy: sourceY, r: 34 }), "vin", roles, "stroke");
       schematicRole(schematicShape(wires, "path", { d: `M44 ${sourceY - 12}h22m-11 -11v22m-11 14h22` }), "vin", roles, "stroke");
       const sourceInfo = schematicShape(drawing, "g", { "data-schematic-info": "source" });
-      schematicInfoBox(sourceInfo, 96, sourceY - 48, 70, roles.vin === "defined" ? 90 : 104);
-      schematicVoltage(sourceInfo, "schematicVtop", 104, sourceY - 24, "VTOP", Number.isFinite(state?.circuit.vin) ? format(state.circuit.vin, "V") : "—", state ? state.tolerances.vin : null, "start", 54);
-      if (roles.vin !== "defined") schematicRole(schematicText(sourceInfo, 104, sourceY + 44, SOLVE_ROLES[roles.vin].short, 12), "vin", roles);
+      const sourceTop = mid - 54, sourceBox = schematicInfoBox(sourceInfo, 96, sourceTop, 148, 132);
+      if (roles.vin === "solving") { sourceBox.setAttribute("fill", "#33252d"); sourceBox.setAttribute("stroke", SOLVE_ROLES.solving.color); sourceBox.setAttribute("stroke-opacity", 0.55); }
+      const sourceNominal = schematicText(sourceInfo, 108, sourceTop + 26, "", 20); sourceNominal.id = "schematicVtop";
+      schematicShape(sourceNominal, "tspan", { x: 108, y: sourceTop + 26 }).textContent = "VTOP ";
+      const sourceVoltage = state?.circuit.vin, sourceTolerance = state?.tolerances.vin, sourceSpread = Math.abs(sourceVoltage) * sourceTolerance / 100;
+      schematicVoltageRows(sourceInfo, sourceNominal, 96, sourceTop + 54, 148, [["Nominal", sourceVoltage, "vtopNominal"], ["Min", sourceVoltage - sourceSpread, "vtopMin"], ["Max", sourceVoltage + sourceSpread, "vtopMax"]], true);
+      if (state) {
+        const tolerance = ` ±${percent(sourceTolerance)}`;
+        schematicShape(sourceNominal, "tspan", { x: 234, y: sourceTop + 26, "font-size": Math.min(12, 62 / (tolerance.length * 0.62)), "text-anchor": "end" }).textContent = tolerance;
+      }
+      if (roles.vin !== "defined") schematicRole(schematicText(sourceInfo, 108, sourceTop + 125, SOLVE_ROLES[roles.vin].short, 10), "vin", roles);
       schematicText(drawing, 285, bottom + 55, "GND", 18, "#a8bece");
       for (const [arm, start, end] of [["r1", top, mid - 44], ["r2", botStart, bottom - 24]]) {
         const pairMode = byId("solveFor").value === "pairs", side = arm === "r1" ? "Top" : "Bot";
@@ -1844,7 +1851,7 @@
       for (const x of [260, 560]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor });
       schematicShape(drawing, "circle", { cx: 660, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3 });
       const pairMode = byId("solveFor").value === "pairs", readout = schematicShape(drawing, "g", { "data-field": "vmidReadout" });
-      const readoutBox = schematicInfoBox(readout, 490, mid - (pairMode ? 198 : 166), 180, pairMode ? 188 : 156);
+      const readoutTop = mid - (pairMode ? 198 : 166), readoutBox = schematicInfoBox(readout, 490, readoutTop, 180, pairMode ? 164 : 156);
       if (findVmid) { readoutBox.setAttribute("fill", "#33252d"); readoutBox.setAttribute("stroke", netColor); readoutBox.setAttribute("stroke-opacity", 0.55); }
       const nominal = schematicText(readout, 502, mid - (pairMode ? 172 : 140), "", 20); nominal.id = "schematicVmid";
       schematicShape(nominal, "tspan", { x: 502, y: mid - (pairMode ? 172 : 140) }).textContent = "VMID ";
@@ -1853,18 +1860,16 @@
         const value = byId("pairVmid").valueAsNumber, content = Number.isFinite(value) ? format(value, "V") : "—";
         const target = schematicText(readout, 660, mid - 140, content, Math.min(18, 82 / (content.length * 0.62)), SOLVE_ROLES[roles.vout].color, "vmidTarget");
         target.id = "schematicVmidTarget"; target.setAttribute("text-anchor", "end"); schematicEditable(target, "target", "VMID target and allowed error");
-        const error = byId("pairErrorPct").valueAsNumber;
-        schematicText(readout, 502, mid - 22, Number.isFinite(error) ? `±${percent(error)} allowed` : "Set error band", 12, "#a8bece");
+        const error = state?.pair?.error, allowed = byId("pairErrorPct").valueAsNumber;
+        const color = !Number.isFinite(error) ? "#a8bece" : error > allowed + 1e-9 ? "#ff8e8e" : error > allowed * 0.75 ? "#ffba52" : "#6ee7ac";
+        const errorInfo = schematicShape(drawing, "g", { "data-field": "vmidError" });
+        schematicText(errorInfo, 490, readoutTop - 66, "WORST-CASE VMID ERROR", 12, "#c6d7e5");
+        const errorText = Number.isFinite(error) ? percent(error) : "—";
+        schematicText(errorInfo, 490, readoutTop - 30, errorText, Math.min(34, 180 / (errorText.length * 0.62)), color, "vmidBounds");
+        schematicText(errorInfo, 490, readoutTop - 10, Number.isFinite(allowed) ? `Allowed ±${percent(allowed)}` : "Set error band", 12, "#a8bece");
       }
-      for (const [index, [label, value, field]] of [["Nominal", state?.result.vout, "vmidNominal"], ["Min", state?.bounds.min, "vmidMin"], ["Max", state?.bounds.max, "vmidMax"]].entries()) {
-        const y = mid - 110 + index * 30, content = value === undefined ? "—" : format(value, "V");
-        schematicText(readout, 502, y, label, 16, "#a8bece");
-        const attributes = { x: 660, y, "font-size": Math.min(18, 82 / (content.length * 0.62)), "text-anchor": "end", "data-field": field };
-        const text = index === 0 ? schematicShape(nominal, "tspan", attributes) : schematicShape(readout, "text", { ...attributes, fill: "#c6e3ff" });
-        text.textContent = content;
-      }
+      schematicVoltageRows(readout, nominal, 490, mid - 110, 180, [["Nominal", state?.result.vout, "vmidNominal"], ["Min", state?.bounds.min, "vmidMin"], ["Max", state?.bounds.max, "vmidMax"]]);
       if (roles.vout !== "defined") schematicRole(schematicText(readout, 502, mid - 22, SOLVE_ROLES[roles.vout].short, 12), "vout", roles);
-      if (state?.pair) schematicText(readout, 660, mid - 22, `Error ${percent(state.pair.error)}`, 12, "#c6e3ff", "vmidBounds").setAttribute("text-anchor", "end");
       return bottom + 80;
     }
 

@@ -112,14 +112,20 @@ to the SVG. Form reset actions restore defaults for the current circuit/search m
 Errors, search progress/results and automatic-value status remain in their
 existing dialogs and accessible status announcements, without visible paragraphs
 above the SVG. Download links sit above the drawing.
-Voltage readouts are part of the circuit drawing: VTOP and source tolerance sit
-beside the source, and VMID sits at the end of an output wire extending just
-past the RL branch. In **Find VMID**, this net and its junctions are red, with
+Voltage readouts are part of the circuit drawing: VTOP has a panel beside the
+source with the same **Nominal**, **Min** and **Max** row format as VMID. Its
+bounds use the entered source tolerance, including correctly ordered bounds for
+negative sources; the heading retains the editable source tolerance. VMID sits
+at the end of an output wire extending just past the RL branch. In **Find VMID**,
+this net and its junctions are red, with
 matching warm accents on the VMID readout and operating-point card. Other modes
 retain the blue output wire. A separate, spaced VMID readout lists **Nominal**, **Min** and
 **Max** voltages for both normal calculations and combination previews. Its minimum and
-maximum use the same entered tolerance limits as the analysis results; combination
-previews also show their target error. Invalid circuit data clears all three
+maximum use the same entered tolerance limits as the analysis results. Combination
+previews show **worst-case VMID error** in larger text above the VMID box, with the
+allowed limit below it. Green, amber and red indicate the share of the allowed
+error used; no selected solution shows a dash. These percentages are outside the
+voltage-readout box. Invalid circuit data clears all three
 values. Calculated voltages are read-only; an entered VMID target remains editable
 in inverse modes. The readouts retain their role colors and appear in the
 standalone SVG download.
