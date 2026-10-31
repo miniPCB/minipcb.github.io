@@ -157,9 +157,8 @@
     .schematic-editor::backdrop { background: rgba(3, 10, 16, 0.75); }
     .schematic-editor h3 { margin: 0; font-size: 1.1rem; }
     .circuit-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; }
-    .circuit-toolbar h2 { flex: 1 1 420px; min-width: 0; padding: 0; line-height: 1.5; }
     .circuit-toolbar .resource-links { margin: 0 0 0 auto; }
-    #schematicFeedback { margin: 0 20px 14px; overflow-wrap: anywhere; }
+    #schematicFeedback { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .calculator-details { width: min(1120px, calc(100% - 24px)); padding: 16px; }
     .calculator-details[data-view="inputs"], .calculator-details[data-view="design"] { width: min(640px, calc(100% - 24px)); }
     .details-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
@@ -379,7 +378,7 @@
     </section>
     <section id="circuitReference" class="panel circuit-reference" aria-labelledby="schematicHeading">
       <div class="circuit-toolbar">
-        <h2 id="schematicHeading">VTOP 12 V → VMID 6 V · 2 resistors · no load</h2>
+        <h2 id="schematicHeading" hidden>VTOP 12 V → VMID 6 V · 2 resistors · no load</h2>
         <button id="circuitChoose" class="btn btn-accent" type="button" aria-haspopup="dialog" aria-controls="calculatorDetails" hidden>Choose values</button>
         <button id="circuitCancelSearch" class="btn" type="button" hidden>Cancel search</button>
         <div class="resource-links">
@@ -3614,17 +3613,9 @@
       const host = schematicShape(parent, "g", { "data-pair-explorer": "", role: "group", "aria-label": "Filter real resistor combinations by performance" });
       schematicShape(host, "path", { d: `M${x} ${y + 12}H${x + width}`, stroke: "#54d2ff", "stroke-opacity": 0.5 });
       const heading = schematicShape(host, "g", { "data-design-solutions-heading": "" });
-      const background = schematicShape(heading, "rect", { x, y: y + 32, width, height: 0, rx: 14, fill: "#163345" });
+      schematicShape(heading, "rect", { x, y: y + 32, width, height: 60, rx: 14, fill: "#163345" });
       schematicText(heading, x + 18, y + 68, "Design Solutions", 28, "#eaf6ff");
-      let top = y + 95;
-      for (const [content, color] of [["Real catalog parts that meet your design specifications.", "#6ee7ac"], ["Select a solution to preview its circuit, copy the BOM, or download the design.", "#c6d7e5"]]) {
-        const line = schematicTableText(heading, x + 18, top, content, width - 36, 13, color); top += line.lines * 15 + 8;
-      }
-      const status = pairSpec ? `${pairItems.length.toLocaleString()} valid designs${pairView.length !== pairItems.length ? ` · ${pairView.length.toLocaleString()} shown` : ""} · ${pairSpec.construction ? "Bounded network search" : "Complete two-resistor search"}` : "Set the known specifications above, then Find Design Solutions.";
-      const note = schematicTableText(heading, x + 18, top, status, width - 36, 12, "#a8bece"); top += note.lines * 15 + 18;
-      background.setAttribute("height", top - y - 32);
-      schematicShape(heading, "title").textContent = pairSpec?.construction ? "The network search checks a bounded set of catalog assignments; additional valid designs may exist. Full-interval target error and conservative per-part stress bounds determine validity." : "All supported two-resistor catalog pairings within the specified search range are checked. Target error and stress include tolerance bounds.";
-      top += 24;
+      let top = y + 116;
       if (!pairItems.length) return top;
       let actionX = x;
       for (const input of pairFamilyToggles) {

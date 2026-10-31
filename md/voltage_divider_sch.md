@@ -99,19 +99,19 @@ The calculation choices appear above the live circuit SVG. Each choice lists
 and the open/finite RL value as you edit.
 The main page ends at the circuit region: the former lower forms, result panels,
 instructions and footer no longer appear beneath the SVG. Click diagram inputs
-and pills for their focused editors. The header summarizes the displayed source,
-output, physical resistor count and load. During search setup it shows the target,
-allowed VMID error and per-resistor resistance range; selected combinations are
-labeled as previews. The general Options, Details & tables and Reset toolbar
-buttons are removed. Search options and graph-axis choices are integrated into
+and pills for their focused editors. The toolbar above the SVG shows only its
+action/download buttons in every mode. The dynamic circuit summary remains the
+region's accessible label, without a visible heading. The general Options,
+Details & tables and Reset toolbar buttons are removed. Search options and graph-axis choices are integrated into
 the SVG, with download links above it.
 **Choose values** appears when automatic resistors are present and
 opens their catalog-selection settings. These dialogs reuse the original state
 and controls; they do not create a second circuit or change the analysis rules.
 Done or Escape returns to the diagram, and calculation/search submission returns
 to the SVG. Form reset actions restore defaults for the current circuit/search mode.
-Errors, search progress/results and automatic-value status remain visible above
-the SVG. Reference/download links also sit above the drawing.
+Errors, search progress/results and automatic-value status remain in their
+existing dialogs and accessible status announcements, without visible paragraphs
+above the SVG. Download links sit above the drawing.
 Voltage readouts are part of the circuit drawing: VTOP and source tolerance sit
 beside the source, and VMID sits at the end of a blue output wire extending just
 past the RL branch. A separate, spaced VMID readout lists **Nominal**, **Min** and
@@ -318,14 +318,10 @@ preserve the current settings and applied circuit. A search with no matches clea
 old candidate annotations and leaves its inputs editable. Use the existing
 **Apply** action to transfer a chosen combination into the circuit and BOM.
 
-Below the circuit, a colored **Design Solutions** introduction separates the design
-space from the circuit. It explains that catalog parts are searched against the
-known specifications and that a chosen design can be previewed, copied as a BOM
-or downloaded. Counts distinguish the valid designs found from the currently
-filtered selection. The two-resistor search checks all supported catalog pairings
-within the specified range; network searches are labeled bounded because additional
-valid designs may exist. Six
-two-ended sliders filter total power, input current, output Rth, target error,
+Below the circuit, a compact colored **Design Solutions** heading separates the
+design space from the circuit. It has no explanatory sentences or result counts;
+detailed search counts and bounded-network limits remain in the results dialog.
+Six two-ended sliders filter total power, input current, output Rth, target error,
 Pstress and Vstress. Networks add a seventh slider for non-trim power spread.
 Power/current/Rth are nominal; error uses the full output interval. Network
 stress uses conservative per-part interval bounds; the two-part variant retains
