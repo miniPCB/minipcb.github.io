@@ -169,6 +169,12 @@
     .schematic-editor { width: min(440px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; padding: 22px; border: 0; border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
     .schematic-editor::backdrop { background: rgba(3, 10, 16, 0.75); }
     .schematic-editor h3 { margin: 0; font-size: 1.1rem; }
+    .schematic-inline { display: flex; gap: 3px; align-items: center; color: #c6e3ff; font: 14px ui-monospace, monospace; }
+    .schematic-inline :is(select, input, button) { box-sizing: border-box; height: 28px; min-height: 0; margin: 0; padding: 2px 5px; border: 1px solid #75d5ff; border-radius: 6px; background: #1e3547; color: inherit; font: inherit; }
+    .schematic-inline select { width: 100%; }
+    .schematic-inline input { width: 0; flex: 1; }
+    .schematic-inline button { padding: 2px 7px; cursor: pointer; }
+    .schematic-inline-error { margin-top: 4px; padding: 6px; border-radius: 5px; background: #502b35; color: #ffd1d1; font: 12px system-ui, sans-serif; }
     .circuit-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; }
     .circuit-toolbar .resource-links { margin: 0 0 0 auto; }
     #schematicFeedback { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -822,7 +828,7 @@
               <p id="parts2Preview" class="note" role="status"></p>
               <div class="actions parts-table-actions"><button id="parts2Apply" class="btn btn-accent" type="button" disabled>Apply selected part</button></div>
               <div class="parts-table-title"><h3>Circuit BOM</h3><button id="parts2Copy" class="btn" type="button" disabled>Copy BOM</button></div>
-              <p id="parts2BomHelp" class="hint">One row per physical resistor. Choose optional performance columns or filter by nominal stress and power. Manual footprints remain Not set until a catalog part is applied.</p>
+              <p id="parts2BomHelp" class="hint">One row per physical resistor. Choose optional performance columns or filter by nominal stress and power. A selected footprint stays known when a calculated value has no exact catalog part number.</p>
               <div id="parts2BomControls" class="bom-view-controls"></div>
               <p id="parts2BomStatus" class="hint" role="status"></p>
               <div class="table-wrap" tabindex="0" role="region" aria-label="Circuit resistor BOM, scroll horizontally on small screens">
@@ -953,9 +959,9 @@
         || JSON.stringify(environmentSettings) !== initialEnvironmentWork
         || environmentEditContext && JSON.stringify(workFormValues(byId("environmentForm"))) !== environmentEditContext.draft
         || workFormValues(byId("pairForm")).some(([id, ...value]) => JSON.stringify(value) !== initialPairWork.get(id))
-        || appliedCatalogParts.size > 0 || catalogDesignVmid !== null || pairSpec !== null || pairComparisons.size > 0 || pairConstruction !== null
+        || appliedCatalogParts.size > 0 || footprintPreferences.size > 0 || catalogDesignVmid !== null || pairSpec !== null || pairComparisons.size > 0 || pairConstruction !== null
         || !byId("automaticDesign").hidden || ARMS.some(arm => byId(`${arm}Parts`).dataset.topology)
-        || (byId("schematicEditor").open && JSON.stringify(workFormValues(byId("schematicEditForm"))) !== schematicDraftWork);
+        || ((byId("schematicEditor").open || schematicEditContext?.inline) && JSON.stringify(workFormValues(byId("schematicEditForm"))) !== schematicDraftWork);
     }
 
     function confirmCircuitLeave(event) {
@@ -1822,11 +1828,13 @@
       return schematicShape(parent, "rect", { x, y, width, height, rx: 10, fill: "#142535", stroke: "none", "pointer-events": "none", "data-schematic-info-box": "" });
     }
 
-    function schematicPill(parent, x, y, content, color, maxWidth, field) {
-      const size = Math.min(14, (maxWidth - 18) / (content.length * 0.62)), width = Math.min(maxWidth, Math.ceil(content.length * size * 0.62 + 18));
+    function schematicPill(parent, x, y, content, color, maxWidth, field, dropdown = false) {
+      const padding = dropdown ? 30 : 18;
+      const size = Math.min(14, (maxWidth - padding) / (content.length * 0.62)), width = Math.min(maxWidth, Math.ceil(content.length * size * 0.62 + padding));
       const pill = schematicShape(parent, "g", { class: "schematic-pill" });
-      schematicShape(pill, "rect", { x, y, width, height: 26, rx: 13, fill: "#1e3547", stroke: "none" });
+      schematicShape(pill, "rect", { x, y, width, height: 26, rx: 13, fill: "#1e3547", stroke: dropdown ? "#6a8ca5" : "none" });
       schematicText(pill, x + 9, y + 18, content, size, color, field);
+      if (dropdown) schematicShape(pill, "path", { d: `M${x + width - 16} ${y + 11}l4 4 4-4`, fill: "none", stroke: color, "stroke-width": 1.5, "pointer-events": "none" });
       return { pill, width };
     }
 
@@ -2017,9 +2025,9 @@
         const value = schematicRole(schematicText(info, x + 68, y + 72, content, 18, "#eaf6ff", "resistance"), arm, roles);
         if (state) schematicEditable(value, part.id, `${part.name} resistance`);
         const tolerance = `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`;
-        const tol = schematicPill(info, x + 68, y + 90, tolerance, "#c6d7e5", 80, "tolerance");
-        const footprint = part.catalog?.case || (pairMode ? part.settings?.package || byId(`pairPackage${side}`).value : null) || "Not set";
-        const size = schematicPill(info, x + 76 + tol.width, y + 90, footprint, SOLVE_ROLES[part.catalog || pairMode && footprint !== "Not set" ? "defined" : "undefined"].color, 88, "footprint");
+        const tol = schematicPill(info, x + 68, y + 90, tolerance, "#c6d7e5", 80, "tolerance", !schematicEditLocks(part.id).tolerance);
+        const footprint = part.catalog?.case || (pairMode ? part.settings?.package || byId(`pairPackage${side}`).value : null) || footprintPreferences.get(part.id) || "Not set";
+        const size = schematicPill(info, x + 76 + tol.width, y + 90, footprint, SOLVE_ROLES[footprint !== "Not set" ? "defined" : "undefined"].color, 88, "footprint", true);
         if (state) { schematicEditable(tol.pill, part.id, `${part.name} tolerance ${tolerance}`, "tolerance"); schematicEditable(size.pill, part.id, `${part.name} footprint`, "power"); }
         return;
       }
@@ -2272,7 +2280,7 @@
         const row = schematicShape(table, "g", { transform: `translate(0 ${top})`, role: "row", "aria-rowindex": index + 2, "data-schematic-part": part.id });
         const background = schematicInfoBox(row, 0, 0, width, 0);
         const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
-        const description = `${part.name}; ${format(part.resistance, "Ω")}; Tolerance ±${percent(part.tolerance)}; Footprint ${part.catalog?.case || "Not set"}; ${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`;
+        const description = `${part.name}; ${format(part.resistance, "Ω")}; Tolerance ±${percent(part.tolerance)}; Footprint ${resistorFootprint(part) || "Not set"}; ${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`;
         schematicShape(row, "title").textContent = description;
         const refCell = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
         const reference = tableText(refCell, 4, baseline, part.name, refWidth - 8, fontSize, SOLVE_ROLES[roles[arm]].color), ref = reference.text;
@@ -2281,7 +2289,7 @@
         alternativesByPart.set(part.id, candidates.filter(candidate => candidate.mpn !== part.mpn));
         const familyNumbers = { tnpw: candidates.find(item => item.familyId.includes("tnpw"))?.mpn, mil: candidates.find(item => item.familyId.includes("m55342"))?.mpn };
         const cells = bomPartCells(part, part.catalog, familyNumbers);
-        const actualDescription = `${cells.value} · ${cells.tolerance} · ${part.catalog?.case || "Footprint not set"}`;
+        const actualDescription = `${cells.value} · ${cells.tolerance} · ${resistorFootprint(part) || "Footprint not set"}`;
         const descriptionCell = schematicShape(row, "g", { role: "cell", "aria-colindex": 4 });
         const described = tableText(descriptionCell, offsets[3] + 4, baseline, actualDescription, narrow ? width - refWidth - 8 : descriptionWidth - 8, fontSize, "#c6e3ff", "description");
         const recommendationText = family => { const match = matches.find(item => item.family === family && item.kind === "nearby"), delta = match ? (match.candidate.resistanceOhms / part.resistance - 1) * 100 : 0; return match ? `${match.candidate.mpn}; ${format(match.candidate.resistanceOhms, "Ω")}; ±${percent(match.candidate.tolerancePct)}; ${match.candidate.case}; ΔR ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "—"; };
@@ -2480,7 +2488,7 @@
       text(64, y += 32, "Environmental intervals are calculated in the calculator; .op remains nominal. Re-export after changing the design.");
       for (const edge of edges) {
         const p = edge.part;
-        text(64, y += 32, `${edge.name} (${p.name}): ${p.resistance} ohm; +/-${p.tolerance}%; ${p.catalog?.case || "footprint not set"}; ${p.rating} W allowed; Vmax ${p.vmax ?? "not specified"}; Pstress ${percent(p.stress.p)}; Vstress ${p.stress.v === null ? "not assessed" : percent(p.stress.v)}`);
+        text(64, y += 32, `${edge.name} (${p.name}): ${p.resistance} ohm; +/-${p.tolerance}%; ${resistorFootprint(p) || "footprint not set"}; ${p.rating} W allowed; Vmax ${p.vmax ?? "not specified"}; Pstress ${percent(p.stress.p)}; Vstress ${p.stress.v === null ? "not assessed" : percent(p.stress.v)}`);
         if (p.mpn) text(64, y += 32, `${edge.name} selected MPN: ${p.mpn}`);
         if (p.environment) text(64, y += 32, `${edge.name} modeled resistance: ${p.environment.min} to ${p.environment.max} ohm (initial tolerance and characterized drift)`);
       }
@@ -2588,13 +2596,13 @@
       const roleDescription = `${solveLabel}. Yellow means missing or invalid input; green means known; red identifies the value to find. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
       const voltageDescription = state && !state.pairSetup && !state.pending ? `Nominal VMID ${format(state.result.vout, "V")}; minimum ${format(state.bounds.min, "V")}; maximum ${format(state.bounds.max, "V")}.${state.pair ? ` Target error ${percent(state.pair.error)}.` : ""} ${environmentScope(state.environment)}. ` : "";
       const searchDescription = mode === "pairs" ? `Search target VMID ${byId("pairVmid").value || "not set"} V; allowed error ±${byId("pairErrorPct").value || "not set"}%. Edit the source, target, load, resistor constraints or Options; Find combinations runs the search. Found resistance and performance values are read-only. Circuit inputs and BOM change only on Apply. ` : "";
-      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor combination preview; circuit inputs and BOM change only on Apply. " : ""}VTOP ${byId("schematicVtop").textContent}. VMID ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${part.catalog?.case || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.") + " " + characteristicsDescription;
+      byId("liveSchematicDesc").textContent = roleDescription + " " + searchDescription + voltageDescription + (state ? `${pairPreviewState ? "Selected resistor combination preview; circuit inputs and BOM change only on Apply. " : ""}VTOP ${byId("schematicVtop").textContent}. VMID ${byId("schematicVmid").textContent}. Each symbol is a physical resistor; RTOP and RBOT labels show equivalent arm values. ${descriptions.join(" ")} Footprints: ${ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name} ${resistorFootprint(part) || "Not set"}`)).join(", ")}. Selected-part stresses use nominal circuit values.` : "Calculation unavailable. Enter valid circuit data to update the schematic.") + " " + characteristicsDescription;
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       decorateSchematicEditors(svg);
       // The download is a self-contained snapshot of the live SVG.
       const snapshot = svg.cloneNode(true); snapshot.setAttribute("role", "img");
-      for (const node of snapshot.querySelectorAll("[data-resistor-hit]")) node.remove();
+      for (const node of snapshot.querySelectorAll("[data-resistor-hit], [data-inline-editor]")) node.remove();
       for (const node of snapshot.querySelectorAll("[data-schematic-symbol]")) for (const attribute of ["tabindex", "role", "aria-label"]) node.removeAttribute(attribute);
       for (const node of snapshot.querySelectorAll("[data-schematic-controls]")) node.remove();
       for (const node of snapshot.querySelectorAll("[data-edit-surface], [data-axis-edit-surface]")) node.remove();
@@ -2621,7 +2629,7 @@
       const familyId = byId("schematicEditFamily").value, chosen = context.part.catalog;
       if (!familyId) {
         const sizes = [...new Set(resistorCatalog?.families.flatMap(family => family.packages.map(pkg => pkg.case)) || [])].sort();
-        catalogOptions("schematicEditFootprint", [{ value: "", label: "Not set (manual)" }, ...sizes.map(size => ({ value: size, label: size }))], "");
+        catalogOptions("schematicEditFootprint", [{ value: "", label: "Not set (manual)" }, ...sizes.map(size => ({ value: size, label: size }))], reset ? footprintPreferences.get(context.part.id) || "" : undefined);
         byId("schematicEditFootprint").disabled = !sizes.length;
         for (const [id, label] of [["Tcr", "Unspecified (manual)"], ["Reliability", "Not specified (manual)"]]) {
           catalogOptions(`schematicEdit${id}`, [{ value: "", label }], ""); byId(`schematicEdit${id}`).disabled = true;
@@ -2643,6 +2651,81 @@
         byId("schematicEditReliability").disabled = !family.failureRates?.length;
       }
       updateSchematicCatalogPreview();
+    }
+
+    function inlineEditorField(context = schematicEditContext) {
+      if (context.pairSearch) return Object.entries(context.fields).find(([id]) => id.startsWith(context.focus === "power" ? "pairPackage" : "pairTol"))?.[1];
+      return byId(context.focus === "power" ? "schematicEditFootprint" : context.focus === "tolerance" ? "schematicEditPartTolerance" : "schematicEditValue");
+    }
+
+    function commonResistanceValues(context) {
+      const current = context.part.resistance, decade = 10 ** Math.floor(Math.log10(current));
+      return [0.1, 0.22, 0.47, 0.499, 1, 2, 2.2, 4.7, 4.99, 10].map(factor => Number((factor * decade).toPrecision(12))).filter(value => Number.isFinite(value) && value > 0).filter(value => {
+        try { schematicCatalogCandidate(value); return true; } catch (_) { return false; }
+      }).sort((a, b) => Math.abs(Math.log(a / current)) - Math.abs(Math.log(b / current))).slice(0, 6).sort((a, b) => a - b);
+    }
+
+    function expandInlinePartEditor() {
+      const context = schematicEditContext; if (!context?.inline) return;
+      context.inline.object.remove(); delete context.inline;
+      byId("schematicEditor").showModal(); inlineEditorField(context)?.focus();
+    }
+
+    function showInlinePartError(message) {
+      const inline = schematicEditContext?.inline; if (!inline) return;
+      inline.error.textContent = message; inline.error.hidden = false;
+      inline.object.setAttribute("width", Math.max(inline.width, 240)); inline.object.setAttribute("height", 110);
+      inline.input.setAttribute("aria-invalid", "true"); inline.input.focus();
+    }
+
+    function saveInlinePartEditor() {
+      if (byId("schematicEditSave").disabled) { showInlinePartError(byId("schematicEditPartStatus").textContent); return; }
+      saveSchematicEditor({ preventDefault() {} });
+    }
+
+    function openInlinePartEditor(node) {
+      const context = schematicEditContext, field = inlineEditorField(context), box = node.getBBox();
+      const width = context.focus === "value" ? 174 : Math.max(40, box.width), object = schematicShape(node.parentNode, "foreignObject", { x: box.x, y: box.y, width, height: 32, "data-inline-editor": "" });
+      const root = document.createElement("div"), row = document.createElement("div"), error = document.createElement("div"), select = document.createElement("select");
+      root.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"); row.className = "schematic-inline"; row.style.width = `${width}px`;
+      row.style.color = node.getAttribute("fill") || node.querySelector("text")?.getAttribute("fill") || "#c6e3ff";
+      error.className = "schematic-inline-error"; error.setAttribute("role", "alert"); error.hidden = true;
+      const name = context.part?.name || (Object.keys(context.fields).some(id => id.endsWith("Top")) ? "RTOP" : "RBOT");
+      select.setAttribute("aria-label", `${name} ${context.focus === "power" ? "footprint" : context.focus === "tolerance" ? "tolerance" : "resistance"}`);
+      if (context.focus === "value") {
+        const values = [...new Set([context.part.resistance, ...commonResistanceValues(context)])].sort((a, b) => a - b);
+        for (const value of values) select.add(new Option(format(value, "Ω"), String(value)));
+        select.value = String(context.part.resistance); select.add(new Option("Custom value…", "custom"));
+      } else {
+        for (const option of field.options) select.add(option.cloneNode(true));
+        select.value = field.value;
+      }
+      select.add(new Option("Part options…", "options")); row.append(select); root.append(row, error); object.append(root);
+      context.inline = { object, input: select, error, width };
+      const stop = event => event.stopPropagation();
+      for (const type of ["click", "pointerdown", "contextmenu"]) object.addEventListener(type, stop);
+      object.addEventListener("keydown", event => {
+        event.stopPropagation();
+        if (event.key === "Escape") { event.preventDefault(); closeSchematicEditor(); }
+        else if (event.key === "Enter" && context.inline?.input.tagName === "INPUT") { event.preventDefault(); saveInlinePartEditor(); }
+      });
+      select.addEventListener("change", () => {
+        if (select.value === "options") { expandInlinePartEditor(); return; }
+        if (select.value === "custom") {
+          const input = document.createElement("input"), unit = document.createElement("span"), apply = document.createElement("button"), scale = Number(byId("schematicEditUnit").value);
+          input.type = "number"; input.step = "any"; input.min = "0"; input.value = context.part.resistance / scale; input.setAttribute("aria-label", `${name} custom resistance`); input.setAttribute("enterkeyhint", "done");
+          unit.textContent = scale === 1e6 ? "MΩ" : scale === 1000 ? "kΩ" : "Ω";
+          apply.type = "button"; apply.textContent = "✓"; apply.setAttribute("aria-label", "Apply custom resistance"); apply.addEventListener("click", saveInlinePartEditor);
+          row.replaceChildren(input, unit, apply); context.inline.input = input;
+          input.addEventListener("input", () => { field.value = input.value; field.dispatchEvent(new Event("input", { bubbles: true })); refreshLeaveWarning(); });
+          input.focus(); input.select(); return;
+        }
+        field.value = context.focus === "value" ? Number(select.value) / Number(byId("schematicEditUnit").value) : select.value;
+        field.dispatchEvent(new Event(context.focus === "value" ? "input" : "change", { bubbles: true })); saveInlinePartEditor();
+      });
+      object.addEventListener("focusout", () => setTimeout(() => { if (schematicEditContext === context && context.inline && !object.contains(document.activeElement)) closeSchematicEditor(false); }, 0));
+      select.focus(); select.scrollIntoView({ block: "nearest", inline: "nearest" });
+      try { select.showPicker?.(); } catch (_) { /* Native selection remains available without picker support or user activation. */ }
     }
 
     function changeSchematicFootprint() {
@@ -2707,7 +2790,7 @@
       });
     }
 
-    function openPairSchematicEditor(key, focus) {
+    function openPairSchematicEditor(key, focus, inlineNode = null) {
       if (key === "search-run") { findPairsFromSchematic({ key, focus }); return; }
       const armKey = key.startsWith("arm-") ? key.slice(4) : key;
       const partArm = byId("pairConstructionMode").value === "configured" && ARMS.find(arm => pairConstruction?.[arm].parts.some(part => part.id === key)), part = partArm && pairConstruction[partArm].parts.find(part => part.id === key);
@@ -2722,25 +2805,28 @@
         input.id = `schematicPair_${id}`; input.value = original.value; input.removeAttribute("aria-invalid"); input.removeAttribute("data-solve-state");
         if (part) input.value = part.settings[{ [`pairFamily${side}`]: "family", [`pairPackage${side}`]: "package", [`pairTol${side}`]: "tolerancePct", pairTcr: "tcrPpm" }[id]] ?? original.value;
         label.htmlFor = input.id; label.textContent = original.labels[0].textContent;
-        field.className = "field"; field.append(label, input); byId("schematicPairFields").append(field); fields[id] = input;
+        field.className = "field"; if (id.startsWith("pairPackage")) field.dataset.footprintField = ""; if (id.startsWith("pairTol")) field.dataset.toleranceField = "";
+        field.append(label, input); byId("schematicPairFields").append(field); fields[id] = input;
       }
       schematicEditContext = { pairSearch: true, pairPartId: part?.id, pairPartArm: partArm, mode: "pairs", key, focus, fields, fingerprint: pairFormFingerprint() };
       byId("schematicEditHeading").textContent = `Edit ${part ? part.name + " catalog limits" : name}`;
       byId("schematicEditHelp").textContent = (part ? "These limits apply to this physical resistor." : "These settings define the design search. The shared TCR applies unless a resistor has an override.") + " Save your specifications, then use Find Design Solutions below the circuit. Changed specifications clear the previous results.";
       byId("schematicEditSave").textContent = "Save specifications"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
-      byId("schematicEditor").showModal();
       schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
+      if (inlineNode && inlineEditorField()) { openInlinePartEditor(inlineNode); return; }
+      byId("schematicEditor").showModal();
       const toleranceId = { source: "pairSourceTol", target: "pairErrorPct", load: "pairLoadTol" }[key] || `pairTol${side}`;
       const selected = fields[focus === "tolerance" ? toleranceId : focus === "power" ? `pairPackage${side}` : ids[0]] || fields[ids[0]];
       selected.focus(); if (selected.tagName === "INPUT") selected.select();
     }
 
-    function openSchematicEditor(node) {
+    function openSchematicEditor(node, inline = false) {
       if (!node.hasAttribute("data-schematic-edit") || node.getAttribute("aria-disabled") === "true" || byId("schematicEditor").open) return;
+      if (schematicEditContext?.inline) closeSchematicEditor(false);
       const key = node.dataset.schematicEdit, focus = node.dataset.editFocus, locks = schematicEditLocks(key);
       if (key.startsWith("environment-")) { openEnvironmentEditor(); return; }
       if (focus === "value" && locks.value || focus === "tolerance" && locks.tolerance) return;
-      if (byId("solveFor").value === "pairs") { openPairSchematicEditor(key, focus); return; }
+      if (byId("solveFor").value === "pairs") { openPairSchematicEditor(key, focus, inline && ["power", "tolerance"].includes(focus) ? node : null); return; }
       const state = pairPreviewState || schematicState;
       if (!state) {
         // Pending constructions still expose their editable work-form inputs.
@@ -2798,8 +2884,9 @@
       byId("schematicEditSave").textContent = "Save changes";
       byId("schematicEditError").hidden = true;
       for (const input of byId("schematicEditForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
-      byId("schematicEditor").showModal();
       schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
+      if (inline && kind === "part" && ["power", "tolerance", "value"].includes(focus)) { openInlinePartEditor(node); return; }
+      byId("schematicEditor").showModal();
       const field = { tolerance: kind === "part" ? "PartTolerance" : "Tolerance", power: byId("schematicEditFootprint").disabled ? byId("schematicEditFamily").disabled ? "PartTolerance" : "Family" : "Footprint", connection: "Connection" }[focus] || "Value";
       byId(`schematicEdit${field}`).focus();
       if (byId(`schematicEdit${field}`).tagName === "INPUT") byId(`schematicEdit${field}`).select();
@@ -2810,10 +2897,12 @@
       target?.focus({ preventScroll: true });
     }
 
-    function closeSchematicEditor() {
+    function closeSchematicEditor(restoreFocus = true) {
       const context = schematicEditContext;
+      context?.inline?.object.remove();
       byId("schematicEditor").close(); schematicEditContext = null;
-      focusSchematicEditorTarget(context);
+      if (restoreFocus) focusSchematicEditorTarget(context);
+      refreshLeaveWarning();
     }
 
     function schematicEditDraft(context) {
@@ -2914,6 +3003,9 @@
           if (byId(`${context.part.id}Auto`)?.checked) { byId(`${context.part.id}Auto`).checked = false; automaticChoices.delete(context.part.id); }
           if (draft.assignment) appliedCatalogParts.set(context.part.id, { ...draft.assignment });
           else appliedCatalogParts.delete(context.part.id);
+          const footprint = draft.assignment?.case || (byId("schematicEditFamily").value ? resistorFootprint(context.part) : byId("schematicEditFootprint").value);
+          if (footprint) footprintPreferences.set(context.part.id, footprint);
+          else footprintPreferences.delete(context.part.id);
         }
         if (context.kind === "target") { byId("targetVout").value = draft.target; byId("targetError").value = draft.allowedErrorPct; }
         designGeneration++;
@@ -2921,13 +3013,15 @@
         catalogDesignVmid = null; update(); selectResultTab("overviewTab"); closeSchematicEditor();
       } catch (error) {
         byId("schematicEditError").textContent = error.message; byId("schematicEditError").hidden = false;
-        (byId("schematicEditForm").querySelector('[aria-invalid="true"]') || (context.pairSearch ? Object.values(context.fields)[0] : byId("schematicEditValue"))).focus();
+        if (context.inline) showInlinePartError(error.message);
+        else (byId("schematicEditForm").querySelector('[aria-invalid="true"]') || (context.pairSearch ? Object.values(context.fields)[0] : byId("schematicEditValue"))).focus();
       }
     }
 
     let resistorCatalog = null;
     let catalogDesignVmid = null;
     const appliedCatalogParts = new Map();
+    const footprintPreferences = new Map();
     const parts2Families = [{ key: "tnpw", id: "vishay-tnpw-e3", label: "TNPW" }, { key: "mil", id: "vishay-eh-m55342", label: "M55342 / D55342" }];
     let parts2Values = [], parts2BomData = [], parts2BomEntries = [], parts2BomRevision = 0, parts2Selection = null, parts2Target = null;
     let pairGeneration = 0, pairItems = [], pairView = [], pairSpec = null, pairSelected = null, pairPage = 0, pairPoints = [];
@@ -3017,8 +3111,13 @@
       refreshLeaveWarning();
     }
 
+    function resistorFootprint(part) {
+      return part.catalog?.case || footprintPreferences.get(part.id) || null;
+    }
+
     function catalogAssignment(part) {
       const chosen = appliedCatalogParts.get(part.id);
+      if (chosen) footprintPreferences.set(part.id, chosen.case);
       if (chosen && catalogSame(part.resistance, chosen.resistanceOhms) && catalogSame(part.tolerance, chosen.tolerancePct) && catalogSame(part.rating, chosen.powerW) && catalogSame(part.vmax, chosen.workingVoltageV)) return chosen;
       appliedCatalogParts.delete(part.id);
       return null;
@@ -3535,7 +3634,7 @@
     }
 
     function bomPartCells(part, chosen = part.catalog, alternatives = {}) {
-      return { reference: part.name, qty: "1", value: format(part.resistance, "Ω"), tolerance: `±${percent(part.tolerance)}`, footprint: chosen?.case || "Not set", mpn: chosen?.mpn || "Unassigned",
+      return { reference: part.name, qty: "1", value: format(part.resistance, "Ω"), tolerance: `±${percent(part.tolerance)}`, footprint: chosen?.case || resistorFootprint(part) || "Not set", mpn: chosen?.mpn || "Unassigned",
         allowed: format(part.rating, "W"), vmax: part.vmax === null ? "Not specified" : format(part.vmax, "V"), tcr: chosen ? `±${chosen.tcrPpm}` : "Not set", reliability: chosen ? chosen.failureRate || "N/A" : "Not set", conditions: chosen ? `${chosen.temperatureC} °C · ${chosen.mode}` : "Manual",
         voltage: format(part.voltage, "V"), current: format(Math.abs(part.current), "A"), power: format(part.power, "W"), pstress: percent(part.stress.p), vstress: percent(part.stress.v), tnpw: alternatives.tnpw || "—", mil: alternatives.mil || "—" };
     }
@@ -3702,7 +3801,7 @@
         }
         try {
           const family = ResistorParts.family(resistorCatalog, entry.id);
-          const size = part.catalog?.case || byId("parts2Package").value;
+          const size = resistorFootprint(part) || byId("parts2Package").value;
           const options = parts2Options(family, size, part.catalog?.temperatureC ?? byId("parts2Temperature").valueAsNumber, part.catalog?.tcrPpm ?? Number(byId("parts2Tcr").value));
           if (!options) continue;
           const tolerances = [...family.toleranceCodes.filter(item => item.pct <= part.tolerance).sort((a, b) => b.pct - a.pct), ...family.toleranceCodes.filter(item => item.pct > part.tolerance).sort((a, b) => a.pct - b.pct)];
@@ -4337,7 +4436,7 @@
       parts2BomEntries = [];
       for (const part of parts) {
         const chosen = catalogAssignment(part);
-        const size = chosen?.case || byId("parts2Package").value;
+        const size = resistorFootprint(part) || byId("parts2Package").value;
         const temperature = chosen?.temperatureC ?? byId("parts2Temperature").valueAsNumber;
         const tcr = chosen?.tcrPpm ?? Number(byId("parts2Tcr").value);
         const matches = {};
@@ -4515,6 +4614,7 @@
       const parts = ARMS.flatMap(arm => schematicState.physical[arm]);
       const ids = parts.map(part => part.id);
       for (const id of appliedCatalogParts.keys()) if (!ids.includes(id)) appliedCatalogParts.delete(id);
+      for (const id of footprintPreferences.keys()) if (!ids.includes(id)) footprintPreferences.delete(id);
       const select = byId("catalogPart");
       if ([...select.options].map(option => option.value).join(",") !== ids.join(",")) catalogOptions("catalogPart", parts.map(part => ({ value: part.id, label: `${part.name} · ${format(part.resistance, "Ω")}` })));
       else for (const [index, part] of parts.entries()) select.options[index].textContent = `${part.name} · ${format(part.resistance, "Ω")}`;
@@ -4920,7 +5020,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     byId("liveSchematic").addEventListener("click", event => {
-      const node = event.target.closest("[data-schematic-edit]") || schematicEditSurfaces.get(event.target); if (node) openSchematicEditor(node);
+      const node = event.target.closest("[data-schematic-edit]") || schematicEditSurfaces.get(event.target); if (node) openSchematicEditor(node, true);
     });
     byId("liveSchematic").addEventListener("contextmenu", openResistorMenu);
     byId("liveSchematic").addEventListener("keydown", event => { if (event.key === "ContextMenu" || event.key === "F10" && event.shiftKey) openResistorMenu(event); });
@@ -4948,7 +5048,7 @@
     byId("liveSchematic").addEventListener("keydown", event => {
       if (!["Enter", " "].includes(event.key)) return;
       const node = event.target.closest("[data-schematic-edit]"); if (!node) return;
-      event.preventDefault(); openSchematicEditor(node);
+      event.preventDefault(); openSchematicEditor(node, true);
     });
     byId("liveSchematic").addEventListener("pointerdown", beginSchematicPairGesture);
     byId("liveSchematic").addEventListener("pointermove", event => {
@@ -5015,6 +5115,7 @@
     // The reset event precedes the browser restoring each control's default value.
     form.addEventListener("reset", () => setTimeout(() => {
       appliedCatalogParts.clear();
+      footprintPreferences.clear();
       automaticChoices.clear(); designGeneration++; closeResistorMenu();
       catalogDesignVmid = null;
       parts2Selection = null;

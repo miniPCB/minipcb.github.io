@@ -153,10 +153,11 @@ still vertical. Nested networks use the same layout without rotating or squeezin
 their symbols. A finite RL adds its load symbol; an open RL has no
 resistor symbol. Each drawn part shows its value and two small filled pills for
 tolerance (for example, **±1%**) and package size (for example, **0805**), without
-repeating Tol. or Footprint labels. The pills have no outlines and their entire
-area is clickable and keyboard accessible; hover/focus identifies the control.
+repeating Tol. or Footprint labels. Editable tolerance and footprint pills have a subtle
+border and dropdown chevron; the entire pill area is clickable and keyboard accessible.
+Hover/focus identifies the control.
 Accessible labels and reference tooltips retain the full parameter names.
-Manual packages read **Not set**, since package size cannot be inferred from
+Unselected packages read **Not set**, since package size cannot be inferred from
 power. Equivalent arm labels allow total-resistance editing when that arm is an
 input; calculated arm values are read-only.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
@@ -232,9 +233,19 @@ and recommendation labels while removing live adoption controls.
 
 Click a bordered SVG value or a pill, or focus it and press Enter/Space, to
 edit the circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
-tolerance (blank resistance means open circuit). Each physical resistor opens
-its resistance and dropdowns for family, footprint, TCR (ppm/°C), tolerance and
-reliability level. M55342 offers the catalog reliability codes; TNPW displays
+tolerance (blank resistance means open circuit). Click a physical resistor's
+value, tolerance or footprint to open a native dropdown **directly on the SVG**.
+Choosing an option applies it immediately, using the same catalog and stress
+validation as the full editor. Footprint and tolerance options follow the
+selected family, package and operating mode; resistance options include common
+compatible values near the displayed resistance.
+
+**Custom value…** replaces the dropdown with an inline numeric resistance and
+its unit. Press Enter or the checkmark to apply; Escape cancels. Invalid choices
+show a local inline message and preserve the circuit. An unfinished custom draft
+participates in leave-page protection. Moving focus away cancels it. **Part
+options…** explicitly opens the full existing dialog for family, TCR, reliability
+and other specifications. M55342 offers catalog reliability codes; TNPW displays
 **Not applicable**. Footprint, TCR and tolerance choices follow the selected
 family's supported combinations. A live part-number preview shows the result.
 
@@ -247,19 +258,30 @@ parts reopen with their reliability, TCR, tolerance, footprint and conditions.
 
 For an unassigned resistor, **Manual · keep current limits** preserves its current
 power rating and offers a tolerance dropdown and optional working-voltage input.
-The **Not set** footprint pill opens an enabled size dropdown. Choosing a size
-previews a compatible catalog family and its actual limits; the selected family
-remains editable. A family can also be selected first for its footprint, TCR and
+Footprint and editable tolerance pills include dropdown chevrons. **Not set**
+also opens an inline size dropdown. Selecting a size applies a compatible
+catalog family and its actual limits. **Part options…** keeps the family
+editable. A family can also be selected first for its footprint, TCR and
 reliability choices. Manual mode permits custom values and clears a prior catalog
 assignment when explicitly selected. Source/load tolerances retain numeric entry.
-Saving updates the existing forms and recalculates the selected result and stress
+Applying a selection or saving advanced changes updates the existing forms and
+recalculates the selected result and stress
 while preserving the active Find mode. Cancel or Escape leaves the circuit unchanged.
+Inline choices use the same validation and stress checks before applying. In the
+real-combination mode, footprint and tolerance choices update that arm or
+physical resistor's search constraints and invalidate changed results; run
+**Find Design Solutions** to generate replacements. They do not apply a preview
+to the circuit. Calculated resistance and tolerance retain their existing locks.
 
 In inverse modes, click VMID to edit the entered target and choose whether VTOP,
 RTOP, RBOT or RL should be found. Every value in the Find state has no edit link
 or keyboard button, including individual resistances in a calculated multi-part
 arm. Other specification editors keep calculated values and units read-only;
-calculated tolerance selections are disabled in tolerance analysis. Known inputs
+calculated tolerance selections are disabled in tolerance analysis. The selected
+physical footprint persists when a recalculated resistance or tolerance no
+longer matches an exact catalog part; the BOM keeps that footprint and marks the
+part number unassigned. It does not invent an ordering code for the calculated
+value or tolerance. Reset clears these footprint preferences. Known inputs
 remain editable, and their changes recalculate the selected result.
 Voltage tolerances follow the same known/calculated role in the SVG and input form:
 VTOP tolerance is locked in Find VTOP; VMID tolerance is locked in Find VMID.
