@@ -1938,6 +1938,7 @@
       defined: { color: "#6ee7ac", label: "Known", short: "Known" },
       solving: { color: "#ff8e8e", label: "Value to find", short: "Find" }
     };
+    const VMID_NET_COLOR = "#54d2ff";
 
     function solverRoles(state) {
       const entered = (id, positive = false, optional = false, multiplier = 1) => {
@@ -2117,13 +2118,18 @@
       return { tree, children, positions, port, width: left - 32, height: Math.max(...children.map(child => child.height)) + 80 };
     }
 
-    function renderVerticalNetwork(parent, model, parts, arm, connection, x, y, roles, state) {
-      const wire = d => schematicShape(parent, "path", { d, fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" });
+    function renderVerticalNetwork(parent, model, parts, arm, connection, x, y, roles, state, terminals = {}) {
+      const wireColor = net => net === "VMID" ? VMID_NET_COLOR : "#a8bece";
+      const wire = (d, net) => schematicShape(parent, "path", { d, fill: "none", stroke: wireColor(net), "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round", ...(net ? { "data-wire-net": net } : {}) });
       if (!model.children) {
         const part = parts.get(model.tree), pairMode = byId("solveFor").value === "pairs", side = arm === "r1" ? "Top" : "Bot";
         const symbol = schematicShape(parent, "g", { "data-schematic-symbol": part.id, "data-arm": arm, "data-connection": connection, tabindex: 0, role: "group", "aria-label": `${part.name}; right-click or press Shift+F10 for construction` });
         schematicShape(symbol, "rect", { x: x + 8, y: y + 16, width: 240, height: 112, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
-        schematicRole(schematicShape(symbol, "path", { d: `M${x + 28} ${y}v26l-10 5 20 10 -20 10 20 10 -20 10 10 7V${y + 144}`, fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round", "data-resistor-body": "", "data-orientation": "vertical" }), arm, roles, "stroke");
+        const body = schematicRole(schematicShape(symbol, "g", { fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round", "data-resistor-body": "", "data-orientation": "vertical" }), arm, roles, "stroke");
+        const lead = (d, net) => schematicShape(body, "path", { d, ...(net ? { stroke: wireColor(net), "data-wire-net": net } : {}) });
+        lead(`M${x + 28} ${y}v26`, terminals.top);
+        schematicShape(body, "path", { d: `M${x + 28} ${y + 26}l-10 5 20 10 -20 10 20 10 -20 10 10 7` });
+        lead(`M${x + 28} ${y + 78}V${y + 144}`, terminals.bottom);
         const info = schematicShape(symbol, "g", { "data-schematic-info": part.id });
         schematicInfoBox(info, x + 56, y + 24, 192, 104);
         const reference = schematicRole(schematicText(info, x + 68, y + 46, part.name, 18), arm, roles);
@@ -2141,23 +2147,27 @@
       if (model.tree.connection === "series") {
         let nextY = y;
         model.children.forEach((child, index) => {
-          renderVerticalNetwork(parent, child, parts, arm, connection, x + model.port - child.port, nextY, roles, state);
+          renderVerticalNetwork(parent, child, parts, arm, connection, x + model.port - child.port, nextY, roles, state, { top: index === 0 ? terminals.top : null, bottom: index === model.children.length - 1 ? terminals.bottom : null });
           nextY += child.height;
           if (index < model.children.length - 1) { wire(`M${x + model.port} ${nextY}v24`); nextY += 24; }
         });
       } else {
         const ports = model.children.map((child, index) => x + model.positions[index] + child.port), lower = y + model.height - 20;
-        wire(`M${x + model.port} ${y}v20M${ports[0]} ${y + 20}H${ports.at(-1)}M${ports[0]} ${lower}H${ports.at(-1)}M${x + model.port} ${lower}v20`);
+        wire(`M${x + model.port} ${y}v20M${ports[0]} ${y + 20}H${ports.at(-1)}`, terminals.top);
+        wire(`M${ports[0]} ${lower}H${ports.at(-1)}M${x + model.port} ${lower}v20`, terminals.bottom);
         model.children.forEach((child, index) => {
-          wire(`M${ports[index]} ${y + 20}v20M${ports[index]} ${y + 40 + child.height}V${lower}`);
-          renderVerticalNetwork(parent, child, parts, arm, connection, x + model.positions[index], y + 40, roles, state);
+          wire(`M${ports[index]} ${y + 20}v20`, terminals.top);
+          wire(`M${ports[index]} ${y + 40 + child.height}V${lower}`, terminals.bottom);
+          renderVerticalNetwork(parent, child, parts, arm, connection, x + model.positions[index], y + 40, roles, state, terminals);
         });
+        const junctions = new Set([x + model.port, ...ports.slice(1, -1)]);
+        for (const cx of junctions) for (const [cy, net] of [[y + 20, terminals.top], [lower, terminals.bottom]]) schematicShape(parent, "circle", { cx, cy, r: 5, fill: wireColor(net), "data-wire-junction": "", ...(net ? { "data-wire-net": net } : {}) });
       }
     }
 
     function renderSchematicDrawing(state, roles) {
       const drawing = byId("schematicDrawing"); drawing.replaceChildren();
-      const mode = byId("solveFor").value, pairMode = mode === "pairs", netColor = mode === "vout" ? SOLVE_ROLES.solving.color : "#54d2ff";
+      const mode = byId("solveFor").value, pairMode = mode === "pairs", netColor = VMID_NET_COLOR;
       const arms = Object.fromEntries(ARMS.map(arm => {
         const side = arm === "r1" ? "Top" : "Bot", connection = state?.networks[arm]?.connection || "series";
         let parts = state?.physical[arm] || [];
@@ -2183,13 +2193,13 @@
         if (state?.networks[arm]) schematicEditable(heading, pairMode ? `arm-${arm}` : arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent and connection`, "connection");
         const equivalent = schematicRole(schematicText(group, headingX, y - 6, "—", 18), arm, roles); equivalent.id = arm === "r1" ? "schematicR1Value" : "schematicR2Value";
         if (state && !state.pending && !pairMode) schematicEditable(equivalent, arm, `${arm === "r1" ? "RTOP" : "RBOT"} equivalent resistance`);
-        renderVerticalNetwork(group, model, new Map(parts.map(part => [part.id, part])), arm, typeof connection === "object" ? "mixed" : connection, x, y, roles, state);
+        renderVerticalNetwork(group, model, new Map(parts.map(part => [part.id, part])), arm, typeof connection === "object" ? "mixed" : connection, x, y, roles, state, arm === "r1" ? { bottom: "VMID" } : { top: "VMID" });
       }
-      schematicShape(wires, "path", { d: `M${mainX} ${topY + arms.r1.model.height}V${mid}M${mainX} ${mid}V${botY}`, stroke: mode === "vout" ? netColor : "#a8bece" });
+      schematicShape(wires, "path", { d: `M${mainX} ${topY + arms.r1.model.height}V${mid}M${mainX} ${mid}V${botY}`, stroke: netColor, "data-wire-net": "VMID" });
       schematicShape(wires, "path", { d: `M${mainX} ${bottom}v24m-20 0h40m-32 10h24m-16 10h8` });
       schematicText(drawing, mainX + 28, bottom + 46, "GND", 16, "#a8bece");
       const load = schematicShape(drawing, "g", { id: "schematicLoad", fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-dasharray": "7 6" });
-      schematicShape(load, "path", { d: `M${mainX} ${mid}H${loadX}V${loadY - 30}`, stroke: netColor });
+      schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${loadX}V${loadY - 30}`, fill: "none", stroke: netColor, "stroke-width": 3, "stroke-dasharray": "7 6", "data-wire-net": "VMID" });
       schematicShape(load, "path", { d: `M${loadX} ${loadY + 30}V${bottom + 24}m-20 0h40m-32 10h24m-16 10h8` });
       const hasLoad = !!state && state.circuit.rl !== null;
       if (hasLoad) { schematicRole(schematicShape(load, "rect", { x: loadX - 11, y: loadY - 30, width: 22, height: 60, rx: 2 }), "rl", roles, "stroke"); load.dataset.schematicLoadSymbol = "rl"; }
@@ -2199,9 +2209,9 @@
       const loadValue = schematicText(loadInfo, loadX + 48, loadY + 10, state ? hasLoad ? Number.isFinite(state.circuit.rl) ? format(state.circuit.rl, "Ω") : "—" : "Open" : "—", 18, "#a8bece"); loadValue.id = "schematicLoadValue";
       if (hasLoad) schematicText(loadInfo, loadX + 48, loadY + 44, `±${percent(state.tolerances.rl)}`, 16, "#a8bece");
       if (state && !state.pending) schematicEditable(loadValue, "load", "RL and load tolerance");
-      schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${readoutX + 210}`, fill: "none", stroke: netColor, "stroke-width": mode === "vout" ? 4 : 3, "data-output-net": "VMID" });
-      for (const x of [mainX, loadX]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor });
-      schematicShape(drawing, "circle", { cx: readoutX + 216, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3 });
+      schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${readoutX + 210}`, fill: "none", stroke: netColor, "stroke-width": mode === "vout" ? 4 : 3, "data-output-net": "VMID", "data-wire-net": "VMID" });
+      for (const x of [mainX, loadX]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor, "data-wire-junction": "", "data-wire-net": "VMID" });
+      schematicShape(drawing, "circle", { cx: readoutX + 216, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3, "data-wire-net": "VMID" });
       schematicNetPanel(drawing, state, roles, "vout", readoutX, readoutY);
       if (pairMode) {
         const error = state?.pair?.error, allowed = byId("pairErrorPct").valueAsNumber;
