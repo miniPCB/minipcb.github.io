@@ -25,7 +25,7 @@
   };
   function defaults() {
     return {
-      thermal: { enabled: true, minC: 25, maxC: 125, manualTcrPpm: null, manualReferenceC: 25 },
+      thermal: { enabled: true, minC: -55, maxC: 125, manualTcrPpm: null, manualReferenceC: 25 },
       radiation: { enabled: true, doseKrad: null, qualifiedKrad: null, tnpwPct: null, milPct: null, manualPct: null },
       aging: { enabled: true, hours: 1000, model: "datasheet", tnpwPct: null, milPct: null, manualPct: null, milReferenceFilmC: null }
     };
@@ -102,7 +102,9 @@
           }
         } else {
           const point = life.find(([hours]) => hours >= settings.aging.hours);
-          if (profile.lifeAmbientC !== undefined && (!Number.isFinite(catalog.temperatureC) || catalog.temperatureC > profile.lifeAmbientC)) { agingPct = null; missing("M55342 ambient exceeds the published aging-test condition", true); }
+          // A conservative power-rating temperature need not be the mission ambient.
+          const ambientC = mission?.ambientMaxC ?? catalog.temperatureC;
+          if (profile.lifeAmbientC !== undefined && (!Number.isFinite(ambientC) || ambientC > profile.lifeAmbientC)) { agingPct = null; missing("M55342 ambient exceeds the published aging-test condition", true); }
           else if (!point) { agingPct = null; missing("Operating life exceeds the published aging envelope", true); }
           else { agingRelativePct = point[1]; agingOhms = point[2]; agingPct = agingRelativePct + 100 * agingOhms / resistance; }
         }

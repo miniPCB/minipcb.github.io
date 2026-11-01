@@ -127,8 +127,9 @@ Editable values have brighter borders and shading; calculated fields have quiete
 borders. The old dotted underlines and small Find labels in these panels are removed.
 VMID sits
 at the end of an output wire extending just past the RL branch. The entire VMID
-net stays blue in every mode, including resistor terminal leads, connected
-parallel-network buses, the load branch and junction dots. Every three-way or
+net uses one color throughout: red when VMID is unknown and blue when it is known,
+including resistor terminal leads, connected parallel-network buses, the load
+branch and junction dots. Every three-way or
 higher wire junction has a connection dot; ordinary bends and unconnected crossings
 do not. Voltage readouts retain their known/calculated role colors.
 A separate, spaced VMID readout lists **Nominal**, **Min** and
@@ -716,7 +717,10 @@ manual TCR/drift inputs, while VTOP retains its entered voltage tolerance, which
 must include the source's full mission variation.
 
 **Thermal:** enter the resistor film/hotspot temperature range, including self
-heating. The defaults are 25–125 °C; ambient alone is not a film-temperature
+heating. The startup defaults are −55 to +125 °C, the common catalog TCR span;
+this is a generic analysis envelope, not a predicted mission temperature.
+Orbit templates instead start with −20 to +70 °C equipment temperature plus
+an editable 10 °C maximum self-heating rise. Ambient alone is not a film-temperature
 estimate. For a catalog resistor,
 `delta_thermal (%) = |TCR| × max(|Tmin − Tref|, |Tmax − Tref|) / 10000`.
 The ordered TCR is used, with TNPW's 20 °C reference and M55342's 25 °C reference.
@@ -724,11 +728,16 @@ The implementation does not qualify TCR extrapolation outside −55 to +125 °C.
 Unassigned resistors and RL need an explicit TCR/reference; their unknown drift
 is marked. PCB thermal resistance is not inferred from package power ratings.
 
-**Aging:** the default life is 1000 hours and the default model uses the next
-published endurance milestone. TNPW follows its selected power mode and includes
+**Aging:** the startup life is a 1000-hour datasheet benchmark, not a mission
+duration. Applying a mission template replaces it with years × 8760 × powered
+duty. The default model uses the next published endurance milestone. TNPW follows
+its selected power mode and includes
 the additional absolute-ohm term. M55342 uses the conservative MIL-spec
-requirements, rather than typical manufacturer performance, with selection
-ambient at or below its published 70 °C endurance condition. Bounds are used
+requirements, rather than typical manufacturer performance. Its actual mission
+equipment maximum must be at or below the published 70 °C endurance condition;
+a catalog power rating derated at a hotter temperature remains conservative and
+does not make the equipment hotter. Without a mission, the selected ambient
+continues to define that condition. Bounds are used
 within the published resistance, film-temperature, time and permissible-load
 envelope; test mounting and exposure assumptions must match the application.
 TNPW's cited endurance procedure uses a 1.5-hour-on / 0.5-hour-off cycle. A
@@ -758,7 +767,7 @@ temperatures, the actual environment and bias conditions.
 If TNPW disappears from the solutions, check both the search inputs and the
 environmental inputs. TNPW supports the catalog's 0.1/0.5/1% tolerance grades and
 10/15/25/50 ppm/°C TCR grades, with package-dependent restrictions. Selecting a
-M55342-only tolerance, TCR or footprint can exclude it. The default 25–125 °C
+M55342-only tolerance, TCR or footprint can exclude it. The default −55 to +125 °C
 film range and 1000-hour life still allow both families. A nonzero radiation
 dose with only an M55342 drift limit excludes TNPW specifically; fill the TNPW
 limit from qualified data or revise the exposure specification. Missing radiation

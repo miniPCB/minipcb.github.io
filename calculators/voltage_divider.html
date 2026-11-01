@@ -1110,9 +1110,9 @@
       const settings = environmentSettings[effect], fields = byId("environmentFields");
       byId("environmentHeading").textContent = `${effect.toUpperCase()} · tolerance stack`;
       byId("environmentHelp").textContent = {
-        thermal: "Use the film/hotspot temperature range, including self heating. ΔR/R = |TCR| × max|Tfilm − Tref| / 10⁶. Catalog parts use their ordered TCR and reference temperature (TNPW 20 °C; M55342 25 °C). Unassigned parts and RL need an explicit TCR. Equal TCR codes do not imply tracking.",
+        thermal: "Startup uses the common catalog TCR range, −55 to +125 °C, not an assumed orbit temperature. For your design, use the film/hotspot range including self heating. ΔR/R = |TCR| × max|Tfilm − Tref| / 10⁶. Catalog parts use their ordered TCR and reference (TNPW 20 °C; M55342 25 °C). Unassigned parts and RL need an explicit TCR. Equal TCR codes do not imply tracking.",
         radiation: "Neither catalog publishes a radiation dose-response limit. Family bounds must cover every selected value/package, mission dose, bias, film temperature and exposure condition. The full bound is used at every nonzero covered dose; it is not extrapolated or scaled linearly. Blank is uncharacterized, not zero. These inputs cover resistance drift, not radiation-induced failures.",
-        aging: "Default: the next published endurance milestone, including TNPW's fixed ohms. M55342 uses MIL-spec limits at ambient ≤70 °C. Overrides must cover all selected parts, mission life, film temperature and load. Optional estimate: ΔRref × (t/tref)^(1/3) × 2^((Tfilm−Tref)/30). M55342's test film temperature must be supplied; it cannot be inferred from 70 °C ambient. Estimates are not lifetime guarantees. Test loading (TNPW 1.5 h on / 0.5 h off) and mounting must cover the mission."
+        aging: "Startup's 1000 h is a datasheet benchmark, not a mission lifetime. Mission profiles replace it with powered hours. Default: the next published endurance milestone, including TNPW's fixed ohms. M55342 uses MIL-spec limits with equipment ambient ≤70 °C; a hotter catalog rating may be used conservatively. Overrides must cover mission life, temperature and load. Optional estimate: ΔRref × (t/tref)^(1/3) × 2^((Tfilm−Tref)/30). M55342's measured test film temperature is required for estimates. TNPW test loading (1.5 h on / 0.5 h off) and mounting must cover the mission."
       }[effect];
       const provenance = byId("environmentPresetSources");
       provenance.replaceChildren(document.createTextNode({
@@ -1939,6 +1939,7 @@
       solving: { color: "#ff8e8e", label: "Value to find", short: "Find" }
     };
     const VMID_NET_COLOR = "#54d2ff";
+    const vmidNetColor = roles => roles.vout === "defined" ? VMID_NET_COLOR : SOLVE_ROLES.solving.color;
 
     function solverRoles(state) {
       const entered = (id, positive = false, optional = false, multiplier = 1) => {
@@ -2119,7 +2120,7 @@
     }
 
     function renderVerticalNetwork(parent, model, parts, arm, connection, x, y, roles, state, terminals = {}) {
-      const wireColor = net => net === "VMID" ? VMID_NET_COLOR : "#a8bece";
+      const wireColor = net => net === "VMID" ? vmidNetColor(roles) : "#a8bece";
       const wire = (d, net) => schematicShape(parent, "path", { d, fill: "none", stroke: wireColor(net), "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round", ...(net ? { "data-wire-net": net } : {}) });
       if (!model.children) {
         const part = parts.get(model.tree), pairMode = byId("solveFor").value === "pairs", side = arm === "r1" ? "Top" : "Bot";
@@ -2167,7 +2168,7 @@
 
     function renderSchematicDrawing(state, roles) {
       const drawing = byId("schematicDrawing"); drawing.replaceChildren();
-      const mode = byId("solveFor").value, pairMode = mode === "pairs", netColor = VMID_NET_COLOR;
+      const mode = byId("solveFor").value, pairMode = mode === "pairs", netColor = vmidNetColor(roles);
       const arms = Object.fromEntries(ARMS.map(arm => {
         const side = arm === "r1" ? "Top" : "Bot", connection = state?.networks[arm]?.connection || "series";
         let parts = state?.physical[arm] || [];

@@ -9,7 +9,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));},box=effect=>svg().querySelector(`[data-environment="${effect}"]`);
  const open=effect=>box(effect).dispatchEvent(new w.MouseEvent('click',{bubbles:true})),save=()=>get('environmentForm').requestSubmit(),cancel=()=>get('environmentCancel').click();
  assert(svg().querySelectorAll('[data-environment]').length===3&&['thermal','radiation','aging'].every(effect=>box(effect).getAttribute('role')==='button'&&box(effect).getAttribute('tabindex')==='0'),'Three editable environmental boxes are present');
- assert(current().thermal.maxC===125&&current().aging.hours===1000&&current().radiation.doseKrad===null&&box('radiation').textContent.includes('Not set'),'Thermal/aging defaults come from published conditions; radiation stays uncharacterized');
+ assert(current().thermal.minC===-55&&current().thermal.maxC===125&&current().aging.hours===1000&&current().radiation.doseKrad===null&&box('radiation').textContent.includes('Not set'),'Startup covers the common catalog TCR range and published aging benchmark; radiation stays uncharacterized');
  assert(!w.eval('leaveWarningActive'),'Default mission inputs do not mark the calculator dirty');
  const pick=(id,value)=>{const select=get(id+'Preset');select.value=value;select.dispatchEvent(new w.Event('change',{bubbles:true}));};
  for(const effect of ['thermal','radiation','aging']){
@@ -27,7 +27,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  assert(current().thermal.minC===-40&&current().thermal.maxC===85&&current().thermal.manualTcrPpm===25&&current().thermal.manualReferenceC===20&&!Object.hasOwn(current().thermal,'undefined'),'Preset saves contain only numeric model inputs, without helper-select keys');
  open('thermal');assert(get('environment_thermal_maxCPreset').value==='85'&&get('environment_thermal_maxC').hidden,'Saved preset values reopen as dropdown selections');pick('environment_thermal_maxC','custom');set('environment_thermal_maxC','87.5');save();
  open('thermal');assert(get('environment_thermal_maxCPreset').value==='custom'&&!get('environment_thermal_maxC').hidden&&get('environment_thermal_maxC').valueAsNumber===87.5,'A non-preset custom temperature survives saving and reopening');
- pick('environment_thermal_minC','25');pick('environment_thermal_maxC','125');pick('environment_thermal_manualTcrPpm','');pick('environment_thermal_manualReferenceC','25');save();
+ pick('environment_thermal_minC','-55');pick('environment_thermal_maxC','125');pick('environment_thermal_manualTcrPpm','');pick('environment_thermal_manualReferenceC','25');save();
  open('radiation');pick('environment_radiation_doseKrad','0');save();assert(current().radiation.doseKrad===0&&model.interval(tnpw,current()).radiationPct===0,'Zero exposure is distinct from an unset dose');
  open('radiation');pick('environment_radiation_doseKrad','custom');set('environment_radiation_doseKrad','7.5');pick('environment_radiation_qualifiedKrad','10');pick('environment_radiation_tnpwPct','0.05');pick('environment_radiation_milPct','0');save();
  assert(current().radiation.doseKrad===7.5&&current().radiation.qualifiedKrad===10&&current().radiation.tnpwPct===.05&&current().radiation.milPct===0&&current().radiation.manualPct===null,'Dose and drift presets preserve custom numbers, explicit zero and missing limits independently');
