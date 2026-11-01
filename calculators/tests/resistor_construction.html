@@ -27,13 +27,13 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  open("r1",true);assert(!get("resistorMenu").hidden,"Shift+F10 opens the same resistor menu");w.closeResistorMenu();
  action("r1","series");let top=leaves("r1"),first=top[0],added=top[1];
  assert(top.length===2&&get("r1Multiple").checked&&get("r1Connection").value==="series","Series insertion converts only the selected arm to two physical parts");
- assert(get(`${first}R`).value==="10"&&!get(`${first}Auto`).checked&&get(`${added}R`).value===""&&get(`${added}Auto`).checked,"The original entered value stays fixed and the new value is undefined/automatic");
- assert(!get("automaticDesign").hidden&&get("designTrim").value===added&&!state(),"The automatic design form identifies the new ratio trim and clears old analysis");
- assert(svg().querySelectorAll("[data-schematic-symbol]").length===3&&svg().textContent.includes("Auto · undefined")&&!/NaN|Infinity/.test(svg().textContent),"Undefined parts remain drawn without stale measurements or invalid numbers");
+ assert(get(`${first}R`).value==="10"&&!get(`${first}Auto`).checked&&get(`${added}R`).value==="10"&&!get(`${added}Auto`).checked,"Both existing and added resistors start with a usable fixed value");
+ assert(get("automaticDesign").hidden&&!!state(),"The added resistor keeps the current circuit calculated without an automatic-values dialog");
+ assert(svg().querySelectorAll("[data-schematic-symbol]").length===3&&svg().textContent.includes("10 kΩ")&&!/NaN|Infinity/.test(svg().textContent),"New parts show populated values without invalid numbers");
  assert(w.eval("leaveWarningActive"),"Topology and undefined circuit work activate leave protection");
- set("designTarget","4");await choose();
+ action(added,"automatic");set("designTarget","4");await choose();
  assert(state()&&near(state().result.vout,4)&&pn(added)?.startsWith("TNPW")&&near(choices().get(added).resistanceOhms,10000),"The ratio trim chooses a real 10 kΩ TNPW part for an exactly reachable 4 V target");
- assert(get(`${added}R`).value===""&&get(`${added}R`).placeholder.includes("10 kΩ")&&get(`${first}R`).value==="10","Computed automatic values are separate from fixed entered resistance");
+ assert(get(`${added}R`).value==="10"&&get(`${added}R`).placeholder.includes("10 kΩ")&&get(`${first}R`).value==="10","Computed automatic values are separate from fixed entered resistance");
  assert(w.schematicBomTsv().includes(pn(added))&&svg().textContent.includes(pn(added)),"Chosen MPN and actual values appear in both SVG and copied BOM");
  assert(get("designStatus").textContent.includes("power spread 0%")&&get("designStatus").textContent.includes("target error 0%"),"The first rule reports matching non-trim power and exact target accuracy");
  assertElectrical("Series trim");
@@ -71,7 +71,7 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  action(added,"fixed");assert(!get(`${added}Auto`).checked&&get(`${added}R`).valueAsNumber>0,"Keep fixed converts a chosen catalog value into an explicit input");
  await reset();assert(!state().networks.r1&&!get("r1Parts").dataset.topology&&choices().size===0&&get("automaticDesign").hidden&&!w.eval("leaveWarningActive"),"Reset clears topology, automatic roles, chosen parts, design UI and leave protection");
  get("r1Multiple").click();get("r1Split").click();get("r1Multiple").click();const visibleResistance=state().circuit.r1;action("r1","series");assert(leaves("r1").length===2&&near(get(`${leaves("r1")[0]}R`).valueAsNumber*Number(get(`${leaves("r1")[0]}Unit`).value),visibleResistance),"Adding to a visible single resistor preserves that resistor rather than reactivating an older hidden construction");await reset();
- action("r1","parallel");added=leaves("r1")[1];set("designTarget","8");await choose();
+ action("r1","parallel");added=leaves("r1")[1];action(added,"automatic");set("designTarget","8");await choose();
  assert(near(state().result.vout,8)&&near(choices().get(added).resistanceOhms,10000),"A parallel addition chooses a real part for an exact 8 V target");assertElectrical("Parallel trim");
  get("designAll").click();assert(w.automaticRows().length===3&&leaves("r2").length===1,"Make all automatic includes both physical arms");
  set("designFamily","vishay-eh-m55342");set("designTrim",leaves("r2")[0]);await choose();

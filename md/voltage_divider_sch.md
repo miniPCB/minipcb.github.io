@@ -59,8 +59,15 @@ Remove prunes the selected resistor and collapses one-member branches.
 **Find real resistor combinations** can reuse this construction, or you can
 right-click its search SVG to build an independent network before applying it.
 
-New resistors default to **undefined automatic values**. Existing entered values
-stay fixed. The **Choose resistor values** form lets you set target VMID, a
+New resistors inherit the selected resistor's value, tolerance and package.
+They stay immediately editable and keep the circuit calculated. If no setting
+is available, the defaults are 10 kΩ, ±0.1% and 0805. Adding a resistor places
+the cursor in its value; type directly, then press Enter. Tab saves and moves
+to the next resistor's value, allowing a chain of values to be entered quickly.
+**Find Design Solutions** below the circuit searches catalog assignments for
+the same construction without opening a dialog.
+
+The advanced **Automatic values** section inside **Options** lets you set target VMID, a
 preferred nominal error, catalog family, footprint, TCR and starting RTOP + RBOT.
 Each physical resistor retains its own tolerance selection. Use the context menu
 or each part's checkbox to mark other resistances automatic; **Make all resistors
@@ -86,8 +93,8 @@ component tolerances remain part of the circuit analysis; the preferred design
 band is nominal, unlike the combination search's worst-case band. Review
 the resulting tolerance interval and stresses. Supplier stock is not checked.
 Actual selected values and MPNs appear in the SVG and copied BOM; the resistance
-input remains blank with its chosen value as a placeholder to distinguish an
-automatic value from a fixed input. Edits invalidate old choices and clear stale
+input retains its starting value, with the chosen automatic value also shown
+in its placeholder. Edits invalidate old choices and clear stale
 analysis until values are chosen again. Switching Find modes fixes already
 chosen resistances before the ordinary solver runs. Reset defaults clears
 construction, automatic roles and chosen parts. SVG downloads preserve the
@@ -100,13 +107,16 @@ and the open/finite RL value as you edit.
 The main page ends at the circuit region: the former lower forms, result panels,
 instructions and footer no longer appear beneath the SVG. Click diagram inputs
 and pills for their focused editors. The toolbar above the SVG shows only its
-action/download buttons in every mode. The dynamic circuit summary remains the
-region's accessible label, without a visible heading. The general Options,
-Details & tables and Reset toolbar buttons are removed. Search options and graph-axis choices are integrated into
-the SVG, with download links above it.
-**Choose values** appears when automatic resistors are present and
-opens their catalog-selection settings. These dialogs reuse the original state
-and controls; they do not create a second circuit or change the analysis rules.
+download buttons in every mode. A large, centered title sits directly above the
+schematic; click it to edit it in place. It defaults to **Voltage Divider**,
+accepts up to 80 characters and is included in the SVG download. Title changes
+participate in leave protection and circuit reset restores the default.
+The dynamic circuit summary remains the region's accessible label.
+The neutral **Options** button beside Known/Unknown is the only entry into the
+large Circuit options dialog. Its section selector exposes Circuit, Automatic
+values and Tables. Ordinary value, tolerance and package edits stay on the SVG;
+invalid inputs and clipboard failures never open Circuit options automatically.
+These controls reuse the original state and calculation rules.
 Done or Escape returns to the diagram, and calculation/search submission returns
 to the SVG. Form reset actions restore defaults for the current circuit/search mode.
 Errors, search progress/results and automatic-value status remain in their
@@ -159,14 +169,15 @@ one vertical symbol per physical RTOP/RBOT resistor in the work form. Series
 parts stack vertically; parallel branches sit side by side, with every resistor
 still vertical. Nested networks use the same layout without rotating or squeezing
 their symbols. A finite RL adds its load symbol; an open RL has no
-resistor symbol. Each drawn part shows its value and two small filled pills for
+resistor symbol. Each drawn part shows a large value field and two controls for
 tolerance (for example, **±1%**) and package size (for example, **0805**), without
 repeating Tol. or Footprint labels. Editable tolerance and footprint pills have a subtle
 border and dropdown chevron; the entire pill area is clickable and keyboard accessible.
 Hover/focus identifies the control.
 Accessible labels and reference tooltips retain the full parameter names.
-Unselected packages read **Not set**, since package size cannot be inferred from
-power. Equivalent arm labels allow total-resistance editing when that arm is an
+Packages start at **0805**, independently of the manual power rating; this
+physical footprint does not assign a catalog part number or infer a rating.
+Equivalent arm labels allow total-resistance editing when that arm is an
 input; calculated arm values are read-only.
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
@@ -240,7 +251,7 @@ values and selected PN until adoption. Static SVG downloads keep descriptions
 and recommendation labels while removing live adoption controls.
 
 Click a bordered SVG value or a pill, or focus it and press Enter/Space, to
-edit the circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
+edit the circuit. VTOP edits voltage and source tolerance inline; RL edits resistance and load
 tolerance (blank resistance means open circuit). Click a physical resistor's
 value to type **directly on the SVG**. A live list shows the six nearest catalog
 values to the resistance being typed, respecting the selected part's family,
@@ -253,15 +264,15 @@ native dropdowns. All selections use the full editor's catalog and stress checks
 The same text entry and suggestions apply to each physical resistor in series,
 parallel and mixed networks. Editing one part preserves its siblings and the
 connections, and recalculates the arm equivalent, operating values and BOM.
-Series resistors have separate, labeled **Value**, **Tolerance** and **Package**
-rows with larger click/tap areas. The schematic grows to fit these controls;
-symbols remain vertical and retain their normal size. Calculated fields keep
-their existing edit restrictions.
+Single, series and parallel resistors use the same three populated controls,
+without visible field labels. Accessible names identify each value, tolerance
+and package. The schematic grows to fit these controls; symbols remain vertical
+and retain their normal size. Inverse-calculated resistances remain read-only.
 
 Escape cancels. Invalid choices show a local inline message and preserve the
 circuit. An unfinished resistance draft participates in leave-page protection.
-Moving focus away cancels it. **Part
-options…** explicitly opens the full existing dialog for family, TCR, reliability
+Moving focus away cancels it. The explicit **Options** button below a value's
+nearby list opens the part dialog for family, TCR, reliability
 and other specifications. M55342 offers catalog reliability codes; TNPW displays
 **Not applicable**. Footprint, TCR and tolerance choices follow the selected
 family's supported combinations. A live part-number preview shows the result.
@@ -275,9 +286,8 @@ parts reopen with their reliability, TCR, tolerance, footprint and conditions.
 
 For an unassigned resistor, **Manual · keep current limits** preserves its current
 power rating and offers a tolerance dropdown and optional working-voltage input.
-Footprint and editable tolerance pills include dropdown chevrons. **Not set**
-also opens an inline size dropdown. Selecting a size applies a compatible
-catalog family and its actual limits. **Part options…** keeps the family
+Footprint and editable tolerance controls include dropdown chevrons. Selecting
+a size applies a compatible catalog family and its actual limits. **Options** keeps the family
 editable. A family can also be selected first for its footprint, TCR and
 reliability choices. Manual mode permits custom values and clears a prior catalog
 assignment when explicitly selected. Source/load tolerances retain numeric entry.
@@ -294,8 +304,8 @@ physical resistor's search constraints and invalidate changed results; run
 **Find Design Solutions** to generate replacements. They do not apply a preview
 to the circuit. Calculated resistance and tolerance retain their existing locks.
 
-In inverse modes, click VMID to edit the entered target and choose whether VTOP,
-RTOP, RBOT or RL should be found. Every value in the Find state has no edit link
+In inverse modes, click VMID to edit the entered target; the calculator tab
+selects whether VTOP, RTOP, RBOT or RL should be found. A calculated value has no edit link
 or keyboard button, including individual resistances in a calculated multi-part
 arm. Other specification editors keep calculated values and units read-only;
 calculated tolerance selections are disabled in tolerance analysis. The selected
@@ -393,12 +403,13 @@ description and Markdown export retain all characteristics in either state.
 
 The SVG also sets up the combination search before any results exist. Click VTOP for the
 source and its tolerance, the separate **Target** row for VMID and its allowed
-error, or RL for the optional load and its tolerance. Click a resistor reference,
-tolerance pill or package pill to choose a physical resistor's family, package,
-catalog tolerance and TCR. In the two-part variant these use arm defaults; network
+error, or RL for the optional load and its tolerance. Physical values are
+populated starting values before search; entering a value makes it fixed for
+a subsequent constrained search. Tolerance and package edit directly; family
+and TCR are available through Options. In the two-part variant these use arm defaults; network
 parts can have independent overrides. The arm heading edits shared defaults.
 The SVG's red **Unknown** and green **Known** tiles explain its circuit colors.
-Beside the color tiles, the neutral **Options** button opens the resistance range,
+Beside the color tiles, the neutral **Options** button opens Circuit options, including the resistance range,
 ambient temperature, shared TCR, maximum stress and optional total-power limit.
 Below the ground symbol, **Find Design Solutions** runs the combination search
 directly from the diagram.
