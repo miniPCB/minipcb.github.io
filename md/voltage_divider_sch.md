@@ -593,6 +593,30 @@ cached design solutions and enables Find Design Solutions; canceling or saving
 unchanged settings preserves them. Settings apply across calculator modes and
 participate in the leave-page warning.
 
+Every numeric mission input offers a dropdown and **Custom…** entry. Opening an
+editor restores the saved preset or custom number. **Not set** is distinct from
+explicit zero; the aging family overrides use **Automatic · catalog endurance**
+to retain their complete published percentage-plus-ohm envelopes. Presets do not
+change the defaults, equations or qualification rules.
+
+| Input | Dropdown choices | Basis and interpretation |
+| --- | --- | --- |
+| Minimum film temperature | −65, −55, −50, −40, 0, 20, 25 °C | Catalog limits/reference points and AEC-Q200 endpoints; −65 °C is outside the supported catalog TCR interval. |
+| Maximum film temperature | 25, 70, 85, 105, 125, 150, 155, 175 °C | Reference/test temperatures and operating limits; values above 125 °C are explicitly labeled outside the catalog TCR interval. These are film temperatures here, including self heating. |
+| Manual/RL TCR | 0, 10, 15, 25, 50, 100, 200, 300 ppm/°C | TNPW/M55342 ordering grades, plus explicit zero only with supporting data; catalog parts continue using their actual ordered grade. |
+| Manual/RL reference | 20 or 25 °C | TNPW and M55342 reference temperatures; Custom supports another documented reference. |
+| Mission/qualification TID | 0, 3, 10, 30, 50, 100, 300, 500, 1000 krad(Si) | Numerical levels from NASA's microcircuit RHA table, plus explicit zero. These levels do not establish resistor radiation qualification. |
+| Operating life | 0, 1000, 2000, 8000, 8760, 10000, 43800, 87600, 131400, 225000 h | Catalog endurance milestones, plus 1/5/10/15-year continuous-operation conveniences using 24 h/day and 365 days/year. Calendar conversions are not qualification durations. |
+| Radiation/aging drift allowances | 0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.6, 1, 2% | Familiar resistance-change magnitudes from the cited datasheet tables, offered only as user-qualified entry shortcuts. They are not generic radiation limits or automatic aging recommendations. |
+| M55342 aging-test film reference | 20, 25, 70, 85, 105, 125, 150, 155, 175 °C | Temperature setpoints only, with Custom for measured test data. No option is a published M55342 test-film reference; the default remains Not set. |
+
+Preset references were reviewed on 31 October 2026: Vishay documents 28758,
+60018 and 28809, [Panasonic's AEC-Q200 grade guide](https://industrial.panasonic.com/jp/ds/ss/technical/b17),
+and [NASA's RHA dose table](https://nepp.nasa.gov/npsl/mic/mono/NSL_PND.html).
+The editors link their relevant references. Temperature endpoints from operating
+or automotive grades are convenient inputs, not permission to extrapolate TCR or
+endurance beyond the selected part's characterized conditions.
+
 Initial tolerance remains the ordering tolerance used in part numbers and the BOM.
 Each physical resistance instead receives separate environmental intervals:
 
@@ -652,6 +676,18 @@ adds no radiation term. These inputs cover resistance drift, not transient
 effects, displacement damage, dose-rate dependence or radiation-induced failures;
 qualification data must cover all selected resistance values/packages, film
 temperatures, the actual environment and bias conditions.
+
+If TNPW disappears from the solutions, check both the search inputs and the
+environmental inputs. TNPW supports the catalog's 0.1/0.5/1% tolerance grades and
+10/15/25/50 ppm/°C TCR grades, with package-dependent restrictions. Selecting a
+M55342-only tolerance, TCR or footprint can exclude it. The default 25–125 °C
+film range and 1000-hour life still allow both families. A nonzero radiation
+dose with only an M55342 drift limit excludes TNPW specifically; fill the TNPW
+limit from qualified data or revise the exposure specification. Missing radiation
+dose is reported as uncharacterized and does not silently become zero exposure.
+Tight output error or stress limits can also remove candidates once thermal and
+aging allowances are included. Network searches remain bounded rather than
+exhaustive.
 
 Unknown terms remain visibly uncharacterized. **Partly characterized** and
 **aging estimate** reports describe modeled intervals, not a universal mission

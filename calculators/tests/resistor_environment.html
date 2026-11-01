@@ -11,6 +11,32 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  assert(svg().querySelectorAll('[data-environment]').length===3&&['thermal','radiation','aging'].every(effect=>box(effect).getAttribute('role')==='button'&&box(effect).getAttribute('tabindex')==='0'),'Three editable environmental boxes are present');
  assert(current().thermal.maxC===125&&current().aging.hours===1000&&current().radiation.doseKrad===null&&box('radiation').textContent.includes('Not set'),'Thermal/aging defaults come from published conditions; radiation stays uncharacterized');
  assert(!w.eval('leaveWarningActive'),'Default mission inputs do not mark the calculator dirty');
+ const pick=(id,value)=>{const select=get(id+'Preset');select.value=value;select.dispatchEvent(new w.Event('change',{bubbles:true}));};
+ for(const effect of ['thermal','radiation','aging']){
+  open(effect);
+  for(const input of get('environmentFields').querySelectorAll('input[type="number"]')){
+   const select=get(input.id+'Preset');
+   assert(select?.tagName==='SELECT'&&select.options.length>=4&&select.labels.length===1&&select.getAttribute('aria-describedby')==='environmentPresetSources','A labeled, sourced dropdown accompanies '+input.id);
+   assert([...select.options].some(option=>option.value==='custom')&&[...select.options].some(option=>option.value===''),'Custom entry and the unset/automatic state remain available for '+input.id);
+   pick(input.id,'custom');assert(!input.hidden&&d.activeElement===input,'Choosing Custom reveals and focuses '+input.id);
+  }
+  assert(get('environmentPresetSources').querySelector('a[href^="https://"]'),'Each editor links its primary preset references');cancel();
+ }
+ assert(!w.eval('leaveWarningActive'),'Canceled preset edits leave the initial design clean');
+ open('thermal');pick('environment_thermal_minC','-40');pick('environment_thermal_maxC','85');pick('environment_thermal_manualTcrPpm','25');pick('environment_thermal_manualReferenceC','20');save();
+ assert(current().thermal.minC===-40&&current().thermal.maxC===85&&current().thermal.manualTcrPpm===25&&current().thermal.manualReferenceC===20&&!Object.hasOwn(current().thermal,'undefined'),'Preset saves contain only numeric model inputs, without helper-select keys');
+ open('thermal');assert(get('environment_thermal_maxCPreset').value==='85'&&get('environment_thermal_maxC').hidden,'Saved preset values reopen as dropdown selections');pick('environment_thermal_maxC','custom');set('environment_thermal_maxC','87.5');save();
+ open('thermal');assert(get('environment_thermal_maxCPreset').value==='custom'&&!get('environment_thermal_maxC').hidden&&get('environment_thermal_maxC').valueAsNumber===87.5,'A non-preset custom temperature survives saving and reopening');
+ pick('environment_thermal_minC','25');pick('environment_thermal_maxC','125');pick('environment_thermal_manualTcrPpm','');pick('environment_thermal_manualReferenceC','25');save();
+ open('radiation');pick('environment_radiation_doseKrad','0');save();assert(current().radiation.doseKrad===0&&model.interval(tnpw,current()).radiationPct===0,'Zero exposure is distinct from an unset dose');
+ open('radiation');pick('environment_radiation_doseKrad','custom');set('environment_radiation_doseKrad','7.5');pick('environment_radiation_qualifiedKrad','10');pick('environment_radiation_tnpwPct','0.05');pick('environment_radiation_milPct','0');save();
+ assert(current().radiation.doseKrad===7.5&&current().radiation.qualifiedKrad===10&&current().radiation.tnpwPct===.05&&current().radiation.milPct===0&&current().radiation.manualPct===null,'Dose and drift presets preserve custom numbers, explicit zero and missing limits independently');
+ near(model.interval(tnpw,current()).radiationPct,.05,'Radiation presets use the whole qualified bound without dose scaling');
+ open('radiation');for(const key of ['doseKrad','qualifiedKrad','tnpwPct','milPct','manualPct'])pick('environment_radiation_'+key,'');save();
+ open('aging');pick('environment_aging_hours','87600');save();assert(current().aging.hours===87600&&current().aging.tnpwPct===null&&model.interval(tnpw,current()).requiredGaps.length===0&&model.interval(mil,current()).requiredGaps.some(text=>text.includes('Operating life')),'Calendar shortcuts preserve automatic family-specific endurance limits');
+ open('aging');pick('environment_aging_tnpwPct','0.1');pick('environment_aging_milPct','0.5');save();near(model.interval(tnpw,current()).agingOhms,0,'Explicit percentage overrides replace automatic endurance rather than double counting it');
+ open('aging');pick('environment_aging_tnpwPct','');pick('environment_aging_milPct','');pick('environment_aging_hours','1000');save();
+ assert(JSON.stringify(current())===JSON.stringify(settings())&&!w.eval('leaveWarningActive'),'Restoring unset/automatic presets restores the exact defaults and clean state');
  open('thermal');set('environment_thermal_maxC','100');await pause();assert(w.eval('leaveWarningActive'),'Pending environmental edits participate in the leave warning');cancel();assert(!w.eval('leaveWarningActive')&&d.activeElement===box('thermal'),'Cancel restores the clean state and box focus');
  let cfg=settings(),interval=model.interval(tnpw,cfg);
  const t=.001,h=25*105/1e6,a=.0005;
@@ -72,9 +98,14 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const originalSettings=clone(current());open('thermal');const unchanged=w.catalogBomCsv();set('environment_thermal_minC','200');save();assert(get('environmentEditor').open&&!get('environmentError').hidden&&JSON.stringify(current())===JSON.stringify(originalSettings)&&w.catalogBomCsv()===unchanged,'Invalid environment changes remain local');cancel();
  set('solveFor','pairs');set('pairMinR','10000');set('pairMaxR','10000');get('pairForm').requestSubmit();let pairs=await w.pairSearchReady;
  assert(pairs.length===4&&pairs.every(pair=>pair.environment.bounds===pair.bounds&&pair.environment.equivalents.r1.tolerance>pair.top.tolerancePct),'Real catalog search uses environmental bounds for both families and mixed pairs');
+ assert(new Set(pairs.map(pair=>w.pairFamilyKey(pair))).size===3&&pairs.some(pair=>pair.top.familyId==='vishay-tnpw-e3'&&pair.bot.familyId==='vishay-tnpw-e3'),'Unchanged environmental defaults retain TNPW-only, M55342-only and mixed solutions');
  const previousSpec=w.eval('pairSpec');open('aging');save();assert(w.eval('pairSpec')===previousSpec&&get('schematicDesignSearch').getAttribute('aria-disabled')==='true','Saving unchanged environmental inputs keeps the completed search locked');
+ open('thermal');pick('environment_thermal_maxC','125');save();assert(w.eval('pairSpec')===previousSpec,'Reselecting the current preset preserves completed solutions');
+ open('radiation');pick('environment_radiation_doseKrad','10');cancel();assert(w.eval('pairSpec')===previousSpec,'Canceling a new dose preset preserves completed solutions');
  open('radiation');set('environment_radiation_doseKrad','10');save();assert(!w.eval('pairSpec')&&get('schematicDesignSearch').getAttribute('aria-disabled')==='false','Changed mission inputs invalidate old solutions and enable a new search');
  get('pairForm').requestSubmit();pairs=await w.pairSearchReady;assert(!pairs.length&&box('radiation').textContent.includes('Qualification needed'),'Unqualified nonzero radiation dose cannot produce accepted catalog solutions');
+ open('radiation');pick('environment_radiation_qualifiedKrad','30');pick('environment_radiation_milPct','0.5');save();get('pairForm').requestSubmit();pairs=await w.pairSearchReady;
+ assert(pairs.length===1&&pairs.every(pair=>w.pairFamilyKey(pair)==='mil'),'A missing TNPW radiation limit excludes TNPW specifically while qualified M55342 remains searchable');
  open('radiation');set('environment_radiation_qualifiedKrad','20');set('environment_radiation_tnpwPct','.2');set('environment_radiation_milPct','.5');save();get('pairForm').requestSubmit();pairs=await w.pairSearchReady;
  assert(pairs.length===4&&pairs.every(pair=>pair.environment.qualified),'Qualified radiation data restores solutions with all configured drift terms covered');
  const snapshot=await(await fetch(get('schematicDownload').href)).text(),saved=new DOMParser().parseFromString(snapshot,'image/svg+xml'),md=await(await fetch(get('markdownDownload').href)).text(),asc=await(await fetch(get('ltspiceDownload').href)).text(),csv=w.pairSearchCsv();
@@ -83,7 +114,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  assert(asc.includes('THERMAL:')&&asc.includes('RADIATION:')&&asc.includes('AGING:')&&asc.includes('.op remains nominal'),'LTspice annotations carry the environmental envelope while distinguishing nominal .op');
  assert(csv.includes('Environmental specification (JSON)')&&csv.includes('qualifiedKrad')&&csv.includes('Environmental scope'),'Search CSV preserves reproducible mission conditions and scope');
  const serial=JSON.stringify(w.eval('pairItems').map(pair=>[pair.top.mpn,pair.bot.mpn,pair.bounds.min,pair.bounds.max]));
- for(const width of [320,390,768,1440]){frame.style.width=width+'px';await pause();const b=svg().getBoundingClientRect();assert([...svg().querySelectorAll('[data-environment] text')].every(text=>{const p=text.getBoundingClientRect();return p.left>=b.left&&p.right<=b.right&&p.top>=b.top&&p.bottom<=b.bottom}),'Environmental cards fit the SVG at '+width+'px');open('thermal');const dialog=get('environmentEditor').getBoundingClientRect();assert(dialog.left>=0&&dialog.right<=width&&get('environmentEditor').scrollWidth<=dialog.width+1,'Mission editor fits at '+width+'px');cancel();}
+ for(const width of [320,390,768,1440]){frame.style.width=width+'px';await pause();const b=svg().getBoundingClientRect();assert([...svg().querySelectorAll('[data-environment] text')].every(text=>{const p=text.getBoundingClientRect();return p.left>=b.left&&p.right<=b.right&&p.top>=b.top&&p.bottom<=b.bottom}),'Environmental cards fit the SVG at '+width+'px');for(const effect of ['thermal','radiation','aging']){open(effect);const dialog=get('environmentEditor').getBoundingClientRect();assert(dialog.left>=0&&dialog.right<=width&&get('environmentEditor').scrollWidth<=dialog.width+1&&[...get('environmentFields').querySelectorAll('select')].every(select=>select.getBoundingClientRect().right<=dialog.right),'The '+effect+' dropdown editor fits at '+width+'px');cancel();}}
  assert(serial===JSON.stringify(w.eval('pairItems').map(pair=>[pair.top.mpn,pair.bot.mpn,pair.bounds.min,pair.bounds.max])),'Resizing and canceled edits preserve validated solutions');
  assert(errors.length===0,'No browser runtime errors: '+errors.join('; '));
 }catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);});
