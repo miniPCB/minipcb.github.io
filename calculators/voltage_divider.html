@@ -175,6 +175,12 @@
     .schematic-inline input { width: 0; flex: 1; }
     .schematic-inline button { padding: 2px 7px; cursor: pointer; }
     .schematic-inline-error { margin-top: 4px; padding: 6px; border-radius: 5px; background: #502b35; color: #ffd1d1; font: 12px system-ui, sans-serif; }
+    .schematic-nearby { margin-top: 4px; padding: 4px; border: 1px solid #6a8ca5; border-radius: 6px; background: #142535; color: #c6e3ff; font: 13px ui-monospace, monospace; }
+    .schematic-nearby-label { padding: 2px 3px 5px; color: #a8bece; font: 11px system-ui, sans-serif; }
+    .schematic-nearby button { display: flex; justify-content: space-between; gap: 4px; width: 100%; padding: 5px 3px; border: 0; border-radius: 3px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    .schematic-nearby button:hover, .schematic-nearby button[aria-selected="true"] { background: #24445a; }
+    .schematic-nearby small { color: #a8bece; font-size: 11px; }
+    .schematic-nearby-more { margin-top: 4px; padding: 2px; border: 0; background: #142535; color: #75d5ff; font: 11px system-ui, sans-serif; cursor: pointer; }
     .circuit-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; }
     .circuit-toolbar .resource-links { margin: 0 0 0 auto; }
     #schematicFeedback { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -2690,11 +2696,74 @@
       return byId(context.focus === "power" ? "schematicEditFootprint" : context.focus === "tolerance" ? "schematicEditPartTolerance" : "schematicEditValue");
     }
 
-    function commonResistanceValues(context) {
-      const current = context.part.resistance, decade = 10 ** Math.floor(Math.log10(current));
-      return [0.1, 0.22, 0.47, 0.499, 1, 2, 2.2, 4.7, 4.99, 10].map(factor => Number((factor * decade).toPrecision(12))).filter(value => Number.isFinite(value) && value > 0).filter(value => {
-        try { schematicCatalogCandidate(value); return true; } catch (_) { return false; }
-      }).sort((a, b) => Math.abs(Math.log(a / current)) - Math.abs(Math.log(b / current))).slice(0, 6).sort((a, b) => a - b);
+    function parseInlineResistance(text, scale) {
+      const compact = text.trim().replace(/\s+/g, ""), explicitOhms = /(?:Ω|Ω|ohms?)$/i.test(compact), value = compact.replace(/(?:Ω|Ω|ohms?)$/i, "");
+      const rkm = /^(\d*)([RrKkM])(\d+)$/.exec(value);
+      const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)([RrKkMmGgµμu]?)$/.exec(value);
+      const factors = { R: 1, r: 1, k: 1e3, K: 1e3, M: 1e6, m: 1e-3, G: 1e9, g: 1e9, µ: 1e-6, μ: 1e-6, u: 1e-6 };
+      const ohms = rkm ? Number(`${rkm[1] || "0"}.${rkm[3]}`) * factors[rkm[2]] : match ? Number(match[1]) * (match[2] ? factors[match[2]] : explicitOhms ? 1 : scale) : NaN;
+      return Number.isFinite(ohms) && ohms > 0 ? { ohms, explicitUnit: !!rkm || !!match?.[2] || explicitOhms } : null;
+    }
+
+    function inlineResistancePool(context) {
+      if (!resistorCatalog) return [];
+      const familyId = byId("schematicEditFamily").value, values = new Set();
+      try {
+        if (familyId) {
+          const current = schematicCatalogCandidate(context.part.resistance);
+          for (const part of ResistorParts.enumerate(resistorCatalog, familyId, { ...current, legacy: current.packaging === "", minOhms: 1e-9, maxOhms: 1e12 })) values.add(part.resistanceOhms);
+        } else {
+          const size = resistorFootprint(context.part) || byId("parts2Package").value, ppm = environmentSettings.thermal.manualTcrPpm ?? Number(byId("parts2Tcr").value);
+          for (const family of resistorCatalog.families) {
+            const options = parts2Options(family, size, Math.max(byId("parts2Temperature").valueAsNumber, environmentSettings.thermal.maxC), ppm);
+            if (!options) continue;
+            for (const grade of family.toleranceCodes.filter(grade => grade.pct <= context.part.tolerance)) for (const part of ResistorParts.enumerate(resistorCatalog, family.id, { ...options, tolerancePct: grade.pct, minOhms: 1e-9, maxOhms: 1e12 })) values.add(part.resistanceOhms);
+          }
+        }
+      } catch (_) { /* Manual entry remains available when no catalog subset can be suggested. */ }
+      return [...values].sort((a, b) => a - b);
+    }
+
+    function openInlineResistanceEditor(context, field, root, row, name) {
+      const inline = context.inline, scale = Number(byId("schematicEditUnit").value), pool = inlineResistancePool(context);
+      const input = document.createElement("input"), unit = document.createElement("span"), apply = document.createElement("button"), nearby = document.createElement("div"), caption = document.createElement("div"), list = document.createElement("div"), more = document.createElement("button");
+      input.type = "text"; input.inputMode = "decimal"; input.value = String(context.part.resistance / scale); input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list"); input.setAttribute("aria-controls", "schematicInlineSuggestions"); input.setAttribute("aria-expanded", "true"); input.setAttribute("aria-label", `${name} resistance`); input.setAttribute("enterkeyhint", "done"); input.autocomplete = "off";
+      unit.textContent = scale === 1e6 ? "MΩ" : scale === 1000 ? "kΩ" : "Ω";
+      apply.type = "button"; apply.textContent = "✓"; apply.setAttribute("aria-label", "Apply resistance");
+      nearby.className = "schematic-nearby"; caption.className = "schematic-nearby-label"; caption.textContent = "Nearest catalog values";
+      list.id = "schematicInlineSuggestions"; list.setAttribute("role", "listbox"); list.setAttribute("aria-label", "Nearest resistor values"); nearby.append(caption, list);
+      more.type = "button"; more.className = "schematic-nearby-more"; more.textContent = "Part options…"; more.addEventListener("click", expandInlinePartEditor);
+      row.replaceChildren(input, unit, apply); root.insertBefore(nearby, inline.error); root.append(more); inline.input = input;
+      inline.resize = () => inline.object.setAttribute("height", Math.max(32, root.scrollHeight));
+      let suggestions = [], active = -1;
+      const setActive = index => {
+        active = index;
+        [...list.children].forEach((option, at) => option.setAttribute("aria-selected", String(at === index)));
+        if (index < 0) input.removeAttribute("aria-activedescendant"); else input.setAttribute("aria-activedescendant", list.children[index].id);
+      };
+      const choose = value => {
+        input.value = String(value / scale); update(); saveInlinePartEditor();
+      };
+      const update = () => {
+        const parsed = parseInlineResistance(input.value, scale); unit.hidden = !!parsed?.explicitUnit;
+        field.value = parsed ? parsed.ohms / scale : ""; field.dispatchEvent(new Event("input", { bubbles: true }));
+        inline.error.hidden = true; input.removeAttribute("aria-invalid"); list.replaceChildren(); active = -1; input.removeAttribute("aria-activedescendant");
+        suggestions = parsed ? [...pool].sort((a, b) => Math.abs(a - parsed.ohms) - Math.abs(b - parsed.ohms) || a - b).slice(0, 6) : [];
+        caption.textContent = suggestions.length ? "Nearest catalog values" : parsed ? "No matching catalog grades" : "Enter a positive resistance";
+        for (const [index, value] of suggestions.entries()) {
+          const option = document.createElement("button"), number = document.createElement("span"), delta = document.createElement("small"), difference = (value / parsed.ohms - 1) * 100;
+          option.type = "button"; option.tabIndex = -1; option.id = `schematicInlineSuggestion${index}`; option.dataset.resistance = value; option.setAttribute("role", "option"); option.setAttribute("aria-selected", "false");
+          number.textContent = format(value, "Ω"); delta.textContent = Math.abs(difference) < 1e-9 ? "exact" : Math.abs(difference) < 1000 ? `${difference > 0 ? "+" : "−"}${percent(Math.abs(difference))}` : "";
+          option.append(number, delta); option.addEventListener("pointerdown", event => event.preventDefault()); option.addEventListener("click", () => choose(value)); list.append(option);
+        }
+        input.setAttribute("aria-expanded", String(suggestions.length > 0)); inline.resize(); refreshLeaveWarning();
+      };
+      inline.accept = () => active >= 0 ? choose(suggestions[active]) : saveInlinePartEditor();
+      input.addEventListener("input", update); apply.addEventListener("click", inline.accept);
+      input.addEventListener("keydown", event => {
+        if (["ArrowDown", "ArrowUp"].includes(event.key) && suggestions.length) { event.preventDefault(); event.stopPropagation(); setActive(event.key === "ArrowDown" ? (active + 1) % suggestions.length : active < 0 ? suggestions.length - 1 : (active - 1 + suggestions.length) % suggestions.length); }
+      });
+      update(); input.focus(); input.select(); inline.object.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
 
     function expandInlinePartEditor() {
@@ -2706,7 +2775,7 @@
     function showInlinePartError(message) {
       const inline = schematicEditContext?.inline; if (!inline) return;
       inline.error.textContent = message; inline.error.hidden = false;
-      inline.object.setAttribute("width", Math.max(inline.width, 240)); inline.object.setAttribute("height", 110);
+      if (inline.resize) inline.resize(); else { inline.object.setAttribute("width", Math.max(inline.width, 240)); inline.object.setAttribute("height", 110); }
       inline.input.setAttribute("aria-invalid", "true"); inline.input.focus();
     }
 
@@ -2716,46 +2785,27 @@
     }
 
     function openInlinePartEditor(node) {
-      const context = schematicEditContext, field = inlineEditorField(context), box = node.getBBox();
-      const width = context.focus === "value" ? 174 : Math.max(40, box.width), object = schematicShape(node.parentNode, "foreignObject", { x: box.x, y: box.y, width, height: 32, "data-inline-editor": "" });
-      const root = document.createElement("div"), row = document.createElement("div"), error = document.createElement("div"), select = document.createElement("select");
-      root.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"); row.className = "schematic-inline"; row.style.width = `${width}px`;
+      const context = schematicEditContext, field = inlineEditorField(context), box = node.getBBox(), svg = byId("liveSchematic");
+      const width = context.focus === "value" ? 174 : Math.max(40, box.width), matrix = svg.getScreenCTM().inverse().multiply(node.parentNode.getScreenCTM());
+      const object = schematicShape(svg, "foreignObject", { x: box.x, y: box.y, width, height: 32, transform: `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`, "data-inline-editor": "" });
+      const root = document.createElement("div"), row = document.createElement("div"), error = document.createElement("div");
+      root.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"); root.style.width = `${width}px`; row.className = "schematic-inline"; row.style.width = `${width}px`;
       row.style.color = node.getAttribute("fill") || node.querySelector("text")?.getAttribute("fill") || "#c6e3ff";
       error.className = "schematic-inline-error"; error.setAttribute("role", "alert"); error.hidden = true;
-      const name = context.part?.name || (Object.keys(context.fields).some(id => id.endsWith("Top")) ? "RTOP" : "RBOT");
-      select.setAttribute("aria-label", `${name} ${context.focus === "power" ? "footprint" : context.focus === "tolerance" ? "tolerance" : "resistance"}`);
-      if (context.focus === "value") {
-        const values = [...new Set([context.part.resistance, ...commonResistanceValues(context)])].sort((a, b) => a - b);
-        for (const value of values) select.add(new Option(format(value, "Ω"), String(value)));
-        select.value = String(context.part.resistance); select.add(new Option("Custom value…", "custom"));
-      } else {
-        for (const option of field.options) select.add(option.cloneNode(true));
-        select.value = field.value;
-      }
-      select.add(new Option("Part options…", "options")); row.append(select); root.append(row, error); object.append(root);
-      context.inline = { object, input: select, error, width };
+      root.append(row, error); object.append(root); context.inline = { object, input: null, error, width };
       const stop = event => event.stopPropagation();
       for (const type of ["click", "pointerdown", "contextmenu"]) object.addEventListener(type, stop);
       object.addEventListener("keydown", event => {
         event.stopPropagation();
         if (event.key === "Escape") { event.preventDefault(); closeSchematicEditor(); }
-        else if (event.key === "Enter" && context.inline?.input.tagName === "INPUT") { event.preventDefault(); saveInlinePartEditor(); }
-      });
-      select.addEventListener("change", () => {
-        if (select.value === "options") { expandInlinePartEditor(); return; }
-        if (select.value === "custom") {
-          const input = document.createElement("input"), unit = document.createElement("span"), apply = document.createElement("button"), scale = Number(byId("schematicEditUnit").value);
-          input.type = "number"; input.step = "any"; input.min = "0"; input.value = context.part.resistance / scale; input.setAttribute("aria-label", `${name} custom resistance`); input.setAttribute("enterkeyhint", "done");
-          unit.textContent = scale === 1e6 ? "MΩ" : scale === 1000 ? "kΩ" : "Ω";
-          apply.type = "button"; apply.textContent = "✓"; apply.setAttribute("aria-label", "Apply custom resistance"); apply.addEventListener("click", saveInlinePartEditor);
-          row.replaceChildren(input, unit, apply); context.inline.input = input;
-          input.addEventListener("input", () => { field.value = input.value; field.dispatchEvent(new Event("input", { bubbles: true })); refreshLeaveWarning(); });
-          input.focus(); input.select(); return;
-        }
-        field.value = context.focus === "value" ? Number(select.value) / Number(byId("schematicEditUnit").value) : select.value;
-        field.dispatchEvent(new Event(context.focus === "value" ? "input" : "change", { bubbles: true })); saveInlinePartEditor();
+        else if (event.key === "Enter" && event.target === context.inline?.input && event.target.tagName === "INPUT" && !event.isComposing) { event.preventDefault(); context.inline.accept(); }
       });
       object.addEventListener("focusout", () => setTimeout(() => { if (schematicEditContext === context && context.inline && !object.contains(document.activeElement)) closeSchematicEditor(false); }, 0));
+      const name = context.part?.name || (Object.keys(context.fields).some(id => id.endsWith("Top")) ? "RTOP" : "RBOT");
+      if (context.focus === "value") { openInlineResistanceEditor(context, field, root, row, name); return; }
+      const select = document.createElement("select"); select.setAttribute("aria-label", `${name} ${context.focus === "power" ? "footprint" : "tolerance"}`);
+      for (const option of field.options) select.add(option.cloneNode(true)); select.value = field.value; select.add(new Option("Part options…", "options")); row.append(select); context.inline.input = select;
+      select.addEventListener("change", () => { if (select.value === "options") { expandInlinePartEditor(); return; } field.value = select.value; field.dispatchEvent(new Event("change", { bubbles: true })); saveInlinePartEditor(); });
       select.focus(); select.scrollIntoView({ block: "nearest", inline: "nearest" });
       try { select.showPicker?.(); } catch (_) { /* Native selection remains available without picker support or user activation. */ }
     }

@@ -1,0 +1,72 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Live nearest resistance checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:2000px;border:0}</style><h1>Live nearest resistance checks</h1><pre id="results">RUNNING</pre><iframe id="calculator" title="Calculator under test" src="../voltage_divider.html?nearest-values-test=1"></iframe><script>
+"use strict";
+const checks=[],failures=[],assert=(ok,label)=>{checks.push(label);if(!ok)failures.push(label);},pause=()=>new Promise(resolve=>setTimeout(resolve,20));
+document.getElementById('calculator').addEventListener('load',async event=>{try{
+ const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get('liveSchematic'),part=()=>w.eval('schematicState.physical.r1[0]'),inline=()=>svg().querySelector('[data-inline-editor]'),input=()=>inline()?.querySelector('input'),options=()=>[...inline().querySelectorAll('[data-resistance]')],values=()=>options().map(option=>Number(option.dataset.resistance));
+ const errors=[];w.addEventListener('error',event=>errors.push(event.message));assert(await w.resistorCatalogReady,'Catalogs load');
+ const open=(id='r1')=>svg().querySelector(`[data-schematic-edit="${id}"][data-edit-focus="value"]`).dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+ const type=value=>{input().value=value;input().dispatchEvent(new w.Event('input',{bubbles:true}));},key=value=>input().dispatchEvent(new w.KeyboardEvent('keydown',{key:value,bubbles:true,cancelable:true}));
+ const reset=async()=>{w.closeSchematicEditor();get('dividerForm').reset();get('pairForm').reset();await pause();};
+ const catalog=await w.ResistorParts.load(),nearest=(pool,target)=>[...new Set(pool)].sort((a,b)=>Math.abs(a-target)-Math.abs(b-target)||a-b).slice(0,6);
+ open();assert(input()?.type==='text'&&!inline().querySelector('select')&&!get('schematicEditor').open,'Value opens directly as a text box without a dropdown or dialog');
+ assert(input().getAttribute('role')==='combobox'&&input().getAttribute('aria-autocomplete')==='list'&&input().getAttribute('aria-controls')===inline().querySelector('[role="listbox"]').id,'Text box exposes an accessible live suggestion list');
+ assert(values().length===6&&values()[0]===10000&&new Set(values()).size===6,'Initial suggestions are distinct and start with the exact current resistance');
+ assert(!w.eval('leaveWarningActive'),'Opening the input does not dirty the circuit');
+ type('12.345');const first=values();assert(first[0]===12300&&first[1]===12400&&part().resistance===10000,'Bare input uses the displayed kΩ unit and ranks values by absolute distance without applying');
+ type('47.2kΩ');assert(values()[0]===47000&&JSON.stringify(values())!==JSON.stringify(first),'Suggestions recompute from the current typed resistance and explicit units');
+ assert(input().nextElementSibling.hidden,'Explicit units hide the redundant unit chip');
+ type('12.345');key('Enter');assert(!inline()&&part().resistance===12345,'Enter commits the arbitrary typed manual value without snapping to a suggestion');
+ for(const [typed,expected] of [['499R',499],['4k99',4990],['12.3 kΩ',12300],['1M',1e6],['1.2e4Ω',12000],['R499',.499],['4K7',4700],['10000 ohms',10000]]){
+  await reset();open();type(typed);key('Enter');assert(!inline()&&part().resistance===expected,`${typed}: unit-aware text entry applies the intended resistance`);
+ }
+ for(const typed of ['','0','-3','Infinity','NaN','12garbage','1e999']){
+  await reset();open();type(typed);assert(values().length===0&&input().getAttribute('aria-expanded')==='false',`${typed||'blank'}: invalid input has no misleading suggestions`);key('Enter');assert(inline()&&!inline().querySelector('[role="alert"]').hidden&&input().getAttribute('aria-invalid')==='true'&&part().resistance===10000,`${typed||'blank'}: invalid input stays local and leaves the circuit intact`);key('Escape');
+ }
+ await reset();open();type('12.345k');key('ArrowDown');assert(options()[0].getAttribute('aria-selected')==='true'&&input().getAttribute('aria-activedescendant')===options()[0].id,'ArrowDown highlights the nearest value and exposes active descendant');key('ArrowUp');assert(options()[5].getAttribute('aria-selected')==='true','ArrowUp wraps from the first value to the final suggestion');key('ArrowDown');key('Enter');assert(!inline()&&part().resistance===12300,'Keyboard selection applies the highlighted catalog value');
+ open();type('47.2k');const chosen=values()[0];options()[0].click();assert(!inline()&&part().resistance===chosen,'Clicking a suggestion applies its actual resistance');
+ open();type('22k');assert(w.eval('leaveWarningActive'),'Unapplied typed changes participate in leave protection');key('Escape');assert(part().resistance===chosen&&d.activeElement===svg().querySelector('[data-schematic-edit="r1"][data-edit-focus="value"]'),'Escape discards the draft and restores focus to the circuit field');
+ await reset();get('solveFor').value='rl';get('solveFor').dispatchEvent(new w.Event('input',{bubbles:true}));open();type('10.123k');options()[0].click();assert(inline()&&part().resistance===10000&&!inline().querySelector('[role="alert"]').hidden,'A catalog value that makes Find RL infeasible is rejected locally');assert(Number(input().value)===10.1&&values()[0]===10100&&options()[0].querySelector('small').textContent==='exact','After a rejected suggestion, nearby values and distances follow the resistance now in the text box');key('Escape');
+ await reset();const tnpw=w.ResistorParts.evaluate(catalog,'vishay-tnpw-e3',{resistanceOhms:10000,package:'0402',tolerancePct:.1,tcrCode:'E',packaging:'ED'});assert(!tnpw.errors?.length,'0402 TNPW fixture is supported');w.applyCatalogPart(tnpw,'r1');open();
+ const current=w.schematicCatalogCandidate(10000),pool=w.ResistorParts.enumerate(catalog,'vishay-tnpw-e3',{...current,minOhms:1e-9,maxOhms:1e12}).map(part=>part.resistanceOhms);
+ for(const target of [12345,47200,99999,5000000]){type(target+'Ω');assert(JSON.stringify(values())===JSON.stringify(nearest(pool,target)),`${target} Ω: nearest list follows the actual 0402 family/TCR/tolerance value range`);}
+ type('12.345k');key('Enter');assert(inline()&&part().resistance===10000&&!inline().querySelector('[role="alert"]').hidden,'Unsupported exact catalog value shows inline feedback without changing the part');type('12.345k');options()[0].click();assert(!inline()&&part().resistance===12300&&part().catalog.familyId==='vishay-tnpw-e3'&&part().catalog.case==='0402'&&part().catalog.tcrCode==='E'&&part().tolerance===.1,'Selecting a nearby supported value retains package, family, tolerance and TCR');
+ open();inline().querySelector('.schematic-nearby-more').click();assert(get('schematicEditor').open&&!inline(),'Part options retains access to the full editor');get('schematicEditCancel').click();
+ // Exercise every physical position in both arms and preserve each network's connections.
+ const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));},state=()=>w.eval('schematicState'),same=(a,b)=>Math.abs(a-b)<=1e-9*Math.max(1,Math.abs(a),Math.abs(b));
+ for(const connection of ['series','parallel'])for(const mode of ['vout','vin','r1','r2','rl','tolerance']){
+  await reset();for(const arm of ['r1','r2']){get(arm+'Multiple').click();set(arm+'Connection',connection);get(arm+'Split').click();}set('solveFor',mode);if(mode==='rl')set('targetVout','4');
+  for(const arm of ['r1','r2']){
+   const ids=state().physical[arm].map(part=>part.id),label=`${connection}/${mode}/${arm}`;
+   if(mode===arm){assert(ids.every(id=>!svg().querySelector(`[data-schematic-edit="${id}"][data-edit-focus="value"]`)),label+': calculated physical resistors remain locked');continue;}
+   for(const [index,id] of ids.entries()){
+    const before=state().physical[arm].map(part=>({...part})),original=before.find(part=>part.id===id),target=original.resistance*1.03+.25;
+    open(id);type(target+'Ω');assert(input()?.type==='text'&&values().length===6,'Individual '+label+'/'+index+': text entry and live suggestions open on this resistor');
+    let expected=target;if(index%2){expected=values()[0];options()[0].click();}else key('Enter');
+    const s=state(),parts=s.physical[arm],changed=parts.find(part=>part.id===id),equivalent=connection==='series'?parts.reduce((sum,part)=>sum+part.resistance,0):1/parts.reduce((sum,part)=>sum+1/part.resistance,0);
+    assert(!inline()&&same(changed.resistance,expected)&&parts.filter(part=>part.id!==id).every(part=>part.resistance===before.find(original=>original.id===part.id).resistance)&&get('solveFor').value===mode&&get(arm+'Connection').value===connection,label+'/'+index+': typed or suggested value changes only the selected physical resistor and preserves mode/topology');
+    assert(same(s.circuit[arm],equivalent)&&parts.every(part=>same(part.voltage,part.current*part.resistance)&&same(part.power,part.voltage*part.current)),label+'/'+index+': equivalent resistance and per-part operating values recalculate correctly');
+    assert(w.schematicBomTsv().split('\r\n').some(row=>{const cells=row.split('\t');return cells[0]===changed.name&&cells[2]===w.format(expected,'Ω');}),label+'/'+index+': BOM reports the individual edited resistance');
+   }
+  }
+ }
+ await reset();for(const arm of ['r1','r2']){get(arm+'Multiple').click();get(arm+'Split').click();const ids=state().physical[arm].map(part=>part.id);w.storeTopology(arm,{connection:'parallel',children:[{connection:'series',children:ids.slice(0,2)},{connection:'series',children:ids.slice(2)}]});w.update();}
+ for(const arm of ['r1','r2'])for(const id of state().physical[arm].map(part=>part.id)){
+  const before=state().physical[arm].map(part=>({...part})),tree=JSON.stringify(w.armTopology(arm));open(id);type('2.641k');const expected=values()[0];options()[0].click();const parts=state().physical[arm],resistance=partId=>parts.find(part=>part.id===partId).resistance,ids=parts.map(part=>part.id),equivalent=1/(1/(resistance(ids[0])+resistance(ids[1]))+1/(resistance(ids[2])+resistance(ids[3])));
+  assert(!inline()&&parts.find(part=>part.id===id).resistance===expected&&parts.filter(part=>part.id!==id).every(part=>part.resistance===before.find(original=>original.id===part.id).resistance),`Mixed ${arm}/${id}: nearby selection targets the right physical resistor`);
+  assert(JSON.stringify(w.armTopology(arm))===tree&&same(state().circuit[arm],equivalent),`Mixed ${arm}/${id}: nested series/parallel connections and independent equivalent are preserved`);
+ }
+ const military=w.ResistorParts.evaluate(catalog,'vishay-eh-m55342',{resistanceOhms:10000,package:'12',tolerancePct:.1,tcrCode:'H',failureRate:'S'});
+ for(const connection of ['series','parallel'])for(const arm of ['r1','r2']){
+  await reset();get(arm+'Multiple').click();set(arm+'Connection',connection);get(arm+'Split').click();const ids=state().physical[arm].map(part=>part.id);
+  w.applyCatalogPart(tnpw,ids[0],true);w.applyCatalogPart(military,ids[1],true);
+  for(const [index,fixture] of [tnpw,military].entries()){
+   const id=ids[index],before=state().physical[arm].map(part=>({id:part.id,resistance:part.resistance,mpn:part.catalog?.mpn}));open(id);type('12.345k');const expected=values()[0];options()[0].click();const parts=state().physical[arm],changed=parts.find(part=>part.id===id),decoded=w.ResistorParts.decode(catalog,fixture.familyId,changed.catalog.mpn);
+   assert(!inline()&&changed.resistance===expected&&decoded.resistanceOhms===expected&&decoded.case===fixture.case&&decoded.tolerancePct===fixture.tolerancePct&&decoded.tcrCode===fixture.tcrCode&&decoded.failureRate===fixture.failureRate,`${connection}/${arm}/${fixture.familyId}: nearby value regenerates the individual MPN while preserving its package, tolerance, TCR and reliability`);
+   assert(parts.filter(part=>part.id!==id).every(part=>part.resistance===before.find(original=>original.id===part.id).resistance&&part.catalog?.mpn===before.find(original=>original.id===part.id).mpn),`${connection}/${arm}/${fixture.familyId}: other physical values and assigned part numbers remain unchanged`);
+  }
+ }
+ await reset();for(const width of [320,390,768,1440]){frame.style.width=width+'px';await pause();open();const box=inline().getBoundingClientRect(),list=inline().querySelector('[role="listbox"]').getBoundingClientRect(),anchor=svg().querySelector('[data-schematic-edit="r1"][data-edit-focus="value"]').getBoundingClientRect();assert(Math.abs(box.left-anchor.left)<2&&Math.abs(box.top-anchor.top)<2&&list.height>0&&list.bottom<=box.bottom+1,`${width}px: text box and nearest list are anchored together and fit their SVG overlay`);assert(svg().lastElementChild===inline(),`${width}px: suggestion overlay paints above the circuit`);key('Escape');}
+ open();type('12.345k');const xml=await(await fetch(get('schematicDownload').href)).text(),saved=new DOMParser().parseFromString(xml,'image/svg+xml');assert(!saved.querySelector('foreignObject,input,button,[data-inline-editor]'),'SVG export excludes transient textbox and suggestions');key('Escape');
+ assert(errors.length===0,'No runtime errors: '+errors.join('; '));
+}catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);});
+</script></html>

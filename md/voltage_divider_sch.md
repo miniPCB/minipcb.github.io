@@ -242,16 +242,21 @@ and recommendation labels while removing live adoption controls.
 Click a bordered SVG value or a pill, or focus it and press Enter/Space, to
 edit the circuit. VTOP opens voltage and source tolerance; RL opens resistance and load
 tolerance (blank resistance means open circuit). Click a physical resistor's
-value, tolerance or footprint to open a native dropdown **directly on the SVG**.
-Choosing an option applies it immediately, using the same catalog and stress
-validation as the full editor. Footprint and tolerance options follow the
-selected family, package and operating mode; resistance options include common
-compatible values near the displayed resistance.
+value to type **directly on the SVG**. A live list shows the six nearest catalog
+values to the resistance being typed, respecting the selected part's family,
+footprint, tolerance and TCR. Bare numbers use the unit shown beside the field;
+explicit units such as `499R`, `4k99`, `12.3 kΩ` and `1M` override it. Click a
+suggestion to apply it, or use the arrow keys and Enter. Enter or the checkmark
+without selecting a suggestion applies the typed value; manual parts allow
+arbitrary positive resistances. Tolerance and footprint retain their direct
+native dropdowns. All selections use the full editor's catalog and stress checks.
+The same text entry and suggestions apply to each physical resistor in series,
+parallel and mixed networks. Editing one part preserves its siblings and the
+connections, and recalculates the arm equivalent, operating values and BOM.
 
-**Custom value…** replaces the dropdown with an inline numeric resistance and
-its unit. Press Enter or the checkmark to apply; Escape cancels. Invalid choices
-show a local inline message and preserve the circuit. An unfinished custom draft
-participates in leave-page protection. Moving focus away cancels it. **Part
+Escape cancels. Invalid choices show a local inline message and preserve the
+circuit. An unfinished resistance draft participates in leave-page protection.
+Moving focus away cancels it. **Part
 options…** explicitly opens the full existing dialog for family, TCR, reliability
 and other specifications. M55342 offers catalog reliability codes; TNPW displays
 **Not applicable**. Footprint, TCR and tolerance choices follow the selected

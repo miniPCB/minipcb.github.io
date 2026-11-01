@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>All package and tolerance search checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:2000px;border:0}</style><h1>Package and tolerance search checks</h1><pre id="results">RUNNING</pre><iframe id="calculator" title="Calculator under test" src="../voltage_divider.html?package-tolerance-test=1"></iframe><script>
+"use strict";
+const checks=[],failures=[],summary={},assert=(ok,label)=>{checks.push(label);if(!ok)failures.push(label);};
+document.getElementById('calculator').addEventListener('load',async event=>{try{
+ const w=event.target.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get('liveSchematic');assert(await w.resistorCatalogReady,'Catalogs load');const errors=[];w.addEventListener('error',event=>errors.push(event.message));const catalog=await w.ResistorParts.load();
+ const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));},search=async()=>{get('pairForm').requestSubmit();return await w.pairSearchReady;};
+ set('solveFor','pairs');const original=w.readPairSpec(),sizes=[...get('pairPackageTop').options].map(option=>option.value),grades=[...get('pairTolTop').options].map(option=>Number(option.value)),tcrs=[...get('pairTcr').options].map(option=>Number(option.value));
+ summary.packages=sizes;summary.tolerances=grades;summary.default0603={};
+ for(const size of ['0805','0603']){set('pairPackageTop',size);set('pairPackageBot',size);const matches=await search();summary.default0603[size]={count:matches.length,families:[...new Set(matches.map(w.pairFamilyKey))]};assert(matches.length>0&&matches.every(pair=>pair.top.case===size&&pair.bot.case===size),'Default full-range search finds valid '+size+' combinations');}
+ const supported=(family,size,tolerance,tcr)=>{const pkg=family.packages.find(pkg=>pkg.case===size),code=family.tcrCodes.find(code=>code.ppm===tcr)?.code;return !!pkg?.limits.some(range=>range.tcrCodes.includes(code)&&range.tolerancesPct.includes(tolerance)&&range.minOhms<=10000&&range.maxOhms>=10000);};
+ // At 10 kΩ, 12 V / 6 V, 50% output error and full stress allowance, every catalog-supported grade can pass; this isolates enumeration from intentionally tight design filters.
+ const spec={...original,vin:12,target:6,sourceTolerance:0,errorPct:50,rl:null,loadTolerance:0,minOhms:10000,maxOhms:10000,maxStress:100,maxPower:null,temperatureC:70};
+ let poolCases=0;
+ for(const family of catalog.families)for(const pkg of family.packages)for(const tolerance of grades)for(const tcr of tcrs){
+  const expected=supported(family,pkg.case,tolerance,tcr),request={...spec,packageTop:pkg.case,familyTop:family.id,toleranceTop:tolerance,tcrPpm:tcr},pool=w.catalogPairParts(request,'Top');poolCases++;
+  assert(pool.length===(expected?1:0),`${family.id}/${pkg.case}/±${tolerance}%/${tcr}ppm: catalog enumeration matches supported limits`);
+  if(pool.length){const part=pool[0],decoded=w.ResistorParts.decode(catalog,family.id,part.mpn);assert(decoded.case===pkg.case&&decoded.tolerancePct===tolerance&&decoded.tcrPpm===tcr&&decoded.resistanceOhms===10000,'Enumerated MPN round-trips physical size/value/grade/TCR: '+part.mpn);}
+ }
+ summary.catalogPoolCases=poolCases;
+ const configure=(size,tolerance,family='all')=>{for(const [id,value]of Object.entries({pairVin:12,pairVmid:6,pairSourceTol:0,pairErrorPct:50,pairMinR:10000,pairMaxR:10000,pairMaxStress:100,pairMaxPower:'',pairRl:'',pairTemperature:70,pairTcr:25,pairFamilyTop:family,pairFamilyBot:family,pairPackageTop:size,pairPackageBot:size,pairTolTop:tolerance,pairTolBot:tolerance}))set(id,value);};
+ summary.simple=[];
+ for(const size of sizes)for(const tolerance of grades){
+  configure(size,tolerance);set('pairConstructionMode','single');const expected=catalog.families.filter(family=>supported(family,size,tolerance,25)).length,matches=await search();
+  assert(get('pairError').hidden&&matches.length===expected*expected,`${size}/±${tolerance}%: real pair search returns every legal family pairing`);
+  assert(matches.every(pair=>pair.top.case===size&&pair.bot.case===size&&pair.top.tolerancePct===tolerance&&pair.bot.tolerancePct===tolerance&&pair.error<=50&&pair.pstress<=100&&pair.vstress<=100),`${size}/±${tolerance}%: every pair preserves requested package/grade and passes bounds`);
+  summary.simple.push({size,tolerance,count:matches.length});
+ }
+ summary.familySearchCases=0;
+ for(const family of catalog.families)for(const pkg of family.packages)for(const tolerance of family.toleranceCodes.map(code=>code.pct)){
+  configure(pkg.case,tolerance,family.id);set('pairConstructionMode','single');const matches=await search(),expected=supported(family,pkg.case,tolerance,25);
+  assert(get('pairError').hidden&&matches.length===(expected?1:0),`${family.id}/${pkg.case}/±${tolerance}%: family-only UI search works`);summary.familySearchCases++;
+ }
+ // Exercise the bounded network path for every supported package/grade, using two series parts per arm.
+ summary.network=[];
+ for(const size of sizes)for(const tolerance of grades){
+  configure(size,tolerance);w.eval('pairConstruction = Object.fromEntries(ARMS.map(arm => { const parts = [0,1].map(index => ({ id: arm + "_test_" + index, name: arm.toUpperCase() + "." + (index+1), automatic: true, resistance: null, settings: {} })); return [arm, { connection: { connection: "series", children: parts.map(part => part.id) }, parts }]; }));');set('pairConstructionMode','configured');const matches=await search(),expected=catalog.families.some(family=>supported(family,size,tolerance,25));
+  assert((matches.length>0)===expected,`${size}/±${tolerance}%: configured network search finds a solution whenever a family supports it`);
+  assert(matches.every(item=>item.combination&&Object.values(item.physical).flat().every(part=>part.catalog.case===size&&part.tolerance===tolerance)&&item.error<=50&&item.pstress<=100&&item.vstress<=100),`${size}/±${tolerance}%: network results use only the requested package/grade`);
+  summary.network.push({size,tolerance,count:matches.length,error:get('pairError').hidden?'':get('pairError').textContent});
+ }
+ // Re-run the full size/grade grid through the actual SVG dropdown event/save path.
+ const chooseSvg=(arm,focus,value)=>{svg().querySelector(`[data-schematic-edit="${arm}"][data-edit-focus="${focus}"]`).dispatchEvent(new w.MouseEvent('click',{bubbles:true}));const select=svg().querySelector('[data-inline-editor] select');assert(select&&!get('schematicEditor').open,'SVG '+arm+' '+focus+' opens its inline selector');select.value=String(value);select.dispatchEvent(new w.Event('change',{bubbles:true}));assert(!svg().querySelector('[data-inline-editor]')&&!get('schematicEditor').open,'SVG '+arm+' '+focus+' saves its selection without a dialog');};
+ summary.inline=[];
+ for(const size of sizes)for(const tolerance of grades){
+  set('pairConstructionMode','single');configure('0805',.1);for(const arm of ['r1','r2']){chooseSvg(arm,'power',size);chooseSvg(arm,'tolerance',tolerance);}const matches=await search(),expected=catalog.families.filter(family=>supported(family,size,tolerance,25)).length;
+  assert(matches.length===expected*expected,`${size}/±${tolerance}%: SVG selections reach the real search with the requested constraints`);summary.inline.push({size,tolerance,count:matches.length});
+ }
+ // A coarse resistor grade can legitimately exceed a tighter output specification.
+ configure('0603',5);set('pairErrorPct','5');let filtered=await search();assert(filtered.length===0&&get('pairError').hidden,'0603 ±5% resistors plus drift cannot satisfy the default ±5% VMID target at half supply');set('pairErrorPct','50');filtered=await search();assert(filtered.length>0,'The same 0603 ±5% catalog parts are searchable once the output allowance permits them');summary.coarseToleranceFilter={tightCount:0,relaxedCount:filtered.length};
+ assert(errors.length===0,'No browser runtime errors: '+errors.join('; '));
+}catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,summary,checks},null,2);});
+</script></html>
