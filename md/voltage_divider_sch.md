@@ -311,6 +311,20 @@ per-resistor tolerance and allowed VMID error. If any part lacks a working-volta
 rating, the overall Vstress is unassessed and the table lists how many parts have
 specified ratings. An explicit maximum Vstress filter excludes unassessed parts.
 
+The expanded table also lists the **tolerance stack**: VTOP source tolerance,
+initial resistor tolerance, thermal drift, radiation drift, aging drift, the
+combined resistor limit, and the resulting VMID interval. Resistance rows show
+the largest per-part limit across the physical divider resistors and RL, if
+fitted; **Up to** indicates that the parts have different limits. Hover details
+list each part and retain any fixed-ohm aging term. These are resistance limits,
+not independent percentages to add to VMID error. The VMID range uses the actual
+network and load with compounded resistance limits and source tolerance.
+Missing terms say **Not set** or **partial**; disabled effects say **Excluded**.
+The stack status distinguishes initial-only analysis, partly characterized
+intervals and aging estimates. The same breakdown follows a selected solution
+preview, an applied circuit, and SVG/Markdown downloads. Expansion only changes
+the display; it does not recalculate or invalidate a search.
+
 Where an independent VMID target exists (inverse modes and combination searches),
 **Nominal target error** is the absolute output error divided by the target
 magnitude, expressed as a percentage; **0%** means on target. **Worst target

@@ -2146,6 +2146,33 @@
 
     let schematicCharacteristicsExpanded = false;
 
+    function circuitToleranceRows(state) {
+      const environment = state.environment;
+      if (!environment) return [];
+      const { settings } = environment, budgets = ARMS.flatMap(arm => state.physical[arm].map(part => [part.name, part.environment]));
+      if (environment.load) budgets.push(["RL", environment.load]);
+      const summary = (key, effect = null) => {
+        if (effect && !settings[effect].enabled) return "Excluded";
+        const values = budgets.map(([, budget]) => budget?.[key]).filter(Number.isFinite);
+        if (!values.length) return "Not set";
+        const high = Math.max(...values), same = values.every(value => Math.abs(value - high) <= 1e-10);
+        return `${same ? "" : "Up to "}±${percent(high)}${values.length < budgets.length || key === "effectivePct" && environment.issues.length ? " · partial" : ""}`;
+      };
+      const detail = key => budgets.map(([name, budget]) => `${name}: ${Number.isFinite(budget?.[key]) ? `±${percent(budget[key])}` : "Not set"}${key === "agingPct" && Number.isFinite(budget?.agingOhms) ? ` (includes ±${format(budget.agingOhms, "Ω")} fixed term)` : ""}`).join("; ");
+      const scope = !Object.values(settings).some(effect => effect.enabled) ? "Initial tolerance only" : environment.estimated ? environment.issues.length ? "Estimate · incomplete" : "Aging estimate" : environment.issues.length ? "Partly characterized" : "Configured bounds";
+      const description = "Resistance limits across physical divider resistors and RL, if fitted; these are not separate additive VMID errors. ";
+      return [
+        ["Tolerance stack", scope, "environmentScope"],
+        ["VTOP tolerance", `±${percent(state.tolerances.vin)}`, "stackSource", "Source variation is applied separately to the complete divider resistance intervals."],
+        ["Initial R tolerance", summary("initialPct"), "stackInitial", description + detail("initialPct")],
+        ["Thermal R drift", summary("thermalPct", "thermal"), "stackThermal", description + detail("thermalPct")],
+        ["Radiation R drift", summary("radiationPct", "radiation"), "stackRadiation", description + detail("radiationPct")],
+        ["Aging R drift", summary("agingPct", "aging"), "stackAging", description + "Equivalent percent includes each part's fixed-ohm endurance term. " + detail("agingPct")],
+        ["Combined R limit", summary("effectivePct"), "stackCombined", description + "Largest deviation from nominal after compounding the configured terms; fixed aging ohms remain absolute. Missing terms are not qualified as zero. " + detail("effectivePct") + ". " + environmentScope(environment)],
+        ["VMID range", `${format(state.bounds.min, "V")} to ${format(state.bounds.max, "V")}`, "stackVmid", "Modeled output interval from VTOP tolerance and the complete resistor stack, using the actual series/parallel network and load. " + environmentScope(environment)]
+      ];
+    }
+
     function circuitCharacteristics(state, mode) {
       const complete = !!state && !state.pairSetup && !state.pending, pair = state?.pair, target = state?.target;
       const value = (number, unit) => Number.isFinite(number) ? format(number, unit) : "—";
@@ -2162,7 +2189,7 @@
         ["Nominal input current", complete ? value(Math.abs(state.result.i1), "A") : "—", "nominalCurrent"],
         ["Source resistance Rth", complete ? value(state.result.rth, "Ω") : "—", "rth"]
       ];
-      if (complete && state.environment) rows.push(["Tolerance stack", state.environment.estimated ? "Aging estimate" : state.environment.issues.length ? "Partly characterized" : "Configured bounds", "environmentScope"]);
+      if (complete) rows.push(...circuitToleranceRows(state));
       if (state?.pair?.combination) rows.push(["Stress method", "Conservative interval bounds", "stressMethod"], ["Non-trim power spread", percent(state.pair.powerSpread), "powerSpread"]);
       if (["pairs", "vin", "r1", "r2", "rl"].includes(mode) || mode === "vout" && Number.isFinite(target)) {
         rows.push([mode === "vout" ? "Nominal VMID target" : "Target VMID", value(target, "V"), "targetVmid"],
@@ -2190,15 +2217,17 @@
       schematicShape(toggle, "rect", { width, height: 38, fill: "transparent" });
       schematicText(toggle, width - 24, 24, schematicCharacteristicsExpanded ? "−" : "+", 18, "#54d2ff");
       const body = schematicShape(table, "g", { id: "schematicCharacteristicsBody", role: "rowgroup", display: schematicCharacteristicsExpanded ? "inline" : "none" });
-      for (const [index, [label, value, field]] of rows.entries()) {
+      for (const [index, [label, value, field, description]] of rows.entries()) {
         const metadata = index >= rows.length - 2, row = schematicShape(body, "g", { role: "row", "aria-rowindex": index + 1 }), top = 52 + index * 28 + (metadata ? 8 : 0);
         const labelSize = width < 420 ? 11 : 12, valueSize = Math.min(metadata ? 11 : 13, (width - 36 - label.length * labelSize * 0.62) / (value.length * 0.62));
         const name = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
         schematicText(name, 12, top, label, labelSize, "#a8bece");
         const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": 2 });
         const parent = field === "calculator" ? schematicShape(cell, "a", { href: url, target: "_top", "aria-label": "Voltage divider calculator page" }) : cell;
-        const text = schematicText(parent, width - 12, top, value, valueSize, field === "calculator" ? "#54d2ff" : field === "findResult" ? complete ? "#ff8e8e" : "#f6d365" : "#c6e3ff", field);
+        const stackColor = field === "stackThermal" ? "#75d5ff" : field === "stackRadiation" ? "#d0acff" : field === "stackAging" ? "#ffd083" : null;
+        const text = schematicText(parent, width - 12, top, value, valueSize, field.startsWith("stack") && /Not set|partial/.test(value) ? "#ffba52" : stackColor || (field === "calculator" ? "#54d2ff" : field === "findResult" ? complete ? "#ff8e8e" : "#f6d365" : "#c6e3ff"), field);
         text.setAttribute("text-anchor", "end");
+        if (description) schematicShape(cell, "title").textContent = description;
         if (field === "calculator") { text.setAttribute("text-decoration", "underline"); schematicShape(parent, "title").textContent = url; }
         if (field === "analyzedAt" && state?.analyzedAt) schematicShape(cell, "title").textContent = state.analyzedAt;
         if (["nominalError", "worstError"].includes(field)) schematicShape(cell, "title").textContent = targetErrorDescription(state?.target);
