@@ -62,6 +62,8 @@
     const tcrPpm = profile ? catalog.tcrPpm : settings.thermal.manualTcrPpm;
     let thermalPct = 0, radiationPct = 0, agingPct = 0, agingRelativePct = 0, agingOhms = 0, estimated = false;
     const missing = (name, required = false) => { issues.push(name); if (required) requiredGaps.push(name); };
+    const mission = settings.mission?.parameters;
+    if (profile && mission && (!Number.isFinite(catalog.temperatureC) || mission.ambientMaxC > Math.max(70, catalog.temperatureC))) missing("Catalog rating ambient is below the mission maximum", true);
     if (settings.thermal.enabled) {
       if (!Number.isFinite(tcrPpm)) { thermalPct = null; missing("Manual resistor/RL TCR not set"); }
       else {
@@ -71,7 +73,7 @@
     }
     if (settings.radiation.enabled) {
       const { doseKrad, qualifiedKrad } = settings.radiation;
-      if (doseKrad === null) { radiationPct = null; missing("Radiation dose not set"); }
+      if (doseKrad === null) { radiationPct = null; missing("Radiation dose not set", !!settings.mission); }
       else if (doseKrad > 0) {
         const bound = settings.radiation[`${key}Pct`];
         if (bound === null || qualifiedKrad === null || qualifiedKrad < doseKrad) { radiationPct = null; missing("Radiation drift is not qualified through the mission dose", true); }
@@ -106,6 +108,9 @@
         }
       }
     }
+    if (settings.aging.enabled && mission?.years > 0 && mission.dutyPct < 100 && settings.aging[`${key}Pct`] === null) {
+      agingPct = null; missing("Unpowered mission aging needs a full-mission drift override", true);
+    }
     const terms = [initialPct, thermalPct, radiationPct, agingRelativePct].filter(value => value !== null);
     if (!Number.isFinite(resistance) || resistance <= 0 || terms.some(value => !Number.isFinite(value) || value < 0 || value >= 100)) throw new Error("The resistor drift stack must keep every resistance finite and positive.");
     // Endurance is affine: percentage of the initial resistance PLUS fixed ohms.
@@ -116,7 +121,7 @@
     const min = agedMin * drift.reduce((factor, pct) => factor * (1 - pct / 100), 1);
     const max = agedMax * drift.reduce((factor, pct) => factor * (1 + pct / 100), 1);
     if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0) throw new Error("The environmental resistance interval exceeds the numeric range.");
-    return { min, max, initialPct, thermalPct, radiationPct, agingPct, agingRelativePct: agingPct === null ? null : agingRelativePct, agingOhms: agingPct === null ? null : agingOhms, tcrPpm, referenceC, estimated, issues, requiredGaps, qualified: !issues.length && !estimated, effectivePct: Math.max(resistance - min, max - resistance) / resistance * 100 };
+    return { min, max, initialPct, thermalPct, radiationPct, agingPct, agingRelativePct: agingPct === null ? null : agingRelativePct, agingOhms: agingPct === null ? null : agingOhms, tcrPpm, referenceC, estimated, issues, requiredGaps, qualified: !issues.length && !estimated && !settings.mission, effectivePct: Math.max(resistance - min, max - resistance) / resistance * 100 };
   }
   root.ResistorEnvironment = Object.freeze({ defaults, initialOnly, validate, interval, profiles, sources });
 })(globalThis);

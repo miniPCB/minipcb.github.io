@@ -607,11 +607,73 @@ cached design solutions and enables Find Design Solutions; canceling or saving
 unchanged settings preserves them. Settings apply across calculator modes and
 participate in the leave-page warning.
 
+### Orbit and mission planning profiles
+
+Open any environmental box, then expand **Mission profiles · orbit & duration**.
+Choose a reference orbit or **Custom orbit / circular GNSS**, edit the assumptions,
+and choose **Use mission defaults for all three stacks**. This stages the complete
+profile; **Save environment** commits it and invalidates previous solutions.
+**Cancel** discards all staged changes. The current profile appears in the SVG
+and Circuit characteristics, and its assumptions accompany SVG, Markdown,
+LTspice annotations and search CSV. No orbit is selected automatically on startup.
+
+Reference templates offer low-inclination LEO (1 year), polar LEO / SSO-like
+(5 years), an eccentric MEO belt-crossing case (5 years), and GEO (15 years).
+These starting durations are editable planning choices, not part lifetime ratings.
+The MEO case is **not** a circular GPS/Galileo environment;
+use a custom annual dose for that orbit or another geometry. Exact reference
+geometry and annual rates are shown in the editor. The reference doses come from
+[NASA/TM-20250006822, pp. 11–12](https://ntrs.nasa.gov/api/citations/20250006822/downloads/TM-20250006822.pdf#page=15),
+using 95% confidence, solar maximum and 2.54 mm aluminum shielding around silicon.
+Changing shielding or orbit geometry invalidates that reference; the tool does
+not interpolate dose versus shielding. A custom annual dose must come from
+applicable mission analysis, including shielding material/geometry and the
+mission epoch, solar activity and required confidence level. The ×2 planning
+multiplier is an editable engineering allowance, not a prescribed universal margin.
+Use the custom-analysis notes field to retain the model, epoch, solar conditions,
+confidence and source alongside the annual dose in design exports.
+
+| Input | Effect on the applied defaults |
+| --- | --- |
+| Orbit altitude, inclination and eccentricity | Select the applicable reference environment; another geometry requires custom radiation analysis. |
+| Shielding | The reference assumes 2.54 mm aluminum. Another thickness/material/geometry needs its own annual dose. |
+| Annual dose and planning multiplier | `TID = annual krad(Si) × elapsed years × multiplier`; this is a planning estimate, not a prediction or qualification of resistor drift. |
+| Equipment minimum/maximum temperature | Film minimum uses the equipment minimum; film maximum adds the chosen maximum self-heating rise. |
+| Resistor self-heating / mounting | Default maximum rise is an editable 10 °C assumption; actual power, mounting and board thermal resistance must support it. It is not calculated from the resistor footprint. |
+| Mission duration | Converts years to elapsed time using 365 days/year and 24 hours/day. |
+| Powered duty | `operating hours = years × 8760 × duty/100`; it does not reduce accumulated radiation exposure. |
+| Unpowered time | Storage still causes drift. Partial-duty missions require qualified full-mission aging overrides covering both powered and unpowered time. |
+
+The initial equipment range is −20 to +70 °C, following the generic-electronics
+range discussed by [ESA thermal-control guidance](https://www.esa.int/esapub/bulletin/bullet87/paroli87.htm).
+With the default self-heating allowance, the initial film envelope is −20 to
++80 °C. This is an internal-equipment assumption shared by all orbits, not an
+external-spacecraft temperature prediction. Edit it to match thermal analysis.
+Catalog power ratings must cover the equipment maximum, accounting for their
+70 °C derating knee; hotter missions require appropriately derated selections.
+
+Applying a profile clears previous radiation qualification limits and aging
+overrides because their dose, temperature or life coverage may no longer apply.
+The tool does not invent TNPW/M55342 radiation drift limits or extrapolate their
+endurance guarantees. Enter qualified family limits for the mission dose, and
+mission aging overrides where published endurance does not cover the duration.
+Missing custom dose is uncharacterized and prevents accepted mission solutions.
+Profiles remain labeled **planning**, even when all configured drift terms are
+covered. Thermal cycling, launch/storage exposure beyond this profile,
+displacement damage and radiation-induced failures require separate assessment.
+See [NASA NEPP's mission-dependent radiation guidance](https://nepp.nasa.gov/pages/Radiation.cfm).
+
+Editing an individual environmental term retains the original template as
+provenance and marks **inputs edited**. **Use independent environmental inputs**
+removes the mission association while retaining the current thermal, radiation
+and aging values; Save/Cancel applies to that change too.
+
 Every numeric mission input offers a dropdown and **Custom…** entry. Opening an
 editor restores the saved preset or custom number. **Not set** is distinct from
 explicit zero; the aging family overrides use **Automatic · catalog endurance**
-to retain their complete published percentage-plus-ohm envelopes. Presets do not
-change the defaults, equations or qualification rules.
+to retain their complete published percentage-plus-ohm envelopes. Individual
+value dropdowns preserve the interval equations and startup defaults. Applying
+a mission template explicitly stages new environmental inputs as described above.
 
 | Input | Dropdown choices | Basis and interpretation |
 | --- | --- | --- |
