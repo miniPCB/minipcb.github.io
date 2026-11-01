@@ -315,16 +315,14 @@ rating, the overall Vstress is unassessed and the table lists how many parts hav
 specified ratings. An explicit maximum Vstress filter excludes unassessed parts.
 
 The expanded table also lists the **tolerance stack**: VTOP source tolerance,
-initial resistor tolerance, thermal drift, radiation drift, aging drift, the
+initial resistor tolerance, thermal drift, the aging/radiation allowance, the
 combined resistor limit, and the resulting VMID interval. Resistance rows show
 the largest per-part limit across the physical divider resistors and RL, if
 fitted; **Up to** indicates that the parts have different limits. Hover details
 list each part and retain any fixed-ohm aging term. These are resistance limits,
 not independent percentages to add to VMID error. The VMID range uses the actual
 network and load with compounded resistance limits and source tolerance.
-Missing terms say **Not set** or **partial**; disabled effects say **Excluded**.
-The stack status distinguishes initial-only analysis, partly characterized
-intervals and aging estimates. The same breakdown follows a selected solution
+The standard calculation is labeled **Drift estimate**. The same breakdown follows a selected solution
 preview, an applied circuit, and SVG/Markdown downloads. Expansion only changes
 the display; it does not recalculate or invalidate a search.
 
@@ -600,200 +598,75 @@ These are independent worst-case limits, not a statistical average: four equal
 in the same direction. The same interval pipeline now covers manual circuits,
 inverse modes, common-tolerance solving, candidate previews and both search paths.
 
-## Environmental tolerance stack
+## Operating conditions and tolerance estimates
 
-The **THERMAL**, **RADIATION** and **AGING** information boxes stack below VTOP.
-Click a box, or focus it and press Enter/Space, to edit its mission inputs. The
-left column expands the drawing instead of reducing the circuit's symbol size.
-The boxes remain in static SVG downloads. Saving changed mission settings clears
-cached design solutions and enables Find Design Solutions; canceling or saving
-unchanged settings preserves them. Settings apply across calculator modes and
-participate in the leave-page warning.
+One **OPERATING CONDITIONS** box below VTOP replaces the Mission, Thermal,
+Radiation and Aging boxes. Click it or press Enter/Space to set the ambient
+minimum and maximum. The default is −55 to +70 °C. No orbit, dose, mission life,
+or family-specific radiation classification is required to use the calculator.
 
-### Orbit and mission planning profiles
+**Drift estimates · automatic by part** is collapsed by default. It contains a
+10 °C self-heating allowance, combined aging/radiation percentage overrides for
+each family, and the unassigned-resistor/RL assumptions (25 ppm/°C at 25 °C,
+±0.5% drift). The self-heating rise is an editable allowance, not a calculation
+of PCB thermal resistance. Temperature drift uses ambient minimum through
+ambient maximum plus that rise. The entered range must fit the catalog TCR
+range; catalog power is conservatively derated for the maximum ambient too.
 
-The **MISSION** information box is always visible above THERMAL, RADIATION and
-AGING. Before choosing a profile it says **Not selected**. Click it, or focus it
-and press Enter/Space, to choose a reference orbit or **Custom orbit / circular
-GNSS** and edit duration and assumptions. **Apply mission** automatically sets
-the temperature range, radiation dose and aging life together in one action.
-**Cancel** leaves the design unchanged. Applying unchanged mission parameters
-preserves qualified drift limits, manual refinements and existing solutions;
-changed parameters invalidate previous solutions and clear stale qualification
-overrides. The current profile appears in the SVG
-and Circuit characteristics, and its assumptions accompany SVG, Markdown,
-LTspice annotations and search CSV. No orbit is selected automatically on startup.
-The individual environmental editors still offer the earlier staged workflow:
-expand **Mission profiles · orbit & duration**, choose **Use mission defaults for
-all three stacks**, then **Save environment**.
+The part's ordered TCR sets temperature drift, using TNPW's 20 °C or M55342's
+25 °C reference. Select TCR and screening/reliability in the existing part
+options. Reliability codes do not change drift or imply radiation qualification.
+No matched-TCR cancellation or statistical reduction is assumed.
 
-Reference templates offer low-inclination LEO (1 year), polar LEO / SSO-like
-(5 years), an eccentric MEO belt-crossing case (5 years), and GEO (15 years).
-These starting durations are editable planning choices, not part lifetime ratings.
-The MEO case is **not** a circular GPS/Galileo environment;
-use a custom annual dose for that orbit or another geometry. Exact reference
-geometry and annual rates are shown in the editor. The reference doses come from
-[NASA/TM-20250006822, pp. 11–12](https://ntrs.nasa.gov/api/citations/20250006822/downloads/TM-20250006822.pdf#page=15),
-using 95% confidence, solar maximum and 2.54 mm aluminum shielding around silicon.
-Changing shielding or orbit geometry invalidates that reference; the tool does
-not interpolate dose versus shielding. A custom annual dose must come from
-applicable mission analysis, including shielding material/geometry and the
-mission epoch, solar activity and required confidence level. The ×2 planning
-multiplier is an editable engineering allowance, not a prescribed universal margin.
-Use the custom-analysis notes field to retain the model, epoch, solar conditions,
-confidence and source alongside the annual dose in design exports.
+Automatic combined drift allowances use these catalog endurance benchmarks:
 
-| Input | Effect on the applied defaults |
-| --- | --- |
-| Orbit altitude, inclination and eccentricity | Select the applicable reference environment; another geometry requires custom radiation analysis. |
-| Shielding | The reference assumes 2.54 mm aluminum. Another thickness/material/geometry needs its own annual dose. |
-| Annual dose and planning multiplier | `TID = annual krad(Si) × elapsed years × multiplier`; this is a planning estimate, not a prediction or qualification of resistor drift. |
-| Equipment minimum/maximum temperature | Film minimum uses the equipment minimum; film maximum adds the chosen maximum self-heating rise. |
-| Resistor self-heating / mounting | Default maximum rise is an editable 10 °C assumption; actual power, mounting and board thermal resistance must support it. It is not calculated from the resistor footprint. |
-| Mission duration | Converts years to elapsed time using 365 days/year and 24 hours/day. |
-| Powered duty | `operating hours = years × 8760 × duty/100`; it does not reduce accumulated radiation exposure. |
-| Unpowered time | Storage still causes drift. Partial-duty missions require qualified full-mission aging overrides covering both powered and unpowered time. |
-
-The initial equipment range is −20 to +70 °C, following the generic-electronics
-range discussed by [ESA thermal-control guidance](https://www.esa.int/esapub/bulletin/bullet87/paroli87.htm).
-With the default self-heating allowance, the initial film envelope is −20 to
-+80 °C. This is an internal-equipment assumption shared by all orbits, not an
-external-spacecraft temperature prediction. Edit it to match thermal analysis.
-Catalog power ratings must cover the equipment maximum, accounting for their
-70 °C derating knee; hotter missions require appropriately derated selections.
-
-Applying a profile clears previous radiation qualification limits and aging
-overrides because their dose, temperature or life coverage may no longer apply.
-The tool does not invent TNPW/M55342 radiation drift limits or extrapolate their
-endurance guarantees. Enter qualified family limits for the mission dose, and
-mission aging overrides where published endurance does not cover the duration.
-Missing custom dose is uncharacterized and prevents accepted mission solutions.
-Profiles remain labeled **planning**, even when all configured drift terms are
-covered. Thermal cycling, launch/storage exposure beyond this profile,
-displacement damage and radiation-induced failures require separate assessment.
-See [NASA NEPP's mission-dependent radiation guidance](https://nepp.nasa.gov/pages/Radiation.cfm).
-
-Editing an individual environmental term retains the original template as
-provenance and marks **inputs edited**. **Use independent environmental inputs**
-removes the mission association while retaining the current thermal, radiation
-and aging values; Save/Cancel applies to that change too.
-
-Every numeric mission input offers a dropdown and **Custom…** entry. Opening an
-editor restores the saved preset or custom number. **Not set** is distinct from
-explicit zero; the aging family overrides use **Automatic · catalog endurance**
-to retain their complete published percentage-plus-ohm envelopes. Individual
-value dropdowns preserve the interval equations and startup defaults. Applying
-a mission template explicitly stages new environmental inputs as described above.
-
-| Input | Dropdown choices | Basis and interpretation |
+| Family / operating mode | Automatic allowance | Benchmark basis |
 | --- | --- | --- |
-| Minimum film temperature | −65, −55, −50, −40, 0, 20, 25 °C | Catalog limits/reference points and AEC-Q200 endpoints; −65 °C is outside the supported catalog TCR interval. |
-| Maximum film temperature | 25, 70, 85, 105, 125, 150, 155, 175 °C | Reference/test temperatures and operating limits; values above 125 °C are explicitly labeled outside the catalog TCR interval. These are film temperatures here, including self heating. |
-| Manual/RL TCR | 0, 10, 15, 25, 50, 100, 200, 300 ppm/°C | TNPW/M55342 ordering grades, plus explicit zero only with supporting data; catalog parts continue using their actual ordered grade. |
-| Manual/RL reference | 20 or 25 °C | TNPW and M55342 reference temperatures; Custom supports another documented reference. |
-| Mission/qualification TID | 0, 3, 10, 30, 50, 100, 300, 500, 1000 krad(Si) | Numerical levels from NASA's microcircuit RHA table, plus explicit zero. These levels do not establish resistor radiation qualification. |
-| Operating life | 0, 1000, 2000, 8000, 8760, 10000, 43800, 87600, 131400, 225000 h | Catalog endurance milestones, plus 1/5/10/15-year continuous-operation conveniences using 24 h/day and 365 days/year. Calendar conversions are not qualification durations. |
-| Radiation/aging drift allowances | 0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.6, 1, 2% | Familiar resistance-change magnitudes from the cited datasheet tables, offered only as user-qualified entry shortcuts. They are not generic radiation limits or automatic aging recommendations. |
-| M55342 aging-test film reference | 20, 25, 70, 85, 105, 125, 150, 155, 175 °C | Temperature setpoints only, with Custom for measured test data. No option is a published M55342 test-film reference; the default remains Not set. |
+| TNPW general | ±(0.05% of resistance + 0.01 Ω) | 1000 h endurance |
+| TNPW power | ±(0.1% of resistance + 0.01 Ω) | 1000 h endurance |
+| TNPW advanced | ±(0.2% of resistance + 0.05 Ω) | 1000 h endurance |
+| M55342 | ±0.5% | MIL 2000 h endurance requirement at 70 °C |
 
-Preset references were reviewed on 31 October 2026: Vishay documents 28758,
-60018 and 28809, [Panasonic's AEC-Q200 grade guide](https://industrial.panasonic.com/jp/ds/ss/technical/b17),
-and [NASA's RHA dose table](https://nepp.nasa.gov/npsl/mic/mono/NSL_PND.html).
-The editors link their relevant references. Temperature endpoints from operating
-or automotive grades are convenient inputs, not permission to extrapolate TCR or
-endurance beyond the selected part's characterized conditions.
+These are **engineering estimates**, not a lifetime prediction or guaranteed
+mission worst case. TNPW's absolute-ohm term makes the percentage allowance
+larger for low values and stays absolute in the interval arithmetic. The
+M55342 default uses the MIL limit rather than lower typical Vishay performance.
+The operating mode, loading and published test conditions remain relevant to
+the benchmark; no lifetime, temperature acceleration or radiation response is
+extrapolated. An override replaces the whole family allowance, including the
+automatic fixed-ohm term, rather than adding a second copy of the drift.
 
-Initial tolerance remains the ordering tolerance used in part numbers and the BOM.
-Each physical resistance instead receives separate environmental intervals:
+Neither datasheet publishes a universal dose-to-resistance-drift curve. The
+automatic benchmark includes **no characterized radiation contribution**.
+Use the combined allowance override for an application-specific aging/radiation
+estimate. The UI and exports explicitly retain this distinction; a screening
+code is not converted into an invented radiation coefficient. Unknown future
+families need their own data, rather than silently inheriting these benchmarks.
 
-`Rmin = Rnom × product(1 − delta_i / 100)`
+For each physical part, with initial tolerance `t`, combined relative drift `a`,
+fixed drift `b` ohms and thermal drift `h` expressed as fractions:
 
-`Rmax = Rnom × product(1 + delta_i / 100)`
+`h = |TCR| × max(|ambient_min − Tref|, |ambient_max + rise − Tref|) / 10⁶`
 
-For percentage-only terms the factors include initial tolerance and each
-characterized drift allowance. TNPW's fixed aging-ohm term stays absolute:
-`Raged,min = Rnom × (1 − initial/100) × (1 − aging_relative/100) − aging_ohms`,
-with the corresponding plus signs for the upper bound. Thermal and radiation
-factors apply to that aged resistance interval. Converting fixed ohms to a
-nominal percentage before the lower-bound calculation would understate drift,
-especially at low resistance. The model retains cross terms and independent signs; there is no RSS reduction or
-assumed cancellation between matching values, catalog families or TCR codes.
-Series/parallel equivalents, VMID/target error, part voltage and power, total
-power and input current all use these resistance endpoints. RL uses the explicit
-manual TCR/drift inputs, while VTOP retains its entered voltage tolerance, which
-must include the source's full mission variation.
+`Rmin = (Rnom × (1 − t) × (1 − a) − b) × (1 − h)`
 
-**Thermal:** enter the resistor film/hotspot temperature range, including self
-heating. The startup defaults are −55 to +125 °C, the common catalog TCR span;
-this is a generic analysis envelope, not a predicted mission temperature.
-Orbit templates instead start with −20 to +70 °C equipment temperature plus
-an editable 10 °C maximum self-heating rise. Ambient alone is not a film-temperature
-estimate. For a catalog resistor,
-`delta_thermal (%) = |TCR| × max(|Tmin − Tref|, |Tmax − Tref|) / 10000`.
-The ordered TCR is used, with TNPW's 20 °C reference and M55342's 25 °C reference.
-The implementation does not qualify TCR extrapolation outside −55 to +125 °C.
-Unassigned resistors and RL need an explicit TCR/reference; their unknown drift
-is marked. PCB thermal resistance is not inferred from package power ratings.
+`Rmax = (Rnom × (1 + t) × (1 + a) + b) × (1 + h)`
 
-**Aging:** the startup life is a 1000-hour datasheet benchmark, not a mission
-duration. Applying a mission template replaces it with years × 8760 × powered
-duty. The default model uses the next published endurance milestone. TNPW follows
-its selected power mode and includes
-the additional absolute-ohm term. M55342 uses the conservative MIL-spec
-requirements, rather than typical manufacturer performance. Its actual mission
-equipment maximum must be at or below the published 70 °C endurance condition;
-a catalog power rating derated at a hotter temperature remains conservative and
-does not make the equipment hotter. Without a mission, the selected ambient
-continues to define that condition. Bounds are used
-within the published resistance, film-temperature, time and permissible-load
-envelope; test mounting and exposure assumptions must match the application.
-TNPW's cited endurance procedure uses a 1.5-hour-on / 0.5-hour-off cycle. A
-different continuous-load or duty profile needs applicable qualification data
-or a mission override; elapsed test duration alone does not establish that bound.
-Life beyond the available envelope remains uncharacterized unless a mission
-drift override is entered. A family-wide override and a separate manual/RL
-override can represent qualified mission data. The optional thin-film estimate
-uses `delta_ref × (hours / reference_hours)^(1/3) × 2^((Tfilm − Tfilm_ref)/30)`.
-M55342's datasheet specifies test ambient rather than the film temperature
-needed for that estimate; its reference film temperature must be entered from
-test data. Neither 70 °C ambient nor the 150 °C operating limit is substituted
-for a measured aging-test film temperature. This is labeled an estimate, not a guaranteed lifetime specification. MIL
-failure-rate codes are not used as resistance-drift coefficients.
+The calculator propagates these intervals through the actual series/parallel
+networks and load, then includes VTOP tolerance in VMID and stress estimates.
+Ordering tolerances and BOM part numbers remain unchanged. Circuit
+characteristics shows initial, thermal and combined drift terms, the compounded
+resistance limit and the resulting VMID range. All results using these defaults
+remain labeled as estimates, even when the complete configured interval fits
+the design target.
 
-**Radiation:** enter mission TID in krad(Si), the qualification dose and a
-qualified resistance-drift allowance for each catalog or manual/RL parts.
-Neither catalog datasheet specifies a dose-to-drift curve, so those defaults
-remain **Not set**. At a nonzero dose the full qualified allowance is used;
-lower dose does not imply proportionally lower drift. Positive-dose searches
-reject candidates lacking limits covering that dose. Explicit zero exposure
-adds no radiation term. These inputs cover resistance drift, not transient
-effects, displacement damage, dose-rate dependence or radiation-induced failures;
-qualification data must cover all selected resistance values/packages, film
-temperatures, the actual environment and bias conditions.
+Save changed conditions to invalidate previous search results. Cancel or save
+unchanged values to preserve them. Inputs share leave-page protection and apply
+across modes. SVG, Markdown, LTspice annotations and search CSV preserve the
+conditions and estimate scope. LTspice `.op` remains the nominal ideal circuit.
 
-If TNPW disappears from the solutions, check both the search inputs and the
-environmental inputs. TNPW supports the catalog's 0.1/0.5/1% tolerance grades and
-10/15/25/50 ppm/°C TCR grades, with package-dependent restrictions. Selecting a
-M55342-only tolerance, TCR or footprint can exclude it. The default −55 to +125 °C
-film range and 1000-hour life still allow both families. A nonzero radiation
-dose with only an M55342 drift limit excludes TNPW specifically; fill the TNPW
-limit from qualified data or revise the exposure specification. Missing radiation
-dose is reported as uncharacterized and does not silently become zero exposure.
-Tight output error or stress limits can also remove candidates once thermal and
-aging allowances are included. Network searches remain bounded rather than
-exhaustive.
-
-Unknown terms remain visibly uncharacterized. **Partly characterized** and
-**aging estimate** reports describe modeled intervals, not a universal mission
-guarantee. Humidity, soldering, thermal cycling and other unentered mechanisms
-are outside this model. Markdown/LTspice annotations and search CSV retain the
-mission model; Markdown also lists each physical part's drift and resistance
-interval. LTspice .op stays an ideal nominal circuit, with environmental results
-reported as calculator annotations rather than simulated aging/radiation sweeps.
-
-Primary references: [TNPW e3 datasheet](https://www.vishay.com/docs/28758/tnpw_e3.pdf)
-(pp. 2, 12), [E/H M55342 datasheet](https://www.vishay.com/docs/60018/eh.pdf)
-(pp. 1, 3), and [Vishay thin-film drift calculation](https://www.vishay.com/docs/28809/driftcalculation.pdf).
+References reviewed 1 November 2026: [TNPW e3](https://www.vishay.com/docs/28758/tnpw_e3.pdf)
+(pp. 2, 12), [E/H M55342](https://www.vishay.com/docs/60018/eh.pdf) (pp. 1, 3).
 
 ## Finding real resistor combinations
 

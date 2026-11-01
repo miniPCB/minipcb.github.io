@@ -127,9 +127,6 @@
     .schematic-field.schematic-editable:focus-visible > rect { stroke-width: 2; }
     .environment-card:hover > rect, .environment-card:focus-visible > rect { fill: #1e3547; stroke: #8addff; stroke-width: 2; }
     .environment-card:focus-visible { outline: none; }
-    .environment-toggle { display: flex; align-items: center; gap: 10px; }
-    .environment-toggle input { width: 18px; min-height: 18px; height: 18px; padding: 0; margin: 0; flex: none; }
-    .environment-toggle label { margin: 0; }
     .environment-preset { width: 100%; }
     .environment-custom-label { margin-top: 8px; font-size: 0.75rem; color: var(--muted); }
     #environmentPresetSources { overflow-wrap: anywhere; }
@@ -469,23 +466,17 @@
     </dialog>
     <dialog id="environmentEditor" class="schematic-editor" aria-labelledby="environmentHeading" aria-describedby="environmentHelp">
       <form id="environmentForm" class="form-grid" novalidate>
-        <h3 id="environmentHeading">Environmental tolerance</h3>
-        <p id="environmentHelp" class="hint"></p>
-        <details id="environmentMissionOptions"><summary>Mission profiles · orbit & duration</summary>
-          <div class="form-grid">
-            <div class="field"><label for="environmentMissionProfile">Mission template</label><select id="environmentMissionProfile"></select></div>
-            <div id="environmentMissionFields" class="form-grid"></div>
-            <p id="environmentMissionPreview" class="hint" role="status"></p>
-            <p id="environmentMissionHelp" class="hint">Orbit altitude, inclination/eccentricity, shielding geometry/material, solar conditions and dose margin affect TID. Equipment temperature, mounting and resistor self-heating determine film temperature. Years and powered duty affect operating hours; off-time still ages parts. Cycling, launch/storage exposure and radiation-induced failures require separate qualification. Reference profiles use 95% confidence, solar-maximum annual doses through 2.54 mm aluminum; changing the orbit or shielding needs a custom dose model. The default ×2 margin and 10 °C self-heating rise are editable planning assumptions. Sources: <a href="https://ntrs.nasa.gov/api/citations/20250006822/downloads/TM-20250006822.pdf#page=15" target="_blank" rel="noopener">NASA reference cases</a> · <a href="https://www.esa.int/esapub/bulletin/bullet87/paroli87.htm" target="_blank" rel="noopener">ESA thermal control</a> · <a href="https://nepp.nasa.gov/pages/Radiation.cfm" target="_blank" rel="noopener">NASA mission factors</a>.</p>
-            <button id="environmentUseMission" class="btn" type="button">Use mission defaults for all three stacks</button>
-            <button id="environmentClearMission" class="btn" type="button" hidden>Use independent environmental inputs</button>
-          </div>
-        </details>
-        <p id="environmentMissionStatus" class="hint" role="status" hidden></p>
+        <h3 id="environmentHeading">Operating conditions</h3>
+        <p id="environmentHelp" class="hint">Set the ambient operating range. Temperature drift follows each part’s ordered TCR; aging and radiation use a combined drift estimate.</p>
         <div id="environmentFields" class="form-grid"></div>
-        <p id="environmentPresetSources" class="hint"></p>
+        <details id="environmentEstimates"><summary>Drift estimates · automatic by part</summary>
+          <div id="environmentEstimateFields" class="form-grid"></div>
+          <p class="hint">TNPW general: ±(0.05% + 0.01 Ω), adjusted for power mode and resistance. M55342: ±0.5% MIL endurance benchmark. Overrides replace the complete aging / radiation allowance.</p>
+          <p class="hint">Defaults are endurance benchmarks, not lifetime or radiation qualification. Neither family publishes a dose-to-drift curve; radiation is not modeled automatically. Increase the combined allowance using applicable data. Reliability codes do not change drift.</p>
+          <p id="environmentPresetSources" class="hint">Benchmarks: <a href="https://www.vishay.com/docs/28758/tnpw_e3.pdf" target="_blank" rel="noopener">TNPW</a> · <a href="https://www.vishay.com/docs/60018/eh.pdf" target="_blank" rel="noopener">M55342</a>.</p>
+        </details>
         <p id="environmentError" class="error" role="alert" hidden></p>
-        <div class="actions"><button id="environmentSave" class="btn btn-accent" type="submit">Save environment</button><button id="environmentCancel" class="btn" type="button">Cancel</button></div>
+        <div class="actions"><button id="environmentSave" class="btn btn-accent" type="submit">Save conditions</button><button id="environmentCancel" class="btn" type="button">Cancel</button></div>
       </form>
     </dialog>
     <dialog id="calculatorDetails" class="schematic-editor calculator-details" data-view="inputs" aria-labelledby="calculatorDetailsHeading">
@@ -923,7 +914,6 @@
   </main>
   <script src="../js/resistor-parts.js"></script>
   <script src="../js/resistor-environment.js"></script>
-  <script src="../js/resistor-mission.js"></script>
   <script>
     "use strict";
 
@@ -946,7 +936,7 @@
     ];
     const form = document.getElementById("dividerForm");
     const byId = id => document.getElementById(id);
-    let environmentSettings = ResistorEnvironment.defaults(), initialEnvironmentWork = JSON.stringify(environmentSettings), environmentEditContext = null;
+    let environmentSettings = ResistorEnvironment.estimateDefaults(), initialEnvironmentWork = JSON.stringify(environmentSettings), environmentEditContext = null;
     let initialCircuitWork = null, schematicDraftWork = null, leaveWarningActive = false;
     const initialPairWork = new Map();
 
@@ -962,7 +952,6 @@
       return JSON.stringify(workFormValues(form)) !== initialCircuitWork
         || JSON.stringify(environmentSettings) !== initialEnvironmentWork
         || environmentEditContext && JSON.stringify(workFormValues(byId("environmentForm"))) !== environmentEditContext.draft
-        || environmentEditContext?.pendingMission && JSON.stringify(environmentEditContext.pendingMission) !== JSON.stringify(environmentSettings)
         || workFormValues(byId("pairForm")).some(([id, ...value]) => JSON.stringify(value) !== initialPairWork.get(id))
         || appliedCatalogParts.size > 0 || catalogDesignVmid !== null || pairSpec !== null || pairComparisons.size > 0 || pairConstruction !== null
         || !byId("automaticDesign").hidden || ARMS.some(arm => byId(`${arm}Parts`).dataset.topology)
@@ -985,15 +974,10 @@
     }
 
     function environmentPresetChoices(effect, key) {
-      const percent = [0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.6, 1, 2];
-      if (key.endsWith("Pct")) return { empty: effect === "aging" && key !== "manualPct" ? "Automatic · catalog endurance" : "Not set · qualification needed", values: percent.map(value => [value, `±${value}% · user-qualified limit`]) };
-      if (key === "doseKrad" || key === "qualifiedKrad") return { empty: "Not set", values: [[0, "0 krad(Si)"], ...[3, 10, 30, 50, 100, 300, 500, 1000].map(value => [value, `${value.toLocaleString()} krad(Si)`])] };
-      if (key === "hours") return { empty: "Not set", values: [[0, "0 h · beginning of life"], [1000, "1,000 h · TNPW test"], [2000, "2,000 h · M55342 test"], [8000, "8,000 h · TNPW test"], [8760, "8,760 h · 1 year continuous"], [10000, "10,000 h · M55342 test"], [43800, "43,800 h · 5 years continuous"], [87600, "87,600 h · 10 years continuous"], [131400, "131,400 h · 15 years continuous"], [225000, "225,000 h · TNPW test"]] };
-      if (key === "manualTcrPpm") return { empty: "Not set", values: [0, 10, 15, 25, 50, 100, 200, 300].map(value => [value, value ? `±${value} ppm/°C` : "0 ppm/°C · only with supporting data"]) };
-      if (key === "manualReferenceC") return { empty: "Not set", values: [[20, "20 °C · TNPW reference"], [25, "25 °C · M55342 reference"]] };
-      // These are setpoints, not a claim that every part is qualified at each temperature.
-      const values = key === "minC" ? [-65, -55, -50, -40, 0, 20, 25] : key === "maxC" ? [25, 70, 85, 105, 125, 150, 155, 175] : [20, 25, 70, 85, 105, 125, 150, 155, 175];
-      return { empty: "Not set", values: values.map(value => [value, `${value} °C${key !== "milReferenceFilmC" && (value < -55 || value > 125) ? " · outside catalog TCR range" : ""}`]) };
+      if (key.endsWith("Pct")) return { empty: "Automatic · catalog benchmark", values: [0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2].map(value => [value, `±${value}% · combined allowance`]) };
+      const values = key === "minC" ? [-55, -40, -20, 0, 20, 25] : key === "maxC" ? [25, 55, 70, 85, 105, 125] : key === "selfHeatingC" ? [0, 5, 10, 20, 30] : key === "manualTcrPpm" ? [10, 15, 25, 50, 100, 200, 300] : [20, 25];
+      const unit = key === "manualTcrPpm" ? "ppm/°C" : "°C";
+      return { empty: "Not set", values: values.map(value => [value, `${value} ${unit}`]) };
     }
 
     function addEnvironmentPresets(group, caption, input, effect, key, choices = environmentPresetChoices(effect, key)) {
@@ -1014,152 +998,37 @@
       showCustom(); group.append(select, customLabel, input);
     }
 
-    function populateMissionFields(id, parameters = ResistorMission.defaults(id)) {
-      const fields = byId("environmentMissionFields"); fields.replaceChildren();
+    function openEnvironmentEditor() {
+      if (byId("environmentEditor").open) return;
+      const fields = byId("environmentFields"), estimates = byId("environmentEstimateFields");
+      fields.replaceChildren(); estimates.replaceChildren();
       const definitions = [
-        ["years", "Mission duration (years)", [0, 0.25, 0.5, 1, 2, 3, 5, 7.5, 10, 15, 20]],
-        ["dutyPct", "Powered duty cycle (%)", [0, 10, 25, 50, 75, 100]],
-        ["ambientMinC", "Minimum equipment temperature (°C)", [-55, -40, -20, 0, 20, 25]],
-        ["ambientMaxC", "Maximum equipment temperature (°C)", [25, 50, 60, 70, 85, 105, 125]],
-        ["selfHeatingC", "Maximum resistor self-heating rise (°C)", [0, 5, 10, 20, 30, 50]],
-        ["shieldMm", "Aluminum-equivalent shielding (mm)", [1, 2, 2.54, 3, 5, 10]],
-        ["doseMargin", "Radiation planning multiplier (×)", [1, 1.5, 2, 3]],
-        ["annualKrad", "Annual TID (krad(Si)/year) · custom model", [0, 1, 3, 10, 30, 100, 300, 1000]]
+        ["thermal", "minC", "Minimum ambient temperature (°C)", fields],
+        ["thermal", "maxC", "Maximum ambient temperature (°C)", fields],
+        ["thermal", "selfHeatingC", "Resistor self-heating allowance (°C)", estimates],
+        ["aging", "tnpwPct", "TNPW · aging / radiation allowance ± (%)", estimates],
+        ["aging", "milPct", "M55342 · aging / radiation allowance ± (%)", estimates],
+        ["thermal", "manualTcrPpm", "Unassigned resistors / RL · TCR (ppm/°C)", estimates],
+        ["thermal", "manualReferenceC", "Unassigned resistors / RL · reference (°C)", estimates],
+        ["aging", "manualPct", "Unassigned resistors / RL · drift allowance ± (%)", estimates]
       ];
-      for (const [key, label, values] of definitions) {
+      for (const [effect, key, label, parent] of definitions) {
         const group = document.createElement("div"), caption = document.createElement("label"), input = document.createElement("input");
-        group.className = "field"; input.id = `mission_${key}`; input.dataset.missionKey = key; input.type = "number"; input.step = "any"; input.value = parameters[key] ?? "";
-        caption.textContent = label; group.append(caption);
-        addEnvironmentPresets(group, caption, input, null, key, { empty: "Not set", values: values.map(value => [value, String(value)]), helpId: "environmentMissionHelp" }); fields.append(group);
+        group.className = "field"; caption.textContent = label;
+        input.id = `environment_${effect}_${key}`; input.type = "number"; input.step = "any";
+        input.min = ["minC", "maxC", "manualReferenceC"].includes(key) ? "-273.15" : "0";
+        input.value = environmentSettings[effect][key] ?? ""; input.dataset.environmentEffect = effect; input.dataset.environmentKey = key;
+        group.append(caption); addEnvironmentPresets(group, caption, input, effect, key); parent.append(group);
       }
-      const modelGroup = document.createElement("div"), modelLabel = document.createElement("label"), model = document.createElement("select");
-      modelGroup.className = "field"; model.id = "mission_doseModel"; modelLabel.htmlFor = model.id; modelLabel.textContent = "Annual dose model";
-      model.add(new Option("NASA reference orbit and shielding", "reference")); model.add(new Option("Custom mission analysis", "custom")); model.value = parameters.doseModel;
-      modelGroup.append(modelLabel, model); fields.children[5].before(modelGroup);
-      const orbitGroup = document.createElement("div"), orbitLabel = document.createElement("label"), orbit = document.createElement("input");
-      orbitGroup.className = "field"; orbit.id = "mission_orbit"; orbit.type = "text"; orbit.maxLength = 240; orbit.value = parameters.orbit; orbitLabel.htmlFor = orbit.id; orbitLabel.textContent = "Orbit geometry / description";
-      orbitGroup.append(orbitLabel, orbit); fields.prepend(orbitGroup);
-      const notesGroup = document.createElement("div"), notesLabel = document.createElement("label"), notes = document.createElement("input");
-      notesGroup.className = "field"; notes.id = "mission_modelNotes"; notes.type = "text"; notes.maxLength = 600; notes.value = parameters.modelNotes || "";
-      notesLabel.htmlFor = notes.id; notesLabel.textContent = "Custom analysis notes · epoch, solar conditions, confidence / source";
-      notesGroup.append(notesLabel, notes); fields.append(notesGroup);
-      fields.oninput = updateMissionPreview;
-      fields.onchange = event => {
-        if (event.target === model && model.value === "custom") { byId("mission_annualKrad").value = ""; byId("mission_annualKradPreset").value = ""; }
-        updateMissionPreview();
-      };
-      updateMissionPreview();
-    }
-
-    function readMissionParameters() {
-      const parameters = { doseModel: byId("mission_doseModel").value, orbit: byId("mission_orbit").value, modelNotes: byId("mission_modelNotes").value };
-      for (const input of byId("environmentMissionFields").querySelectorAll("[data-mission-key]")) {
-        if (input.validity.badInput) throw new Error("Enter finite mission parameters.");
-        parameters[input.dataset.missionKey] = input.value === "" ? null : input.valueAsNumber;
-      }
-      return parameters;
-    }
-
-    function readMissionSettings(preserveExisting = false) {
-      const candidate = ResistorMission.create(byId("environmentMissionProfile").value, readMissionParameters(), environmentSettings), current = environmentSettings.mission;
-      const sameMission = current && candidate.mission.profileId === current.profileId && Object.entries(candidate.mission.parameters).every(([key, value]) => value === current.parameters[key]);
-      return preserveExisting && sameMission ? JSON.parse(JSON.stringify(environmentSettings)) : candidate;
-    }
-
-    function updateMissionPreview() {
-      if (environmentEditContext?.missionOnly && environmentEditContext.removeMission) {
-        environmentEditContext.removeMission = false;
-        byId("environmentMissionStatus").hidden = !environmentSettings.mission;
-        byId("environmentMissionStatus").textContent = ResistorMission.summary(environmentSettings);
-      }
-      const reference = byId("mission_doseModel").value === "reference";
-      byId("mission_annualKrad").closest(".field").hidden = reference;
-      byId("mission_modelNotes").closest(".field").hidden = reference;
-      try {
-        const id = byId("environmentMissionProfile").value, next = readMissionSettings(environmentEditContext?.missionOnly), mission = next.mission.parameters, annual = reference ? ResistorMission.profiles.find(profile => profile.id === id).annualKrad : mission.annualKrad;
-        const values = `film ${next.thermal.minC} to ${next.thermal.maxC} °C; ${next.aging.hours.toLocaleString()} powered hours`, dose = next.radiation.doseKrad === null ? "Not set" : next.radiation.doseKrad.toLocaleString() + " krad(Si)";
-        const preview = environmentEditContext?.missionOnly && ResistorMission.edited(next) ? `Current mission refinements retained: ${values}; TID ${dose}.` : `Planning preview: ${values}. Annual TID ${annual === null ? "Not set" : annual.toLocaleString() + " krad(Si)/yr"} × ${mission.years} yr × ${mission.doseMargin} = ${dose}.`;
-        byId("environmentMissionPreview").textContent = preview + ` TID uses calendar years, not powered duty. New mission defaults clear previous radiation qualification and aging overrides. Enter qualified family drift limits before searching at nonzero dose${mission.dutyPct < 100 ? "; a full-mission aging override must also cover unpowered time" : ""}.`;
-        byId("environmentUseMission").disabled = false;
-        if (environmentEditContext?.missionOnly) byId("environmentSave").disabled = false;
-      } catch (error) { byId("environmentMissionPreview").textContent = error.message; byId("environmentUseMission").disabled = true; if (environmentEditContext?.missionOnly) byId("environmentSave").disabled = true; }
-    }
-
-    function stageMissionProfile() {
-      if (!environmentEditContext) return;
-      try {
-        const next = ResistorMission.create(byId("environmentMissionProfile").value, readMissionParameters(), environmentSettings);
-        environmentEditContext.pendingMission = next;
-        environmentEditContext.removeMission = false;
-        populateEnvironmentFields(environmentEditContext.effect, next[environmentEditContext.effect]);
-        byId("environmentMissionStatus").hidden = false;
-        byId("environmentMissionStatus").textContent = `${ResistorMission.summary(next)}. Save environment applies all three stacks; Cancel discards this profile.`;
-        byId("environmentMissionOptions").open = false;
-        byId("environmentClearMission").hidden = false;
-        byId("environmentFields").querySelector("select")?.focus();
-        refreshLeaveWarning();
-      } catch (error) { byId("environmentError").textContent = error.message; byId("environmentError").hidden = false; }
-    }
-
-    function populateEnvironmentFields(effect, settings) {
-      const fields = byId("environmentFields"); fields.replaceChildren();
-      const definitions = {
-        thermal: [["enabled", "Include thermal drift", "checkbox"], ["minC", "Minimum resistor film temperature (°C)"], ["maxC", "Maximum resistor film temperature (°C)"], ["manualTcrPpm", "Unassigned resistors / RL · |TCR| limit (ppm/°C)"], ["manualReferenceC", "Unassigned resistors / RL · reference (°C)"]],
-        radiation: [["enabled", "Include radiation drift", "checkbox"], ["doseKrad", "Mission total ionizing dose (krad(Si))"], ["qualifiedKrad", "Drift limits qualified through (krad(Si))"], ["tnpwPct", "TNPW · qualified resistance drift ± (%)"], ["milPct", "M55342 · qualified resistance drift ± (%)"], ["manualPct", "Unassigned resistors / RL · drift ± (%)"]],
-        aging: [["enabled", "Include aging drift", "checkbox"], ["hours", "Operating life (hours)"], ["model", "Catalog aging model", "select"], ["tnpwPct", "TNPW · mission drift override ± (%)"], ["milPct", "M55342 · mission drift override ± (%)"], ["manualPct", "Unassigned resistors / RL · mission drift ± (%)"], ["milReferenceFilmC", "M55342 test film temperature · estimate only (°C)"]]
-      };
-      for (const [key, label, type = "number"] of definitions[effect]) {
-        const group = document.createElement("div"); group.className = type === "checkbox" ? "environment-toggle" : "field";
-        const caption = document.createElement("label"), id = `environment_${effect}_${key}`; caption.htmlFor = id; caption.textContent = label;
-        const input = document.createElement(type === "select" ? "select" : "input"); input.id = id; input.dataset.environmentKey = key;
-        if (type === "select") { input.add(new Option("Datasheet endurance envelope", "datasheet")); input.add(new Option("Time / temperature estimate", "estimate")); input.value = settings[key]; }
-        else { input.type = type; if (type === "checkbox") input.checked = settings[key]; else { input.step = "any"; input.placeholder = "Not set"; input.value = settings[key] ?? ""; input.min = key.endsWith("C") ? "-273.15" : "0"; } }
-        if (type === "checkbox") group.append(input, caption);
-        else { group.append(caption); if (type === "number") addEnvironmentPresets(group, caption, input, effect, key); else group.append(input); }
-        fields.append(group);
-      }
-    }
-
-    function openEnvironmentEditor(effect, missionOnly = false) {
-      if (byId("environmentEditor").open || !["thermal", "radiation", "aging"].includes(effect)) return;
-      const settings = environmentSettings[effect], fields = byId("environmentFields");
-      byId("environmentHeading").textContent = missionOnly ? "MISSION · design environment" : `${effect.toUpperCase()} · tolerance stack`;
-      byId("environmentHelp").textContent = missionOnly ? "Choose an orbit and mission duration. Apply mission automatically sets temperature, radiation dose and aging life together. You can adjust individual drift limits afterward." : {
-        thermal: "Startup uses the common catalog TCR range, −55 to +125 °C, not an assumed orbit temperature. For your design, use the film/hotspot range including self heating. ΔR/R = |TCR| × max|Tfilm − Tref| / 10⁶. Catalog parts use their ordered TCR and reference (TNPW 20 °C; M55342 25 °C). Unassigned parts and RL need an explicit TCR. Equal TCR codes do not imply tracking.",
-        radiation: "Neither catalog publishes a radiation dose-response limit. Family bounds must cover every selected value/package, mission dose, bias, film temperature and exposure condition. The full bound is used at every nonzero covered dose; it is not extrapolated or scaled linearly. Blank is uncharacterized, not zero. These inputs cover resistance drift, not radiation-induced failures.",
-        aging: "Startup's 1000 h is a datasheet benchmark, not a mission lifetime. Mission profiles replace it with powered hours. Default: the next published endurance milestone, including TNPW's fixed ohms. M55342 uses MIL-spec limits with equipment ambient ≤70 °C; a hotter catalog rating may be used conservatively. Overrides must cover mission life, temperature and load. Optional estimate: ΔRref × (t/tref)^(1/3) × 2^((Tfilm−Tref)/30). M55342's measured test film temperature is required for estimates. TNPW test loading (1.5 h on / 0.5 h off) and mounting must cover the mission."
-      }[effect];
-      const provenance = byId("environmentPresetSources");
-      provenance.replaceChildren(document.createTextNode({
-        thermal: "Temperature choices use catalog test points and AEC-Q200 endpoints, applied here to the film/hotspot. Catalog TCR covers −55 to +125 °C. Manual TCR choices use catalog grades; zero needs supporting data. Sources: ",
-        radiation: "Dose choices follow microcircuit RHA levels; they do not qualify these resistors. Percentage choices are entry shortcuts, not catalog radiation limits. At a nonzero dose, a blank family drift limit excludes that family. Use your qualified test data. Sources: ",
-        aging: "Hours include published test milestones and calendar shortcuts (24 h/day, 365 days/year). Percentage choices are user-qualified overrides; Automatic retains the catalog's fixed-ohm terms. Reference-film choices are setpoints only: use measured test data. Sources: "
-      }[effect]));
-      const references = [["TNPW", ResistorEnvironment.sources.tnpw], ["M55342", ResistorEnvironment.sources.mil], effect === "radiation" ? ["NASA RHA dose table", "https://nepp.nasa.gov/npsl/mic/mono/NSL_PND.html"] : effect === "thermal" ? ["AEC-Q200 guide", "https://industrial.panasonic.com/jp/ds/ss/technical/b17"] : ["Drift model", ResistorEnvironment.sources.aging]];
-      for (const [index, [title, url]] of references.entries()) { const link = document.createElement("a"); link.textContent = title; link.href = url; link.target = "_blank"; link.rel = "noopener"; if (index) provenance.append(" · "); provenance.append(link); }
-      populateEnvironmentFields(effect, settings);
-      byId("environmentMissionProfile").replaceChildren(...ResistorMission.profiles.map(profile => new Option(profile.name, profile.id)));
-      byId("environmentMissionProfile").value = environmentSettings.mission?.profileId || "leo";
-      populateMissionFields(byId("environmentMissionProfile").value, environmentSettings.mission?.parameters);
-      byId("environmentMissionOptions").open = missionOnly;
-      fields.hidden = provenance.hidden = missionOnly;
-      byId("environmentUseMission").hidden = missionOnly;
-      byId("environmentSave").textContent = missionOnly ? "Apply mission" : "Save environment";
-      byId("environmentSave").disabled = false;
-      byId("environmentMissionStatus").hidden = !environmentSettings.mission;
-      byId("environmentClearMission").hidden = !environmentSettings.mission;
-      byId("environmentMissionStatus").textContent = ResistorMission.summary(environmentSettings);
+      byId("environmentEstimates").open = false;
       byId("environmentError").hidden = true;
-      environmentEditContext = { effect, missionOnly, ...(missionOnly ? { returnKey: "mission-profile" } : {}), fingerprint: JSON.stringify(environmentSettings), draft: JSON.stringify(workFormValues(byId("environmentForm"))) };
-      if (missionOnly) updateMissionPreview();
-      byId("environmentEditor").showModal(); (missionOnly ? byId("environmentMissionProfile") : fields.querySelector("select"))?.focus();
+      environmentEditContext = { returnKey: "environment-conditions", fingerprint: JSON.stringify(environmentSettings), draft: JSON.stringify(workFormValues(byId("environmentForm"))) };
+      byId("environmentEditor").showModal(); fields.querySelector("select").focus();
     }
 
     function closeEnvironmentEditor() {
-      const effect = environmentEditContext?.effect, returnKey = environmentEditContext?.returnKey || `environment-${effect}`;
       byId("environmentEditor").close(); environmentEditContext = null;
-      const target = byId("liveSchematic").querySelector(`[data-schematic-edit="${returnKey}"]`) || byId("liveSchematic").querySelector(`[data-schematic-edit="environment-${effect}"]`);
-      target?.focus({ preventScroll: true });
+      byId("liveSchematic").querySelector('[data-schematic-edit="environment-conditions"]')?.focus({ preventScroll: true });
       refreshLeaveWarning();
     }
 
@@ -1167,19 +1036,15 @@
       event.preventDefault();
       try {
         if (!environmentEditContext || environmentEditContext.fingerprint !== JSON.stringify(environmentSettings)) throw new Error("Environmental settings changed. Cancel and reopen this editor.");
-        let next = JSON.parse(JSON.stringify(environmentEditContext.pendingMission || environmentSettings));
-        if (environmentEditContext.missionOnly && !environmentEditContext.removeMission) {
-          next = readMissionSettings(true);
-        }
-        const target = next[environmentEditContext.effect];
-        for (const input of environmentEditContext.missionOnly ? [] : byId("environmentFields").querySelectorAll("[data-environment-key]")) {
-          if (input.validity.badInput) throw new Error(`Enter a finite value for ${input.labels[0].textContent}.`);
-          target[input.dataset.environmentKey] = input.type === "checkbox" ? input.checked : input.tagName === "SELECT" ? input.value : input.value === "" ? null : input.valueAsNumber;
+        const next = JSON.parse(JSON.stringify(environmentSettings));
+        for (const input of byId("environmentForm").querySelectorAll("[data-environment-key]")) {
+          if (input.validity.badInput) throw new Error("Enter finite operating-condition inputs.");
+          next[input.dataset.environmentEffect][input.dataset.environmentKey] = input.value === "" ? null : input.valueAsNumber;
         }
         ResistorEnvironment.validate(next);
         if (JSON.stringify(next) !== JSON.stringify(environmentSettings)) {
           environmentSettings = next; invalidateAutomaticDesign();
-          invalidatePairSearch("Environmental tolerance inputs changed. Find Design Solutions to update the results."); update();
+          invalidatePairSearch("Operating conditions changed. Find Design Solutions to update the results."); update();
         }
         closeEnvironmentEditor();
       } catch (error) { byId("environmentError").textContent = error.message; byId("environmentError").hidden = false; }
@@ -1753,7 +1618,14 @@
       const equivalents = {}, issues = new Set(), requiredGaps = new Set(); let estimated = false;
       const collect = budget => { budget.issues.forEach(issue => issues.add(issue)); budget.requiredGaps.forEach(issue => requiredGaps.add(issue)); estimated ||= budget.estimated; return budget; };
       for (const arm of ARMS) {
-        for (const part of physical[arm]) part.environment = collect(ResistorEnvironment.interval(part, settings));
+        for (const part of physical[arm]) {
+          if (part.catalog && settings.basis === "ambient-estimate") {
+            const powerW = ResistorEnvironment.allowedPower(part.catalog, settings);
+            part.rating = Math.min(part.rating, powerW);
+            part.catalog = { ...part.catalog, powerW, temperatureC: Math.max(part.catalog.temperatureC, settings.thermal.maxC) };
+          }
+          part.environment = collect(ResistorEnvironment.interval(part, settings));
+        }
         equivalents[arm] = networkEquivalent(physical[arm], networks[arm]?.connection || physical[arm][0].id, true);
       }
       const load = circuit.rl === null ? null : collect(ResistorEnvironment.interval({ resistance: circuit.rl, tolerance: tolerances.rl }, settings));
@@ -1765,6 +1637,7 @@
     function environmentScope(environment) {
       if (!environment) return "Initial tolerance only";
       if (!Object.values(environment.settings).some(effect => effect.enabled)) return "Initial tolerance only";
+      if (environment.settings.basis === "ambient-estimate") return "Estimated tolerance interval · initial tolerance + ambient/TCR + aging/radiation allowance. Radiation response is not modeled; catalog benchmarks are not mission qualification." + (environment.issues.length ? " " + environment.issues.join("; ") : "");
       return [environment.settings.mission ? "Mission planning assumptions" : "", environment.estimated ? "Modeled interval · aging estimate" : "Configured drift interval", environment.issues.length ? `Uncharacterized: ${environment.issues.join("; ")}` : "All configured resistance-drift terms covered"].filter(Boolean).join(". ");
     }
 
@@ -2077,51 +1950,33 @@
 
     function environmentReportRows(state) {
       const settings = state?.environment?.settings || environmentSettings;
-      const drift = (value, fallback = "not set") => value === null ? fallback : `±${percent(value)}`;
+      const allowance = (key, automatic) => settings.aging[key] === null ? automatic : `±${percent(settings.aging[key])} override`;
       return [
-        ...(settings.mission ? [["Mission template", ResistorMission.summary(settings) + "; " + settings.mission.parameters.orbit], ["Mission assumptions", `Equipment ${settings.mission.parameters.ambientMinC} to ${settings.mission.parameters.ambientMaxC} °C; self-heating up to ${settings.mission.parameters.selfHeatingC} °C; ${settings.mission.parameters.shieldMm ?? "not set"} mm Al-equivalent shielding; ${settings.mission.parameters.doseModel} annual dose model; ×${settings.mission.parameters.doseMargin} dose multiplier. TID uses elapsed years; powered hours use duty. Template may be edited; actual applied terms follow below.`], ["Mission references", Object.values(ResistorMission.sources).join(" ; ")]] : []),
-        ...(settings.mission?.parameters.doseModel === "custom" ? [["Custom radiation analysis", settings.mission.parameters.modelNotes || "Epoch / solar conditions / confidence / source not recorded"]] : []),
-        ["THERMAL", settings.thermal.enabled ? `Film ${settings.thermal.minC} to ${settings.thermal.maxC} °C; ordered catalog TCR / reference; manual/RL TCR ${settings.thermal.manualTcrPpm ?? "not set"} ppm/°C at ${settings.thermal.manualReferenceC} °C` : "Excluded"],
-        ["RADIATION", !settings.radiation.enabled ? "Excluded" : settings.radiation.doseKrad === null ? "Mission dose not set; uncharacterized" : `${settings.radiation.doseKrad} krad(Si); qualified through ${settings.radiation.qualifiedKrad ?? "not set"} krad(Si); TNPW ${drift(settings.radiation.tnpwPct)}; M55342 ${drift(settings.radiation.milPct)}; manual/RL ${drift(settings.radiation.manualPct)}`],
-        ["AGING", !settings.aging.enabled ? "Excluded" : `${settings.aging.hours} h; ${settings.aging.model === "estimate" ? "time/temperature estimate; M55342 reference film " + (settings.aging.milReferenceFilmC ?? "not set") + " °C" : "datasheet endurance envelope"}; TNPW ${drift(settings.aging.tnpwPct, "catalog")}; M55342 ${drift(settings.aging.milPct, "catalog")}; manual/RL ${drift(settings.aging.manualPct)}`],
+        ["Ambient temperature", `${settings.thermal.minC} to ${settings.thermal.maxC} °C`],
+        ["Temperature drift", `Ordered part TCR / reference; +${settings.thermal.selfHeatingC} °C self-heating allowance. Unassigned/RL: ${settings.thermal.manualTcrPpm} ppm/°C at ${settings.thermal.manualReferenceC} °C.`],
+        ["Aging / radiation allowance", `TNPW: ${allowance("tnpwPct", "automatic 1000 h endurance benchmark: general ±(0.05% + 0.01 Ω), power ±(0.1% + 0.01 Ω), advanced ±(0.2% + 0.05 Ω)")}; M55342: ${allowance("milPct", "automatic ±0.5% MIL 2000 h endurance benchmark at 70 °C")}; unassigned/RL: ${allowance("manualPct", "not set")}. Estimated combined allowance, not a lifetime or dose rating.`],
+        ["Radiation assumption", "No automatic dose-response estimate. Catalog benchmarks contain no characterized radiation allowance; a custom combined allowance must cover the intended radiation exposure. Screening/reliability codes do not predict resistance drift."],
         ["Scope", environmentScope(state?.environment)]
       ];
     }
 
     function renderEnvironmentBoxes(parent, state, x, y) {
-      const settings = state?.environment?.settings || environmentSettings, parts = ARMS.flatMap(arm => state?.physical[arm] || []), budgets = parts.map(part => part.environment).filter(Boolean);
-      const colors = { thermal: "#75d5ff", radiation: "#d0acff", aging: "#ffd083" };
-      const mission = schematicShape(parent, "g", { "data-mission-profile": settings.mission?.profileId || "", class: "environment-card" });
-      const missionBackground = schematicInfoBox(mission, x, y, 224, 92); missionBackground.setAttribute("pointer-events", "all"); missionBackground.setAttribute("stroke", "#6a8ca5");
-      schematicText(mission, x + 14, y + 24, settings.mission ? "MISSION · planning" : "MISSION", 16, "#8fdfd0");
-      schematicTableText(mission, x + 14, y + 48, settings.mission ? ResistorMission.summary(settings) : "Not selected", 196, 13, settings.mission ? "#c6d7e5" : "#f6d365", "missionSummary", 18);
-      if (!settings.mission) schematicText(mission, x + 14, y + 72, "Sets temp · rad · aging", 12, "#a8bece");
-      schematicShape(mission, "title").textContent = settings.mission ? settings.mission.parameters.orbit + ". " + environmentReportRows(state).filter(([name]) => name.startsWith("Mission")).map(([, value]) => value).join(". ") : "Select an orbit and duration to automatically set thermal, radiation and aging inputs together.";
-      schematicEditable(mission, "mission-profile", "mission: set temperature, radiation and aging together");
-      y += 104;
-      for (const effect of ["thermal", "radiation", "aging"]) {
-        const value = settings[effect], values = budgets.map(budget => budget[`${effect === "radiation" ? "radiation" : effect}Pct`]);
-        const complete = budgets.length && values.every(Number.isFinite);
-        const contribution = effect === "radiation" && value.doseKrad === null ? "Qualified drift: Not set" : effect === "radiation" && value.doseKrad > 0 && (value.qualifiedKrad === null || value.qualifiedKrad < value.doseKrad) ? "Qualification needed" : complete ? `ΔR up to ±${percent(Math.max(...values))}` : budgets.length ? "Part drift not characterized" : "Select parts to see drift";
-        const summary = !value.enabled ? "Excluded from this analysis" : effect === "thermal" ? `Film ${value.minC} to ${value.maxC} °C` : effect === "radiation" ? value.doseKrad === null ? "Mission dose: Not set" : `${value.doseKrad} krad(Si) mission dose` : `${value.hours.toLocaleString()} h · ${value.model === "estimate" ? "Estimate" : "Datasheet"}`;
-        const panel = schematicShape(parent, "g", { "data-environment": effect, class: "environment-card" });
-        const background = schematicInfoBox(panel, x, y, 224, 0); background.setAttribute("stroke", "#6a8ca5");
-        background.setAttribute("pointer-events", "all");
-        schematicText(panel, x + 14, y + 26, effect.toUpperCase(), 18, value.enabled ? colors[effect] : "#a8bece");
-        [summary, value.enabled ? contribution : "Initial tolerance remains active"].forEach((content, index) => schematicTableText(panel, x + 14, y + 50 + index * 38, content, 196, 14, content.includes("not") || content.includes("Not set") ? "#ffba52" : "#c6d7e5", null, 18));
-        const tcrs = budgets.map(budget => budget.tcrPpm).filter(Number.isFinite), range = tcrs.length ? [...new Set(tcrs)].sort((a, b) => a - b) : [];
-        const extra = !value.enabled ? "No environmental term" : effect === "thermal" ? range.length ? `TCR ${range[0]}${range.length > 1 ? "–" + range.at(-1) : ""} ppm/°C` : "TCR: Not set" : effect === "radiation" ? value.qualifiedKrad === null ? "No dose curve assumed" : `Test limit ${value.qualifiedKrad < 1e6 ? value.qualifiedKrad : value.qualifiedKrad.toExponential(1)} krad` : value.model === "estimate" ? "Not a lifetime guarantee" : "Catalog endurance limits";
-        schematicText(panel, x + 14, y + 124, extra, Math.min(12, 196 / (extra.length * 0.62)), "#a8bece");
-        background.setAttribute("height", 144);
-        schematicShape(panel, "title").textContent = environmentReportRows(state).find(row => row[0] === effect.toUpperCase())[1] + ". " + (effect === "thermal" ? "Film temperature must include self heating; no matching or TCR tracking is assumed." : effect === "aging" ? "Aging requires permissible power, film temperature and qualification conditions. Failure-rate codes are not resistance drift." : "No generic radiation coefficient is inferred from a catalog or failure-rate code.");
-        schematicEditable(panel, `environment-${effect}`, `${effect} mission inputs and drift model`);
-        y += 156;
-      }
-      return y;
+      const settings = state?.environment?.settings || environmentSettings;
+      const panel = schematicShape(parent, "g", { "data-environment": "conditions", class: "environment-card" });
+      const background = schematicInfoBox(panel, x, y, 224, 166); background.setAttribute("stroke", "#6a8ca5"); background.setAttribute("pointer-events", "all");
+      schematicText(panel, x + 14, y + 25, "OPERATING CONDITIONS", 15, "#75d5ff");
+      schematicText(panel, x + 14, y + 52, "Ambient temperature", 13, "#a8bece");
+      schematicText(panel, x + 14, y + 78, `${settings.thermal.minC} to ${settings.thermal.maxC} °C`, 22, "#eaf6ff");
+      schematicText(panel, x + 14, y + 108, "TCR + drift estimate", 14, "#c6d7e5");
+      const edited = settings.aging.tnpwPct !== null || settings.aging.milPct !== null || settings.aging.manualPct !== 0.5;
+      schematicText(panel, x + 14, y + 140, edited ? "Custom drift estimate" : "Automatic drift estimate", 12, "#ffd083");
+      schematicShape(panel, "title").textContent = environmentReportRows(state).map(([name, value]) => `${name}: ${value}`).join(". ");
+      schematicEditable(panel, "environment-conditions", "ambient operating temperature and drift estimates");
+      return y + 178;
     }
 
     function environmentPartRows(state) {
-      const rows = [["Reference", "Initial tolerance", "Thermal drift", "Radiation drift", "Aging drift", "Aging fixed term (ohm)", "Rmin (ohm)", "Rmax (ohm)"]];
+      const rows = [["Reference", "Initial tolerance", "Temperature drift", "Separate radiation term (excluded)", "Aging / radiation allowance", "Aging fixed term (ohm)", "Rmin (ohm)", "Rmax (ohm)"]];
       const add = (name, budget) => { if (budget) rows.push([name, ...["initialPct", "thermalPct", "radiationPct", "agingRelativePct"].map(key => budget[key] === null ? "Uncharacterized" : `±${percent(budget[key])}`), budget.agingOhms ?? "Uncharacterized", budget.min, budget.max]); };
       for (const arm of ARMS) for (const part of state?.physical[arm] || []) add(part.name, part.environment);
       add("RL", state?.environment?.load);
@@ -2243,7 +2098,7 @@
         const info = schematicShape(drawing, "g", { "data-field": "vmidError" });
         schematicText(info, readoutX, readoutY - 66, "WORST-CASE VMID ERROR", 12, "#c6d7e5");
         schematicText(info, readoutX, readoutY - 30, Number.isFinite(error) ? percent(error) : "—", 34, color, "vmidBounds");
-        schematicText(info, readoutX, readoutY - 10, Number.isFinite(allowed) ? `Allowed ±${percent(allowed)}${state?.environment?.issues.length ? " · partial model" : state?.environment?.estimated ? " · aging estimate" : ""}` : "Set error band", 12, "#a8bece");
+        schematicText(info, readoutX, readoutY - 10, Number.isFinite(allowed) ? `Allowed ±${percent(allowed)}${state?.environment?.issues.length ? " · partial model" : state?.environment?.estimated ? " · drift estimate" : ""}` : "Set error band", 12, "#a8bece");
         schematicShape(info, "title").textContent = environmentScope(state?.environment);
       }
       return { width: readoutX + 316, height: Math.max(bottom + 80, environmentBottom + 12) };
@@ -2302,16 +2157,15 @@
         return `${same ? "" : "Up to "}±${percent(high)}${values.length < budgets.length || key === "effectivePct" && environment.issues.length ? " · partial" : ""}`;
       };
       const detail = key => budgets.map(([name, budget]) => `${name}: ${Number.isFinite(budget?.[key]) ? `±${percent(budget[key])}` : "Not set"}${key === "agingPct" && Number.isFinite(budget?.agingOhms) ? ` (includes ±${format(budget.agingOhms, "Ω")} fixed term)` : ""}`).join("; ");
-      const scope = !Object.values(settings).some(effect => effect.enabled) ? "Initial tolerance only" : environment.estimated ? environment.issues.length ? "Estimate · incomplete" : "Aging estimate" : environment.issues.length ? "Partly characterized" : "Configured bounds";
+      const scope = !Object.values(settings).some(effect => effect.enabled) ? "Initial tolerance only" : environment.estimated ? environment.issues.length ? "Estimate · incomplete" : "Drift estimate" : environment.issues.length ? "Partly characterized" : "Configured bounds";
       const description = "Resistance limits across physical divider resistors and RL, if fitted; these are not separate additive VMID errors. ";
       return [
         ["Tolerance stack", scope, "environmentScope"],
-        ...(settings.mission ? [["Mission profile", `${ResistorMission.profiles.find(profile => profile.id === settings.mission.profileId).short} · ${settings.mission.parameters.years} yr${ResistorMission.edited(settings) ? " · edited" : ""}`, "stackMission", ResistorMission.summary(settings) + ". Planning template and assumptions; edited values are shown in the actual tolerance terms below."]] : []),
         ["VTOP tolerance", `±${percent(state.tolerances.vin)}`, "stackSource", "Source variation is applied separately to the complete divider resistance intervals."],
         ["Initial R tolerance", summary("initialPct"), "stackInitial", description + detail("initialPct")],
         ["Thermal R drift", summary("thermalPct", "thermal"), "stackThermal", description + detail("thermalPct")],
-        ["Radiation R drift", summary("radiationPct", "radiation"), "stackRadiation", description + detail("radiationPct")],
-        ["Aging R drift", summary("agingPct", "aging"), "stackAging", description + "Equivalent percent includes each part's fixed-ohm endurance term. " + detail("agingPct")],
+        ...(settings.basis === "ambient-estimate" ? [] : [["Radiation R drift", summary("radiationPct", "radiation"), "stackRadiation", description + detail("radiationPct")]]),
+        ["Aging / radiation allowance", summary("agingPct", "aging"), "stackAging", description + "Equivalent percent includes each part's fixed-ohm endurance term. " + detail("agingPct")],
         ["Combined R limit", summary("effectivePct"), "stackCombined", description + "Largest deviation from nominal after compounding the configured terms; fixed aging ohms remain absolute. Missing terms are not qualified as zero. " + detail("effectivePct") + ". " + environmentScope(environment)],
         ["VMID range", `${format(state.bounds.min, "V")} to ${format(state.bounds.max, "V")}`, "stackVmid", "Modeled output interval from VTOP tolerance and the complete resistor stack, using the actual series/parallel network and load. " + environmentScope(environment)]
       ];
@@ -2646,7 +2500,7 @@
       if (state.circuit.rl !== null) connectivity.push(["RL", "RL", "Load", "VMID", "0", state.circuit.rl, state.tolerances.rl, "Not checked", "Not checked", "Unassigned"]);
       const diagram = ["flowchart TB", '  GND(("GND"))', '  VTOP(("VTOP"))', '  VMID(("VMID"))', `  GND -->|"V1 ${state.circuit.vin} V"| VTOP`, ...edges.map(edge => `  ${edge.from === "0" ? "GND" : edge.from} -->|"${edge.name} ${edge.part.resistance} ohm"| ${edge.to === "0" ? "GND" : edge.to}`)];
       if (state.circuit.rl !== null) diagram.push(`  VMID -->|"RL ${state.circuit.rl} ohm"| GND`);
-      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Operating Point Information", "", table([["Quantity", "Nominal value"], ...operatingPoint]), "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Environmental tolerance stack", "", table([["Effect", "Mission / model"], ...environmentReportRows(state)]), "", "Resistance intervals compound independent percentage limits. Aging keeps any fixed ohms separate: Raged,min = Rnom * (1-initial/100) * (1-aging_relative/100) - aging_ohms; upper uses plus signs. Thermal/radiation factors then apply to that aged interval. Unknown terms are uncharacterized, not zero-qualified. No cancellation, matching, RSS or unqualified radiation dose scaling is assumed. The film-temperature range must include self heating. VTOP tolerance must cover the full source mission variation.", "", table(environmentPartRows(state)), "", `Sources: ${Object.values(ResistorEnvironment.sources).join(" ; ")}`, "", "## Circuit connections", "", `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Pstress is power / allowed power × 100%; Vstress is absolute voltage drop / specified maximum continuous working voltage × 100%. Both limits apply independently. A missing working-voltage rating is unassessed (—), not a power-derived limit. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
+      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Operating Point Information", "", table([["Quantity", "Nominal value"], ...operatingPoint]), "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Environmental tolerance stack", "", table([["Effect", "Assumption / estimate"], ...environmentReportRows(state)]), "", "Resistance intervals compound independent percentage limits. Aging keeps any fixed ohms separate: Raged,min = Rnom * (1-initial/100) * (1-aging_relative/100) - aging_ohms; upper uses plus signs. Thermal/radiation factors then apply to that aged interval. The combined aging/radiation allowance is an estimate based on catalog endurance benchmarks or custom inputs; no radiation dose-response or mission-life guarantee is inferred. No cancellation, matching or RSS is assumed. Film temperature uses ambient plus the stated self-heating allowance. VTOP tolerance covers source variation.", "", table(environmentPartRows(state)), "", `Sources: ${Object.values(ResistorEnvironment.sources).join(" ; ")}`, "", "## Circuit connections", "", `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Pstress is power / allowed power × 100%; Vstress is absolute voltage drop / specified maximum continuous working voltage × 100%. Both limits apply independently. A missing working-voltage rating is unassessed (—), not a power-derived limit. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
     }
 
     function updateCircuitDownloads(state, mode) {
@@ -2884,8 +2738,7 @@
     function openSchematicEditor(node) {
       if (!node.hasAttribute("data-schematic-edit") || node.getAttribute("aria-disabled") === "true" || byId("schematicEditor").open) return;
       const key = node.dataset.schematicEdit, focus = node.dataset.editFocus, locks = schematicEditLocks(key);
-      if (key === "mission-profile") { openEnvironmentEditor("thermal", true); return; }
-      if (key.startsWith("environment-")) { openEnvironmentEditor(key.slice(12)); return; }
+      if (key.startsWith("environment-")) { openEnvironmentEditor(); return; }
       if (focus === "value" && locks.value || focus === "tolerance" && locks.tolerance) return;
       if (byId("solveFor").value === "pairs") { openPairSchematicEditor(key, focus); return; }
       const state = pairPreviewState || schematicState;
@@ -3471,7 +3324,7 @@
       const parts = [];
       for (const family of resistorCatalog.families) {
         if (spec[`family${side}`] !== "all" && spec[`family${side}`] !== family.id) continue;
-        const options = parts2Options(family, spec[`package${side}`], spec.temperatureC, spec.tcrPpm);
+        const options = parts2Options(family, spec[`package${side}`], spec.environment?.basis === "ambient-estimate" ? Math.max(spec.temperatureC, spec.environment.thermal.maxC) : spec.temperatureC, spec.tcrPpm);
         if (!options) continue;
         parts.push(...ResistorParts.enumerate(resistorCatalog, family.id, { ...options, minOhms: spec.minOhms, maxOhms: spec.maxOhms, tolerancePct: spec[`tolerance${side}`] }));
       }
@@ -3492,7 +3345,7 @@
       const botThevenin = loadMax === null ? a : parallel(a, loadMax);
       const pBot = analyze(v, a, clamp(botThevenin, c, d), loadMax).p2;
       const vTop = v / (1 + lowerMin / b), vBot = v / (1 + a / lowerMax);
-      const stressFor = (part, power, voltage) => ({ p: power / part.powerW * 100, v: part.workingVoltageV === null ? null : voltage / part.workingVoltageV * 100 });
+      const stressFor = (part, power, voltage) => ({ p: power / ResistorEnvironment.allowedPower(part, settings) * 100, v: part.workingVoltageV === null ? null : voltage / part.workingVoltageV * 100 });
       const maximumCurrent = analyze(v, a, c, loadMin).i1;
       return { top: stressFor(top, pTop, vTop), bot: stressFor(bot, pBot, vBot), power: v * maximumCurrent, current: maximumCurrent, absolute: { top: { power: pTop, voltage: vTop, current: maximumCurrent }, bot: { power: pBot, voltage: vBot, current: analyze(v, a, c, loadMax).i2 } } };
     }
@@ -5139,21 +4992,6 @@
     byId("schematicEditCancel").addEventListener("click", closeSchematicEditor);
     byId("schematicEditor").addEventListener("cancel", event => { event.preventDefault(); closeSchematicEditor(); });
     byId("environmentForm").addEventListener("submit", saveEnvironment);
-    byId("environmentMissionProfile").addEventListener("change", () => populateMissionFields(byId("environmentMissionProfile").value));
-    byId("environmentUseMission").addEventListener("click", stageMissionProfile);
-    byId("environmentClearMission").addEventListener("click", () => {
-      if (!environmentEditContext) return;
-      const next = JSON.parse(JSON.stringify(environmentEditContext.pendingMission || environmentSettings)); delete next.mission;
-      environmentEditContext.pendingMission = next;
-      environmentEditContext.removeMission = true;
-      byId("environmentMissionStatus").hidden = false;
-      byId("environmentMissionStatus").textContent = `${environmentEditContext.missionOnly ? "Apply mission" : "Save environment"} removes the mission template and keeps the environmental input values. Cancel keeps the current mission.`;
-      byId("environmentClearMission").hidden = true;
-      byId("environmentMissionOptions").open = false;
-      byId("environmentSave").disabled = false;
-      (environmentEditContext.missionOnly ? byId("environmentSave") : byId("environmentFields").querySelector("select"))?.focus();
-      refreshLeaveWarning();
-    });
     byId("environmentCancel").addEventListener("click", closeEnvironmentEditor);
     byId("environmentEditor").addEventListener("cancel", event => { event.preventDefault(); closeEnvironmentEditor(); });
     byId("circuitChoose").addEventListener("click", () => openCalculatorDetails("design"));
