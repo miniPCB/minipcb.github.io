@@ -1,0 +1,42 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Current load mode checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:2200px;border:0}</style><h1>All modes with current load and complete drift stacks</h1><pre id="results">RUNNING</pre><iframe id="calculator" title="Calculator under test" src="../voltage_divider.html?current-load-modes-test=1"></iframe><script>
+"use strict";
+const checks=[],failures=[],assert=(ok,label)=>{checks.push(label);if(!ok)failures.push(label);},close=(a,b)=>Math.abs(a-b)<=1e-10*Math.max(Math.abs(a),Math.abs(b),1e-12),pause=()=>new Promise(resolve=>setTimeout(resolve,20));
+document.getElementById('calculator').addEventListener('load',async event=>{try{
+ const w=event.target.contentWindow,d=w.document,get=id=>d.getElementById(id),state=()=>w.eval('schematicState'),errors=[];w.addEventListener('error',event=>errors.push(event.message));assert(await w.resistorCatalogReady,'Catalogs load');const catalog=await w.ResistorParts.load();
+ const cfg=()=>{const c=w.ResistorEnvironment.defaults();c.thermal.minC=-20;c.thermal.maxC=70;c.thermal.manualTcrPpm=25;c.radiation={enabled:true,doseKrad:10,qualifiedKrad:20,manualPct:.15,tnpwPct:.2,milPct:.3};c.aging.manualPct=.4;c.aging.tnpwPct=.4;c.aging.milPct=.6;return c;};
+ const settings=c=>w.eval('environmentSettings='+JSON.stringify(c)+';update()'),set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));},reset=async()=>{get('dividerForm').reset();get('pairForm').reset();await pause();};
+ const combine=(parts,connection,ranges,end)=>{
+  const visit=node=>typeof node==='string'?ranges.get(node)[end]:node.connection==='series'?node.children.reduce((sum,child)=>sum+visit(child),0):1/node.children.reduce((sum,child)=>sum+1/visit(child),0);
+  return visit(typeof connection==='object'?connection:{connection:connection||'series',children:parts.map(part=>part.id)});
+ };
+ const verify=(s,label,inverse=false)=>{
+  const ranges=new Map();let all=true;
+  for(const part of Object.values(s.physical).flat()){
+   const family=part.catalog?.familyId,key=family==='vishay-tnpw-e3'?'tnpw':family==='vishay-eh-m55342'?'mil':'manual',reference=key==='tnpw'?20:25,tcr=part.catalog?.tcrPpm??25,thermal=tcr*Math.max(Math.abs(-20-reference),Math.abs(70-reference))/1e6,rad={manual:.0015,tnpw:.002,mil:.003}[key],age=key==='mil'?.006:.004;
+   const min=part.resistance*(1-part.tolerance/100)*(1-age)*(1-thermal)*(1-rad),max=part.resistance*(1+part.tolerance/100)*(1+age)*(1+thermal)*(1+rad);ranges.set(part.id,[min,max]);
+   all&&=close(part.environment.min,min)&&close(part.environment.max,max)&&part.environment.initialPct===part.tolerance&&part.environment.thermalPct>0&&part.environment.radiationPct>0&&part.environment.agingPct>0;
+  }
+  assert(all,label+': every physical resistor compounds initial, thermal, radiation and aging limits');
+  const arms=Object.fromEntries(['r1','r2'].map(arm=>[arm,[0,1].map(end=>combine(s.physical[arm],s.networks[arm]?.connection,ranges,end))]));
+  assert(close(s.bounds.r1Min,arms.r1[0])&&close(s.bounds.r1Max,arms.r1[1])&&close(s.bounds.r2Min,arms.r2[0])&&close(s.bounds.r2Max,arms.r2[1]),label+': actual series/parallel resistance intervals reach the calculation');
+  const values=[];
+  if(inverse){const target=s.result.vout,error=Number(get('targetError').value)/100;for(const threshold of [target-Math.abs(target)*error,target+Math.abs(target)*error])for(const top of arms.r1)for(const bot of arms.r2)for(const current of [s.circuit.iload-s.circuit.iloadTolerance,s.circuit.iload+s.circuit.iloadTolerance])values.push(threshold*(1+top/bot)+current*top);assert(close(s.bounds.vinMin,Math.min(...values))&&close(s.bounds.vinMax,Math.max(...values)),label+': inverse source range contains all independent tolerance terms');}
+  else{for(const source of [s.circuit.vin-Math.abs(s.circuit.vin)*s.tolerances.vin/100,s.circuit.vin+Math.abs(s.circuit.vin)*s.tolerances.vin/100])for(const top of arms.r1)for(const bot of arms.r2)for(const current of [s.circuit.iload-s.circuit.iloadTolerance,s.circuit.iload+s.circuit.iloadTolerance])values.push((source/top-current)/(1/top+1/bot));assert(close(s.bounds.min,Math.min(...values))&&close(s.bounds.max,Math.max(...values)),label+': VMID range contains all independent tolerance terms');}
+  assert(close(s.bounds.iloadMin,s.circuit.iload-s.circuit.iloadTolerance)&&close(s.bounds.iloadMax,s.circuit.iload+s.circuit.iloadTolerance),label+': absolute current uncertainty is independent of resistor drift');
+ };
+ for(const fixture of ['single','series','parallel','vishay-tnpw-e3','vishay-eh-m55342'])for(const mode of ['vout','vin','r1','r2','rl','tolerance']){
+  await reset();set('loadType','current');set('loadCurrent','.2');set('loadCurrentTolerance','.1');set('targetVout','5.999');set('targetError','10');set('tolVin','.5');
+  if(['series','parallel'].includes(fixture))for(const arm of ['r1','r2']){get(arm+'Multiple').click();set(arm+'Connection',fixture);get(arm+'Split').click();}
+  if(fixture.startsWith('vishay')){const part=w.ResistorParts.evaluate(catalog,fixture,{resistanceOhms:10000,tolerancePct:.1});w.applyCatalogPart(part,'r1');w.applyCatalogPart(part,'r2');}
+  settings(cfg());set('solveFor',mode);const s=state();assert(s&&get('inputError').hidden,fixture+'/'+mode+': a complete current-load calculation is available');if(s)verify(s,fixture+'/'+mode,mode==='vin');
+ }
+ await reset();set('loadType','current');set('solveFor','vin');set('targetVout','1');set('targetError','.1');settings(cfg());const whole=state().bounds.vinMax-state().bounds.vinMin;
+ for(const effect of ['thermal','radiation','aging']){const c=cfg();c[effect].enabled=false;settings(c);assert(state().bounds.vinMax-state().bounds.vinMin<whole,effect+': removing this drift term narrows the trip-voltage interval');}
+ settings(w.ResistorEnvironment.estimateDefaults());assert(state().physical.r1[0].environment.thermalPct>0&&state().physical.r1[0].environment.agingPct>0&&Number.isFinite(state().bounds.vinMin),'The normal combined aging/radiation allowance remains enabled with ambient/TCR estimates');
+ for(const fixture of ['single','series','parallel']){
+  await reset();set('loadType','current');set('loadCurrent','.2');if(fixture!=='single')for(const arm of ['r1','r2']){get(arm+'Multiple').click();set(arm+'Connection',fixture);get(arm+'Split').click();}
+  settings(cfg());set('solveFor','pairs');set('pairLoadType','current');set('pairLoadCurrent','.2');set('pairMinR','10000');set('pairMaxR','10000');set('pairErrorPct','10');get('pairForm').requestSubmit();const matches=await w.pairSearchReady;assert(matches.length>0,fixture+': catalog solutions exist with a complete environmental/current stack');if(matches.length)verify(w.eval('pairPreviewState'),fixture+'/catalog preview');
+ }
+ assert(errors.length===0,'No runtime errors: '+errors.join('; '));
+}catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);});
+</script></html>

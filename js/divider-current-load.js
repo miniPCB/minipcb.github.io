@@ -46,17 +46,27 @@
     return { ...limits, min, max, deviation: nominal === 0 ? null : 100 * Math.max(Math.abs(min - nominal), Math.abs(max - nominal)) / Math.abs(nominal) };
   }
 
-  function sourceTolerance(circuit, limits, errorPct) {
+  function sourceRange(circuit, limits, errorPct) {
     const target = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl, circuit.iload).vout, spread = Math.abs(target) * errorPct / 100;
-    let lower = -Infinity, upper = Infinity;
-    for (const sample of samples({ ...limits, vinMin: 0, vinMax: 0 })) {
-      const gain = sample.result.ratio, offset = sample.result.vout;
-      lower = Math.max(lower, (target - spread - offset) / gain); upper = Math.min(upper, (target + spread - offset) / gain);
+    const targetMin = target - spread, targetMax = target + spread, stress = { top: { power: 0, voltage: 0, current: 0 }, bot: { power: 0, voltage: 0, current: 0 } };
+    let min = Infinity, max = -Infinity;
+    // Inverse uncertainty: each corner is a different trip voltage at the
+    // specified VMID threshold, not an independently varying supply input.
+    for (const sample of samples({ ...limits, vinMin: 0, vinMax: 0, iloadMin: limits.iloadMin ?? 0, iloadMax: limits.iloadMax ?? 0 })) {
+      for (const vmid of ends(targetMin, targetMax)) {
+        const current = vmid / sample.result.bottom + sample.current, drop = sample.r1 * current, vin = vmid + drop;
+        min = Math.min(min, vin); max = Math.max(max, vin);
+        stress.top.power = Math.max(stress.top.power, drop * current); stress.top.voltage = Math.max(stress.top.voltage, Math.abs(drop)); stress.top.current = Math.max(stress.top.current, Math.abs(current));
+        stress.bot.power = Math.max(stress.bot.power, vmid * (vmid / sample.r2)); stress.bot.voltage = Math.max(stress.bot.voltage, Math.abs(vmid)); stress.bot.current = Math.max(stress.bot.current, Math.abs(vmid / sample.r2));
+      }
     }
-    if (circuit.vin === 0) return { feasible: lower <= 0 && upper >= 0, maxPct: null };
-    const limit = Math.min(99.999, 100 * Math.min(circuit.vin - lower, upper - circuit.vin) / Math.abs(circuit.vin));
-    if (!Number.isFinite(limit)) throw new Error("The calculated VTOP tolerance exceeds the numeric range.");
-    return { feasible: limit >= -1e-10, maxPct: limit < -1e-10 ? null : Math.floor(Math.max(0, limit) * 1e6) / 1e6 };
+    const absolute = Math.max(Math.abs(min - circuit.vin), Math.abs(max - circuit.vin)), deviation = circuit.vin === 0 ? null : 100 * absolute / Math.abs(circuit.vin);
+    if (![min, max, absolute, deviation ?? 0].every(Number.isFinite)) throw new Error("The calculated VTOP range exceeds the numeric range.");
+    stress.current = stress.top.current;
+    // A conservative source-power envelope also covers injected current and
+    // interior extrema. Resistor stresses above keep the threshold correlation.
+    stress.power = Math.max(Math.abs(min), Math.abs(max)) * stress.current;
+    return { min, max, absolute, deviation, targetMin, targetMax, stress };
   }
 
   function envelope(limits) {
@@ -89,5 +99,5 @@
     result.top.power = topPower; result.bot.power = botPower; return result;
   }
 
-  root.DividerCurrentLoad = Object.freeze({ enabled, analyze, inverse, ranges, samples, bounds, sourceTolerance, envelope, stress });
+  root.DividerCurrentLoad = Object.freeze({ enabled, analyze, inverse, ranges, samples, bounds, sourceRange, envelope, stress });
 })(globalThis);

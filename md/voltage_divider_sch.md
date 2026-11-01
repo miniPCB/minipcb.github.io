@@ -70,12 +70,17 @@ precision to show small leakage intervals. For exact 10 kΩ / 10 kΩ resistors a
 12 V, 0 µA ±0.1 µA gives **5.9995–6.0005 V**. The user's IL range is an independent
 specified limit; no IC-specific thermal, aging or nonlinear leakage model is inferred.
 
-Find VTOP intersects the permitted source interval for every affine
-`VMID = gain × VTOP + offset` corner before reporting a symmetric source
-tolerance. Exact two-resistor stress checks include interior matched-resistance
-power peaks. Series/parallel networks retain conservative per-part voltage,
-current and power envelopes. Ordinary calculations, catalog previews, automatic
-selection and both combination-search paths use this same current model.
+Find VTOP propagates the known VMID threshold interval through the inverse
+`VTOP = VMID × (1 + RTOP / RBOT) + IL × RTOP` at every resistor/current corner.
+Min and Max are the actual trip-voltage endpoints, which may be asymmetric;
+the displayed tolerance is the larger deviation from nominal. A tighter threshold
+still has a finite resistor/leakage trip range. This is not a budget of allowable
+supply variation. VMID remains the specified threshold interval, so derived
+VTOP uncertainty is not fed back as an independent input and counted twice.
+Threshold stress checks preserve this correlation. Network part stresses and
+total source power retain conservative envelopes. Ordinary calculations,
+catalog previews, automatic selection and both combination-search paths use
+the same full resistor intervals and independent current range.
 
 SVG, Markdown and search CSV retain the model and absolute current tolerance.
 The LTspice export uses `ILOAD VMID 0 DC <amps>` and a real `current` symbol;
@@ -173,15 +178,16 @@ Voltage readouts are part of the circuit drawing. Both panels start with the net
 name, followed by **Target** (or **Calculated** for a solved voltage),
 **Tolerance**, **Max** and **Min**. A VMID target also retains a **Nominal** row
 so the selected design's actual output can be compared with its target.
-Known VTOP bounds use the entered source tolerance. **Find VTOP** calculates the
-maximum symmetric source tolerance that keeps the full VMID interval inside the
-required target band, after accounting for resistor, load and environmental
-variation. Its tolerance field is read-only, and Min/Max use the calculated
-tolerance; a previous source-tolerance input does not constrain this calculation.
-Negative source limits stay ordered. Zero nominal VTOP has a 0 V absolute range.
-If no symmetric source tolerance fits at the calculated nominal voltage, the
-nominal result remains available while tolerance says **No solution** and the
-source limits are unavailable. Missing required drift coverage says **Unassessed**.
+Known VTOP bounds use the entered source tolerance. **Find VTOP** instead shows
+the supply trip-voltage range from the known VMID threshold tolerance, each
+physical resistor's initial/temperature/aging/radiation interval, and load
+uncertainty. Its calculated tolerance is read-only and reports the larger
+endpoint deviation. Min/Max retain the actual, possibly asymmetric endpoints;
+a previous source-tolerance input does not constrain this inverse calculation.
+Negative limits stay ordered. Zero nominal VTOP uses an absolute voltage
+tolerance, including any nonzero range caused by leakage uncertainty. Missing
+required drift coverage says **Unassessed**; a narrow threshold tolerance does
+not make the computed trip range unavailable.
 In inverse modes and combination searches, VMID Target and
 Tolerance are editable specifications, and Max/Min show that required band; the actual nominal
 output remains separate, with its actual tolerance interval available in the panel
@@ -363,7 +369,7 @@ value or tolerance. Reset clears these footprint preferences. Known inputs
 remain editable, and their changes recalculate the selected result.
 Voltage tolerances follow the same known/calculated role in the SVG and input form:
 VTOP tolerance is locked in Find VTOP; VMID tolerance is locked in Find VMID.
-Find VTOP recalculates its source tolerance and bounds after edits to VMID's
+Find VTOP recalculates its trip-voltage tolerance and bounds after edits to VMID's
 allowed band, physical resistor values/tolerances, load or operating conditions.
 In inverse modes, VMID tolerance edits the allowed target-error band, preserving
 the nominal circuit and Find mode. Its Max/Min are acceptance limits; the actual
@@ -673,14 +679,20 @@ in parallel give the same 10 kΩ arm, with 6 V and 0.15 mA per upper part.
 
 ## Tolerance analysis
 
-For Find VTOP, let `g0` be the nominal loaded divider gain, `gmin/gmax` its
-resistor/load/environment corner gains and `e` the allowed VMID error as a
-fraction. The symmetric source budget is
-`t = min(1 − (1 − e) × g0/gmin, (1 + e) × g0/gmax − 1)`.
-The result is capped at 99.999% and rounded down to six decimal places in percent.
-Source limits are `VTOP ± |VTOP| × t`. For equal 1% resistors without other drift,
-a 6 V ±5% output target gives nominal VTOP 12 V and ±3.960396% source tolerance,
-or 11.52475248 to 12.47524752 V. Stress bounds and downloads use the same result.
+For **Find VTOP**, propagate the VMID threshold bounds through
+`VTOP = VMID × (1 + RTOP / RBOT + RTOP / RL) + IL × RTOP`, omitting the RL
+term for an open/current-source load and using `IL = 0` for a resistor load.
+Evaluate both threshold endpoints with every independent RTOP/RBOT/RL interval
+endpoint and both current endpoints. Resistance intervals already include the
+initial, thermal and aging/radiation terms for every physical part. The minimum
+and maximum required VTOP are the trip-voltage limits. The tolerance is
+`max(|VTOPmin − VTOPnom|, |VTOPmax − VTOPnom|) / |VTOPnom|`; it is absolute volts
+when the nominal source is zero. It is not capped or rounded down as a supply
+budget. For equal 1% resistors and a 6 V ±5% threshold, nominal VTOP is 12 V
+and the trip interval is **11.2871287–12.7272727 V** (maximum deviation ±6.06%).
+The known VMID bounds remain 5.7–6.3 V. Stress uses the corresponding threshold
+and resistor/load corners rather than varying the derived source independently.
+Downloads retain this same interpretation and interval.
 
 Independent VTOP, R1, R2, and RL tolerances range from 0 to 99.999 percent. Each
 input varies over `nominal ± abs(nominal) × tolerance / 100`. Defaults are ±0.1%
