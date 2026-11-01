@@ -485,7 +485,7 @@
         <div id="environmentFields" class="form-grid"></div>
         <p id="environmentPresetSources" class="hint"></p>
         <p id="environmentError" class="error" role="alert" hidden></p>
-        <div class="actions"><button class="btn btn-accent" type="submit">Save environment</button><button id="environmentCancel" class="btn" type="button">Cancel</button></div>
+        <div class="actions"><button id="environmentSave" class="btn btn-accent" type="submit">Save environment</button><button id="environmentCancel" class="btn" type="button">Cancel</button></div>
       </form>
     </dialog>
     <dialog id="calculatorDetails" class="schematic-editor calculator-details" data-view="inputs" aria-labelledby="calculatorDetailsHeading">
@@ -1060,15 +1060,29 @@
       return parameters;
     }
 
+    function readMissionSettings(preserveExisting = false) {
+      const candidate = ResistorMission.create(byId("environmentMissionProfile").value, readMissionParameters(), environmentSettings), current = environmentSettings.mission;
+      const sameMission = current && candidate.mission.profileId === current.profileId && Object.entries(candidate.mission.parameters).every(([key, value]) => value === current.parameters[key]);
+      return preserveExisting && sameMission ? JSON.parse(JSON.stringify(environmentSettings)) : candidate;
+    }
+
     function updateMissionPreview() {
+      if (environmentEditContext?.missionOnly && environmentEditContext.removeMission) {
+        environmentEditContext.removeMission = false;
+        byId("environmentMissionStatus").hidden = !environmentSettings.mission;
+        byId("environmentMissionStatus").textContent = ResistorMission.summary(environmentSettings);
+      }
       const reference = byId("mission_doseModel").value === "reference";
       byId("mission_annualKrad").closest(".field").hidden = reference;
       byId("mission_modelNotes").closest(".field").hidden = reference;
       try {
-        const id = byId("environmentMissionProfile").value, next = ResistorMission.create(id, readMissionParameters(), environmentSettings), mission = next.mission.parameters, annual = reference ? ResistorMission.profiles.find(profile => profile.id === id).annualKrad : mission.annualKrad;
-        byId("environmentMissionPreview").textContent = `Planning preview: film ${next.thermal.minC} to ${next.thermal.maxC} °C; ${next.aging.hours.toLocaleString()} powered hours. Annual TID ${annual === null ? "Not set" : annual.toLocaleString() + " krad(Si)/yr"} × ${mission.years} yr × ${mission.doseMargin} = ${next.radiation.doseKrad === null ? "Not set" : next.radiation.doseKrad.toLocaleString() + " krad(Si)"}. TID uses calendar years, not powered duty. Applying clears previous radiation qualification and aging overrides. Enter qualified family drift limits before searching at nonzero dose${mission.dutyPct < 100 ? "; a full-mission aging override must also cover unpowered time" : ""}.`;
+        const id = byId("environmentMissionProfile").value, next = readMissionSettings(environmentEditContext?.missionOnly), mission = next.mission.parameters, annual = reference ? ResistorMission.profiles.find(profile => profile.id === id).annualKrad : mission.annualKrad;
+        const values = `film ${next.thermal.minC} to ${next.thermal.maxC} °C; ${next.aging.hours.toLocaleString()} powered hours`, dose = next.radiation.doseKrad === null ? "Not set" : next.radiation.doseKrad.toLocaleString() + " krad(Si)";
+        const preview = environmentEditContext?.missionOnly && ResistorMission.edited(next) ? `Current mission refinements retained: ${values}; TID ${dose}.` : `Planning preview: ${values}. Annual TID ${annual === null ? "Not set" : annual.toLocaleString() + " krad(Si)/yr"} × ${mission.years} yr × ${mission.doseMargin} = ${dose}.`;
+        byId("environmentMissionPreview").textContent = preview + ` TID uses calendar years, not powered duty. New mission defaults clear previous radiation qualification and aging overrides. Enter qualified family drift limits before searching at nonzero dose${mission.dutyPct < 100 ? "; a full-mission aging override must also cover unpowered time" : ""}.`;
         byId("environmentUseMission").disabled = false;
-      } catch (error) { byId("environmentMissionPreview").textContent = error.message; byId("environmentUseMission").disabled = true; }
+        if (environmentEditContext?.missionOnly) byId("environmentSave").disabled = false;
+      } catch (error) { byId("environmentMissionPreview").textContent = error.message; byId("environmentUseMission").disabled = true; if (environmentEditContext?.missionOnly) byId("environmentSave").disabled = true; }
     }
 
     function stageMissionProfile() {
@@ -1076,6 +1090,7 @@
       try {
         const next = ResistorMission.create(byId("environmentMissionProfile").value, readMissionParameters(), environmentSettings);
         environmentEditContext.pendingMission = next;
+        environmentEditContext.removeMission = false;
         populateEnvironmentFields(environmentEditContext.effect, next[environmentEditContext.effect]);
         byId("environmentMissionStatus").hidden = false;
         byId("environmentMissionStatus").textContent = `${ResistorMission.summary(next)}. Save environment applies all three stacks; Cancel discards this profile.`;
@@ -1105,11 +1120,11 @@
       }
     }
 
-    function openEnvironmentEditor(effect) {
+    function openEnvironmentEditor(effect, missionOnly = false) {
       if (byId("environmentEditor").open || !["thermal", "radiation", "aging"].includes(effect)) return;
       const settings = environmentSettings[effect], fields = byId("environmentFields");
-      byId("environmentHeading").textContent = `${effect.toUpperCase()} · tolerance stack`;
-      byId("environmentHelp").textContent = {
+      byId("environmentHeading").textContent = missionOnly ? "MISSION · design environment" : `${effect.toUpperCase()} · tolerance stack`;
+      byId("environmentHelp").textContent = missionOnly ? "Choose an orbit and mission duration. Apply mission automatically sets temperature, radiation dose and aging life together. You can adjust individual drift limits afterward." : {
         thermal: "Startup uses the common catalog TCR range, −55 to +125 °C, not an assumed orbit temperature. For your design, use the film/hotspot range including self heating. ΔR/R = |TCR| × max|Tfilm − Tref| / 10⁶. Catalog parts use their ordered TCR and reference (TNPW 20 °C; M55342 25 °C). Unassigned parts and RL need an explicit TCR. Equal TCR codes do not imply tracking.",
         radiation: "Neither catalog publishes a radiation dose-response limit. Family bounds must cover every selected value/package, mission dose, bias, film temperature and exposure condition. The full bound is used at every nonzero covered dose; it is not extrapolated or scaled linearly. Blank is uncharacterized, not zero. These inputs cover resistance drift, not radiation-induced failures.",
         aging: "Startup's 1000 h is a datasheet benchmark, not a mission lifetime. Mission profiles replace it with powered hours. Default: the next published endurance milestone, including TNPW's fixed ohms. M55342 uses MIL-spec limits with equipment ambient ≤70 °C; a hotter catalog rating may be used conservatively. Overrides must cover mission life, temperature and load. Optional estimate: ΔRref × (t/tref)^(1/3) × 2^((Tfilm−Tref)/30). M55342's measured test film temperature is required for estimates. TNPW test loading (1.5 h on / 0.5 h off) and mounting must cover the mission."
@@ -1126,13 +1141,18 @@
       byId("environmentMissionProfile").replaceChildren(...ResistorMission.profiles.map(profile => new Option(profile.name, profile.id)));
       byId("environmentMissionProfile").value = environmentSettings.mission?.profileId || "leo";
       populateMissionFields(byId("environmentMissionProfile").value, environmentSettings.mission?.parameters);
-      byId("environmentMissionOptions").open = false;
+      byId("environmentMissionOptions").open = missionOnly;
+      fields.hidden = provenance.hidden = missionOnly;
+      byId("environmentUseMission").hidden = missionOnly;
+      byId("environmentSave").textContent = missionOnly ? "Apply mission" : "Save environment";
+      byId("environmentSave").disabled = false;
       byId("environmentMissionStatus").hidden = !environmentSettings.mission;
       byId("environmentClearMission").hidden = !environmentSettings.mission;
       byId("environmentMissionStatus").textContent = ResistorMission.summary(environmentSettings);
       byId("environmentError").hidden = true;
-      environmentEditContext = { effect, fingerprint: JSON.stringify(environmentSettings), draft: JSON.stringify(workFormValues(byId("environmentForm"))) };
-      byId("environmentEditor").showModal(); fields.querySelector("select")?.focus();
+      environmentEditContext = { effect, missionOnly, ...(missionOnly ? { returnKey: "mission-profile" } : {}), fingerprint: JSON.stringify(environmentSettings), draft: JSON.stringify(workFormValues(byId("environmentForm"))) };
+      if (missionOnly) updateMissionPreview();
+      byId("environmentEditor").showModal(); (missionOnly ? byId("environmentMissionProfile") : fields.querySelector("select"))?.focus();
     }
 
     function closeEnvironmentEditor() {
@@ -1147,8 +1167,12 @@
       event.preventDefault();
       try {
         if (!environmentEditContext || environmentEditContext.fingerprint !== JSON.stringify(environmentSettings)) throw new Error("Environmental settings changed. Cancel and reopen this editor.");
-        const next = JSON.parse(JSON.stringify(environmentEditContext.pendingMission || environmentSettings)), target = next[environmentEditContext.effect];
-        for (const input of byId("environmentFields").querySelectorAll("[data-environment-key]")) {
+        let next = JSON.parse(JSON.stringify(environmentEditContext.pendingMission || environmentSettings));
+        if (environmentEditContext.missionOnly && !environmentEditContext.removeMission) {
+          next = readMissionSettings(true);
+        }
+        const target = next[environmentEditContext.effect];
+        for (const input of environmentEditContext.missionOnly ? [] : byId("environmentFields").querySelectorAll("[data-environment-key]")) {
           if (input.validity.badInput) throw new Error(`Enter a finite value for ${input.labels[0].textContent}.`);
           target[input.dataset.environmentKey] = input.type === "checkbox" ? input.checked : input.tagName === "SELECT" ? input.value : input.value === "" ? null : input.valueAsNumber;
         }
@@ -2067,15 +2091,14 @@
     function renderEnvironmentBoxes(parent, state, x, y) {
       const settings = state?.environment?.settings || environmentSettings, parts = ARMS.flatMap(arm => state?.physical[arm] || []), budgets = parts.map(part => part.environment).filter(Boolean);
       const colors = { thermal: "#75d5ff", radiation: "#d0acff", aging: "#ffd083" };
-      if (settings.mission) {
-        const mission = schematicShape(parent, "g", { "data-mission-profile": settings.mission.profileId, class: "environment-card" });
-        schematicInfoBox(mission, x, y, 224, 92).setAttribute("pointer-events", "all");
-        schematicText(mission, x + 14, y + 24, "MISSION · planning", 16, "#8fdfd0");
-        schematicTableText(mission, x + 14, y + 48, ResistorMission.summary(settings), 196, 13, "#c6d7e5", "missionSummary", 18);
-        schematicShape(mission, "title").textContent = settings.mission.parameters.orbit + ". " + environmentReportRows(state).filter(([name]) => name.startsWith("Mission")).map(([, value]) => value).join(". ");
-        schematicEditable(mission, "mission-profile", "orbit and mission profile assumptions");
-        y += 104;
-      }
+      const mission = schematicShape(parent, "g", { "data-mission-profile": settings.mission?.profileId || "", class: "environment-card" });
+      const missionBackground = schematicInfoBox(mission, x, y, 224, 92); missionBackground.setAttribute("pointer-events", "all"); missionBackground.setAttribute("stroke", "#6a8ca5");
+      schematicText(mission, x + 14, y + 24, settings.mission ? "MISSION · planning" : "MISSION", 16, "#8fdfd0");
+      schematicTableText(mission, x + 14, y + 48, settings.mission ? ResistorMission.summary(settings) : "Not selected", 196, 13, settings.mission ? "#c6d7e5" : "#f6d365", "missionSummary", 18);
+      if (!settings.mission) schematicText(mission, x + 14, y + 72, "Sets temp · rad · aging", 12, "#a8bece");
+      schematicShape(mission, "title").textContent = settings.mission ? settings.mission.parameters.orbit + ". " + environmentReportRows(state).filter(([name]) => name.startsWith("Mission")).map(([, value]) => value).join(". ") : "Select an orbit and duration to automatically set thermal, radiation and aging inputs together.";
+      schematicEditable(mission, "mission-profile", "mission: set temperature, radiation and aging together");
+      y += 104;
       for (const effect of ["thermal", "radiation", "aging"]) {
         const value = settings[effect], values = budgets.map(budget => budget[`${effect === "radiation" ? "radiation" : effect}Pct`]);
         const complete = budgets.length && values.every(Number.isFinite);
@@ -2861,7 +2884,7 @@
     function openSchematicEditor(node) {
       if (!node.hasAttribute("data-schematic-edit") || node.getAttribute("aria-disabled") === "true" || byId("schematicEditor").open) return;
       const key = node.dataset.schematicEdit, focus = node.dataset.editFocus, locks = schematicEditLocks(key);
-      if (key === "mission-profile") { openEnvironmentEditor("thermal"); environmentEditContext.returnKey = key; byId("environmentMissionOptions").open = true; byId("environmentMissionProfile").focus(); return; }
+      if (key === "mission-profile") { openEnvironmentEditor("thermal", true); return; }
       if (key.startsWith("environment-")) { openEnvironmentEditor(key.slice(12)); return; }
       if (focus === "value" && locks.value || focus === "tolerance" && locks.tolerance) return;
       if (byId("solveFor").value === "pairs") { openPairSchematicEditor(key, focus); return; }
@@ -5122,11 +5145,13 @@
       if (!environmentEditContext) return;
       const next = JSON.parse(JSON.stringify(environmentEditContext.pendingMission || environmentSettings)); delete next.mission;
       environmentEditContext.pendingMission = next;
+      environmentEditContext.removeMission = true;
       byId("environmentMissionStatus").hidden = false;
-      byId("environmentMissionStatus").textContent = "Save environment removes the mission template and keeps the environmental input values. Cancel keeps the current mission.";
+      byId("environmentMissionStatus").textContent = `${environmentEditContext.missionOnly ? "Apply mission" : "Save environment"} removes the mission template and keeps the environmental input values. Cancel keeps the current mission.`;
       byId("environmentClearMission").hidden = true;
       byId("environmentMissionOptions").open = false;
-      byId("environmentFields").querySelector("select")?.focus();
+      byId("environmentSave").disabled = false;
+      (environmentEditContext.missionOnly ? byId("environmentSave") : byId("environmentFields").querySelector("select"))?.focus();
       refreshLeaveWarning();
     });
     byId("environmentCancel").addEventListener("click", closeEnvironmentEditor);

@@ -612,13 +612,20 @@ participate in the leave-page warning.
 
 ### Orbit and mission planning profiles
 
-Open any environmental box, then expand **Mission profiles · orbit & duration**.
-Choose a reference orbit or **Custom orbit / circular GNSS**, edit the assumptions,
-and choose **Use mission defaults for all three stacks**. This stages the complete
-profile; **Save environment** commits it and invalidates previous solutions.
-**Cancel** discards all staged changes. The current profile appears in the SVG
+The **MISSION** information box is always visible above THERMAL, RADIATION and
+AGING. Before choosing a profile it says **Not selected**. Click it, or focus it
+and press Enter/Space, to choose a reference orbit or **Custom orbit / circular
+GNSS** and edit duration and assumptions. **Apply mission** automatically sets
+the temperature range, radiation dose and aging life together in one action.
+**Cancel** leaves the design unchanged. Applying unchanged mission parameters
+preserves qualified drift limits, manual refinements and existing solutions;
+changed parameters invalidate previous solutions and clear stale qualification
+overrides. The current profile appears in the SVG
 and Circuit characteristics, and its assumptions accompany SVG, Markdown,
 LTspice annotations and search CSV. No orbit is selected automatically on startup.
+The individual environmental editors still offer the earlier staged workflow:
+expand **Mission profiles · orbit & duration**, choose **Use mission defaults for
+all three stacks**, then **Save environment**.
 
 Reference templates offer low-inclination LEO (1 year), polar LEO / SSO-like
 (5 years), an eccentric MEO belt-crossing case (5 years), and GEO (15 years).
