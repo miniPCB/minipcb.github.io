@@ -1640,6 +1640,34 @@
       return { settings, equivalents, load, bounds: toleranceAnalysis(circuit, tolerances, ranges), issues: [...issues], requiredGaps: [...requiredGaps], estimated, qualified: !issues.size && !estimated && !settings.mission };
     }
 
+    function sourceToleranceBudget(circuit, bounds, allowedErrorPct) {
+      if (circuit.vin === 0) return { feasible: true, maxPct: null };
+      const lowBottom = circuit.rl === null ? bounds.r2Min : parallel(bounds.r2Min, bounds.rlMin);
+      const highBottom = circuit.rl === null ? bounds.r2Max : parallel(bounds.r2Max, bounds.rlMax);
+      const gain = analyze(1, circuit.r1, circuit.r2, circuit.rl).ratio;
+      const lowGain = 1 / (1 + bounds.r1Max / lowBottom), highGain = 1 / (1 + bounds.r1Min / highBottom);
+      const error = allowedErrorPct / 100;
+      // Intersect the permitted source intervals at both resistor/load corners.
+      // Keep a symmetric tolerance about nominal VTOP inside that intersection.
+      const lower = error >= 1 ? 100 : 100 * (1 - (1 - error) * gain / lowGain);
+      const upper = 100 * ((1 + error) * gain / highGain - 1);
+      const limit = Math.min(99.999, lower, upper);
+      if (!Number.isFinite(limit)) throw new Error("The calculated VTOP tolerance exceeds the numeric range.");
+      return { feasible: limit >= -1e-10, maxPct: limit < -1e-10 ? null : Math.floor(Math.max(0, limit) * 1e6) / 1e6 };
+    }
+
+    function circuitEnvironment(mode, circuit, tolerances, physical, networks, allowedErrorPct, settings = environmentSettings) {
+      if (mode === "vin") tolerances.vin = 0;
+      const environment = environmentAnalysis(circuit, tolerances, physical, networks, settings);
+      if (mode !== "vin") return environment;
+      environment.sourceTolerance = environment.requiredGaps.length ? { feasible: null, maxPct: null } : sourceToleranceBudget(circuit, environment.bounds, allowedErrorPct);
+      tolerances.vin = environment.sourceTolerance.maxPct ?? 0;
+      const ranges = Object.fromEntries(ARMS.map(arm => [arm, [environment.bounds[`${arm}Min`], environment.bounds[`${arm}Max`]]]));
+      if (environment.load) ranges.rl = [environment.load.min, environment.load.max];
+      environment.bounds = toleranceAnalysis(circuit, tolerances, ranges);
+      return environment;
+    }
+
     function environmentScope(environment) {
       if (!environment) return "Initial tolerance only";
       if (!Object.values(environment.settings).some(effect => effect.enabled)) return "Initial tolerance only";
@@ -1931,16 +1959,19 @@
       const target = source ? actual : byId(pairMode ? "pairVmid" : "targetVout").valueAsNumber;
       const hasTarget = source ? mode !== "vin" : !["vout", "tolerance"].includes(mode);
       const targetLimits = !source && hasTarget;
-      const tolerance = source ? state?.tolerances.vin ?? byId(pairMode ? "pairSourceTol" : "tolVin").valueAsNumber : targetLimits ? byId(pairMode ? "pairErrorPct" : "targetError").valueAsNumber : state?.bounds.deviation;
+      const sourceBudget = source && mode === "vin" ? state?.environment?.sourceTolerance : null;
+      const tolerance = source ? mode === "vin" ? sourceBudget?.maxPct : state?.tolerances.vin ?? byId(pairMode ? "pairSourceTol" : "tolVin").valueAsNumber : targetLimits ? byId(pairMode ? "pairErrorPct" : "targetError").valueAsNumber : state?.bounds.deviation;
       const center = targetLimits ? target : actual, spread = Math.abs(center) * tolerance / 100;
-      const min = source || targetLimits ? center - spread : state?.bounds.min, max = source || targetLimits ? center + spread : state?.bounds.max;
+      const min = source && mode === "vin" ? sourceBudget?.feasible ? state?.bounds.vinMin : NaN : source || targetLimits ? center - spread : state?.bounds.min;
+      const max = source && mode === "vin" ? sourceBudget?.feasible ? state?.bounds.vinMax : NaN : source || targetLimits ? center + spread : state?.bounds.max;
       const value = number => Number.isFinite(number) ? format(number, "V") : "—";
       const rows = [{ label: hasTarget ? "Target" : "Calculated", content: value(hasTarget ? target : actual), field: source ? "vtopNominal" : hasTarget ? "vmidTarget" : "vmidNominal", id: source ? "schematicVtop" : hasTarget ? "schematicVmidTarget" : "schematicVmid", edit: source ? "source" : hasTarget ? "target" : null }];
       if (!source && hasTarget) rows.push({ label: "Nominal", content: value(actual), field: "vmidNominal", id: "schematicVmid" });
-      rows.push({ label: "Tolerance", content: Number.isFinite(tolerance) ? `±${percent(tolerance)}` : !source && Number.isFinite(min) && Number.isFinite(max) ? `±${format(Math.max(Math.abs(max - actual), Math.abs(actual - min)), "V")}` : "—", field: source ? "vtopTolerance" : "vmidTolerance", edit: source ? "source" : targetLimits ? "target" : null, focus: "tolerance" },
+      rows.push({ label: "Tolerance", content: sourceBudget && sourceBudget.feasible !== true ? sourceBudget.feasible === false ? "No solution" : "Unassessed" : Number.isFinite(tolerance) ? `±${percent(tolerance)}` : Number.isFinite(min) && Number.isFinite(max) ? `±${format(Math.max(Math.abs(max - actual), Math.abs(actual - min)), "V")}` : "—", field: source ? "vtopTolerance" : "vmidTolerance", edit: source ? "source" : targetLimits ? "target" : null, focus: "tolerance" },
         { label: "Max", content: value(max), field: source ? "vtopMax" : "vmidMax" },
         { label: "Min", content: value(min), field: source ? "vtopMin" : "vmidMin" });
       const panel = schematicShape(parent, "g", { "data-field": source ? "vtopReadout" : "vmidReadout", ...(source ? { "data-schematic-info": "source" } : {}) });
+      if (source && mode === "vin") schematicShape(panel, "title").textContent = sourceBudget?.feasible === false ? "At the calculated nominal VTOP, resistor/load variation exceeds the required VMID band even with an exact source. Allow more VMID error or reduce resistor/load drift." : sourceBudget?.feasible === null ? "The resistor/load drift interval is not fully characterized, so the permitted VTOP tolerance is unassessed." : "Maximum symmetric VTOP tolerance that keeps the full resistor/load/environment interval inside the required VMID band. The displayed Min and Max use that calculated tolerance.";
       if (targetLimits) schematicShape(panel, "title").textContent = `Target, tolerance and limits specify the required VMID band. Nominal is the selected design's actual output. Actual output interval: ${value(state?.bounds.min)} to ${value(state?.bounds.max)}.`;
       if (!source && !targetLimits) schematicShape(panel, "title").textContent = environmentScope(state?.environment) + ". VTOP tolerance must include the source's full mission variation.";
       const height = 64 + rows.length * 36;
@@ -1960,6 +1991,7 @@
       const settings = state?.environment?.settings || environmentSettings;
       const allowance = (key, automatic) => settings.aging[key] === null ? automatic : `±${percent(settings.aging[key])} override`;
       return [
+        ...(state?.environment?.sourceTolerance ? [["Calculated VTOP tolerance", state.environment.sourceTolerance.feasible === false ? "At the calculated nominal VTOP, no symmetric source tolerance meets the required VMID band. Nominal circuit analysis uses an exact source." : state.environment.sourceTolerance.feasible === null ? "Unassessed: the resistor/load interval is not fully characterized." : state.environment.sourceTolerance.maxPct === null ? "Zero nominal VTOP; absolute source interval is 0 V to 0 V." : `Maximum symmetric ±${percent(state.tolerances.vin)}; ${format(state.bounds.vinMin, "V")} to ${format(state.bounds.vinMax, "V")}. Includes resistor, load and environmental variation within the required VMID band.`]] : []),
         ["Ambient temperature", `${settings.thermal.minC} to ${settings.thermal.maxC} °C`],
         ["Temperature drift", `Ordered part TCR / reference; +${settings.thermal.selfHeatingC} °C self-heating allowance. Unassigned/RL: ${settings.thermal.manualTcrPpm} ppm/°C at ${settings.thermal.manualReferenceC} °C.`],
         ["Aging / radiation allowance", `TNPW: ${allowance("tnpwPct", "automatic 1000 h endurance benchmark: general ±(0.05% + 0.01 Ω), power ±(0.1% + 0.01 Ω), advanced ±(0.2% + 0.05 Ω)")}; M55342: ${allowance("milPct", "automatic ±0.5% MIL 2000 h endurance benchmark at 70 °C")}; unassigned/RL: ${allowance("manualPct", "not set")}. Estimated combined allowance, not a lifetime or dose rating.`],
@@ -2169,7 +2201,7 @@
       const description = "Resistance limits across physical divider resistors and RL, if fitted; these are not separate additive VMID errors. ";
       return [
         ["Tolerance stack", scope, "environmentScope"],
-        ["VTOP tolerance", `±${percent(state.tolerances.vin)}`, "stackSource", "Source variation is applied separately to the complete divider resistance intervals."],
+        ["VTOP tolerance", environment.sourceTolerance?.feasible === false ? "No solution" : environment.sourceTolerance?.feasible === null ? "Unassessed" : `±${percent(state.tolerances.vin)}`, "stackSource", "Source variation is applied separately to the complete divider resistance intervals. In Find VTOP, this is the maximum symmetric source tolerance inside the required VMID band."],
         ["Initial R tolerance", summary("initialPct"), "stackInitial", description + detail("initialPct")],
         ["Thermal R drift", summary("thermalPct", "thermal"), "stackThermal", description + detail("thermalPct")],
         ...(settings.basis === "ambient-estimate" ? [] : [["Radiation R drift", summary("radiationPct", "radiation"), "stackRadiation", description + detail("radiationPct")]]),
@@ -2947,7 +2979,7 @@
         for (const arm of ARMS) for (const item of physical[arm]) item.tolerance = tolerances[arm];
       }
       for (const arm of ARMS) if (networks[arm]) tolerances[arm] = networkEquivalent(physical[arm], networks[arm].connection).tolerance;
-      const environment = environmentAnalysis(solved, tolerances, physical, networks, environmentSettings), bounds = environment.bounds;
+      const environment = circuitEnvironment(mode, solved, tolerances, physical, networks, allowedErrorPct), bounds = environment.bounds;
       const worst = environmentWorstStress(solved, tolerances, physical, networks, environment);
       const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null)];
       for (const arm of ARMS) for (const item of analyzeParts(physical[arm], networks[arm]?.connection || "series", arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2)) {
@@ -4593,7 +4625,7 @@
       }
       const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl);
       const tolerances = { ...state.tolerances, r1: equivalents.r1.tolerance, r2: equivalents.r2.tolerance };
-      const environment = environmentAnalysis(circuit, tolerances, physical, state.networks, environmentSettings), bounds = environment.bounds;
+      const environment = circuitEnvironment(mode, circuit, tolerances, physical, state.networks, state.allowedErrorPct), bounds = environment.bounds;
       const worst = environmentWorstStress(circuit, tolerances, physical, state.networks, environment).byPart[targetId];
       const highest = Math.max(worst.p, worst.v);
       if (![result.vout, bounds.min, bounds.max, highest].every(Number.isFinite)) throw new Error("Candidate exceeds the numeric range.");
@@ -4735,7 +4767,7 @@
 
     function clearResults(message) {
       for (const id of ["vout", "iin", "ptotal", "ratio", "solutionValue", "voutMin", "voutMax", "voutError"]) byId(id).textContent = "—";
-      for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolR1", "tolR2"]) if (byId(id).readOnly) byId(id).value = "";
+      for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolVin", "tolR1", "tolR2"]) if (byId(id).readOnly) byId(id).value = "";
       for (const arm of ARMS) byId(`${arm}Summary`).textContent = "Enter valid part values to calculate the equivalent arm.";
       byId("operatingRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate.</td></tr>';
       byId("toleranceRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate tolerance bounds.</td></tr>';
@@ -4801,7 +4833,7 @@
           }
         }
         const tolerances = {
-          vin: readTolerance("tolVin", "VTOP tolerance"),
+          vin: mode === "vin" ? 0 : readTolerance("tolVin", "VTOP tolerance"),
           r1: mode === "tolerance" ? 0 : networks.r1 ? networks.r1.equivalent.tolerance : readTolerance("tolR1", "R1 tolerance"),
           r2: mode === "tolerance" ? 0 : networks.r2 ? networks.r2.equivalent.tolerance : readTolerance("tolR2", "R2 tolerance"),
           rl: rl === null ? 0 : readTolerance("tolRl", "RL tolerance")
@@ -4827,7 +4859,7 @@
             }
           }
         }
-        const environment = environmentAnalysis(circuit, tolerances, physical, networks, environmentSettings), bounds = environment.bounds;
+        const environment = circuitEnvironment(mode, circuit, tolerances, physical, networks, allowedErrorPct), bounds = environment.bounds;
         const worst = environmentWorstStress(circuit, tolerances, physical, networks, environment);
         const selected1 = comparisonPart("r1", physical.r1);
         const selected2 = comparisonPart("r2", physical.r2);
@@ -4847,7 +4879,7 @@
 
         byId("inputError").hidden = true;
         if (["vout", "tolerance"].includes(mode)) byId("targetVout").value = result.vout;
-        else if (mode === "vin") byId("vin").value = vin;
+        else if (mode === "vin") { byId("vin").value = vin; byId("tolVin").value = environment.sourceTolerance.feasible ? tolerances.vin : ""; }
         else byId(mode).value = circuit[mode] === null ? "" : circuit[mode] / Number(byId(`${mode}Unit`).value);
         if (mode === "tolerance") {
           byId("tolR1").value = tolerances.r1;
@@ -4875,7 +4907,7 @@
         byId("voutMin").textContent = format(bounds.min, "V");
         byId("voutMax").textContent = format(bounds.max, "V");
         byId("voutError").textContent = bounds.deviation === null ? "— (zero nominal)" : percent(bounds.deviation);
-        const toleranceRows = [["VTOP", bounds.vinMin, vin, bounds.vinMax, "V"], ["RTOP (R1)", bounds.r1Min, r1, bounds.r1Max, "Ω"], ["RBOT (R2)", bounds.r2Min, r2, bounds.r2Max, "Ω"]];
+        const toleranceRows = [["VTOP", environment.sourceTolerance?.feasible === false || environment.sourceTolerance?.feasible === null ? NaN : bounds.vinMin, vin, environment.sourceTolerance?.feasible === false || environment.sourceTolerance?.feasible === null ? NaN : bounds.vinMax, "V"], ["RTOP (R1)", bounds.r1Min, r1, bounds.r1Max, "Ω"], ["RBOT (R2)", bounds.r2Min, r2, bounds.r2Max, "Ω"]];
         for (const arm of ARMS) if (networks[arm]) for (const part of physical[arm]) toleranceRows.push([part.name, part.environment.min, part.resistance, part.environment.max, "Ω"]);
         if (rl !== null) toleranceRows.push(["RL", bounds.rlMin, rl, bounds.rlMax, "Ω"]);
         byId("toleranceRows").innerHTML = toleranceRows.map(([name, min, nominal, max, unit]) => `<tr><th scope="row">${name}</th><td>${format(min, unit)}</td><td>${format(nominal, unit)}</td><td>${format(max, unit)}</td></tr>`).join("");

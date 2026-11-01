@@ -116,8 +116,16 @@ Voltage readouts are part of the circuit drawing. Both panels start with the net
 name, followed by **Target** (or **Calculated** for a solved voltage),
 **Tolerance**, **Max** and **Min**. A VMID target also retains a **Nominal** row
 so the selected design's actual output can be compared with its target.
-VTOP bounds use the entered source tolerance, including correctly ordered bounds
-for negative sources. In inverse modes and combination searches, VMID Target and
+Known VTOP bounds use the entered source tolerance. **Find VTOP** calculates the
+maximum symmetric source tolerance that keeps the full VMID interval inside the
+required target band, after accounting for resistor, load and environmental
+variation. Its tolerance field is read-only, and Min/Max use the calculated
+tolerance; a previous source-tolerance input does not constrain this calculation.
+Negative source limits stay ordered. Zero nominal VTOP has a 0 V absolute range.
+If no symmetric source tolerance fits at the calculated nominal voltage, the
+nominal result remains available while tolerance says **No solution** and the
+source limits are unavailable. Missing required drift coverage says **Unassessed**.
+In inverse modes and combination searches, VMID Target and
 Tolerance are editable specifications, and Max/Min show that required band; the actual nominal
 output remains separate, with its actual tolerance interval available in the panel
 tooltip, result tables and SVG description. Calculated VMID shows the computed
@@ -285,6 +293,8 @@ value or tolerance. Reset clears these footprint preferences. Known inputs
 remain editable, and their changes recalculate the selected result.
 Voltage tolerances follow the same known/calculated role in the SVG and input form:
 VTOP tolerance is locked in Find VTOP; VMID tolerance is locked in Find VMID.
+Find VTOP recalculates its source tolerance and bounds after edits to VMID's
+allowed band, physical resistor values/tolerances, load or operating conditions.
 In inverse modes, VMID tolerance edits the allowed target-error band, preserving
 the nominal circuit and Find mode. Its Max/Min are acceptance limits; the actual
 output interval remains a separate calculated result. Known voltage fields remain
@@ -589,6 +599,15 @@ an example input, not a rating assigned to all 0805 components. Four 40 kΩ part
 in parallel give the same 10 kΩ arm, with 6 V and 0.15 mA per upper part.
 
 ## Tolerance analysis
+
+For Find VTOP, let `g0` be the nominal loaded divider gain, `gmin/gmax` its
+resistor/load/environment corner gains and `e` the allowed VMID error as a
+fraction. The symmetric source budget is
+`t = min(1 − (1 − e) × g0/gmin, (1 + e) × g0/gmax − 1)`.
+The result is capped at 99.999% and rounded down to six decimal places in percent.
+Source limits are `VTOP ± |VTOP| × t`. For equal 1% resistors without other drift,
+a 6 V ±5% output target gives nominal VTOP 12 V and ±3.960396% source tolerance,
+or 11.52475248 to 12.47524752 V. Stress bounds and downloads use the same result.
 
 Independent VTOP, R1, R2, and RL tolerances range from 0 to 99.999 percent. Each
 input varies over `nominal ± abs(nominal) × tolerance / 100`. Defaults are ±0.1%
