@@ -169,6 +169,19 @@
     .schematic-editor { width: min(440px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; padding: 22px; border: 0; border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
     .schematic-editor::backdrop { background: rgba(3, 10, 16, 0.75); }
     .schematic-editor h3 { margin: 0; font-size: 1.1rem; }
+    .frame-export-dialog { width: min(480px, calc(100% - 32px)); padding: 26px; }
+    .frame-export-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+    .frame-export-brand { display: block; width: 132px; height: auto; }
+    .frame-export-close { min-width: 36px; font-size: 22px; line-height: 1; }
+    .frame-export-title { margin: 9px 0 5px; color: var(--text); overflow-wrap: anywhere; }
+    .frame-export-formats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+    .frame-export-format { display: grid; justify-items: center; gap: 7px; min-height: 140px; padding: 20px 12px; border: 1px solid #365166; border-radius: 14px; background: #172a39; color: var(--format-color); cursor: pointer; }
+    .frame-export-format:hover, .frame-export-format:focus-visible { background: #223e50; border-color: var(--format-color); }
+    .frame-export-format svg { width: 44px; height: 44px; }
+    .frame-export-format strong { font-size: 18px; letter-spacing: 0.04em; }
+    .frame-export-format small { color: var(--muted); font-size: 12px; }
+    .frame-export-format:disabled { cursor: wait; opacity: 0.55; }
+    #frameExportStatus { margin: 18px 0 0; overflow-wrap: anywhere; }
     .schematic-inline { display: flex; gap: 3px; align-items: center; color: #c6e3ff; font: 14px ui-monospace, monospace; }
     .schematic-inline :is(select, input, button) { box-sizing: border-box; height: var(--schematic-control-height, 28px); min-height: 0; margin: 0; padding: 2px 5px; border: 1px solid #75d5ff; border-radius: 6px; background: #1e3547; color: inherit; font: inherit; }
     .schematic-inline select { width: 100%; }
@@ -446,6 +459,31 @@
       <button type="button" role="menuitem" data-resistor-action="fixed">Keep the current value fixed</button>
     </div>
     <div id="pairAxisMenu" class="resistor-menu pair-axis-menu" role="menu" aria-label="Choose graph axis" hidden></div>
+    <dialog id="frameExportDialog" class="schematic-editor frame-export-dialog" aria-labelledby="frameExportHeading" aria-describedby="frameExportScope frameExportTitle">
+      <div class="frame-export-header"><img class="frame-export-brand" src="../logo.png" width="132" height="42" alt="miniPCB" /><button id="frameExportClose" class="btn frame-export-close" type="button" aria-label="Close download formats">×</button></div>
+      <h3 id="frameExportHeading">Download circuit</h3>
+      <p id="frameExportTitle" class="frame-export-title"></p>
+      <p id="frameExportScope" class="hint">Just the title and framed schematic.</p>
+      <div class="frame-export-formats" aria-label="Image formats">
+        <button type="button" class="frame-export-format" data-frame-format="svg" style="--format-color:#54d2ff" aria-label="Download framed circuit as SVG">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 35C7 9 41 39 41 13M7 35 7 13M41 13v22"/><path d="M4 10h6v6H4zm34 22h6v6h-6z" fill="currentColor"/><circle cx="7" cy="35" r="4" fill="#172a39"/><circle cx="41" cy="13" r="4" fill="#172a39"/></svg>
+          <strong>SVG</strong><small>Vector</small>
+        </button>
+        <button type="button" class="frame-export-format" data-frame-format="png" style="--format-color:#6ee7ac" aria-label="Download framed circuit as PNG">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="36" height="36" rx="5"/><path d="m7 34 12-13 9 10 6-6 8 9"/><circle cx="32" cy="15" r="3"/></svg>
+          <strong>PNG</strong><small>Lossless image</small>
+        </button>
+        <button type="button" class="frame-export-format" data-frame-format="jpeg" style="--format-color:#ffba52" aria-label="Download framed circuit as JPEG">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="36" height="36" rx="5"/><path d="m7 35 9-9 8 7 10-14 8 12M14 13h8m-8 5h5"/></svg>
+          <strong>JPEG</strong><small>Compact image</small>
+        </button>
+        <button type="button" class="frame-export-format" data-frame-format="bmp" style="--format-color:#d0acff" aria-label="Download framed circuit as BMP">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="36" height="36" rx="5"/><path d="M18 6v36M30 6v36M6 18h36M6 30h36"/><path d="M18 18h12v12H18zM30 30h11v11H30z" fill="currentColor" opacity=".5"/></svg>
+          <strong>BMP</strong><small>Bitmap</small>
+        </button>
+      </div>
+      <p id="frameExportStatus" class="hint" role="status" hidden></p>
+    </dialog>
     <dialog id="schematicEditor" class="schematic-editor" aria-labelledby="schematicEditHeading" aria-describedby="schematicEditHelp">
       <form id="schematicEditForm" class="form-grid" novalidate>
         <input id="schematicEditTitle" type="hidden" />
@@ -933,6 +971,7 @@
   <script src="../js/resistor-parts.js"></script>
   <script src="../js/resistor-environment.js"></script>
   <script src="../js/divider-current-load.js"></script>
+  <script src="../js/circuit-image-export.js"></script>
   <script>
     "use strict";
 
@@ -1871,6 +1910,8 @@
     let schematicUrl = null;
     let schematicMarkup = "";
     const circuitDownloads = new Map();
+    let frameExportSnapshot = null, frameExportGeneration = 0;
+    let circuitLogoDataUrl = null;
     let schematicEditContext = null;
     let schematicBomData = [];
     let schematicBomCopyGeneration = 0;
@@ -2662,6 +2703,85 @@
       return `${state.pair ? "Combination preview · " : ""}VTOP ${value(state.circuit.vin, "V")} → VMID ${value(state.result.vout, "V")} · ${count} resistors · ${DividerCurrentLoad.enabled(state.circuit) ? `IL ${currentText(state.circuit.iload)} ±${currentText(state.circuit.iloadTolerance)}` : state.circuit.rl === null ? "no load" : `RL ${value(state.circuit.rl, "Ω")}`}`;
     }
 
+    function staticSchematicSnapshot(source) {
+      const snapshot = source.cloneNode(true); snapshot.setAttribute("role", "img");
+      for (const node of snapshot.querySelectorAll("[data-resistor-hit], [data-inline-editor], [data-schematic-controls], [data-edit-surface], [data-axis-edit-surface]")) node.remove();
+      for (const node of snapshot.querySelectorAll("[data-schematic-symbol]")) for (const attribute of ["tabindex", "role", "aria-label"]) node.removeAttribute(attribute);
+      for (const node of snapshot.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
+      for (const node of snapshot.querySelectorAll("[data-pair-slider], [data-pair-chart], [data-pair-action], [data-pair-axis]")) {
+        if (node.hasAttribute("data-pair-axis")) { node.querySelector("title")?.remove(); node.removeAttribute("aria-label"); }
+        for (const attribute of ["role", "tabindex", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext", "aria-pressed", "aria-haspopup", "aria-controls", "aria-expanded", "data-pair-action", "data-pair-axis", "data-axis-plot"]) node.removeAttribute(attribute);
+        if (node.hasAttribute("data-pair-chart")) node.setAttribute("aria-label", node.getAttribute("aria-label").split(". Click")[0]);
+      }
+      return snapshot;
+    }
+
+    function renderCircuitFrame(host, box, drawing, titleText) {
+      const { x, y, width, height } = box, frame = schematicShape(host, "g", { id: "schematicFrame", "data-x": x, "data-y": y, "data-width": width, "data-height": height });
+      schematicShape(frame, "rect", { x: x + 1, y: y + 1, width: width - 2, height: height - 2, rx: 18, fill: "#101823", stroke: "#39586f", "stroke-width": 1.5, "data-circuit-frame-border": "" });
+      const brand = schematicShape(frame, "g", { "data-circuit-brand": "", role: "img", "aria-label": "miniPCB" });
+      schematicShape(brand, "image", { x: x + 20, y: y + 14, width: 132, height: 42, href: circuitLogoDataUrl || "../logo.png", preserveAspectRatio: "xMinYMid meet", "data-circuit-logo": "" });
+      const title = schematicText(frame, x + width / 2, y + 80, titleText, Math.min(34, (width - 64) / (titleText.length * 0.62)), "#eaf6ff");
+      title.id = "schematicTitle"; title.setAttribute("text-anchor", "middle"); title.setAttribute("font-weight", "600"); schematicEditable(title, "design-title", "design title");
+      frame.append(drawing);
+      const buttonX = x + width - 198, buttonY = y + 14;
+      const button = schematicShape(frame, "g", { id: "schematicFrameDownload", role: "button", tabindex: 0, "aria-label": "Download framed circuit", "aria-haspopup": "dialog", "aria-controls": "frameExportDialog", "data-frame-download": "", "data-schematic-controls": "", class: "pair-svg-action" });
+      schematicShape(button, "rect", { x: buttonX, y: buttonY, width: 178, height: 36, rx: 9, fill: "#1e3547", stroke: "#6a8ca5" });
+      schematicShape(button, "path", { d: `M${buttonX + 20} ${buttonY + 9}v13m-5-5 5 5 5-5m-12 7v4h14v-4`, fill: "none", stroke: "#54d2ff", "stroke-width": 1.8, "stroke-linecap": "round", "stroke-linejoin": "round" });
+      schematicText(button, buttonX + 37, buttonY + 23, "Download circuit", 14, "#c6e3ff");
+      return frame;
+    }
+
+    function circuitFrameSnapshot() {
+      const frame = byId("schematicFrame"), width = Math.ceil(Number(frame.dataset.width)), height = Math.ceil(Number(frame.dataset.height));
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      for (const [name, value] of Object.entries({ width, height, viewBox: `0 0 ${width} ${height}`, "font-family": byId("liveSchematic").getAttribute("font-family"), "aria-labelledby": "frameImageTitle frameImageDesc" })) svg.setAttribute(name, value);
+      const title = byId("circuitTitle").value.trim() || "Voltage Divider";
+      schematicShape(svg, "title", { id: "frameImageTitle" }).textContent = title;
+      schematicShape(svg, "desc", { id: "frameImageDesc" }).textContent = "miniPCB · " + byId("schematicHeading").textContent;
+      schematicShape(svg, "rect", { width, height, fill: "#101823" });
+      const drawing = frame.cloneNode(true); drawing.setAttribute("transform", `translate(${-Number(frame.dataset.x)} ${-Number(frame.dataset.y)})`); svg.append(drawing);
+      return { title, width, height, logoEmbedded: !!circuitLogoDataUrl, markup: new XMLSerializer().serializeToString(staticSchematicSnapshot(svg)) };
+    }
+
+    function openCircuitFrameExport() {
+      const dialog = byId("frameExportDialog"); if (dialog.open) return;
+      closeSchematicEditor(false); frameExportSnapshot = circuitFrameSnapshot(); frameExportGeneration++;
+      byId("frameExportTitle").textContent = frameExportSnapshot.title; byId("frameExportStatus").hidden = true;
+      dialog.setAttribute("aria-busy", "false"); for (const button of dialog.querySelectorAll("[data-frame-format]")) button.disabled = false;
+      dialog.showModal(); dialog.querySelector('[data-frame-format="svg"]').focus();
+    }
+
+    async function downloadCircuitFrame(format) {
+      const dialog = byId("frameExportDialog"), snapshot = frameExportSnapshot;
+      if (!dialog.open || !snapshot || dialog.getAttribute("aria-busy") === "true") return;
+      const generation = ++frameExportGeneration, status = byId("frameExportStatus");
+      dialog.setAttribute("aria-busy", "true"); for (const button of dialog.querySelectorAll("[data-frame-format]")) button.disabled = true;
+      status.setAttribute("role", "status"); status.hidden = false; status.textContent = `Preparing ${format.toUpperCase()}…`;
+      try {
+        const logo = await window.circuitLogoReady;
+        if (!logo) throw new Error("The miniPCB logo could not be loaded. Reload and try again.");
+        if (!dialog.open || generation !== frameExportGeneration) return;
+        let prepared = snapshot;
+        if (!snapshot.logoEmbedded) {
+          const image = new DOMParser().parseFromString(snapshot.markup, "image/svg+xml");
+          image.querySelector("[data-circuit-logo]").setAttribute("href", logo);
+          prepared = { ...snapshot, markup: new XMLSerializer().serializeToString(image) };
+        }
+        const blob = await CircuitImageExport.encode(prepared, format);
+        if (!dialog.open || generation !== frameExportGeneration) return;
+        const url = URL.createObjectURL(blob), link = document.createElement("a");
+        link.href = url; link.download = CircuitImageExport.filename(snapshot.title, format); link.hidden = true; document.body.append(link);
+        try { link.click(); } finally { link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+        dialog.close();
+        return blob;
+      } catch (error) {
+        if (dialog.open && generation === frameExportGeneration) { status.setAttribute("role", "alert"); status.textContent = error.message || "Image export failed. Try another format."; }
+      } finally {
+        if (generation === frameExportGeneration) { dialog.setAttribute("aria-busy", "false"); for (const button of dialog.querySelectorAll("[data-frame-format]")) button.disabled = false; }
+      }
+    }
+
     function renderSchematic() {
       closePairAxisMenu();
       const svg = byId("liveSchematic");
@@ -2681,19 +2801,18 @@
       const detailsX = stacked ? 24 : drawingWidth + 40;
       const detailsWidth = (stacked ? viewportWidth : width) - detailsX - 16, informationWidth = stacked ? viewportWidth - 32 : detailsWidth;
       const characteristics = circuitCharacteristics(state, mode), operatingHeight = operatingPointHeight(informationWidth), analysisHeight = operatingHeight + characteristics.height + 16;
-      const drawingY = 104 + (stacked ? analysisHeight : 0);
+      const drawingY = 156 + (stacked ? analysisHeight : 0);
       const drawingBottom = drawingY + drawing.height;
-      const partsGroup = byId("schematicParts");
+      const partsGroup = byId("schematicParts"), drawingNode = byId("schematicDrawing"), drawingX = stacked ? (width - drawingWidth) / 2 : 12;
       partsGroup.replaceChildren();
-      const title = schematicText(partsGroup, (stacked ? (width - drawingWidth) / 2 : 12) + drawingWidth / 2, drawingY - 22, titleText, Math.min(34, (drawingWidth - 48) / (titleText.length * 0.62)), "#eaf6ff");
-      title.id = "schematicTitle"; title.setAttribute("text-anchor", "middle"); title.setAttribute("font-weight", "600");
-      schematicEditable(title, "design-title", "design title");
-      let controlsBottom = drawingBottom;
+      const frameBottom = drawingBottom + 16;
+      renderCircuitFrame(partsGroup, { x: drawingX - 8, y: drawingY - 108, width: drawingWidth + 16, height: drawing.height + 124 }, drawingNode, titleText);
+      let controlsBottom = frameBottom;
       const optionsHost = schematicShape(partsGroup, "g", { "data-schematic-controls": "" });
       const options = schematicPill(optionsHost, 218, 13, "Options", "#c6e3ff", 100);
       schematicEditable(options.pill, "circuit-options", "Options");
       if (mode === "pairs" || ARMS.some(arm => byId(`${arm}Multiple`).checked)) {
-        const left = stacked ? (width - drawingWidth) / 2 : 12, top = drawingBottom + 6;
+        const left = drawingX, top = frameBottom + 12;
         const controls = schematicShape(partsGroup, "g", { "data-schematic-controls": "", "data-circuit-search-controls": "" });
         const buttonWidth = 460, buttonX = left + (drawingWidth - buttonWidth) / 2;
         const button = schematicShape(controls, "g", { id: "schematicDesignSearch" });
@@ -2733,18 +2852,8 @@
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       decorateSchematicEditors(svg);
-      // The download is a self-contained snapshot of the live SVG.
-      const snapshot = svg.cloneNode(true); snapshot.setAttribute("role", "img");
-      for (const node of snapshot.querySelectorAll("[data-resistor-hit], [data-inline-editor]")) node.remove();
-      for (const node of snapshot.querySelectorAll("[data-schematic-symbol]")) for (const attribute of ["tabindex", "role", "aria-label"]) node.removeAttribute(attribute);
-      for (const node of snapshot.querySelectorAll("[data-schematic-controls]")) node.remove();
-      for (const node of snapshot.querySelectorAll("[data-edit-surface], [data-axis-edit-surface]")) node.remove();
-      for (const node of snapshot.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
-      for (const node of snapshot.querySelectorAll("[data-pair-slider], [data-pair-chart], [data-pair-action], [data-pair-axis]")) {
-        if (node.hasAttribute("data-pair-axis")) { node.querySelector("title")?.remove(); node.removeAttribute("aria-label"); }
-        for (const attribute of ["role", "tabindex", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext", "aria-pressed", "aria-haspopup", "aria-controls", "aria-expanded", "data-pair-action", "data-pair-axis", "data-axis-plot"]) node.removeAttribute(attribute);
-        if (node.hasAttribute("data-pair-chart")) node.setAttribute("aria-label", node.getAttribute("aria-label").split(". Click")[0]);
-      }
+      // The existing full download and the framed export share static cleanup.
+      const snapshot = staticSchematicSnapshot(svg);
       const markup = new XMLSerializer().serializeToString(snapshot);
       if (markup !== schematicMarkup) {
         const previousUrl = schematicUrl;
@@ -5314,6 +5423,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
     byId("liveSchematic").addEventListener("click", event => {
+      if (event.target.closest("[data-frame-download]")) { openCircuitFrameExport(); return; }
       const node = event.target.closest("[data-schematic-edit]") || schematicEditSurfaces.get(event.target); if (node) openSchematicEditor(node, true);
     });
     byId("liveSchematic").addEventListener("contextmenu", openResistorMenu);
@@ -5341,6 +5451,7 @@
     });
     byId("liveSchematic").addEventListener("keydown", event => {
       if (!["Enter", " "].includes(event.key)) return;
+      if (event.target.closest("[data-frame-download]")) { event.preventDefault(); openCircuitFrameExport(); return; }
       const node = event.target.closest("[data-schematic-edit]"); if (!node) return;
       event.preventDefault(); openSchematicEditor(node, true);
     });
@@ -5378,6 +5489,15 @@
     for (const type of ["wheel", "touchmove"]) window.addEventListener(type, event => { if (!event.target.closest?.("#pairAxisMenu")) closePairAxisMenu(); }, { passive: true });
     window.addEventListener("resize", () => closePairAxisMenu());
     byId("schematicEditForm").addEventListener("submit", saveSchematicEditor);
+    byId("frameExportDialog").addEventListener("click", event => {
+      const format = event.target.closest("[data-frame-format]")?.dataset.frameFormat;
+      if (format) window.frameExportReady = downloadCircuitFrame(format);
+    });
+    byId("frameExportClose").addEventListener("click", () => byId("frameExportDialog").close());
+    byId("frameExportDialog").addEventListener("close", () => {
+      frameExportGeneration++; frameExportSnapshot = null;
+      byId("schematicFrameDownload")?.focus({ preventScroll: true });
+    });
     byId("schematicEditFamily").addEventListener("change", () => configureSchematicCatalog(true));
     byId("schematicEditFootprint").addEventListener("change", changeSchematicFootprint);
     byId("schematicEditTcr").addEventListener("change", () => configureSchematicCatalog());
@@ -5432,6 +5552,13 @@
     initializeBomControls("pairBom", true, () => { pairComparisonRevision++; renderPairComparison(true); });
     renderPairComparison();
     update();
+    // Embed the original PNG bytes so saved SVGs and raster exports work offline.
+    window.circuitLogoReady = fetch("../logo.png").then(response => {
+      if (!response.ok) throw new Error("Logo unavailable");
+      return response.blob();
+    }).then(blob => new Promise((resolve, reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob);
+    })).then(url => { circuitLogoDataUrl = url; renderSchematic(); return url; }).catch(() => null);
     initialCircuitWork = JSON.stringify(workFormValues(form));
     for (const [id, ...value] of workFormValues(byId("pairForm"))) initialPairWork.set(id, JSON.stringify(value));
     // Recheck after UI handlers run, including programmatic SVG edits and part adoption.

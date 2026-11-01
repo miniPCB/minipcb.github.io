@@ -38,6 +38,29 @@ physical connection table, Mermaid connection diagram, SVG BOM with separately
 labeled unapplied alternatives/recommendations, and the matching nominal netlist.
 These generated files are snapshots; later calculator edits require a new download.
 
+## Framed circuit images
+
+The editable circuit title and schematic sit inside a frame using the original
+repository `logo.png`. The format picker uses the same logo, and downloads embed
+the original PNG bytes for offline use.
+Its **Download circuit** button opens an icon picker for **SVG**, **PNG**,
+**JPEG** and **BMP**. The image includes the title, physical resistors, load,
+voltage readouts and operating conditions. The BOM, workspace summary, graphs,
+color key and action buttons stay outside this download. The existing toolbar
+**Download SVG** still exports the full workspace.
+
+SVG remains vector. PNG is lossless; JPEG uses high quality; BMP is an
+uncompressed 24-bit image. Raster files normally render at twice the circuit's
+size, with an 8192-pixel edge / 16-megapixel limit for very large networks.
+All formats use the same dark background and keep the complete frame, including
+circuit areas outside the screen on a phone. The title supplies a safe filename.
+
+The picker captures the diagram when it opens, including a selected combination
+preview or unknown fields in search setup. It removes live editors and controls;
+no diagram values are changed or applied. Escape or Close cancels the picker,
+including a conversion in progress. A failed image conversion keeps the format
+choices available for retry. Image generation stays in the browser.
+
 ## Current-source load and sense-pin leakage
 
 Click the load symbol or its **RL/IL** selector and choose **Current source**.
