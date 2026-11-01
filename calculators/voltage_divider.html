@@ -599,6 +599,8 @@
             <div id="solvedArmSlot" hidden></div>
             <details id="loadOptions" class="optional-section">
               <summary id="loadOptionsLabel">Output load · open circuit</summary>
+              <div class="field"><label for="loadType">Load model</label><select id="loadType"><option value="resistor">Resistor</option><option value="current">Current source</option></select></div>
+              <div class="rating-fields"><div class="field"><label for="loadCurrent">IL (µA; positive toward ground)</label><input id="loadCurrent" type="number" value="0" step="any" /></div><div class="field"><label for="loadCurrentTolerance">IL ± (µA)</label><input id="loadCurrentTolerance" type="number" value="0.1" min="0" step="any" /></div></div>
               <div id="rlField" class="field">
                 <label for="rl">Output load · RL <span class="hint">(optional)</span></label>
                 <div class="input-unit">
@@ -684,6 +686,8 @@
               <div class="field"><label for="pairMaxR">Maximum resistance (Ω)</label><input id="pairMaxR" type="number" value="499000" min="0" step="any" /></div>
             </div><p class="hint">Per-resistor catalog range. Single-resistor arms are exhaustive; larger networks use a bounded similar-power search, including mixed families.</p></details>
             <details><summary>Load, temperature, and stress limits</summary><div class="rating-fields">
+              <div class="field"><label for="pairLoadType">Load model</label><select id="pairLoadType"><option value="resistor">Resistor</option><option value="current">Current source</option></select></div>
+              <div class="rating-fields"><div class="field"><label for="pairLoadCurrent">IL (µA; positive toward ground)</label><input id="pairLoadCurrent" type="number" value="0" step="any" /></div><div class="field"><label for="pairLoadCurrentTolerance">IL ± (µA)</label><input id="pairLoadCurrentTolerance" type="number" value="0.1" min="0" step="any" /></div></div>
               <div class="field"><label for="pairRl">Optional RL (Ω)</label><input id="pairRl" type="number" placeholder="Open circuit" min="0" step="any" /></div>
               <div class="field"><label for="pairLoadTol">RL tolerance · ± (%)</label><input id="pairLoadTol" type="number" value="0.1" min="0" max="99.999" step="any" /></div>
               <div class="field"><label for="pairTemperature">Selection ambient (°C)</label><input id="pairTemperature" type="number" value="70" step="any" /></div>
@@ -716,7 +720,7 @@
               <div class="metric"><span class="metric-label">Output voltage</span><output id="vout" for="vin r1 r2 rl">—</output><small>VMID relative to ground</small></div>
               <div class="metric"><span class="metric-label">Input current</span><output id="iin" for="vin r1 r2 rl">—</output><small>Through upper resistor R1</small></div>
               <div class="metric"><span class="metric-label">Total power</span><output id="ptotal" for="vin r1 r2 rl">—</output><small>R1 + R2 + load dissipation</small></div>
-              <div class="metric"><span class="metric-label">Divider ratio</span><output id="ratio" for="r1 r2 rl">—</output><small>VMID / VTOP · loaded gain</small></div>
+              <div class="metric"><span class="metric-label" id="ratioLabel">Divider ratio</span><output id="ratio" for="r1 r2 rl loadType loadCurrent">—</output><small id="ratioDescription">VMID / VTOP · loaded gain</small></div>
             </div>
             <div class="table-wrap">
               <table>
@@ -928,6 +932,7 @@
   </main>
   <script src="../js/resistor-parts.js"></script>
   <script src="../js/resistor-environment.js"></script>
+  <script src="../js/divider-current-load.js"></script>
   <script>
     "use strict";
 
@@ -1154,6 +1159,13 @@
       tolerance: { title: "Find the allowed resistor tolerance", symbol: "tolerance", help: "Set an allowed VMID error, the nominal circuit, and source/load variation. The result is the largest shared tolerance for every physical RTOP/RBOT part.", equation: "Keep VMID within nominal VMID ± the allowed error" }
     };
 
+    function modeDetails(mode) {
+      if (byId("loadType").value !== "current") return MODE_DETAILS[mode];
+      if (mode === "rl") return { title: "Find the load current", symbol: "IL", help: "Enter VTOP, target VMID and both resistances. Positive IL flows toward ground.", equation: "IL = (VTOP − VMID) / RTOP − VMID / RBOT" };
+      const equations = { vout: "VMID = (VTOP / RTOP − IL) / (1 / RTOP + 1 / RBOT)", vin: "VTOP = VMID × (1 + RTOP / RBOT) + IL × RTOP", r1: "RTOP = (VTOP − VMID) / (VMID / RBOT + IL)", r2: "RBOT = VMID / ((VTOP − VMID) / RTOP − IL)" };
+      return { ...MODE_DETAILS[mode], equation: equations[mode] || MODE_DETAILS[mode].equation };
+    }
+
     for (const id of ["p1", "p2"]) {
       for (const rating of RATINGS) {
         const option = new Option(`${rating.label} (${rating.watts} W)`, rating.watts);
@@ -1162,13 +1174,19 @@
       }
     }
 
-    function format(value, unit) {
+    function format(value, unit, digits = 4) {
       if (value === 0) return `0 ${unit}`;
       const magnitude = Math.abs(value);
       const scales = [[1e9, "G"], [1e6, "M"], [1e3, "k"], [1, ""], [1e-3, "m"], [1e-6, "µ"], [1e-9, "n"], [1e-12, "p"]];
       const scale = scales.find(([factor]) => magnitude >= factor);
       if (!scale) return `${value.toExponential(3)} ${unit}`;
-      return `${Number((value / scale[0]).toPrecision(4))} ${scale[1]}${unit}`;
+      return `${Number((value / scale[0]).toPrecision(digits))} ${scale[1]}${unit}`;
+    }
+
+    function voltageDigits(state) {
+      if (!state?.circuit || !DividerCurrentLoad.enabled(state.circuit)) return 4;
+      const span = state.bounds?.max - state.bounds?.min, magnitude = Math.max(Math.abs(state.bounds?.min), Math.abs(state.bounds?.max));
+      return span > 0 && Number.isFinite(magnitude) ? Math.min(9, Math.max(4, Math.ceil(Math.log10(magnitude / span)) + 2)) : 4;
     }
 
     function percent(value) {
@@ -1185,6 +1203,43 @@
       const smaller = Math.min(a, b);
       return smaller / (1 + smaller / Math.max(a, b));
     }
+
+    function loadIds(prefix = "") {
+      return prefix === "pair" ? { type: "pairLoadType", value: "pairLoadCurrent", tolerance: "pairLoadCurrentTolerance", resistance: "pairRl" } : { type: "loadType", value: "loadCurrent", tolerance: "loadCurrentTolerance", resistance: "rl" };
+    }
+
+    function readLoad(prefix = "", fields = null, solving = false, validate = true) {
+      const ids = loadIds(prefix), field = id => fields?.[id] || byId(id), current = field(ids.type).value === "current";
+      const read = (id, label, optional = false, positive = false) => {
+        const input = field(id), value = input.value === "" && optional ? null : input.valueAsNumber;
+        if (validate && (value !== null && (!Number.isFinite(value) || positive && value <= 0) || value === null && !optional)) { input.setAttribute("aria-invalid", "true"); throw new Error(`Enter a valid ${label}.`); }
+        return value;
+      };
+      if (!current) return { loadType: "resistor", rl: solving ? null : read(ids.resistance, "load resistance", true, true) * (prefix ? 1 : Number(byId("rlUnit").value)) || null, iload: 0, iloadTolerance: 0 };
+      const value = solving ? 0 : read(ids.value, "load current"), tolerance = read(ids.tolerance, "absolute current tolerance");
+      if (validate && (tolerance < 0 || !Number.isFinite((value + tolerance) * 1e-6) || !Number.isFinite((value - tolerance) * 1e-6))) { field(ids.tolerance).setAttribute("aria-invalid", "true"); throw new Error("Use a finite, nonnegative absolute current tolerance."); }
+      return { loadType: "current", rl: null, iload: value * 1e-6, iloadTolerance: tolerance * 1e-6 };
+    }
+
+    function writeLoad(circuit, prefix = "") {
+      const ids = loadIds(prefix), current = DividerCurrentLoad.enabled(circuit);
+      byId(ids.type).value = current ? "current" : "resistor";
+      if (current) { byId(ids.value).value = (circuit.iload || 0) / 1e-6; byId(ids.tolerance).value = (circuit.iloadTolerance || 0) / 1e-6; }
+      else byId(ids.resistance).value = circuit.rl === null ? "" : circuit.rl / (prefix ? 1 : Number(byId("rlUnit").value));
+    }
+
+    function refreshLoadFields(prefix = "") {
+      const ids = loadIds(prefix), current = byId(ids.type).value === "current";
+      byId(ids.value).closest(".rating-fields").hidden = !current;
+      byId(ids.resistance).closest(".field").hidden = current;
+      byId(prefix ? "pairLoadTol" : "tolRl").closest(".field").hidden = current;
+    }
+
+    function loadText(circuit) {
+      return DividerCurrentLoad.enabled(circuit) ? currentText(circuit.iload) : circuit.rl === null ? "Open" : format(circuit.rl, "Ω");
+    }
+
+    function currentText(value) { return Number.isFinite(value) ? `${Number((value / 1e-6).toPrecision(6))} µA` : "—"; }
 
     function networkEquivalent(parts, connection, useEnvironment = false) {
       const resistanceAt = (part, factor) => !factor ? part.resistance : useEnvironment && part.environment ? part.environment[factor < 0 ? "min" : "max"] : part.resistance * (1 + factor * part.tolerance / 100);
@@ -1439,7 +1494,7 @@
         if (!resistorCatalog) throw new Error("Load the resistor catalogs before choosing values.");
         const vin = readInput("vin", "VTOP"), target = readInput("designTarget", "Target VMID"), scale = readInput("designScale", "Starting resistance", false, true), errorLimit = readInput("designError", "Preferred nominal error");
         if (errorLimit < 0 || !(target / vin > 0 && target / vin < 1)) throw new Error("Use a nonnegative error and a VMID with the same sign as VTOP and smaller magnitude.");
-        const rl = readInput("rl", "RL", true, true, Number(byId("rlUnit").value));
+        const loadModel = readLoad(), rl = loadModel.rl;
         const rows = automaticRows(), trim = rows.find(item => item.id === byId("designTrim").value);
         if (!trim) throw new Error("Choose an automatic ratio-trim resistor.");
         const family = ResistorParts.family(resistorCatalog, byId("designFamily").value), options = parts2Options(family, byId("designPackage").value, 70, Number(byId("designTcr").value));
@@ -1464,7 +1519,7 @@
             physical[arm] = models[arm].parts.map(part => { const candidate = assignment.get(part.id); return candidate ? { ...part, resistance: candidate.resistanceOhms, rating: candidate.powerW, vmax: candidate.workingVoltageV, catalog: candidate } : { ...part, catalog: appliedCatalogParts.get(part.id) }; });
             equivalents[arm] = networkEquivalent(physical[arm], models[arm].connection);
           }
-          const circuit = { vin, rl, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance }, result = analyze(vin, circuit.r1, circuit.r2, rl);
+          const circuit = { vin, ...loadModel, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance }, result = analyze(vin, circuit.r1, circuit.r2, rl, circuit.iload);
           const measured = ARMS.flatMap(arm => analyzeParts(physical[arm], models[arm].connection, arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2));
           const tolerances = { vin: byId("tolVin").valueAsNumber, rl: rl === null ? 0 : byId("tolRl").valueAsNumber }, environment = searchEnvironmentAnalysis(circuit, tolerances, physical, models, environmentSettings), worst = environment && environmentWorstStress(circuit, tolerances, physical, models, environment);
           const driftSafe = !!environment && !environment.requiredGaps.length && Object.values(worst.byPart).every(part => part.p <= 100 + 1e-9 && (part.v === null || part.v <= 100 + 1e-9));
@@ -1563,7 +1618,8 @@
       byId(`${select.id}Heading`).textContent = `${selected.name} · ${arm === "r1" ? "upper" : "lower"} part`;
     }
 
-    function analyze(vin, r1, r2, rl) {
+    function analyze(vin, r1, r2, rl, iload = 0) {
+      if (iload) return DividerCurrentLoad.analyze(vin, r1, r2, rl, iload);
       const bottom = rl === null ? r2 : parallel(r2, rl);
       const ratio = 1 / (1 + r1 / bottom);
       const vout = vin * ratio;
@@ -1579,6 +1635,11 @@
     }
 
     function solveCircuit(mode, circuit, target) {
+      if (DividerCurrentLoad.enabled(circuit)) {
+        const solved = DividerCurrentLoad.inverse(mode, circuit, target);
+        if (!Number.isFinite(solved.vin) || !Number.isFinite(solved.iload ?? 0) || [solved.r1, solved.r2, solved.rl].some(value => value !== null && (!Number.isFinite(value) || value <= 0))) throw new Error("No finite positive resistor solution exists for this current load and target.");
+        return solved;
+      }
       const solved = { ...circuit };
       const { vin, r1, r2, rl } = circuit;
       if (mode === "vin") {
@@ -1616,6 +1677,7 @@
     }
 
     function toleranceAnalysis(circuit, tolerances, armRanges = {}) {
+      if (DividerCurrentLoad.enabled(circuit)) return DividerCurrentLoad.bounds(circuit, tolerances, armRanges);
       const { vin, r1, r2, rl } = circuit;
       const interval = (value, tolerance) => [value - Math.abs(value) * (tolerance / 100), value + Math.abs(value) * (tolerance / 100)];
       const [vinMin, vinMax] = interval(vin, tolerances.vin);
@@ -1655,6 +1717,7 @@
     }
 
     function sourceToleranceBudget(circuit, bounds, allowedErrorPct) {
+      if (DividerCurrentLoad.enabled(circuit)) return DividerCurrentLoad.sourceTolerance(circuit, bounds, allowedErrorPct);
       if (circuit.vin === 0) return { feasible: true, maxPct: null };
       const lowBottom = circuit.rl === null ? bounds.r2Min : parallel(bounds.r2Min, bounds.rlMin);
       const highBottom = circuit.rl === null ? bounds.r2Max : parallel(bounds.r2Max, bounds.rlMax);
@@ -1695,7 +1758,7 @@
     }
 
     function solveTolerance(circuit, tolerances, target, physical = null, networks = {}, settings = environmentSettings) {
-      if (analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl).vout === 0) throw new Error("Tolerance solving requires a nonzero nominal VMID.");
+      if (analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl, circuit.iload).vout === 0) throw new Error("Tolerance solving requires a nonzero nominal VMID.");
       const deviationAt = value => {
         const trial = { ...tolerances, r1: value, r2: value };
         const parts = physical && Object.fromEntries(ARMS.map(arm => [arm, physical[arm].map(part => ({ ...part, tolerance: value }))]));
@@ -1719,6 +1782,7 @@
     }
 
     function configureSolver() {
+      refreshLoadFields(); refreshLoadFields("pair");
       const mode = byId("solveFor").value;
       const enteringCombinations = mode === "pairs" && lastSolveMode !== "pairs";
       lastSolveMode = mode;
@@ -1736,8 +1800,12 @@
       }
       for (const arm of ARMS) prepareNetwork(arm);
       for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolR1", "tolR2"]) {
-        byId(id).readOnly = id === mode || (id === "targetVout" && ["vout", "tolerance"].includes(mode)) || (["tolR1", "tolR2"].includes(id) && mode === "tolerance");
+        byId(id).readOnly = id === mode && !(id === "rl" && byId("loadType").value === "current") || (id === "targetVout" && ["vout", "tolerance"].includes(mode)) || (["tolR1", "tolR2"].includes(id) && mode === "tolerance");
       }
+      byId("loadCurrent").readOnly = mode === "rl" && byId("loadType").value === "current";
+      const currentLoad = byId("loadType").value === "current";
+      document.querySelector('[data-solve-mode="rl"] strong').textContent = currentLoad ? "Find IL" : "Find RL";
+      byId("solveFor").querySelector('[value="rl"]').textContent = currentLoad ? "IL · Load current" : "RL · Output load";
       byId("tolVin").readOnly = schematicEditLocks("source").tolerance;
       byId("targetError").readOnly = mode === "vout";
       for (const arm of ARMS) {
@@ -1770,10 +1838,10 @@
     }
 
     function configureFocusedForm(mode) {
-      const info = MODE_DETAILS[mode];
+      const info = modeDetails(mode);
       byId("formModeHeading").textContent = info.title;
       byId("solveHelp").textContent = info.help;
-      const lower = byId("rl").value.trim() === "" ? "RBOT" : "(RBOT || RL)";
+      const lower = byId("loadType").value === "current" || byId("rl").value.trim() === "" ? "RBOT" : "(RBOT || RL)";
       byId("solveEquation").textContent = mode === "r2" && lower !== "RBOT" ? "1 / RBOT = (VTOP − VMID) / (RTOP × VMID) − 1 / RL" : info.equation.replaceAll("Rbottom", lower);
       byId("calculateButton").textContent = `Calculate ${info.symbol}`;
       byId("vinField").hidden = mode === "vin";
@@ -1894,11 +1962,12 @@
         return (optional && input.value === "" && !input.validity.badInput) || (Number.isFinite(value) && (!positive || value > 0));
       };
       const armEntered = arm => byId(`${arm}Multiple`).checked ? [...byId(`${arm}Parts`).children].every(row => byId(`${row.id}Auto`).checked ? automaticChoices.has(row.id) : entered(`${row.id}R`, true, false, Number(byId(`${row.id}Unit`).value))) : entered(arm, true, false, Number(byId(`${arm}Unit`).value));
-      const roles = Object.fromEntries(Object.entries({ vin: entered("vin"), vout: entered("targetVout"), r1: armEntered("r1"), r2: armEntered("r2"), rl: entered("rl", true, true, Number(byId("rlUnit").value)) }).map(([key, valid]) => [key, valid ? "defined" : "undefined"]));
+      const roles = Object.fromEntries(Object.entries({ vin: entered("vin"), vout: entered("targetVout"), r1: armEntered("r1"), r2: armEntered("r2"), rl: byId("loadType").value === "current" ? entered("loadCurrent") && entered("loadCurrentTolerance") && byId("loadCurrentTolerance").valueAsNumber >= 0 : entered("rl", true, true, Number(byId("rlUnit").value)) }).map(([key, valid]) => [key, valid ? "defined" : "undefined"]));
       const mode = byId("solveFor").value;
       // Pair mode uses its own inputs and keeps both resistor values as outputs.
       if (mode === "pairs") {
         for (const [key, id, positive, optional] of [["vin", "pairVin", false, false], ["vout", "pairVmid", false, false], ["rl", "pairRl", true, true]]) roles[key] = entered(id, positive, optional) ? "defined" : "undefined";
+        if (byId("pairLoadType").value === "current") roles.rl = entered("pairLoadCurrent") && entered("pairLoadCurrentTolerance") && byId("pairLoadCurrentTolerance").valueAsNumber >= 0 ? "defined" : "undefined";
         roles.r1 = roles.r2 = "solving";
       } else if (mode === "tolerance") roles.r1 = roles.r2 = "solving";
       else roles[mode] = "solving";
@@ -1918,9 +1987,9 @@
           physical[arm] = model.parts.map(part => ({ ...part, resistance: Number.isFinite(part.resistance) ? part.resistance : 10000, tolerance: part.settings.tolerancePct ?? Number(byId(`pairTol${side}`).value), settings: { ...part.settings, package: part.settings.package ?? byId(`pairPackage${side}`).value }, rating: NaN, stress: { p: NaN, v: NaN } }));
           networks[arm] = model.parts.length > 1 ? { connection: displayNetworkConnection(model.connection), parts: physical[arm] } : null;
         }
-        return { pairSetup: true, constructionSetup: true, circuit: { vin: number("pairVin"), rl: number("pairRl") }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical, networks, result: {}, bounds: {}, target: number("pairVmid"), allowedErrorPct: number("pairErrorPct"), analyzedAt: null };
+        return { pairSetup: true, constructionSetup: true, circuit: { vin: number("pairVin"), ...readLoad("pair", null, false, false) }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical, networks, result: {}, bounds: {}, target: number("pairVmid"), allowedErrorPct: number("pairErrorPct"), analyzedAt: null };
       }
-      return { pairSetup: true, circuit: { vin: number("pairVin"), rl: byId("pairRl").value === "" && !byId("pairRl").validity.badInput ? null : byId("pairRl").valueAsNumber }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical: { r1: [], r2: [] }, networks: { r1: null, r2: null }, result: {}, bounds: {}, target: number("pairVmid"), allowedErrorPct: number("pairErrorPct"), analyzedAt: pairSpec?.analyzedAt || null };
+      return { pairSetup: true, circuit: { vin: number("pairVin"), ...readLoad("pair", null, false, false) }, tolerances: { vin: number("pairSourceTol"), rl: number("pairLoadTol") }, physical: { r1: [], r2: [] }, networks: { r1: null, r2: null }, result: {}, bounds: {}, target: number("pairVmid"), allowedErrorPct: number("pairErrorPct"), analyzedAt: pairSpec?.analyzedAt || null };
     }
 
     function schematicRole(node, key, roles, attribute = "fill") {
@@ -1937,7 +2006,7 @@
         physical[arm] = byId(`${arm}Multiple`).checked ? [...byId(`${arm}Parts`).children].map(row => ({ id: row.id, name: row.dataset.name, resistance: byId(`${row.id}Auto`).checked ? automaticChoices.get(row.id)?.resistanceOhms ?? byId(`${row.id}R`).valueAsNumber * Number(byId(`${row.id}Unit`).value) : byId(`${row.id}R`).valueAsNumber * Number(byId(`${row.id}Unit`).value), tolerance: byId(`${row.id}Tol`).valueAsNumber, rating: byId(`${row.id}Power`).valueAsNumber, vmax: null, stress: { p: NaN, v: NaN } })) : [{ id: arm, name: arm.toUpperCase(), resistance: byId(arm).valueAsNumber * Number(byId(`${arm}Unit`).value), tolerance: byId(`tolR${index}`).valueAsNumber, rating: Number(byId(`p${index}`).value), vmax: null, stress: { p: NaN, v: NaN } }];
         networks[arm] = byId(`${arm}Multiple`).checked ? { connection: byId(`${arm}Connection`).value === "mixed" ? armTopology(arm) : byId(`${arm}Connection`).value, parts: physical[arm] } : null;
       }
-      return { pending: true, physical, networks, circuit: { vin: byId("vin").valueAsNumber, r1: NaN, r2: NaN, rl: byId("rl").value === "" ? null : byId("rl").valueAsNumber * Number(byId("rlUnit").value) }, tolerances: { vin: byId("tolVin").valueAsNumber, rl: byId("tolRl").valueAsNumber }, result: {}, bounds: {}, target: byId("designTarget").valueAsNumber };
+      return { pending: true, physical, networks, circuit: { vin: byId("vin").valueAsNumber, r1: NaN, r2: NaN, ...readLoad("", null, false, false) }, tolerances: { vin: byId("tolVin").valueAsNumber, rl: byId("tolRl").valueAsNumber }, result: {}, bounds: {}, target: byId("designTarget").valueAsNumber };
     }
 
     const schematicEditSurfaces = new WeakMap();
@@ -1978,7 +2047,7 @@
       const center = targetLimits ? target : actual, spread = Math.abs(center) * tolerance / 100;
       const min = source && mode === "vin" ? sourceBudget?.feasible ? state?.bounds.vinMin : NaN : source || targetLimits ? center - spread : state?.bounds.min;
       const max = source && mode === "vin" ? sourceBudget?.feasible ? state?.bounds.vinMax : NaN : source || targetLimits ? center + spread : state?.bounds.max;
-      const value = number => Number.isFinite(number) ? format(number, "V") : "—";
+      const value = number => Number.isFinite(number) ? format(number, "V", voltageDigits(state)) : "—";
       const rows = [{ label: hasTarget ? "Target" : "Calculated", content: value(hasTarget ? target : actual), field: source ? "vtopNominal" : hasTarget ? "vmidTarget" : "vmidNominal", id: source ? "schematicVtop" : hasTarget ? "schematicVmidTarget" : "schematicVmid", edit: source ? "source" : hasTarget ? "target" : null }];
       if (!source && hasTarget) rows.push({ label: "Nominal", content: value(actual), field: "vmidNominal", id: "schematicVmid" });
       rows.push({ label: "Tolerance", content: sourceBudget && sourceBudget.feasible !== true ? sourceBudget.feasible === false ? "No solution" : "Unassessed" : Number.isFinite(tolerance) ? `±${percent(tolerance)}` : Number.isFinite(min) && Number.isFinite(max) ? `±${format(Math.max(Math.abs(max - actual), Math.abs(actual - min)), "V")}` : "—", field: source ? "vtopTolerance" : "vmidTolerance", edit: source ? "source" : targetLimits ? "target" : null, focus: "tolerance" },
@@ -2005,6 +2074,7 @@
       const settings = state?.environment?.settings || environmentSettings;
       const allowance = (key, automatic) => settings.aging[key] === null ? automatic : `±${percent(settings.aging[key])} override`;
       return [
+        ...(state?.circuit && DividerCurrentLoad.enabled(state.circuit) ? [["Load current", `${currentText(state.circuit.iload)} ±${currentText(state.circuit.iloadTolerance)} (absolute); positive toward ground. Independent of resistor drift.`]] : []),
         ...(state?.environment?.sourceTolerance ? [["Calculated VTOP tolerance", state.environment.sourceTolerance.feasible === false ? "At the calculated nominal VTOP, no symmetric source tolerance meets the required VMID band. Nominal circuit analysis uses an exact source." : state.environment.sourceTolerance.feasible === null ? "Unassessed: the resistor/load interval is not fully characterized." : state.environment.sourceTolerance.maxPct === null ? "Zero nominal VTOP; absolute source interval is 0 V to 0 V." : `Maximum symmetric ±${percent(state.tolerances.vin)}; ${format(state.bounds.vinMin, "V")} to ${format(state.bounds.vinMax, "V")}. Includes resistor, load and environmental variation within the required VMID band.`]] : []),
         ["Ambient temperature", `${settings.thermal.minC} to ${settings.thermal.maxC} °C`],
         ["Temperature drift", `Ordered part TCR / reference; +${settings.thermal.selfHeatingC} °C self-heating allowance. Unassigned/RL: ${settings.thermal.manualTcrPpm} ppm/°C at ${settings.thermal.manualReferenceC} °C.`],
@@ -2138,14 +2208,22 @@
       const load = schematicShape(drawing, "g", { id: "schematicLoad", fill: "none", stroke: "#a8bece", "stroke-width": 3, "stroke-dasharray": "7 6" });
       schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${loadX}V${loadY - 30}`, fill: "none", stroke: netColor, "stroke-width": 3, "stroke-dasharray": "7 6", "data-wire-net": "VMID" });
       schematicShape(load, "path", { d: `M${loadX} ${loadY + 30}V${bottom + 24}m-20 0h40m-32 10h24m-16 10h8` });
-      const hasLoad = !!state && state.circuit.rl !== null;
-      if (hasLoad) { schematicRole(schematicShape(load, "rect", { x: loadX - 11, y: loadY - 30, width: 22, height: 60, rx: 2 }), "rl", roles, "stroke"); load.dataset.schematicLoadSymbol = "rl"; }
+      const model = state?.circuit || readLoad(pairMode ? "pair" : "", null, false, false), currentLoad = DividerCurrentLoad.enabled(model), hasLoad = currentLoad || !!state && state.circuit.rl !== null;
+      load.removeAttribute("stroke-dasharray");
+      if (currentLoad) {
+        schematicRole(schematicShape(load, "circle", { cx: loadX, cy: loadY, r: 30, fill: "#142535" }), "rl", roles, "stroke");
+        schematicShape(load, "path", { d: `M${loadX} ${loadY - 16}v32m-7-8 7 8 7-8`, stroke: SOLVE_ROLES[roles.rl].color });
+        load.dataset.schematicLoadSymbol = "current";
+        schematicShape(load, "title").textContent = "Positive IL flows from VMID toward ground; negative IL injects current into VMID.";
+      } else if (hasLoad) { schematicRole(schematicShape(load, "rect", { x: loadX - 11, y: loadY - 30, width: 22, height: 60, rx: 2, "pointer-events": "all" }), "rl", roles, "stroke"); load.dataset.schematicLoadSymbol = "rl"; }
+      else schematicShape(load, "rect", { x: loadX - 15, y: loadY - 30, width: 30, height: 60, fill: "transparent", stroke: "none", "pointer-events": "all" });
+      schematicEditable(load, "load-type", "load model", "type");
       const loadInfo = schematicShape(drawing, "g", { "data-schematic-info": "load" });
       schematicInfoBox(loadInfo, loadX + 36, loadY - 42, 148, hasLoad ? 112 : 78);
-      schematicText(loadInfo, loadX + 48, loadY - 18, "RL", 20, SOLVE_ROLES[roles.rl].color);
-      const loadValue = schematicText(loadInfo, loadX + 48, loadY + 10, state ? hasLoad ? Number.isFinite(state.circuit.rl) ? format(state.circuit.rl, "Ω") : "—" : "Open" : "—", 18, "#a8bece"); loadValue.id = "schematicLoadValue";
-      if (hasLoad) schematicText(loadInfo, loadX + 48, loadY + 44, `±${percent(state.tolerances.rl)}`, 16, "#a8bece");
-      if (state && !state.pending) schematicEditable(loadValue, "load", "RL and load tolerance");
+      const type = schematicPill(loadInfo, loadX + 44, loadY - 38, currentLoad ? "IL" : "RL", SOLVE_ROLES[roles.rl].color, 72, null, true); schematicEditable(type.pill, "load-type", "load model", "type");
+      const loadValue = schematicText(loadInfo, loadX + 48, loadY + 10, loadText(model), 18, "#a8bece"); loadValue.id = "schematicLoadValue";
+      if (hasLoad) { const tolerance = schematicText(loadInfo, loadX + 48, loadY + 44, currentLoad ? `±${currentText(model.iloadTolerance)}` : `±${percent(state.tolerances.rl)}`, 16, "#a8bece"); schematicEditable(tolerance, "load", "load tolerance", "tolerance"); }
+      schematicEditable(loadValue, "load", "load value");
       schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${readoutX + 210}`, fill: "none", stroke: netColor, "stroke-width": mode === "vout" ? 4 : 3, "data-output-net": "VMID", "data-wire-net": "VMID" });
       for (const x of [mainX, loadX]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor, "data-wire-junction": "", "data-wire-net": "VMID" });
       schematicShape(drawing, "circle", { cx: readoutX + 216, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3, "data-wire-net": "VMID" });
@@ -2177,7 +2255,8 @@
     function operatingPointRows(state) {
       const complete = !!state && !state.pairSetup && !state.pending;
       const findVmid = byId("solveFor").value === "vout";
-      return [["VMID", complete ? state.result.vout : null, "V", "vmid", findVmid ? "#ff8e8e" : "#75d5ff", findVmid ? "#3b2530" : "#12354b"], ["Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
+      const current = !!state && DividerCurrentLoad.enabled(state.circuit);
+      return [["VMID", complete ? state.result.vout : null, "V", "vmid", findVmid ? "#ff8e8e" : "#75d5ff", findVmid ? "#3b2530" : "#12354b"], [current ? "Source power" : "Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? current ? state.result.i1 : Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
     }
 
     function operatingPointHeight(width) {
@@ -2190,11 +2269,11 @@
       schematicText(group, 0, 20, heading, Math.min(18, width / (heading.length * 0.62)), "#eaf6ff");
       operatingPointRows(state).forEach(([label, value, unit, key, accent, background], index) => {
         const left = (index % columns) * (cardWidth + gap), top = 34 + Math.floor(index / columns) * 100;
-        const card = schematicShape(group, "g", { transform: `translate(${left} ${top})`, role: "group", "aria-label": `${label}: ${Number.isFinite(value) ? format(value, unit) : "unavailable"}${state?.pair ? "; selected preview, nominal" : "; nominal"}`, "data-operating-point": key });
+        const card = schematicShape(group, "g", { transform: `translate(${left} ${top})`, role: "group", "aria-label": `${label}: ${Number.isFinite(value) ? format(value, unit, unit === "V" ? voltageDigits(state) : 4) : "unavailable"}${state?.pair ? "; selected preview, nominal" : "; nominal"}`, "data-operating-point": key });
         schematicShape(card, "rect", { width: cardWidth, height: 88, rx: 12, fill: background });
         schematicShape(card, "rect", { x: 0, y: 14, width: 4, height: 60, rx: 2, fill: accent });
         schematicText(card, 14, 23, label, 13, accent);
-        const content = Number.isFinite(value) ? format(value, unit) : "—";
+        const content = Number.isFinite(value) ? format(value, unit, unit === "V" ? voltageDigits(state) : 4) : "—";
         schematicText(card, 14, 66, content, Math.min(34, (cardWidth - 28) / (content.length * 0.62)), "#f4fbff", `operating${key}`);
         schematicShape(card, "title").textContent = `${state?.pair ? "Selected combination preview; nominal" : "Nominal operating point"}${key === "rth" ? "; output source resistance, load excluded" : ""}.`;
       });
@@ -2225,27 +2304,28 @@
         ...(settings.basis === "ambient-estimate" ? [] : [["Radiation R drift", summary("radiationPct", "radiation"), "stackRadiation", description + detail("radiationPct")]]),
         ["Aging / radiation allowance", summary("agingPct", "aging"), "stackAging", description + "Equivalent percent includes each part's fixed-ohm endurance term. " + detail("agingPct")],
         ["Combined R limit", summary("effectivePct"), "stackCombined", description + "Largest deviation from nominal after compounding the configured terms; fixed aging ohms remain absolute. Missing terms are not qualified as zero. " + detail("effectivePct") + ". " + environmentScope(environment)],
-        ["VMID range", `${format(state.bounds.min, "V")} to ${format(state.bounds.max, "V")}`, "stackVmid", "Modeled output interval from VTOP tolerance and the complete resistor stack, using the actual series/parallel network and load. " + environmentScope(environment)]
+        ["VMID range", `${format(state.bounds.min, "V", voltageDigits(state))} to ${format(state.bounds.max, "V", voltageDigits(state))}`, "stackVmid", "Modeled output interval from VTOP tolerance and the complete resistor stack, using the actual series/parallel network and load. " + environmentScope(environment)]
       ];
     }
 
     function circuitCharacteristics(state, mode) {
       const complete = !!state && !state.pairSetup && !state.pending, pair = state?.pair, target = state?.target;
-      const value = (number, unit) => Number.isFinite(number) ? format(number, unit) : "—";
+      const value = (number, unit) => Number.isFinite(number) ? format(number, unit, unit === "V" ? voltageDigits(state) : 4) : "—";
       const accuracy = distance => {
         if (!complete || !Number.isFinite(target)) return "—";
         if (target === 0) return value(distance, "V");
         const error = distance / Math.abs(target) * 100;
         return percent(error < 1e-10 ? 0 : error);
       };
-      const solved = !complete ? mode === "pairs" ? "No selected combination" : "—" : mode === "pairs" ? "Combination preview" : mode === "tolerance" ? `±${percent(state.tolerances.r1)} each` : mode === "vout" ? value(state.result.vout, "V") : mode === "vin" ? value(state.circuit.vin, "V") : state.circuit[mode] === null ? "Open circuit" : value(state.circuit[mode], "Ω");
+      const solved = !complete ? mode === "pairs" ? "No selected combination" : "—" : mode === "rl" && DividerCurrentLoad.enabled(state.circuit) ? currentText(state.circuit.iload) : mode === "pairs" ? "Combination preview" : mode === "tolerance" ? `±${percent(state.tolerances.r1)} each` : mode === "vout" ? value(state.result.vout, "V") : mode === "vin" ? value(state.circuit.vin, "V") : state.circuit[mode] === null ? "Open circuit" : value(state.circuit[mode], "Ω");
       const rows = [
-        [mode === "pairs" ? "Find RTOP + RBOT" : mode === "tolerance" ? "Find R tolerance" : `Find ${MODE_DETAILS[mode].symbol}`, solved, "findResult"],
+        [mode === "pairs" ? "Find RTOP + RBOT" : mode === "tolerance" ? "Find R tolerance" : `Find ${modeDetails(mode).symbol}`, solved, "findResult"],
         ["Nominal total power", complete ? value(state.result.total, "W") : "—", "nominalPower"],
         ["Nominal input current", complete ? value(Math.abs(state.result.i1), "A") : "—", "nominalCurrent"],
         ["Source resistance Rth", complete ? value(state.result.rth, "Ω") : "—", "rth"]
       ];
       if (complete) rows.push(...circuitToleranceRows(state));
+      if (complete && DividerCurrentLoad.enabled(state.circuit)) rows.push(["Load current", `${currentText(state.circuit.iload)} ±${currentText(state.circuit.iloadTolerance)}`, "loadCurrent"], ["Load current range", `${currentText(state.bounds.iloadMin)} to ${currentText(state.bounds.iloadMax)}`, "loadCurrentRange"]);
       if (state?.pair?.combination) rows.push(["Stress method", "Conservative interval bounds", "stressMethod"], ["Non-trim power spread", percent(state.pair.powerSpread), "powerSpread"]);
       if (["pairs", "vin", "r1", "r2", "rl"].includes(mode) || mode === "vout" && Number.isFinite(target)) {
         rows.push([mode === "vout" ? "Nominal VMID target" : "Target VMID", value(target, "V"), "targetVmid"],
@@ -2447,6 +2527,7 @@
       if (![state.result.vout, state.bounds.min, state.bounds.max].every(Number.isFinite)) return null;
       const netlist = ["* miniPCB - " + (state.pair ? "selected combination preview" : "displayed circuit"), `V1 VTOP 0 DC ${state.circuit.vin}`, ...edges.map(edge => `${edge.name} ${edge.from} ${edge.to} ${edge.part.resistance}`)];
       if (state.circuit.rl !== null) netlist.push(`RL VMID 0 ${state.circuit.rl}`);
+      if (DividerCurrentLoad.enabled(state.circuit)) netlist.push(`ILOAD VMID 0 DC ${state.circuit.iload}`, `* ILOAD absolute tolerance +/-${state.circuit.iloadTolerance} A; positive VMID to ground`);
       netlist.push(".op", ".end");
       return { state, mode, trees, edges, netlist: netlist.join("\r\n") + "\r\n", bom: schematicBomData.map(row => [...row]) };
     }
@@ -2460,6 +2541,7 @@
       add("RTOP_ohm", `if(abs(I(V1))>0,abs(V(VTOP,VMID)/I(V1)),${state.circuit.r1})`);
       add("RBOT_ohm", `if(abs(${bottomCurrent})>0,abs(V(VMID)/${bottomCurrent}),${state.circuit.r2})`);
       add("Operating_power_W", "-V(VTOP)*I(V1)");
+      if (DividerCurrentLoad.enabled(state.circuit)) add("Load_current_A", "I(ILOAD)");
       for (const edge of edges) {
         const base = edge.name.replace(/[^a-zA-Z0-9_]/g, "_"); let name = base, suffix = 1;
         while (usedNames.has(name.toLowerCase())) name = base + "_" + suffix++;
@@ -2475,12 +2557,13 @@
       else add("Vstress_unassessed_parts", String(edges.length - voltageNames.length));
       const parts = edges.map(edge => edge.part);
       const rows = [
-        ["VTOP", format(state.circuit.vin, "V")], ["VMID", format(state.result.vout, "V")],
+        ["VTOP", format(state.circuit.vin, "V", voltageDigits(state))], ["VMID", format(state.result.vout, "V", voltageDigits(state))],
         ["RTOP equivalent", format(state.circuit.r1, "ohm")], ["RBOT equivalent", format(state.circuit.r2, "ohm")],
         ["Operating power (including load)", format(state.result.total, "W")],
         ["Pstress (highest divider part)", percent(Math.max(...parts.map(part => part.stress.p)))],
         ["Vstress (highest divider part)", voltageNames.length === edges.length ? percent(maximumVoltageStress(parts)) : `not assessed (${voltageNames.length}/${edges.length} parts rated)`]
       ];
+      if (DividerCurrentLoad.enabled(state.circuit)) rows.push(["IL (positive toward ground)", `${currentText(state.circuit.iload)} +/-${currentText(state.circuit.iloadTolerance)} absolute`]);
       if (state.worst) rows.push(["Calculator bounded VMID", `${state.bounds.min} to ${state.bounds.max} V`], ["Calculator worst Pstress", percent(Math.max(state.worst.top.p, state.worst.bot.p))], ["Calculator worst Vstress", voltageNames.length === edges.length ? percent(Math.max(state.worst.top.v, state.worst.bot.v)) : "not assessed"]);
       return { rows, measurements };
     }
@@ -2524,6 +2607,11 @@
       flags.push("FLAG 96 96 VTOP", `FLAG ${center} ${middle} VMID`, `FLAG 96 ${bottom} 0`, `FLAG ${center} ${bottom} 0`);
       for (const [name, [x, y]] of points) if (name.startsWith("N_")) flags.push(`FLAG ${x} ${y} ${name}`);
       if (state.circuit.rl !== null) { const loadX = 256 + width + 192; wire(center, middle, loadX, middle); resistor("RL", state.circuit.rl, loadX, middle, 160); flags.push(`FLAG ${loadX} ${middle + 160} 0`); }
+      if (DividerCurrentLoad.enabled(state.circuit)) {
+        // ADI's current symbol has pins (0,0) and (0,80) in R0 orientation.
+        const loadX = 256 + width + 192; wire(center, middle, loadX, middle); wire(loadX, middle, loadX, middle + 32); wire(loadX, middle + 112, loadX, middle + 160);
+        symbols.push(`SYMBOL current ${loadX} ${middle + 32} R0`, "SYMATTR InstName ILOAD", `SYMATTR Value ${state.circuit.iload}`); flags.push(`FLAG ${loadX} ${middle + 160} 0`);
+      }
       text(48, 16, "miniPCB - " + (state.pair ? "selected combination preview (not applied)" : "displayed circuit"));
       text(48, 48, "Analyzed: " + state.analyzedAt + " | https://www.minipcb.com/calculators/voltage_divider.html");
       let y = bottom + 64; text(64, y, ".op", true);
@@ -2534,6 +2622,7 @@
       text(64, y += 32, "Run .op, then View > SPICE Error Log for the measured report. Values ending _pct are percentages.");
       text(64, y += 32, "RTOP/RBOT measurements use exported nominal equivalents at zero drive.");
       for (const line of [`Nominal ideal DC; tolerances, ratings and MPNs below are annotations, not simulation models.`, `VMID nominal=${state.result.vout} V; min=${state.bounds.min} V; max=${state.bounds.max} V`, `VTOP tolerance +/-${state.tolerances.vin}%; RL ${state.circuit.rl === null ? "open (omitted)" : state.circuit.rl + " ohm, +/-" + state.tolerances.rl + "%"}`]) text(64, y += 32, line);
+      if (DividerCurrentLoad.enabled(state.circuit)) text(64, y += 32, `ILOAD ${state.circuit.iload} A, +/-${state.circuit.iloadTolerance} A absolute; current flows VMID to 0. Tolerance is not simulated by .op.`);
       for (const [label, value] of environmentReportRows(state)) for (const line of `${label}: ${value}`.match(/.{1,110}(?:\s|$)|.{1,110}/g) || []) text(64, y += 32, line.trim());
       text(64, y += 32, "Environmental intervals are calculated in the calculator; .op remains nominal. Re-export after changing the design.");
       for (const edge of edges) {
@@ -2552,13 +2641,15 @@
       const cell = value => String(value ?? "—").replaceAll("|", "&#124;").replace(/[\r\n]/g, " ");
       const table = rows => rows.map((row, index) => "| " + row.map(cell).join(" | ") + " |" + (index === 0 ? "\n| " + row.map(() => "---").join(" | ") + " |" : "")).join("\n");
       const characteristics = circuitCharacteristics(state, mode).rows.map(([label, value]) => [label, value]);
-      const operatingPoint = operatingPointRows(state).map(([label, value, unit]) => [label, value === null ? "—" : format(value, unit)]);
-      const connectivity = [["Reference", "LTspice name", "Arm", "From node", "To node", "Resistance (ohm)", "Tolerance (%)", "Allowed power (W)", "Working voltage (V)", "Selected MPN"]];
+      const operatingPoint = operatingPointRows(state).map(([label, value, unit]) => [label, value === null ? "—" : format(value, unit, unit === "V" ? voltageDigits(state) : 4)]);
+      const connectivity = [["Reference", "LTspice name", "Arm", "From node", "To node", "Resistance (ohm)", DividerCurrentLoad.enabled(state.circuit) ? "Tolerance (resistors %, IL absolute)" : "Tolerance (%)", "Allowed power (W)", "Working voltage (V)", "Selected MPN"]];
       for (const edge of edges) connectivity.push([edge.part.name, edge.name, edge.arm === "r1" ? "RTOP" : "RBOT", edge.from, edge.to, edge.part.resistance, edge.part.tolerance, edge.part.rating, edge.part.vmax ?? "Not specified", edge.part.mpn || "Unassigned"]);
       if (state.circuit.rl !== null) connectivity.push(["RL", "RL", "Load", "VMID", "0", state.circuit.rl, state.tolerances.rl, "Not checked", "Not checked", "Unassigned"]);
+      if (DividerCurrentLoad.enabled(state.circuit)) connectivity.push(["IL", "ILOAD", "Current source", "VMID", "0", "—", `±${currentText(state.circuit.iloadTolerance)} absolute`, "Not checked", "Not checked", "External load"]);
       const diagram = ["flowchart TB", '  GND(("GND"))', '  VTOP(("VTOP"))', '  VMID(("VMID"))', `  GND -->|"V1 ${state.circuit.vin} V"| VTOP`, ...edges.map(edge => `  ${edge.from === "0" ? "GND" : edge.from} -->|"${edge.name} ${edge.part.resistance} ohm"| ${edge.to === "0" ? "GND" : edge.to}`)];
       if (state.circuit.rl !== null) diagram.push(`  VMID -->|"RL ${state.circuit.rl} ohm"| GND`);
-      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Operating Point Information", "", table([["Quantity", "Nominal value"], ...operatingPoint]), "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Environmental tolerance stack", "", table([["Effect", "Assumption / estimate"], ...environmentReportRows(state)]), "", "Resistance intervals compound independent percentage limits. Aging keeps any fixed ohms separate: Raged,min = Rnom * (1-initial/100) * (1-aging_relative/100) - aging_ohms; upper uses plus signs. Thermal/radiation factors then apply to that aged interval. The combined aging/radiation allowance is an estimate based on catalog endurance benchmarks or custom inputs; no radiation dose-response or mission-life guarantee is inferred. No cancellation, matching or RSS is assumed. Film temperature uses ambient plus the stated self-heating allowance. VTOP tolerance covers source variation.", "", table(environmentPartRows(state)), "", `Sources: ${Object.values(ResistorEnvironment.sources).join(" ; ")}`, "", "## Circuit connections", "", `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Pstress is power / allowed power × 100%; Vstress is absolute voltage drop / specified maximum continuous working voltage × 100%. Both limits apply independently. A missing working-voltage rating is unassessed (—), not a power-derived limit. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
+      if (DividerCurrentLoad.enabled(state.circuit)) diagram.push(`  VMID -->|"ILOAD ${state.circuit.iload} A, +/-${state.circuit.iloadTolerance} A"| GND`);
+      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Operating Point Information", "", table([["Quantity", "Nominal value"], ...operatingPoint]), "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Environmental tolerance stack", "", table([["Effect", "Assumption / estimate"], ...environmentReportRows(state)]), "", "Resistance intervals compound independent percentage limits. Aging keeps any fixed ohms separate: Raged,min = Rnom * (1-initial/100) * (1-aging_relative/100) - aging_ohms; upper uses plus signs. Thermal/radiation factors then apply to that aged interval. The combined aging/radiation allowance is an estimate based on catalog endurance benchmarks or custom inputs; no radiation dose-response or mission-life guarantee is inferred. No cancellation, matching or RSS is assumed. Film temperature uses ambient plus the stated self-heating allowance. VTOP tolerance covers source variation.", "", table(environmentPartRows(state)), "", `Sources: ${Object.values(ResistorEnvironment.sources).join(" ; ")}`, "", "## Circuit connections", "", `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", DividerCurrentLoad.enabled(state.circuit) ? `ILOAD: ${state.circuit.iload} A from VMID to ground, absolute tolerance ±${currentText(state.circuit.iloadTolerance)}. Negative current injects into VMID. The .op simulation uses nominal current; the calculator bounds include the absolute current interval.` : state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Pstress is power / allowed power × 100%; Vstress is absolute voltage drop / specified maximum continuous working voltage × 100%. Both limits apply independently. A missing working-voltage rating is unassessed (—), not a power-derived limit. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
     }
 
     function updateCircuitDownloads(state, mode) {
@@ -2574,14 +2665,14 @@
     }
 
     function schematicSummary(state, mode) {
-      const value = (number, unit) => Number.isFinite(number) ? format(number, unit) : "—";
+      const value = (number, unit) => Number.isFinite(number) ? format(number, unit, unit === "V" ? voltageDigits(state) : 4) : "—";
       const count = state ? ARMS.reduce((total, arm) => total + state.physical[arm].length, 0) : 0;
       if (mode === "pairs" && !state?.pair) {
         return `Find VMID ${value(state?.target, "V")} ±${percent(state?.allowedErrorPct)} from VTOP ${value(state?.circuit.vin, "V")} · ${count || 2} resistors · ${value(byId("pairMinR").valueAsNumber, "Ω")}–${value(byId("pairMaxR").valueAsNumber, "Ω")} each`;
       }
-      if (!state) return `Find ${MODE_DETAILS[mode].symbol} · enter valid circuit values`;
+      if (!state) return `Find ${modeDetails(mode).symbol} · enter valid circuit values`;
       if (state.pending) return `Choose ${count} resistor values for VMID ${value(state.target, "V")} from VTOP ${value(state.circuit.vin, "V")}`;
-      return `${state.pair ? "Combination preview · " : ""}VTOP ${value(state.circuit.vin, "V")} → VMID ${value(state.result.vout, "V")} · ${count} resistors · ${state.circuit.rl === null ? "no load" : `RL ${value(state.circuit.rl, "Ω")}`}`;
+      return `${state.pair ? "Combination preview · " : ""}VTOP ${value(state.circuit.vin, "V")} → VMID ${value(state.result.vout, "V")} · ${count} resistors · ${DividerCurrentLoad.enabled(state.circuit) ? `IL ${currentText(state.circuit.iload)} ±${currentText(state.circuit.iloadTolerance)}` : state.circuit.rl === null ? "no load" : `RL ${value(state.circuit.rl, "Ω")}`}`;
     }
 
     function renderSchematic() {
@@ -2591,8 +2682,8 @@
       const titleText = byId("circuitTitle").value.trim() || "Voltage Divider";
       if (mode !== "pairs") { pairSvgGesture = null; pairSvgPlots = []; }
       const roles = solverRoles(state);
-      const solveLabel = mode === "pairs" ? `Find RTOP + RBOT${state?.pair ? " · preview" : ""}` : `Find ${MODE_DETAILS[mode].symbol}`;
-      byId("formSolveTarget").textContent = mode === "pairs" ? "Find RTOP + RBOT" : `Find ${MODE_DETAILS[mode].symbol}`;
+      const solveLabel = mode === "pairs" ? `Find RTOP + RBOT${state?.pair ? " · preview" : ""}` : `Find ${modeDetails(mode).symbol}`;
+      byId("formSolveTarget").textContent = mode === "pairs" ? "Find RTOP + RBOT" : `Find ${modeDetails(mode).symbol}`;
       for (const node of svg.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
       byId("schematicHeading").textContent = schematicSummary(state, mode);
       byId("liveSchematicTitle").textContent = titleText + (pairPreviewState ? " · selected resistor combination preview" : mode === "pairs" ? " · combination search inputs" : " · live circuit values");
@@ -2632,9 +2723,9 @@
       byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY})`);
       byId("schematicR1Value").textContent = Number.isFinite(state?.circuit.r1) ? format(state.circuit.r1, "Ω") : "—";
       byId("schematicR2Value").textContent = Number.isFinite(state?.circuit.r2) ? format(state.circuit.r2, "Ω") : "—";
-      byId("schematicLoadValue").textContent = state ? state.circuit.rl === null ? "Open" : Number.isFinite(state.circuit.rl) ? format(state.circuit.rl, "Ω") : "—" : "—";
+      byId("schematicLoadValue").textContent = state ? loadText(state.circuit) : "—";
       for (const [id, key] of [["schematicR1Value", "r1"], ["schematicR2Value", "r2"], ["schematicLoadValue", "rl"]]) schematicRole(byId(id), key, roles);
-      byId("schematicLoad").setAttribute("opacity", roles.rl === "solving" || state && state.circuit.rl !== null ? "1" : "0.35");
+      byId("schematicLoad").setAttribute("opacity", roles.rl === "solving" || state && (DividerCurrentLoad.enabled(state.circuit) || state.circuit.rl !== null) ? "1" : "0.35");
       const bottom = renderSchematicTable(partsGroup, state?.pending || state?.constructionSetup ? null : state, roles, detailsX, detailsY, detailsWidth, alternativeParts);
       let contentBottom = Math.max(controlsBottom + 20, bottom);
       if (mode === "pairs" && pairItems.length) {
@@ -2709,7 +2800,7 @@
     }
 
     function inlineEditorField(context = schematicEditContext) {
-      if (context.quickField) return byId(context.quickField.text ? "schematicEditTitle" : "schematicEditValue");
+      if (context.quickField) return context.quickField.select ? byId(context.quickField.id) : byId(context.quickField.text ? "schematicEditTitle" : "schematicEditValue");
       if (context.pairSearch && context.fields.resistance && context.focus === "value") return context.fields.resistance;
       if (context.pairSearch) {
         if (["source", "target", "load"].includes(context.key)) return Object.values(context.fields)[context.focus === "tolerance" ? 1 : 0];
@@ -2816,7 +2907,7 @@
 
     function openInlinePartEditor(node) {
       const context = schematicEditContext, field = inlineEditorField(context), box = node.getBBox(), svg = byId("liveSchematic");
-      const width = field.tagName === "INPUT" ? Math.max(174, box.width) : Math.max(40, box.width), height = Math.max(28, box.height), matrix = svg.getScreenCTM().inverse().multiply(node.parentNode.getScreenCTM());
+      const width = field.tagName === "INPUT" || context.quickField?.select ? Math.max(174, box.width) : Math.max(40, box.width), height = Math.max(28, box.height), matrix = svg.getScreenCTM().inverse().multiply(node.parentNode.getScreenCTM());
       const object = schematicShape(svg, "foreignObject", { x: box.x, y: box.y, width, height: Math.max(32, height), transform: `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`, "data-inline-editor": "" });
       const root = document.createElement("div"), row = document.createElement("div"), error = document.createElement("div");
       root.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"); root.style.width = `${width}px`; row.className = "schematic-inline"; row.style.width = `${width}px`;
@@ -2855,18 +2946,19 @@
         if (size) copy.textContent = size[1]; select.add(copy);
       }
       select.value = field.value; row.append(select); context.inline.input = select;
-      select.addEventListener("change", () => { field.value = select.value; field.dispatchEvent(new Event("change", { bubbles: true })); saveInlinePartEditor(); });
+      select.addEventListener("change", () => { if (!context.quickField) { field.value = select.value; field.dispatchEvent(new Event("change", { bubbles: true })); } saveInlinePartEditor(); });
       select.focus(); select.scrollIntoView({ block: "nearest", inline: "nearest" });
       try { select.showPicker?.(); } catch (_) { /* Native selection remains available without picker support or user activation. */ }
     }
 
     function openQuickField(node) {
       const key = node.dataset.schematicEdit, focus = node.dataset.editFocus, tolerance = focus === "tolerance";
-      const id = key === "design-title" ? "circuitTitle" : { source: tolerance ? "tolVin" : "vin", target: tolerance ? "targetError" : "targetVout", load: tolerance ? "tolRl" : "rl" }[key];
+      const ids = loadIds(byId("solveFor").value === "pairs" ? "pair" : ""), current = byId(ids.type).value === "current";
+      const id = key === "load-type" ? ids.type : key === "load" && current ? tolerance ? ids.tolerance : ids.value : key === "design-title" ? "circuitTitle" : { source: tolerance ? "tolVin" : "vin", target: tolerance ? "targetError" : "targetVout", load: tolerance ? "tolRl" : "rl" }[key];
       if (!id) return;
-      const field = byId(id), unit = key === "design-title" ? "" : tolerance ? "%" : key === "load" ? byId("rlUnit").selectedOptions[0].textContent : "V";
+      const field = byId(id), unit = key === "design-title" || key === "load-type" ? "" : key === "load" && current ? "µA" : tolerance ? "%" : key === "load" ? byId("rlUnit").selectedOptions[0].textContent : "V";
       byId(key === "design-title" ? "schematicEditTitle" : "schematicEditValue").value = field.value;
-      schematicEditContext = { key, focus, mode: byId("solveFor").value, quickField: { id, unit, text: key === "design-title", label: key === "design-title" ? "Design title" : key, original: field.value } };
+      schematicEditContext = { key, focus, mode: byId("solveFor").value, quickField: { id, unit, select: key === "load-type", absoluteCurrent: key === "load" && current && tolerance, text: key === "design-title", label: key === "design-title" ? "Design title" : key === "load-type" ? "Load model" : key, original: field.value } };
       schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm"))); openInlinePartEditor(node);
     }
 
@@ -2874,11 +2966,13 @@
       const context = schematicEditContext, config = context.quickField, field = byId(config.id), input = context.inline.input;
       try {
         if (context.mode !== byId("solveFor").value || field.value !== config.original) throw new Error("This input changed. Reopen it to edit.");
-        if (config.text) {
+        if (config.select) {
+          if (![...field.options].some(option => option.value === input.value)) throw new Error("Choose a load model."); field.value = input.value;
+        } else if (config.text) {
           const value = input.value.trim(); if (!value || value.length > 80) throw new Error("Use 1–80 characters."); field.value = value;
         } else {
           const value = input.value.trim(), number = Number(value), optional = config.id === "rl";
-          if ((!value && !optional) || value && (!Number.isFinite(number) || config.id === "rl" && number <= 0 || ["tolVin", "tolRl", "targetError"].includes(config.id) && (number < 0 || config.id !== "targetError" && number >= 100))) throw new Error("Enter a valid value.");
+          if ((!value && !optional) || value && (!Number.isFinite(number) || config.id === "rl" && number <= 0 || config.absoluteCurrent && number < 0 || ["tolVin", "tolRl", "targetError"].includes(config.id) && (number < 0 || config.id !== "targetError" && number >= 100))) throw new Error("Enter a valid value.");
           field.value = value;
         }
         closeSchematicEditor(false); field.dispatchEvent(new Event("input", { bubbles: true })); focusSchematicEditorTarget(context);
@@ -2948,8 +3042,8 @@
       if (byId("solveFor").value !== "pairs") {
         const state = schematicState || pendingConstructionState();
         if (!state) return;
-        for (const [id, value] of Object.entries({ pairVin: state.circuit.vin, pairVmid: state.target ?? state.result.vout, pairSourceTol: state.tolerances.vin, pairRl: state.circuit.rl ?? "", pairLoadTol: state.tolerances.rl })) byId(id).value = value;
-        byId("pairValuePolicy").value = "all"; importPairConstruction(false);
+        for (const [id, value] of Object.entries({ pairVin: state.circuit.vin, pairVmid: state.target ?? state.result.vout, pairSourceTol: state.tolerances.vin, pairLoadTol: state.tolerances.rl })) byId(id).value = value;
+        writeLoad(state.circuit, "pair"); byId("pairValuePolicy").value = "all"; importPairConstruction(false);
         byId("solveFor").value = "pairs"; update();
       }
       const fingerprint = pairFormFingerprint();
@@ -3003,6 +3097,8 @@
       if (!node.hasAttribute("data-schematic-edit") || node.getAttribute("aria-disabled") === "true" || byId("schematicEditor").open) return;
       if (schematicEditContext?.inline) closeSchematicEditor(false);
       const key = node.dataset.schematicEdit, focus = node.dataset.editFocus, locks = schematicEditLocks(key);
+      if (key === "load-type") { openQuickField(byId("liveSchematic").querySelector('[data-schematic-info="load"] [data-schematic-edit="load-type"]') || node); return; }
+      if (key === "load" && byId(loadIds(byId("solveFor").value === "pairs" ? "pair" : "").type).value === "current") { if (!(focus === "value" && locks.value)) openQuickField(node); return; }
       if (key === "design-title") { openQuickField(node); return; }
       if (key === "circuit-options" || key === "search-options") { openCalculatorDetails("inputs"); return; }
       if (key === "search-run") { findPairsFromSchematic({ key, focus }); return; }
@@ -3118,7 +3214,7 @@
         const scale = solved[mode] / circuit[mode];
         for (const item of physical[mode]) item.resistance *= scale;
       }
-      const result = analyze(solved.vin, solved.r1, solved.r2, solved.rl);
+      const result = analyze(solved.vin, solved.r1, solved.r2, solved.rl, solved.iload);
       if (mode === "tolerance") {
         const allowed = readInput("targetError", "Allowed VMID error");
         if (allowed < 0) throw new Error("Allowed VMID error must be zero or greater.");
@@ -3174,7 +3270,7 @@
         const draft = schematicEditDraft(context);
         if (["arm", "target"].includes(context.kind)) fixChosenAutomaticValues();
         byId("vin").value = draft.circuit.vin; byId("tolVin").value = draft.tolerances.vin;
-        byId("rl").value = draft.circuit.rl === null ? "" : draft.circuit.rl / Number(byId("rlUnit").value); byId("tolRl").value = draft.tolerances.rl;
+        writeLoad(draft.circuit); byId("tolRl").value = draft.tolerances.rl;
         for (const [index, arm] of ARMS.entries()) {
           byId(arm).value = draft.circuit[arm] / Number(byId(`${arm}Unit`).value);
           if (draft.networks[arm]) { byId(`${arm}Connection`).value = connectionLabel(draft.networks[arm].connection); if (typeof draft.networks[arm].connection !== "object") { delete byId(`${arm}Parts`).dataset.topology; byId(`${arm}Connection`).querySelector('[value="mixed"]').disabled = true; } }
@@ -3268,6 +3364,7 @@
     }
 
     function refreshPairConstruction() {
+      refreshLoadFields("pair");
       const configured = byId("pairConstructionMode").value === "configured", selected = byId("pairTrim").value;
       if (configured && !pairConstruction) pairConstruction = defaultPairConstruction();
       byId("pairNetworkOptions").hidden = !configured;
@@ -3441,7 +3538,7 @@
         packageTop: field("pairPackageTop").value, packageBot: field("pairPackageBot").value,
         minOhms: read("pairMinR", "Minimum resistance", false, true), maxOhms: read("pairMaxR", "Maximum resistance", false, true),
         temperatureC: read("pairTemperature", "Selection ambient"), tcrPpm: Number(field("pairTcr").value),
-        rl: read("pairRl", "RL", true, true), maxStress: read("pairMaxStress", "Maximum stress", false, true),
+        ...readLoad("pair", fields), maxStress: read("pairMaxStress", "Maximum stress", false, true),
         maxPower: read("pairMaxPower", "Maximum total power", true, false, 0.001),
         environment: JSON.parse(JSON.stringify(environmentSettings))
       };
@@ -3476,7 +3573,7 @@
         networks[arm] = model.parts.length > 1 ? { connection: displayNetworkConnection(model.connection), parts } : null;
         physical[arm] = parts;
       }
-      const circuit = { vin: spec.vin, rl: spec.rl, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance }, result = analyze(spec.vin, circuit.r1, circuit.r2, spec.rl);
+      const circuit = { vin: spec.vin, rl: spec.rl, loadType: spec.loadType, iload: spec.iload, iloadTolerance: spec.iloadTolerance, r1: equivalents.r1.resistance, r2: equivalents.r2.resistance }, result = analyze(spec.vin, circuit.r1, circuit.r2, spec.rl, circuit.iload);
       for (const arm of ARMS) physical[arm] = analyzeParts(physical[arm], spec.construction[arm].connection, arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2);
       return { circuit, result, physical, equivalents, networks };
     }
@@ -3484,7 +3581,8 @@
     function combinationStressBounds(spec, state) {
       const source = Math.abs(spec.vin) * (1 + spec.sourceTolerance / 100), equivalents = state.environment?.equivalents || state.equivalents, top = equivalents.r1, bot = equivalents.r2;
       const loadMin = spec.rl === null ? null : state.environment?.load?.min ?? spec.rl * (1 - spec.loadTolerance / 100), loadMax = spec.rl === null ? null : state.environment?.load?.max ?? spec.rl * (1 + spec.loadTolerance / 100);
-      const maximum = analyze(source, top.min, bot.min, loadMin), byPart = {}, groups = {};
+      const current = DividerCurrentLoad.enabled(spec) ? DividerCurrentLoad.envelope(state.environment?.bounds || DividerCurrentLoad.ranges(spec, { vin: spec.sourceTolerance }, { r1: [top.min, top.max], r2: [bot.min, bot.max], rl: [loadMin, loadMax] })) : null;
+      const maximum = current ? { total: current.power, i1: current.current } : analyze(source, top.min, bot.min, loadMin), byPart = {}, groups = {};
       for (const arm of ARMS) {
         const parts = new Map(state.physical[arm].map(part => [part.id, part])), ranges = new Map();
         const range = node => {
@@ -3508,9 +3606,9 @@
             }
           }
         };
-        const voltage = arm === "r1" ? analyze(source, top.max, bot.min, loadMin).v1 : analyze(source, top.min, bot.max, loadMax).vout;
+        const voltage = current ? current[arm === "r1" ? "top" : "bot"].voltage : arm === "r1" ? analyze(source, top.max, bot.min, loadMin).v1 : analyze(source, top.min, bot.max, loadMax).vout;
         const connection = spec.construction[arm].connection;
-        visit(connection, voltage, arm === "r1" ? maximum.i1 : voltage / range(connection).min);
+        visit(connection, voltage, current ? current[arm === "r1" ? "top" : "bot"].current : arm === "r1" ? maximum.i1 : voltage / range(connection).min);
         const limits = state.physical[arm].map(part => byPart[part.id]);
         const voltages = limits.map(limit => limit.v).filter(value => value !== null);
         groups[arm] = { p: Math.max(...limits.map(limit => limit.p)), v: voltages.length ? Math.max(...voltages) : null };
@@ -3523,7 +3621,7 @@
         const connection = networks[arm]?.connection || "series";
         return [arm, { connection: typeof connection === "object" ? connection : { connection, children: physical[arm].map(part => part.id) } }];
       }));
-      const spec = { vin: circuit.vin, sourceTolerance: tolerances.vin, rl: circuit.rl, loadTolerance: tolerances.rl, construction };
+      const spec = { vin: circuit.vin, sourceTolerance: tolerances.vin, rl: circuit.rl, loadType: circuit.loadType, iload: circuit.iload, iloadTolerance: circuit.iloadTolerance, loadTolerance: tolerances.rl, construction };
       let worst;
       if (ARMS.every(arm => physical[arm].length === 1)) {
         const candidate = part => ({ resistanceOhms: part.resistance, tolerancePct: part.tolerance, powerW: part.rating, workingVoltageV: part.vmax });
@@ -3628,6 +3726,11 @@
       const a = topRange.min, b = topRange.max, c = botRange.min, d = botRange.max;
       const load = spec.rl === null ? null : environment?.load || ResistorEnvironment.interval({ resistance: spec.rl, tolerance: spec.loadTolerance }, settings);
       const loadMin = load?.min ?? null, loadMax = load?.max ?? null;
+      if (DividerCurrentLoad.enabled(spec)) {
+        const limits = environment?.bounds || DividerCurrentLoad.ranges({ ...spec, r1: top.resistanceOhms, r2: bot.resistanceOhms }, { vin: spec.sourceTolerance }, { r1: [a, b], r2: [c, d], rl: [loadMin, loadMax] }), absolute = DividerCurrentLoad.stress(limits);
+        const stressFor = (part, value) => ({ p: value.power / ResistorEnvironment.allowedPower(part, settings) * 100, v: part.workingVoltageV === null ? null : value.voltage / part.workingVoltageV * 100 });
+        return { top: stressFor(top, absolute.top), bot: stressFor(bot, absolute.bot), power: absolute.power, current: absolute.current, absolute: { top: absolute.top, bot: absolute.bot } };
+      }
       const lowerMin = loadMin === null ? c : parallel(c, loadMin), lowerMax = loadMax === null ? d : parallel(d, loadMax);
       const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
       // Power can peak inside a resistance interval: evaluate the matched-load point.
@@ -3641,8 +3744,8 @@
     }
 
     function evaluateResistorPair(spec, top, bot) {
-      const circuit = { vin: spec.vin, r1: top.resistanceOhms, r2: bot.resistanceOhms, rl: spec.rl };
-      const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl);
+      const circuit = { vin: spec.vin, r1: top.resistanceOhms, r2: bot.resistanceOhms, rl: spec.rl, loadType: spec.loadType, iload: spec.iload, iloadTolerance: spec.iloadTolerance };
+      const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl, circuit.iload);
       const physical = Object.fromEntries([["r1", top], ["r2", bot]].map(([arm, part]) => [arm, [{ id: arm, name: arm === "r1" ? "R1" : "R2", resistance: part.resistanceOhms, tolerance: part.tolerancePct, rating: part.powerW, vmax: part.workingVoltageV, catalog: part }]]));
       const environment = searchEnvironmentAnalysis(circuit, { vin: spec.sourceTolerance, r1: top.tolerancePct, r2: bot.tolerancePct, rl: spec.loadTolerance }, physical, { r1: null, r2: null }, spec.environment);
       if (!environment || environment.requiredGaps.length) return null;
@@ -3680,8 +3783,15 @@
         for (let index = 0; index < tops.length; index++) {
           if (generation !== pairGeneration) return [];
           const top = tops[index];
-          const equivalentMin = top.resistanceOhms * gainMin / (1 - gainMin);
-          const equivalentMax = gainMax >= 1 ? Infinity : top.resistanceOhms * gainMax / (1 - gainMax);
+          let minGain = gainMin, maxGain = gainMax;
+          if (DividerCurrentLoad.enabled(spec)) {
+            const drive = spec.vin - (spec.iload || 0) * top.resistanceOhms, spread = Math.abs(spec.target) * spec.errorPct / 100;
+            if (drive === 0) { if (Math.abs(spec.target) > spread) continue; minGain = 0; maxGain = 1; }
+            else { const gains = [(spec.target - spread) / drive, (spec.target + spread) / drive]; minGain = Math.max(0, Math.min(...gains)); maxGain = Math.min(1, Math.max(...gains)); }
+            if (maxGain <= 0 || minGain >= 1 || minGain > maxGain) continue;
+          }
+          const equivalentMin = top.resistanceOhms * minGain / (1 - minGain);
+          const equivalentMax = maxGain >= 1 ? Infinity : top.resistanceOhms * maxGain / (1 - maxGain);
           if (spec.rl !== null && equivalentMin >= spec.rl) continue;
           const botMin = spec.rl === null ? equivalentMin : equivalentMin / (1 - equivalentMin / spec.rl);
           const botMax = spec.rl === null || equivalentMax === Infinity ? Infinity : equivalentMax >= spec.rl ? Infinity : equivalentMax / (1 - equivalentMax / spec.rl);
@@ -3844,7 +3954,7 @@
       const columns = bomColumns("pairBom", true), filters = readBomFilters("pairBom"), groups = [];
       if (!pairSpec) return { columns, filters, groups };
       const spec = pairSpec;
-      let search = `VTOP ${format(spec.vin, "V")} ±${percent(spec.sourceTolerance)}; target VMID ${format(spec.target, "V")} ±${percent(spec.errorPct)}; RL ${spec.rl === null ? "Open" : `${format(spec.rl, "Ω")} ±${percent(spec.loadTolerance)}`}; ambient ${spec.temperatureC} °C; stress ≤ ${percent(spec.maxStress)}${spec.maxPower === null ? "" : `; total power ≤ ${format(spec.maxPower, "W")}`}`;
+      let search = `VTOP ${format(spec.vin, "V")} ±${percent(spec.sourceTolerance)}; target VMID ${format(spec.target, "V")} ±${percent(spec.errorPct)}; ${DividerCurrentLoad.enabled(spec) ? `IL ${currentText(spec.iload)} ±${currentText(spec.iloadTolerance)} absolute` : `RL ${spec.rl === null ? "Open" : `${format(spec.rl, "Ω")} ±${percent(spec.loadTolerance)}`}`}; ambient ${spec.temperatureC} °C; stress ≤ ${percent(spec.maxStress)}${spec.maxPower === null ? "" : `; total power ≤ ${format(spec.maxPower, "W")}`}`;
       search += "; Environmental specification: " + JSON.stringify(spec.environment || ResistorEnvironment.initialOnly());
       for (const [index, pair] of [...pairComparisons].entries()) {
         const rows = pair.combination ? ARMS.flatMap(arm => pair.physical[arm].map(part => {
@@ -3967,8 +4077,8 @@
         id: arm, name: arm === "r1" ? "R1" : "R2", resistance: chosen.resistanceOhms, tolerance: chosen.tolerancePct, rating: chosen.powerW, vmax: chosen.workingVoltageV,
         mpn: chosen.mpn, catalog: chosen, alternatives: pairAlternativeParts(pair, side)
       }], "series", voltage, current);
-      const environment = environmentAnalysis({ vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, { vin: spec.sourceTolerance, rl: spec.loadTolerance }, physical, { r1: null, r2: null }, spec.environment);
-      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, bounds: pair.bounds, environment, worst: pair.worst, pair, target: spec.target, allowedErrorPct: spec.errorPct, analyzedAt: spec.analyzedAt };
+      const environment = environmentAnalysis({ vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl, loadType: spec.loadType, iload: spec.iload, iloadTolerance: spec.iloadTolerance }, { vin: spec.sourceTolerance, rl: spec.loadTolerance }, physical, { r1: null, r2: null }, spec.environment);
+      pairPreviewState = { circuit: { vin: spec.vin, r1: pair.top.resistanceOhms, r2: pair.bot.resistanceOhms, rl: spec.rl, loadType: spec.loadType, iload: spec.iload, iloadTolerance: spec.iloadTolerance }, tolerances: { vin: spec.sourceTolerance, r1: pair.top.tolerancePct, r2: pair.bot.tolerancePct, rl: spec.loadTolerance }, networks: { r1: null, r2: null }, physical, result: pair.result, bounds: pair.bounds, environment, worst: pair.worst, pair, target: spec.target, allowedErrorPct: spec.errorPct, analyzedAt: spec.analyzedAt };
       renderSchematic();
     }
 
@@ -4511,6 +4621,7 @@
       const items = filtered ? pairView : pairItems;
       if (!pairSpec || !items.length) return "";
       const csv = rows => {
+        if (DividerCurrentLoad.enabled(pairSpec)) { rows[0].push("Load model", "IL nominal (A)", "IL absolute tolerance (A)"); for (const row of rows.slice(1)) row.push("current", pairSpec.iload, pairSpec.iloadTolerance); }
         rows[0].push("Environmental specification (JSON)", "Environmental scope");
         for (const row of rows.slice(1)) row.push(JSON.stringify(pairSpec.environment || ResistorEnvironment.initialOnly()), environmentScope(items[0].environment));
         return rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(",")).join("\r\n") + "\r\n";
@@ -4530,7 +4641,7 @@
       const pair = pairSelected, spec = pairSpec;
       catalogDesignVmid = spec.target;
       byId("vin").value = spec.vin; byId("tolVin").value = spec.sourceTolerance;
-      byId("rl").value = spec.rl === null ? "" : spec.rl / Number(byId("rlUnit").value); byId("tolRl").value = spec.loadTolerance;
+      writeLoad(spec); byId("tolRl").value = spec.loadTolerance;
       if (pair.combination) {
         designGeneration++; automaticChoices.clear(); appliedCatalogParts.clear();
         for (const arm of ARMS) {
@@ -4780,7 +4891,7 @@
         for (const item of physical[mode]) item.resistance *= scale;
         equivalents[mode] = networkEquivalent(physical[mode], state.networks[mode]?.connection || "series");
       }
-      const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl);
+      const result = analyze(circuit.vin, circuit.r1, circuit.r2, circuit.rl, circuit.iload);
       const tolerances = { ...state.tolerances, r1: equivalents.r1.tolerance, r2: equivalents.r2.tolerance };
       const environment = circuitEnvironment(mode, circuit, tolerances, physical, state.networks, state.allowedErrorPct), bounds = environment.bounds;
       const worst = environmentWorstStress(circuit, tolerances, physical, state.networks, environment).byPart[targetId];
@@ -4924,7 +5035,7 @@
 
     function clearResults(message) {
       for (const id of ["vout", "iin", "ptotal", "ratio", "solutionValue", "voutMin", "voutMax", "voutError"]) byId(id).textContent = "—";
-      for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolVin", "tolR1", "tolR2"]) if (byId(id).readOnly) byId(id).value = "";
+      for (const id of ["vin", "r1", "r2", "rl", "loadCurrent", "targetVout", "tolVin", "tolR1", "tolR2"]) if (byId(id).readOnly) byId(id).value = "";
       for (const arm of ARMS) byId(`${arm}Summary`).textContent = "Enter valid part values to calculate the equivalent arm.";
       byId("operatingRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate.</td></tr>';
       byId("toleranceRows").innerHTML = '<tr><td colspan="4">Enter valid circuit data to calculate tolerance bounds.</td></tr>';
@@ -4971,7 +5082,7 @@
           vin: mode === "vin" ? null : readInput("vin", "Input voltage"),
           r1: mode === "r1" ? null : networks.r1 ? networks.r1.equivalent.resistance : readInput("r1", "RTOP resistance", false, true, Number(byId("r1Unit").value)),
           r2: mode === "r2" ? null : networks.r2 ? networks.r2.equivalent.resistance : readInput("r2", "RBOT resistance", false, true, Number(byId("r2Unit").value)),
-          rl: mode === "rl" ? null : readInput("rl", "Load resistance", true, true, Number(byId("rlUnit").value))
+          ...readLoad("", null, mode === "rl")
         };
         const target = ["vout", "tolerance"].includes(mode) ? null : readInput("targetVout", "Target VMID");
         const allowedErrorPct = mode === "vout" ? null : readInput("targetError", "Allowed VMID error");
@@ -4997,7 +5108,7 @@
         };
         const vmax1 = networks.r1 ? null : readInput("vmax1", "R1 maximum working voltage", true, true);
         const vmax2 = networks.r2 ? null : readInput("vmax2", "R2 maximum working voltage", true, true);
-        const result = analyze(vin, r1, r2, rl);
+        const result = analyze(vin, r1, r2, rl, circuit.iload);
         const physical = {
           r1: analyzeParts(networks.r1 ? networks.r1.parts : [{ id: "r1", name: "R1", resistance: r1, tolerance: tolerances.r1, rating: Number(byId("p1").value), vmax: vmax1 }], networks.r1 ? networks.r1.connection : "series", result.v1, result.i1),
           r2: analyzeParts(networks.r2 ? networks.r2.parts : [{ id: "r2", name: "R2", resistance: r2, tolerance: tolerances.r2, rating: Number(byId("p2").value), vmax: vmax2 }], networks.r2 ? networks.r2.connection : "series", result.vout, result.i2)
@@ -5037,6 +5148,7 @@
         byId("inputError").hidden = true;
         if (["vout", "tolerance"].includes(mode)) byId("targetVout").value = result.vout;
         else if (mode === "vin") { byId("vin").value = vin; byId("tolVin").value = environment.sourceTolerance.feasible ? tolerances.vin : ""; }
+        else if (mode === "rl" && DividerCurrentLoad.enabled(circuit)) writeLoad(circuit);
         else byId(mode).value = circuit[mode] === null ? "" : circuit[mode] / Number(byId(`${mode}Unit`).value);
         if (mode === "tolerance") {
           byId("tolR1").value = tolerances.r1;
@@ -5057,30 +5169,35 @@
         renderComparison("r1", physical.r1, selected1);
         renderComparison("r2", physical.r2, selected2);
         byId("tolRl").disabled = rl === null;
-        byId("loadOptionsLabel").textContent = `Output load · ${rl === null ? "open circuit" : format(rl, "Ω")}`;
+        byId("loadOptionsLabel").textContent = `Output load · ${loadText(circuit)}`;
         const names = { vin: "VTOP", vout: "VMID", r1: "RTOP (R1)", r2: "RBOT (R2)", rl: "RL", tolerance: "Common R1/R2 tolerance" };
         byId("solutionLabel").textContent = `3. Result · ${names[mode]}`;
-        byId("solutionValue").textContent = mode === "tolerance" ? `±${tolerances.r1}% each` : mode === "vout" ? format(result.vout, "V") : mode === "vin" ? format(vin, "V") : circuit[mode] === null ? "Open circuit" : format(circuit[mode], "Ω");
-        byId("voutMin").textContent = format(bounds.min, "V");
-        byId("voutMax").textContent = format(bounds.max, "V");
+        if (mode === "rl" && DividerCurrentLoad.enabled(circuit)) byId("solutionLabel").textContent = "3. Result · IL";
+        byId("solutionValue").textContent = mode === "rl" && DividerCurrentLoad.enabled(circuit) ? currentText(circuit.iload) : mode === "tolerance" ? `±${tolerances.r1}% each` : mode === "vout" ? format(result.vout, "V") : mode === "vin" ? format(vin, "V") : circuit[mode] === null ? "Open circuit" : format(circuit[mode], "Ω");
+        const voltagePrecision = voltageDigits({ circuit, bounds });
+        byId("voutMin").textContent = format(bounds.min, "V", voltagePrecision);
+        byId("voutMax").textContent = format(bounds.max, "V", voltagePrecision);
         byId("voutError").textContent = bounds.deviation === null ? "— (zero nominal)" : percent(bounds.deviation);
         const toleranceRows = [["VTOP", environment.sourceTolerance?.feasible === false || environment.sourceTolerance?.feasible === null ? NaN : bounds.vinMin, vin, environment.sourceTolerance?.feasible === false || environment.sourceTolerance?.feasible === null ? NaN : bounds.vinMax, "V"], ["RTOP (R1)", bounds.r1Min, r1, bounds.r1Max, "Ω"], ["RBOT (R2)", bounds.r2Min, r2, bounds.r2Max, "Ω"]];
         for (const arm of ARMS) if (networks[arm]) for (const part of physical[arm]) toleranceRows.push([part.name, part.environment.min, part.resistance, part.environment.max, "Ω"]);
         if (rl !== null) toleranceRows.push(["RL", bounds.rlMin, rl, bounds.rlMax, "Ω"]);
+        if (DividerCurrentLoad.enabled(circuit)) toleranceRows.push(["IL", bounds.iloadMin, circuit.iload, bounds.iloadMax, "A"]);
         byId("toleranceRows").innerHTML = toleranceRows.map(([name, min, nominal, max, unit]) => `<tr><th scope="row">${name}</th><td>${format(min, unit)}</td><td>${format(nominal, unit)}</td><td>${format(max, unit)}</td></tr>`).join("");
-        byId("vout").textContent = format(result.vout, "V");
+        byId("vout").textContent = format(result.vout, "V", voltagePrecision);
         byId("iin").textContent = format(result.i1, "A");
         byId("ptotal").textContent = format(result.total, "W");
         byId("ratio").textContent = percent(result.ratio * 100);
+        byId("ratioLabel").textContent = DividerCurrentLoad.enabled(circuit) ? "Resistor gain" : "Divider ratio";
+        byId("ratioDescription").textContent = DividerCurrentLoad.enabled(circuit) ? "IL adds an independent voltage offset" : "VMID / VTOP · loaded gain";
         const rows = [];
         for (const arm of ARMS) {
           rows.push(arm === "r1" ? ["R1 · upper total", result.v1, result.i1, result.p1] : ["R2 · lower total", result.vout, result.i2, result.p2]);
           if (networks[arm]) for (const part of physical[arm]) rows.push([part.name, part.voltage, part.current, part.power]);
         }
-        if (rl !== null) rows.push(["RL · load", result.vout, result.il, result.pl]);
+        if (rl !== null || DividerCurrentLoad.enabled(circuit)) rows.push([DividerCurrentLoad.enabled(circuit) ? "IL · current source" : "RL · load", result.vout, result.il, result.pl]);
         byId("operatingRows").innerHTML = rows.map(([name, voltage, current, power]) => `<tr><th scope="row">${name}</th><td>${format(voltage, "V")}</td><td>${format(current, "A")}</td><td>${format(power, "W")}</td></tr>`).join("");
         const loading = rl === null ? 0 : 100 / (1 + rl / result.rth);
-        byId("loadSummary").textContent = `Unloaded VMID: ${format(result.unloaded, "V")} · Rth: ${format(result.rth, "Ω")} · ${rl === null ? "Open load (IL = 0 A)." : `RL = ${format(rl, "Ω")}; output magnitude reduced by ${percent(Math.max(0, loading))}.`}`;
+        byId("loadSummary").textContent = `Unloaded VMID: ${format(result.unloaded, "V")} · Rth: ${format(result.rth, "Ω")} · ${DividerCurrentLoad.enabled(circuit) ? `IL ${currentText(circuit.iload)} ±${currentText(circuit.iloadTolerance)}; positive toward ground.` : rl === null ? "Open load (IL = 0 A)." : `RL = ${format(rl, "Ω")}; output magnitude reduced by ${percent(Math.max(0, loading))}.`}`;
         byId("stressCards").innerHTML = allParts.map(part => stressCard(part.name, part.resistance, part.rating, part.stress, part.vmax, part.catalog)).join("");
         byId("ratingRows").innerHTML = comparisons.map(({ rating, r1: a, r2: b }) => {
           const cells = [a.p, a.v, b.p, b.v].map((value, index) => {

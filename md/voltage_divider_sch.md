@@ -13,7 +13,7 @@ preview is exported as shown, without applying it to the work form. Undefined or
 invalid circuits and search setup without a valid preview have no download links;
 old files are cleared instead of falling back to the default circuit.
 
-The LTspice schematic uses standard voltage/resistor symbols and an ideal nominal
+The LTspice schematic uses standard voltage, resistor and current-source symbols and an ideal nominal
 DC operating-point analysis (`.op`). An open load is omitted. Values use full
 numeric precision in ohms/volts, avoiding SPICE suffix ambiguity. Tolerances,
 ratings and selected part numbers appear as annotations; they do not implement
@@ -37,6 +37,53 @@ The Markdown download contains the current characteristics, date/calculator link
 physical connection table, Mermaid connection diagram, SVG BOM with separately
 labeled unapplied alternatives/recommendations, and the matching nominal netlist.
 These generated files are snapshots; later calculator edits require a new download.
+
+## Current-source load and sense-pin leakage
+
+Click the load symbol or its **RL/IL** selector and choose **Current source**.
+Its value and tolerance edit directly on the SVG. The defaults are **0 µA** with
+an **absolute ±0.1 µA** tolerance, suitable for entering a specified leakage
+range of −0.1 to +0.1 µA. Positive IL flows from VMID toward ground; negative
+IL injects current into VMID. Switching models retains the parked resistance
+and the previously entered current settings. The **Find RL** calculator becomes
+**Find IL** while this model is selected.
+
+With `Rth = RTOP || RBOT`, the nominal current-loaded equations are:
+
+- `VMID = VTOP × RBOT / (RTOP + RBOT) − IL × Rth`.
+- `VTOP = VMID × (1 + RTOP / RBOT) + IL × RTOP`.
+- `RTOP = (VTOP − VMID) / (VMID / RBOT + IL)`.
+- `RBOT = VMID / ((VTOP − VMID) / RTOP − IL)`.
+- `IL = (VTOP − VMID) / RTOP − VMID / RBOT`.
+
+Resistor solutions must still be positive and finite. With an active current
+source, nominal VMID is not necessarily confined between ground and VTOP.
+The displayed **Resistor gain** is the proportional voltage term; IL adds an
+independent offset. **Source power** is signed net power drawn from VTOP, and
+can be negative when an injecting source returns power to that supply.
+
+Worst-case VMID checks `ILnom ± ILtolerance` at every source/resistance interval
+corner. It combines the absolute current range with the full resistor tolerance,
+temperature and aging stack; current tolerance is not a percentage of nominal
+current and remains meaningful at zero nominal IL. Voltage readouts gain enough
+precision to show small leakage intervals. For exact 10 kΩ / 10 kΩ resistors at
+12 V, 0 µA ±0.1 µA gives **5.9995–6.0005 V**. The user's IL range is an independent
+specified limit; no IC-specific thermal, aging or nonlinear leakage model is inferred.
+
+Find VTOP intersects the permitted source interval for every affine
+`VMID = gain × VTOP + offset` corner before reporting a symmetric source
+tolerance. Exact two-resistor stress checks include interior matched-resistance
+power peaks. Series/parallel networks retain conservative per-part voltage,
+current and power envelopes. Ordinary calculations, catalog previews, automatic
+selection and both combination-search paths use this same current model.
+
+SVG, Markdown and search CSV retain the model and absolute current tolerance.
+The LTspice export uses `ILOAD VMID 0 DC <amps>` and a real `current` symbol;
+its R0 pin offsets `(0,0)` / `(0,80)` follow
+[ADI's schematic reference](https://github.com/analogdevicesinc/ltspice-reference/blob/main/ai_ref/SCHEMATIC-REFERENCE.md).
+The measured report includes `Load_current_A`. As with resistor tolerances,
+`.op` simulates nominal current only; calculator bounds and tolerance annotations
+describe the uncertainty rather than silently adding a simulation sweep.
 
 After circuit edits or resistor-combination searches, leaving, refreshing or closing the
 page requests the browser's standard confirmation so you can stay and keep your
@@ -559,9 +606,11 @@ closed dialogs do not add the old lower panels to the printout.
 
 Output load and tolerance/rating settings are collapsible. Combination searches have
 their own target and tolerance form. An invalid setting automatically opens its
-containing sections so it can be corrected. The page styling and circuit-analysis
-logic remain in the one HTML file; shared part catalogs and their numbering
-engine are loaded separately.
+containing sections so it can be corrected. The page styling and integration
+remain in the HTML file; current-load interval mathematics, shared part catalogs
+and the numbering engine are loaded separately.
+
+For the resistor-load model:
 
 - VMID uses the loaded divider equation above.
 - `VTOP = VMID × (1 + RTOP / Rb)`.
@@ -570,7 +619,7 @@ engine are loaded separately.
 - Unloaded: `RBOT = Rb`. Loaded: `RBOT = Rb / (1 − Rb / RL)`.
 - To solve the load: `RL = Rb / (1 − Rb / RBOT)`.
 
-Resistance solutions require the same sign for VTOP and VMID with
+Resistor-load resistance solutions require the same sign for VTOP and VMID with
 `0 < abs(VMID) < abs(VTOP)`. A passive load cannot increase the unloaded output
 magnitude. The load solution is open circuit when the target equals the unloaded
 output. Zero, negative, infinite, and otherwise infeasible resistance solutions
