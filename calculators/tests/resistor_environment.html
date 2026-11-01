@@ -1,0 +1,90 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Environmental resistor stack checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:2200px;border:0}</style><h1>Environmental resistor stack checks</h1><pre id="results">RUNNING</pre><iframe id="calculator" title="Calculator under test" src="../voltage_divider.html?environment-test=1"></iframe><script>
+"use strict";
+const checks=[],failures=[],assert=(ok,label)=>{checks.push(label);if(!ok)failures.push(label);},near=(a,b,label)=>assert(Number.isFinite(a)&&Math.abs(a-b)<=1e-10*Math.max(1,Math.abs(b)),`${label}: ${a} vs ${b}`),pause=()=>new Promise(resolve=>setTimeout(resolve,20));
+document.getElementById('calculator').addEventListener('load',async event=>{try{
+ const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get('liveSchematic');
+ assert(await w.resistorCatalogReady,'Catalogs load');const errors=[];w.addEventListener('error',e=>errors.push(e.message));
+ const model=w.ResistorEnvironment,catalog=await w.ResistorParts.load(),tnpw=w.ResistorParts.evaluate(catalog,'vishay-tnpw-e3',{resistanceOhms:10000,tolerancePct:0.1}),mil=w.ResistorParts.evaluate(catalog,'vishay-eh-m55342',{resistanceOhms:10000,tolerancePct:0.1});
+ const settings=()=>model.defaults(),clone=value=>JSON.parse(JSON.stringify(value)),current=()=>w.eval('environmentSettings'),state=()=>w.eval('pairPreviewState || schematicState');
+ const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));},box=effect=>svg().querySelector(`[data-environment="${effect}"]`);
+ const open=effect=>box(effect).dispatchEvent(new w.MouseEvent('click',{bubbles:true})),save=()=>get('environmentForm').requestSubmit(),cancel=()=>get('environmentCancel').click();
+ assert(svg().querySelectorAll('[data-environment]').length===3&&['thermal','radiation','aging'].every(effect=>box(effect).getAttribute('role')==='button'&&box(effect).getAttribute('tabindex')==='0'),'Three editable environmental boxes are present');
+ assert(current().thermal.maxC===125&&current().aging.hours===1000&&current().radiation.doseKrad===null&&box('radiation').textContent.includes('Not set'),'Thermal/aging defaults come from published conditions; radiation stays uncharacterized');
+ assert(!w.eval('leaveWarningActive'),'Default mission inputs do not mark the calculator dirty');
+ open('thermal');set('environment_thermal_maxC','100');await pause();assert(w.eval('leaveWarningActive'),'Pending environmental edits participate in the leave warning');cancel();assert(!w.eval('leaveWarningActive')&&d.activeElement===box('thermal'),'Cancel restores the clean state and box focus');
+ let cfg=settings(),interval=model.interval(tnpw,cfg);
+ const t=.001,h=25*105/1e6,a=.0005;
+ near(interval.min,(10000*(1-t)*(1-a)-.01)*(1-h),'TNPW minimum keeps the endurance-ohm term absolute');
+ near(interval.max,(10000*(1+t)*(1+a)+.01)*(1+h),'TNPW maximum retains the relative cross terms and fixed ohms');
+ near(interval.agingPct,.0501,'TNPW endurance includes the absolute ohmic term');
+ assert(interval.radiationPct===null&&interval.issues.some(text=>text.includes('Radiation')),'Missing radiation is reported as unknown rather than zero-qualified');
+ interval=model.interval(mil,cfg);near(interval.thermalPct,.25,'M55342 uses the 25 C reference');near(interval.agingPct,.5,'M55342 uses the MIL limit, not typical performance');
+ cfg.aging.hours=1001;near(model.interval(tnpw,cfg).agingPct,.1002,'Endurance lookup takes the next published milestone without optimistic interpolation');
+ cfg.aging.hours=225001;assert(model.interval(tnpw,cfg).requiredGaps.length>0,'Life beyond published endurance is uncharacterized');
+ cfg=settings();cfg.thermal.enabled=false;near(model.interval(tnpw,cfg).agingPct,.0501,'Excluding TCR drift retains the known film temperature for aging');
+ cfg=settings();cfg.aging.model='estimate';cfg.thermal.maxC=95;cfg.thermal.minC=25;cfg.radiation.doseKrad=0;
+ interval=model.interval(tnpw,cfg);near(interval.agingPct,.0501/2,'Time/temperature estimate halves drift for a 30 K reduction');
+ cfg.aging.hours=8000;near(model.interval(tnpw,cfg).agingPct,.0501,'Cube-root duration doubles estimated drift at eight times life');assert(model.interval(tnpw,cfg).estimated&&!model.interval(tnpw,cfg).qualified,'An aging estimate is never presented as a qualified bound');
+ assert(model.interval(mil,cfg).requiredGaps.some(issue=>issue.includes('film temperature')),'M55342 test ambient is not substituted for an unknown test film temperature');
+ cfg.aging.milReferenceFilmC=150;near(model.interval(mil,cfg).agingPct,.5*Math.cbrt(8000/2000)*Math.pow(2,(95-150)/30),'M55342 time/temperature estimation uses the explicitly supplied test film reference');
+ const hotMil={...mil,temperatureC:100},hotSettings=settings();assert(model.interval(hotMil,hotSettings).requiredGaps.length>0,'M55342 endurance at 70 C is not extrapolated to a higher ambient');hotSettings.aging.milPct=.7;near(model.interval(hotMil,hotSettings).agingPct,.7,'A qualified mission override can cover another M55342 operating condition');
+ cfg.thermal.maxC=125;cfg.aging.hours=1e9;
+ const agedSpec={...w.readPairSpec(),vin:1,target:.5,errorPct:50,sourceTolerance:0,rl:null,maxStress:100,maxPower:null,environment:cfg},small=w.ResistorParts.evaluate(catalog,'vishay-tnpw-e3',{resistanceOhms:1,tolerancePct:1}),larger=w.ResistorParts.evaluate(catalog,'vishay-tnpw-e3',{resistanceOhms:10,tolerancePct:1});
+ assert(w.evaluateResistorPair(agedSpec,small,small)===null,'An invalid aged resistance is rejected without aborting the catalog search');assert(w.evaluateResistorPair(agedSpec,larger,larger),'Other candidates remain searchable under the same estimated mission');
+ cfg=settings();cfg.radiation.doseKrad=10;assert(model.interval(tnpw,cfg).requiredGaps.length>0,'A nonzero dose requires qualification data');
+ cfg.radiation.qualifiedKrad=20;cfg.radiation.tnpwPct=.2;near(model.interval(tnpw,cfg).radiationPct,.2,'Covered radiation uses the full qualified drift bound');
+ cfg.radiation.doseKrad=5;near(model.interval(tnpw,cfg).radiationPct,.2,'Lower mission dose does not invent linear radiation scaling');
+ cfg.radiation.doseKrad=21;assert(model.interval(tnpw,cfg).requiredGaps.length>0,'Mission dose above qualification is rejected');
+ cfg.radiation.doseKrad=0;near(model.interval(tnpw,cfg).radiationPct,0,'Explicit zero exposure needs no radiation qualification');
+ const lowOhm=w.ResistorParts.evaluate(catalog,'vishay-tnpw-e3',{resistanceOhms:10,tolerancePct:1});cfg.radiation.doseKrad=10;
+ const lowBudget=model.interval(lowOhm,cfg);near(lowBudget.min,(10*.99*.9995-.01)*.997375*.998,'Absolute aging ohms preserve the true low-value minimum');near(lowBudget.max,(10*1.01*1.0005+.01)*1.002625*1.002,'Absolute aging ohms preserve the true low-value maximum');
+ for(const initial of [-1,1])for(const age of [-1,1])for(const temp of [-1,1])for(const rad of [-1,1]){const measured=(10*(1+initial*.01)*(1+age*.0005)+age*.01)*(1+temp*.002625)*(1+rad*.002);assert(measured>=lowBudget.min-1e-12&&measured<=lowBudget.max+1e-12,'Independent initial/affine-aging/thermal/radiation corners fit the resistance bounds');}
+ cfg=settings();cfg.thermal.maxC=126;assert(model.interval(mil,cfg).requiredGaps.length>0,'A TCR is not extrapolated outside its specified temperature range');
+ cfg=model.initialOnly();near(model.interval(tnpw,cfg).min,9990,'Initial-only mode retains the original low resistance');near(model.interval(tnpw,cfg).max,10010,'Initial-only mode retains the original high resistance');
+ near(model.interval({resistance:1e308,tolerance:50},cfg).effectivePct,50,'Effective drift remains finite for a representable large resistance interval');
+ const hugePart={resistanceOhms:1e308,tolerancePct:0,powerW:1e308,workingVoltageV:1e308},huge=w.pairWorstStress({vin:1e308,sourceTolerance:0,rl:null,loadTolerance:0,environment:cfg},hugePart,hugePart);
+ near(huge.top.p,25,'Large-signal power stress avoids intermediate overflow');near(huge.top.v,50,'Large-signal voltage division avoids intermediate overflow');near(huge.current,.5,'Large-signal input current avoids resistance-sum overflow');
+ for(const [effect,key,value]of [['thermal','minC',126],['thermal','manualTcrPpm',-1],['radiation','doseKrad',-1],['aging','hours',-1],['aging','hours',Infinity],['aging','tnpwPct',100]]){cfg=settings();cfg[effect][key]=value;let threw=false;try{model.validate(cfg)}catch(e){threw=true}assert(threw,`${effect}.${key}: invalid mission inputs are rejected`);}
+ w.applyCatalogPart(tnpw,'r1');w.applyCatalogPart(tnpw,'r2');set('tolVin','2');
+ let actual=state(),lo=(10000*(1-t)*(1-a)-.01)*(1-h),hi=(10000*(1+t)*(1+a)+.01)*(1+h);
+ near(actual.bounds.min,12*.98*lo/(hi+lo),'Main VMID minimum includes the complete environmental stack');near(actual.bounds.max,12*1.02*hi/(lo+hi),'Main VMID maximum includes source variation and the full stack');
+ assert(actual.physical.r1[0].tolerance===.1&&actual.physical.r1[0].mpn===tnpw.mpn&&w.catalogBomCsv().includes(tnpw.mpn),'Environmental drift does not corrupt ordering tolerance or the BOM part number');
+ assert(svg().querySelector('[data-field="pstress"]').parentElement.querySelector('title').textContent.includes('environmental drift'),'Stress tooltips identify the configured environmental bound');
+ for(const source of [-12.24,-11.76,11.76,12.24])for(const top of [lo,10000,hi])for(const bot of [lo,10000,hi]){const sample=w.analyze(source,top,bot,null);assert(sample.p1<=actual.worst.byPart.r1.power+1e-12&&sample.p2<=actual.worst.byPart.r2.power+1e-12&&Math.abs(sample.v1)<=actual.worst.byPart.r1.voltage+1e-12&&Math.abs(sample.vout)<=actual.worst.byPart.r2.voltage+1e-12,'Main signed operating samples remain inside environmental part-stress bounds');}
+ // Independently sample a parallel RTOP and series RBOT with a drifting load.
+ cfg=settings();cfg.radiation.doseKrad=0;cfg.thermal.manualTcrPpm=10;cfg.aging.manualPct=.1;
+ const physical={r1:['a','b'].map(id=>({id,name:id,resistance:20000,tolerance:.1,rating:.14,vmax:150,catalog:{...tnpw,resistanceOhms:20000}})),r2:['c','e'].map(id=>({id,name:id,resistance:5000,tolerance:.1,rating:.14,vmax:150,catalog:{...tnpw,resistanceOhms:5000}}))},networks={r1:{connection:'parallel'},r2:{connection:'series'}},circuit={vin:-24,r1:10000,r2:10000,rl:100000},tols={vin:2,rl:10};
+ const envelope=w.environmentAnalysis(circuit,tols,physical,networks,cfg),worst=w.environmentWorstStress(circuit,tols,physical,networks,envelope);
+ for(let mask=0;mask<64;mask++){
+  const points=[...physical.r1,...physical.r2].map((part,i)=>({...part,resistance:part.environment[(mask>>i)&1?'max':'min']})),top=w.networkEquivalent(points.slice(0,2),'parallel').resistance,bot=w.networkEquivalent(points.slice(2),'series').resistance,load=envelope.load[(mask>>4)&1?'max':'min'],source=-24*((mask>>5)&1?1.02:.98),sample=w.analyze(source,top,bot,load);
+  assert(sample.vout>=envelope.bounds.min-1e-10&&sample.vout<=envelope.bounds.max+1e-10&&sample.total<=worst.power+1e-12&&Math.abs(sample.i1)<=worst.current+1e-12,'Mixed-network voltage, total power and input-current samples fit the environmental envelope');
+  for(const arm of ['r1','r2'])for(const part of w.analyzeParts(arm==='r1'?points.slice(0,2):points.slice(2),networks[arm].connection,arm==='r1'?sample.v1:sample.vout,arm==='r1'?sample.i1:sample.i2))assert(part.power<=worst.byPart[part.id].power+1e-12&&Math.abs(part.voltage)<=worst.byPart[part.id].voltage+1e-12&&Math.abs(part.current)<=worst.byPart[part.id].current+1e-12,'Every physical network part stays inside its environmental stress bounds');
+ }
+ cfg=settings();cfg.radiation.doseKrad=0;cfg.thermal.manualTcrPpm=25;cfg.aging.manualPct=.05;
+ const commonCircuit={vin:12,r1:10000,r2:10000,rl:null},commonParts=Object.fromEntries(['r1','r2'].map(id=>[id,[{id,resistance:10000,tolerance:0,rating:.25,vmax:150}]])),commonTols={vin:0,r1:0,r2:0,rl:0},commonNetworks={r1:null,r2:null};
+ const solvedTolerance=w.solveTolerance(commonCircuit,commonTols,1,commonParts,commonNetworks,cfg),lower=(1-solvedTolerance/100)*(1-.0025)*(1-.0005),upper=(1+solvedTolerance/100)*(1+.0025)*(1+.0005);
+ const solvedError=100*(12*upper/(upper+lower)-6)/6;
+ assert(solvedError<=1+1e-9&&solvedError>1-1e-6,'Rounded-down common initial tolerance stays inside the budget including the environmental floor');assert(solvedTolerance>0&&solvedTolerance<1,'Environmental drift reduces the available manufacturing tolerance');
+ let impossible=false;try{w.solveTolerance(commonCircuit,commonTols,.1,commonParts,commonNetworks,cfg)}catch(e){impossible=true}assert(impossible,'Common-tolerance solving rejects a target already exceeded by environmental drift');
+ const catalogParts=Object.fromEntries(['r1','r2'].map(id=>[id,[{id,resistance:10,tolerance:0,rating:.14,vmax:150,catalog:lowOhm}]]));
+ const catalogTolerance=w.solveTolerance({...commonCircuit,r1:10,r2:10},commonTols,1,catalogParts,commonNetworks,cfg);
+ assert(Number.isFinite(catalogTolerance)&&catalogTolerance>0&&catalogTolerance<1,'Common-tolerance search handles invalid high-tolerance trial bounds with absolute aging ohms');
+ const originalSettings=clone(current());open('thermal');const unchanged=w.catalogBomCsv();set('environment_thermal_minC','200');save();assert(get('environmentEditor').open&&!get('environmentError').hidden&&JSON.stringify(current())===JSON.stringify(originalSettings)&&w.catalogBomCsv()===unchanged,'Invalid environment changes remain local');cancel();
+ set('solveFor','pairs');set('pairMinR','10000');set('pairMaxR','10000');get('pairForm').requestSubmit();let pairs=await w.pairSearchReady;
+ assert(pairs.length===4&&pairs.every(pair=>pair.environment.bounds===pair.bounds&&pair.environment.equivalents.r1.tolerance>pair.top.tolerancePct),'Real catalog search uses environmental bounds for both families and mixed pairs');
+ const previousSpec=w.eval('pairSpec');open('aging');save();assert(w.eval('pairSpec')===previousSpec&&get('schematicDesignSearch').getAttribute('aria-disabled')==='true','Saving unchanged environmental inputs keeps the completed search locked');
+ open('radiation');set('environment_radiation_doseKrad','10');save();assert(!w.eval('pairSpec')&&get('schematicDesignSearch').getAttribute('aria-disabled')==='false','Changed mission inputs invalidate old solutions and enable a new search');
+ get('pairForm').requestSubmit();pairs=await w.pairSearchReady;assert(!pairs.length&&box('radiation').textContent.includes('Qualification needed'),'Unqualified nonzero radiation dose cannot produce accepted catalog solutions');
+ open('radiation');set('environment_radiation_qualifiedKrad','20');set('environment_radiation_tnpwPct','.2');set('environment_radiation_milPct','.5');save();get('pairForm').requestSubmit();pairs=await w.pairSearchReady;
+ assert(pairs.length===4&&pairs.every(pair=>pair.environment.qualified),'Qualified radiation data restores solutions with all configured drift terms covered');
+ const snapshot=await(await fetch(get('schematicDownload').href)).text(),saved=new DOMParser().parseFromString(snapshot,'image/svg+xml'),md=await(await fetch(get('markdownDownload').href)).text(),asc=await(await fetch(get('ltspiceDownload').href)).text(),csv=w.pairSearchCsv();
+ assert(saved.querySelectorAll('[data-environment]').length===3&&!saved.querySelector('[data-schematic-edit],script'),'Static SVG keeps environmental information without live edit controls');
+ assert(md.includes('Environmental tolerance stack')&&md.includes('Thermal drift')&&md.includes('Radiation drift')&&md.includes('Aging drift')&&md.includes('28758')&&md.includes('60018'),'Markdown preserves mission inputs, per-part drift intervals and primary sources');
+ assert(asc.includes('THERMAL:')&&asc.includes('RADIATION:')&&asc.includes('AGING:')&&asc.includes('.op remains nominal'),'LTspice annotations carry the environmental envelope while distinguishing nominal .op');
+ assert(csv.includes('Environmental specification (JSON)')&&csv.includes('qualifiedKrad')&&csv.includes('Environmental scope'),'Search CSV preserves reproducible mission conditions and scope');
+ const serial=JSON.stringify(w.eval('pairItems').map(pair=>[pair.top.mpn,pair.bot.mpn,pair.bounds.min,pair.bounds.max]));
+ for(const width of [320,390,768,1440]){frame.style.width=width+'px';await pause();const b=svg().getBoundingClientRect();assert([...svg().querySelectorAll('[data-environment] text')].every(text=>{const p=text.getBoundingClientRect();return p.left>=b.left&&p.right<=b.right&&p.top>=b.top&&p.bottom<=b.bottom}),'Environmental cards fit the SVG at '+width+'px');open('thermal');const dialog=get('environmentEditor').getBoundingClientRect();assert(dialog.left>=0&&dialog.right<=width&&get('environmentEditor').scrollWidth<=dialog.width+1,'Mission editor fits at '+width+'px');cancel();}
+ assert(serial===JSON.stringify(w.eval('pairItems').map(pair=>[pair.top.mpn,pair.bot.mpn,pair.bounds.min,pair.bounds.max])),'Resizing and canceled edits preserve validated solutions');
+ assert(errors.length===0,'No browser runtime errors: '+errors.join('; '));
+}catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);});
+</script></html>

@@ -303,9 +303,10 @@ beside the circuit on larger screens and above it on smaller screens. Click its
 heading or press Enter/Space to expand it; this preserves the calculation and
 search selection. The expanded table identifies the
 calculated quantity and lists nominal total power, input current and source
-resistance Rth. Ordinary modes show the highest nominal Pstress and Vstress
-among all physical RTOP/RBOT parts; combination previews retain their validated worst-case
-stress values. Find RL also shows load power; tolerance analysis shows the found
+resistance Rth. Every mode reports worst-case Pstress and Vstress over its
+configured resistance-drift intervals. Two-part circuits use analytic extrema,
+including interior power peaks; networks use conservative per-part bounds.
+Applying a two-part solution retains its preview's stress basis. Find RL also shows load power; tolerance analysis shows the found
 per-resistor tolerance and allowed VMID error. If any part lacks a working-voltage
 rating, the overall Vstress is unassessed and the table lists how many parts have
 specified ratings. An explicit maximum Vstress filter excludes unassessed parts.
@@ -566,7 +567,8 @@ Largest deviation is the larger endpoint distance from nominal VMID, divided by
 At the defaults, ±0.1% R1/R2 gives VMID from 5.994 to 6.006 V. A ±5% output error
 band around a 6 V target therefore includes that divider. The combination search checks
 the full interval against the target band, including any nominal output mismatch.
-The other operating-point and stress tabs continue to use nominal values.
+The operating-point and parts-list measurements remain explicitly nominal;
+Circuit characteristics reports the configured worst-case stress bounds.
 
 For multiple-part arms, the minimum/maximum equivalent resistance is evaluated
 using every physical part's own lower/upper resistance limit. Series endpoints
@@ -578,9 +580,90 @@ both arm intervals and the individual part intervals.
 
 These are independent worst-case limits, not a statistical average: four equal
 1% parts still allow a 1% equivalent arm excursion when they all vary together
-in the same direction. Manual multi-part stress analysis uses nominal per-part
-voltages and currents; the two-resistor search additionally checks worst-case
-power and voltage across its selected source, resistor, and load intervals.
+in the same direction. The same interval pipeline now covers manual circuits,
+inverse modes, common-tolerance solving, candidate previews and both search paths.
+
+## Environmental tolerance stack
+
+The **THERMAL**, **RADIATION** and **AGING** information boxes stack below VTOP.
+Click a box, or focus it and press Enter/Space, to edit its mission inputs. The
+left column expands the drawing instead of reducing the circuit's symbol size.
+The boxes remain in static SVG downloads. Saving changed mission settings clears
+cached design solutions and enables Find Design Solutions; canceling or saving
+unchanged settings preserves them. Settings apply across calculator modes and
+participate in the leave-page warning.
+
+Initial tolerance remains the ordering tolerance used in part numbers and the BOM.
+Each physical resistance instead receives separate environmental intervals:
+
+`Rmin = Rnom × product(1 − delta_i / 100)`
+
+`Rmax = Rnom × product(1 + delta_i / 100)`
+
+For percentage-only terms the factors include initial tolerance and each
+characterized drift allowance. TNPW's fixed aging-ohm term stays absolute:
+`Raged,min = Rnom × (1 − initial/100) × (1 − aging_relative/100) − aging_ohms`,
+with the corresponding plus signs for the upper bound. Thermal and radiation
+factors apply to that aged resistance interval. Converting fixed ohms to a
+nominal percentage before the lower-bound calculation would understate drift,
+especially at low resistance. The model retains cross terms and independent signs; there is no RSS reduction or
+assumed cancellation between matching values, catalog families or TCR codes.
+Series/parallel equivalents, VMID/target error, part voltage and power, total
+power and input current all use these resistance endpoints. RL uses the explicit
+manual TCR/drift inputs, while VTOP retains its entered voltage tolerance, which
+must include the source's full mission variation.
+
+**Thermal:** enter the resistor film/hotspot temperature range, including self
+heating. The defaults are 25–125 °C; ambient alone is not a film-temperature
+estimate. For a catalog resistor,
+`delta_thermal (%) = |TCR| × max(|Tmin − Tref|, |Tmax − Tref|) / 10000`.
+The ordered TCR is used, with TNPW's 20 °C reference and M55342's 25 °C reference.
+The implementation does not qualify TCR extrapolation outside −55 to +125 °C.
+Unassigned resistors and RL need an explicit TCR/reference; their unknown drift
+is marked. PCB thermal resistance is not inferred from package power ratings.
+
+**Aging:** the default life is 1000 hours and the default model uses the next
+published endurance milestone. TNPW follows its selected power mode and includes
+the additional absolute-ohm term. M55342 uses the conservative MIL-spec
+requirements, rather than typical manufacturer performance, with selection
+ambient at or below its published 70 °C endurance condition. Bounds are used
+within the published resistance, film-temperature, time and permissible-load
+envelope; test mounting and exposure assumptions must match the application.
+TNPW's cited endurance procedure uses a 1.5-hour-on / 0.5-hour-off cycle. A
+different continuous-load or duty profile needs applicable qualification data
+or a mission override; elapsed test duration alone does not establish that bound.
+Life beyond the available envelope remains uncharacterized unless a mission
+drift override is entered. A family-wide override and a separate manual/RL
+override can represent qualified mission data. The optional thin-film estimate
+uses `delta_ref × (hours / reference_hours)^(1/3) × 2^((Tfilm − Tfilm_ref)/30)`.
+M55342's datasheet specifies test ambient rather than the film temperature
+needed for that estimate; its reference film temperature must be entered from
+test data. Neither 70 °C ambient nor the 150 °C operating limit is substituted
+for a measured aging-test film temperature. This is labeled an estimate, not a guaranteed lifetime specification. MIL
+failure-rate codes are not used as resistance-drift coefficients.
+
+**Radiation:** enter mission TID in krad(Si), the qualification dose and a
+qualified resistance-drift allowance for each catalog or manual/RL parts.
+Neither catalog datasheet specifies a dose-to-drift curve, so those defaults
+remain **Not set**. At a nonzero dose the full qualified allowance is used;
+lower dose does not imply proportionally lower drift. Positive-dose searches
+reject candidates lacking limits covering that dose. Explicit zero exposure
+adds no radiation term. These inputs cover resistance drift, not transient
+effects, displacement damage, dose-rate dependence or radiation-induced failures;
+qualification data must cover all selected resistance values/packages, film
+temperatures, the actual environment and bias conditions.
+
+Unknown terms remain visibly uncharacterized. **Partly characterized** and
+**aging estimate** reports describe modeled intervals, not a universal mission
+guarantee. Humidity, soldering, thermal cycling and other unentered mechanisms
+are outside this model. Markdown/LTspice annotations and search CSV retain the
+mission model; Markdown also lists each physical part's drift and resistance
+interval. LTspice .op stays an ideal nominal circuit, with environmental results
+reported as calculator annotations rather than simulated aging/radiation sweeps.
+
+Primary references: [TNPW e3 datasheet](https://www.vishay.com/docs/28758/tnpw_e3.pdf)
+(pp. 2, 12), [E/H M55342 datasheet](https://www.vishay.com/docs/60018/eh.pdf)
+(pp. 1, 3), and [Vishay thin-film drift calculation](https://www.vishay.com/docs/28809/driftcalculation.pdf).
 
 ## Finding real resistor combinations
 
@@ -642,8 +725,10 @@ branches; their conservative power/stress bounds include possible interior power
 peaks. They can reject a feasible design when the bounds are loose, but do not
 substitute nominal arm stress for individual resistor limits. The SVG analysis
 table and result status identify **Conservative interval bounds**. The ordinary
-manual circuit views still show actual nominal per-part stress. Total power
-includes RL; its rating is not checked. Temperature drift/tracking are not modeled.
+parts table still shows nominal per-part stress; Circuit characteristics reports
+the environmental worst-case bounds. Total power includes RL; its rating is not
+checked. Thermal/aging/radiation drift follows the environmental inputs above;
+TCR tracking is not assumed.
 
 Each plotted point represents one complete real-part combination. Click a point
 or result row to preview all physical symbols, individual descriptions/MPNs and
@@ -693,13 +778,14 @@ package, and tolerance ceiling. The optional settings specify TCR, packaging,
 failure-rate level where applicable, power operating mode, and selection ambient.
 Defaults use 70 °C and TNPW general operation. These are sourced, supported family
 subsets, not an exhaustive inventory or a live supplier stock search.
-Selection ambient adjusts allowed power; TCR filters part numbers. Temperature
-drift and TCR tracking are not included in the VMID tolerance bounds.
+Selection ambient adjusts allowed power; TCR selects part numbers and drives the
+thermal drift interval. Aging and radiation follow the shared mission inputs;
+TCR tracking is not assumed.
 
 Suggestions are preferred values within ±5% of the target physical resistance.
 Each preview recalculates the actual arm equivalents, VMID, tolerance bounds,
 and selected-part stress with the candidate's working voltage and allowed power
-at the chosen ambient. Candidates exceeding the selected part's nominal limits
+at the chosen ambient. Candidates exceeding the selected part's modeled worst-case limits
 are omitted. Other parts' limits remain visible in the normal circuit results;
 matching one resistor does not guarantee a complete design meets its targets.
 
@@ -735,7 +821,7 @@ packing, and M55342 failure-rate level. Ambient and TCR can be selected;
 the original **Parts** tab retains the other ordering/power-mode controls.
 Rows align the same resistance, tolerance, size, and TCR. Each family retains
 its own allowed power and working-voltage limit. A dash means no supported match
-meets the selected family rules and selected-part nominal stress limits.
+meets the selected family rules and selected-part modeled stress limits.
 
 The **Circuit BOM** starts with standard reference, quantity, value, tolerance,
 footprint and manufacturer-part-number columns, with one row per physical
