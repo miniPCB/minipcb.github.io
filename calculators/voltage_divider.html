@@ -170,7 +170,7 @@
     .schematic-editor::backdrop { background: rgba(3, 10, 16, 0.75); }
     .schematic-editor h3 { margin: 0; font-size: 1.1rem; }
     .schematic-inline { display: flex; gap: 3px; align-items: center; color: #c6e3ff; font: 14px ui-monospace, monospace; }
-    .schematic-inline :is(select, input, button) { box-sizing: border-box; height: 28px; min-height: 0; margin: 0; padding: 2px 5px; border: 1px solid #75d5ff; border-radius: 6px; background: #1e3547; color: inherit; font: inherit; }
+    .schematic-inline :is(select, input, button) { box-sizing: border-box; height: var(--schematic-control-height, 28px); min-height: 0; margin: 0; padding: 2px 5px; border: 1px solid #75d5ff; border-radius: 6px; background: #1e3547; color: inherit; font: inherit; }
     .schematic-inline select { width: 100%; }
     .schematic-inline input { width: 0; flex: 1; }
     .schematic-inline button { padding: 2px 7px; cursor: pointer; }
@@ -2029,9 +2029,9 @@
       return rows;
     }
 
-    function schematicNetworkModel(tree) {
-      if (typeof tree === "string") return { tree, width: 264, height: 144, port: 28 };
-      const children = tree.children.map(schematicNetworkModel);
+    function schematicNetworkModel(tree, seriesPart = false) {
+      if (typeof tree === "string") return { tree, width: seriesPart ? 324 : 264, height: seriesPart ? 192 : 144, port: 28, seriesPart };
+      const children = tree.children.map(child => schematicNetworkModel(child, tree.connection === "series" && tree.children.length > 1));
       if (children.length === 1) return children[0];
       if (tree.connection === "series") {
         const port = Math.max(...children.map(child => child.port));
@@ -2049,22 +2049,38 @@
       if (!model.children) {
         const part = parts.get(model.tree), pairMode = byId("solveFor").value === "pairs", side = arm === "r1" ? "Top" : "Bot";
         const symbol = schematicShape(parent, "g", { "data-schematic-symbol": part.id, "data-arm": arm, "data-connection": connection, tabindex: 0, role: "group", "aria-label": `${part.name}; right-click or press Shift+F10 for construction` });
-        schematicShape(symbol, "rect", { x: x + 8, y: y + 16, width: 240, height: 112, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
+        schematicShape(symbol, "rect", { x: x + 8, y: y + (model.seriesPart ? 8 : 16), width: model.seriesPart ? 300 : 240, height: model.seriesPart ? 168 : 112, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
         const body = schematicRole(schematicShape(symbol, "g", { fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round", "data-resistor-body": "", "data-orientation": "vertical" }), arm, roles, "stroke");
         const lead = (d, net) => schematicShape(body, "path", { d, ...(net ? { stroke: wireColor(net), "data-wire-net": net } : {}) });
         lead(`M${x + 28} ${y}v26`, terminals.top);
         schematicShape(body, "path", { d: `M${x + 28} ${y + 26}l-10 5 20 10 -20 10 20 10 -20 10 10 7` });
-        lead(`M${x + 28} ${y + 78}V${y + 144}`, terminals.bottom);
+        lead(`M${x + 28} ${y + 78}V${y + model.height}`, terminals.bottom);
         const info = schematicShape(symbol, "g", { "data-schematic-info": part.id });
-        schematicInfoBox(info, x + 56, y + 24, 192, 104);
-        const reference = schematicRole(schematicText(info, x + 68, y + 46, part.name, 18), arm, roles);
+        schematicInfoBox(info, x + 56, y + (model.seriesPart ? 8 : 24), model.seriesPart ? 252 : 192, model.seriesPart ? 168 : 104);
+        const reference = schematicRole(schematicText(info, x + 68, y + (model.seriesPart ? 32 : 46), part.name, 18), arm, roles);
         if (state && pairMode && resistorCatalog) schematicEditable(reference, state.constructionSetup || state.pair?.combination ? part.id : arm, `${part.name} search constraints`, "specifications");
         const content = Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : pairMode ? "Find" : "Auto · undefined";
+        const footprint = part.catalog?.case || (pairMode ? part.settings?.package || byId(`pairPackage${side}`).value : null) || footprintPreferences.get(part.id) || "Not set";
+        if (model.seriesPart) {
+          info.dataset.seriesPartFields = "";
+          for (const [index, [label, text, field, focus, color]] of [
+            ["Value", content, "resistance", "value", SOLVE_ROLES[roles[arm]].color],
+            ["Tolerance", `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`, "tolerance", "tolerance", "#c6d7e5"],
+            ["Package", footprint, "footprint", "power", SOLVE_ROLES[footprint !== "Not set" ? "defined" : "undefined"].color]
+          ].entries()) {
+            const top = y + 42 + index * 44, control = schematicShape(info, "g", { class: "schematic-field", "data-field": field, "data-part-control": focus });
+            schematicText(info, x + 68, top + 23, label, 14, "#a8bece");
+            schematicShape(control, "rect", { x: x + 148, y: top, width: 148, height: 36, rx: 6, fill: "#142535", stroke: "#2b4152" });
+            schematicText(control, x + 158, top + 24, text, Math.min(18, (focus === "value" ? 128 : 108) / (text.length * 0.62)), color);
+            if (state) schematicEditable(control, part.id, `${part.name} ${label.toLowerCase()}`, focus);
+            if (focus !== "value" && control.hasAttribute("data-schematic-edit")) schematicShape(control, "path", { d: `M${x + 276} ${top + 15}l4 4 4-4`, fill: "none", stroke: color, "stroke-width": 1.5, "pointer-events": "none" });
+          }
+          return;
+        }
         const value = schematicRole(schematicText(info, x + 68, y + 72, content, 18, "#eaf6ff", "resistance"), arm, roles);
         if (state) schematicEditable(value, part.id, `${part.name} resistance`);
         const tolerance = `±${Number.isFinite(part.tolerance) ? percent(part.tolerance) : "—"}`;
         const tol = schematicPill(info, x + 68, y + 90, tolerance, "#c6d7e5", 80, "tolerance", !schematicEditLocks(part.id).tolerance);
-        const footprint = part.catalog?.case || (pairMode ? part.settings?.package || byId(`pairPackage${side}`).value : null) || footprintPreferences.get(part.id) || "Not set";
         const size = schematicPill(info, x + 76 + tol.width, y + 90, footprint, SOLVE_ROLES[footprint !== "Not set" ? "defined" : "undefined"].color, 88, "footprint", true);
         if (state) { schematicEditable(tol.pill, part.id, `${part.name} tolerance ${tolerance}`, "tolerance"); schematicEditable(size.pill, part.id, `${part.name} footprint`, "power"); }
         return;
@@ -2786,10 +2802,11 @@
 
     function openInlinePartEditor(node) {
       const context = schematicEditContext, field = inlineEditorField(context), box = node.getBBox(), svg = byId("liveSchematic");
-      const width = context.focus === "value" ? 174 : Math.max(40, box.width), matrix = svg.getScreenCTM().inverse().multiply(node.parentNode.getScreenCTM());
-      const object = schematicShape(svg, "foreignObject", { x: box.x, y: box.y, width, height: 32, transform: `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`, "data-inline-editor": "" });
+      const width = context.focus === "value" ? 174 : Math.max(40, box.width), height = Math.max(28, box.height), matrix = svg.getScreenCTM().inverse().multiply(node.parentNode.getScreenCTM());
+      const object = schematicShape(svg, "foreignObject", { x: box.x, y: box.y, width, height: Math.max(32, height), transform: `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`, "data-inline-editor": "" });
       const root = document.createElement("div"), row = document.createElement("div"), error = document.createElement("div");
       root.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"); root.style.width = `${width}px`; row.className = "schematic-inline"; row.style.width = `${width}px`;
+      if (height >= 36) { row.style.setProperty("--schematic-control-height", `${height}px`); row.style.fontSize = "16px"; }
       row.style.color = node.getAttribute("fill") || node.querySelector("text")?.getAttribute("fill") || "#c6e3ff";
       error.className = "schematic-inline-error"; error.setAttribute("role", "alert"); error.hidden = true;
       root.append(row, error); object.append(root); context.inline = { object, input: null, error, width };
@@ -2811,7 +2828,7 @@
     }
 
     function changeSchematicFootprint() {
-      const size = byId("schematicEditFootprint").value;
+      const size = byId("schematicEditFootprint").value, manual = !byId("schematicEditFamily").value, tolerance = byId("schematicEditPartTolerance").value, vmax = byId("schematicEditVmax").value;
       if (!byId("schematicEditFamily").value && size && resistorCatalog) {
         const families = resistorCatalog.families.filter(family => family.packages.some(pkg => pkg.case === size && pkg.powerW[family.defaults.mode]));
         const family = families.find(family => family.id === byId("catalogFamily").value) || families[0];
@@ -2822,6 +2839,11 @@
         }
       }
       configureSchematicCatalog();
+      if (manual && byId("schematicEditFamily").value && (byId("schematicEditSave").disabled || byId("schematicEditPartTolerance").value !== tolerance)) {
+        // A footprint alone must not require an exact catalog value or change a manual tolerance.
+        byId("schematicEditFamily").value = ""; configureSchematicCatalog(true);
+        byId("schematicEditFootprint").value = size; byId("schematicEditPartTolerance").value = tolerance; byId("schematicEditVmax").value = vmax; updateSchematicCatalogPreview();
+      }
     }
 
     function schematicCatalogCandidate(resistanceOhms) {

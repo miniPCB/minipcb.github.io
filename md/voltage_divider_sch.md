@@ -253,6 +253,10 @@ native dropdowns. All selections use the full editor's catalog and stress checks
 The same text entry and suggestions apply to each physical resistor in series,
 parallel and mixed networks. Editing one part preserves its siblings and the
 connections, and recalculates the arm equivalent, operating values and BOM.
+Series resistors have separate, labeled **Value**, **Tolerance** and **Package**
+rows with larger click/tap areas. The schematic grows to fit these controls;
+symbols remain vertical and retain their normal size. Calculated fields keep
+their existing edit restrictions.
 
 Escape cancels. Invalid choices show a local inline message and preserve the
 circuit. An unfinished resistance draft participates in leave-page protection.
@@ -277,6 +281,10 @@ catalog family and its actual limits. **Part options…** keeps the family
 editable. A family can also be selected first for its footprint, TCR and
 reliability choices. Manual mode permits custom values and clears a prior catalog
 assignment when explicitly selected. Source/load tolerances retain numeric entry.
+If a manual value has no exact supported catalog part, a package choice records
+the physical footprint while retaining the manual tolerance, rating and voltage limit;
+the part number remains unassigned. This also permits independent footprint
+selection for values produced by splitting an arm, such as 2.5 kΩ.
 Applying a selection or saving advanced changes updates the existing forms and
 recalculates the selected result and stress
 while preserving the active Find mode. Cancel or Escape leaves the circuit unchanged.
