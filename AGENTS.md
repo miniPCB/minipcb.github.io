@@ -62,3 +62,4 @@ HTML, Markdown, or JavaScript are valid.
 
 ## Notes
 - Avoid touching files not needed for the task.
+- For calculator work, including related JavaScript and exports, read [calculators/AGENTS.md](calculators/AGENTS.md).

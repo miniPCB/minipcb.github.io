@@ -255,6 +255,12 @@ Packages start at **0805**, independently of the manual power rating; this
 physical footprint does not assign a catalog part number or infer a rating.
 Equivalent arm labels allow total-resistance editing when that arm is an
 input; calculated arm values are read-only.
+Ordinary electrical nets and ground use blue throughout, including internal
+series/parallel connections. A calculated VMID or VTOP net uses red. The resistor,
+supply and load symbols keep their known/calculated role colors, with a consistent
+20 px lead between each symbol body and its net. Long connection runs use net
+color. Connection dots mark actual branch junctions; symbol sizes stay unchanged.
+
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
 connections visible. The **Parts list and electrical part stress** table contains **Ref Des**,

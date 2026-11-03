@@ -1,0 +1,45 @@
+# Calculator notes for AI agents
+
+These are established miniPCB calculator conventions. Preserve them when making
+changes to calculator pages, shared JavaScript, schematics and exports. They do
+not add a permission or confirmation step to an authorized task.
+
+## Schematic drawing
+
+- Use blue `#54d2ff` for ordinary nets, including internal connections and ground.
+  Never use grey for electrical wiring. Neutral text and UI borders may stay grey.
+- A calculated voltage net uses red: VMID in Find VMID, VTOP in Find VTOP.
+  Keep an entire net, its branches, junction dots and terminal outlines consistent.
+- Component symbols retain their role colors: green for known, red for calculated,
+  yellow for missing data. Do not extend symbol color along arbitrary wire runs.
+- Use 20 px symbol leads before changing to net color. This is the calculator's
+  drawing convention, not a physical lead-length specification. Resistor bodies
+  are 52 px tall; keep both leads equal and the zigzag at its normal size.
+- Center resistor symbols within their allocated rows. Grow the drawing for
+  series, parallel and mixed networks; keep all resistor symbols vertical.
+- Draw connection dots at real three-way and four-way junctions. Do not add dots
+  at ordinary bends or at unconnected crossings.
+- Check supply, ground, load resistor and current-source boundaries as well as
+  divider resistors. Check both a single part and nested series/parallel networks.
+
+## Interaction and information
+
+- Keep Value, Tolerance and Package directly editable on the diagram, populated
+  and easy to use. Open the advanced circuit dialog only through Options.
+- Let known/calculated roles determine editability in every mode. Preserve the
+  selected mode and other physical parts when editing one resistor.
+- Keep Pstress and Vstress compact and tied to each actual part's ratings. Label
+  nominal versus worst-case results accurately. Format stress as nonnegative
+  percentages with two decimals; missing ratings are unassessed, not zero.
+- Carry configured initial, thermal, radiation/aging and load uncertainty through
+  every mode. Distinguish inverse trip-voltage ranges from allowable source
+  tolerance budgets; avoid counting derived uncertainty twice.
+- Use the real repository `logo.png`; do not invent or redraw miniPCB branding.
+- Export the currently displayed circuit or selected preview. Preserve the title
+  and real logo, embed assets for offline use, and remove editing/action controls.
+  Keep framed-circuit downloads distinct from full-workspace downloads.
+- Accept embedded data images in self-contained SVGs; verify their original asset
+  bytes when testing branding.
+- Verify visual changes on desktop and phone, in series/parallel/mixed circuits,
+  and in exported images. Check text fit, symbol size, lead boundaries, node dots
+  and live updates after a value, tolerance or package change.
