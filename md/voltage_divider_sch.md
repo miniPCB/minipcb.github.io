@@ -417,7 +417,14 @@ calculator editing controls.
 
 In the resistor-combination visualization, selecting a point or table row previews that
 combination in the top SVG, including VMID bounds, error, power, current, Rth and worst
-stress. The per-part fields show the selected MPN's nominal stress. Matching
+stress. Each physical resistor card has a compact **Pstress / Vstress** footer
+below its value, tolerance and package controls. It shows that resistor's nominal
+power and voltage utilization, matching the parts list, in nonnegative percentages
+with two decimals. Green is below the limit, amber is at the limit and red is over
+it. A missing working-voltage rating shows **—**, and unresolved circuits/search
+setup show **—** for unavailable measurements. The tooltip identifies the nominal
+basis and the individual rating. The footer stays in framed/full SVG and raster
+downloads; the three editing controls keep their normal size. Matching
 TNPW or M55342/D55342 alternatives appear alongside it with their own power and
 voltage limits. Preview alternatives must also satisfy the combination search criteria;
 other calculator views check alternatives at the nominal operating point.

@@ -2136,7 +2136,7 @@
     }
 
     function schematicNetworkModel(tree, seriesPart = false) {
-      if (typeof tree === "string") return { tree, width: 324, height: 160, port: 28, seriesPart };
+      if (typeof tree === "string") return { tree, width: 324, height: 180, port: 28, seriesPart };
       const children = tree.children.map(child => schematicNetworkModel(child, tree.connection === "series" && tree.children.length > 1));
       if (children.length === 1) return children[0];
       if (tree.connection === "series") {
@@ -2155,14 +2155,14 @@
       if (!model.children) {
         const part = parts.get(model.tree), pairMode = byId("solveFor").value === "pairs", side = arm === "r1" ? "Top" : "Bot";
         const symbol = schematicShape(parent, "g", { "data-schematic-symbol": part.id, "data-arm": arm, "data-connection": connection, tabindex: 0, role: "group", "aria-label": `${part.name}; right-click or press Shift+F10 for construction` });
-        schematicShape(symbol, "rect", { x: x + 8, y: y + 8, width: 300, height: 136, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
+        schematicShape(symbol, "rect", { x: x + 8, y: y + 8, width: 300, height: 156, fill: "transparent", "pointer-events": "all", "data-resistor-hit": "" });
         const body = schematicRole(schematicShape(symbol, "g", { fill: "none", "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round", "data-resistor-body": "", "data-orientation": "vertical" }), arm, roles, "stroke");
         const lead = (d, net) => schematicShape(body, "path", { d, ...(net ? { stroke: wireColor(net), "data-wire-net": net } : {}) });
         lead(`M${x + 28} ${y}v26`, terminals.top);
         schematicShape(body, "path", { d: `M${x + 28} ${y + 26}l-10 5 20 10 -20 10 20 10 -20 10 10 7` });
         lead(`M${x + 28} ${y + 78}V${y + model.height}`, terminals.bottom);
         const info = schematicShape(symbol, "g", { "data-schematic-info": part.id, "data-part-fields": "", ...(model.seriesPart ? { "data-series-part-fields": "" } : {}) });
-        schematicInfoBox(info, x + 56, y + 8, 252, 136);
+        schematicInfoBox(info, x + 56, y + 8, 252, 156);
         schematicRole(schematicText(info, x + 68, y + 32, part.name, 18), arm, roles);
         const content = Number.isFinite(part.resistance) ? format(part.resistance, "Ω") : "10 kΩ";
         const footprint = pairMode ? part.settings?.package || part.catalog?.case || byId(`pairPackage${side}`).value || "0805" : resistorFootprint(part);
@@ -2176,6 +2176,17 @@
           schematicText(control, left + 10, top + 24, text, Math.min(18, (width - (focus === "value" ? 20 : 40)) / (text.length * 0.62)), color);
           if (state) schematicEditable(control, part.id, `${part.name} ${field}`, focus);
           if (focus !== "value" && control.hasAttribute("data-schematic-edit")) schematicShape(control, "path", { d: `M${left + width - 20} ${top + 15}l4 4 4-4`, fill: "none", stroke: color, "stroke-width": 1.5, "pointer-events": "none" });
+        }
+        const readouts = schematicShape(info, "g", { "data-resistor-stress": part.id, "data-stress-basis": "nominal" });
+        schematicShape(readouts, "path", { d: `M${x + 68} ${y + 135}h228`, stroke: "#2b4152" });
+        for (const [key, label, left] of [["p", "Pstress", x + 68], ["v", "Vstress", x + 188]]) {
+          const value = state && !state.pending && !state.pairSetup ? part.stress?.[key] : null, content = partStressPercent(value);
+          const cell = schematicShape(readouts, "g", { "data-stress-metric": key });
+          schematicText(cell, left, y + 153, label, 10.5, "#a8bece");
+          const color = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" }[stressClass(value)];
+          const number = schematicText(cell, left + 108, y + 153, content, Math.min(12, 58 / (content.length * 0.62)), Number.isFinite(value) ? color : "#a8bece");
+          number.setAttribute("text-anchor", "end"); number.setAttribute("data-stress-value", "");
+          schematicShape(cell, "title").textContent = !Number.isFinite(value) ? key === "v" && state && !state.pending && !state.pairSetup ? "Vstress not assessed: maximum continuous working voltage is not specified." : "Stress is unavailable until the circuit is calculated." : `${part.name}: nominal ${label} ${content}. ${key === "p" ? `Power / allowed power (${format(part.rating, "W")})` : `Absolute voltage drop / working-voltage rating (${format(part.vmax, "V")})`} × 100%.`;
         }
         return;
       }
