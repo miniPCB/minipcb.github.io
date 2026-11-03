@@ -1016,25 +1016,26 @@ data clears the BOM; manual part edits and reset clear stale assignments.
 | Vstress | `abs(Vdrop) / Vdesign × 100%` |
 
 Click either Pstress or Vstress on a schematic resistor to open its ratings panel.
-It shows the assigned manufacturer's power and working-voltage ratings, a
-footprint table for the selected catalog operating mode, and the resulting design
-limits. For an unassigned resistor the table is a reference; selecting a reference
+It shows the part rating beside the resulting design limit. Manufacturer ratings
+by footprint and operating mode are available in a collapsed reference section.
+For an unassigned resistor the table is a reference; selecting a reference
 does not assign a part or replace its entered ratings.
 
-Additional power and voltage derating are separate percentages shared by every
-physical divider resistor, including series, parallel and mixed networks. Both
-default to 0%. A 50% power derating leaves half the temperature-adjusted power
-available. The same convention applies independently to voltage:
+Power limit and voltage limit are separate dropdowns shared by every physical
+divider resistor, including series, parallel and mixed networks. Both default to
+**100% of rating**. **80% of rating** means 80% is available for the design;
+**20% of rating** means 20% is available. Power uses the temperature-adjusted
+manufacturer rating before applying the selected percentage:
 
 ```text
-Pdesign = Pallowed × (1 − additional power derating / 100)
-Vdesign = Vmax × (1 − additional voltage derating / 100)
+Pdesign = Pallowed × power limit / 100
+Vdesign = Vmax × voltage limit / 100
 Pstress = P / Pdesign × 100%
 Vstress = |V| / Vdesign × 100%
 ```
 
 `Pallowed` is the manufacturer power allowed at the selected operating temperature;
-manual ratings are used as entered before additional derating. `Vmax` is the
+manual ratings are used as entered before applying the selected percentage. `Vmax` is the
 specified maximum continuous working voltage. These limits are independent:
 changing the power rating changes Pstress,
 and changing the working-voltage rating changes Vstress. Both must meet any
@@ -1044,8 +1045,10 @@ operating-point value; there is no derived current-stress percentage.
 The design factors apply once to nominal stress, worst-case bounds and solution
 searches. Changing them invalidates previous solutions without changing assigned
 part numbers, resistor values or voltage uncertainty intervals. LTspice measurements
-use the same design limits; Markdown and CSV downloads retain the derating inputs.
-Reset restores both factors to 0%. A missing voltage rating remains unassessed.
+use the same design limits; Markdown and CSV downloads state the percentages of
+rating used. Existing reductions are converted without changing their limits
+(a previous 20% reduction becomes 80% of rating); nonstandard values stay selectable.
+Reset restores both dropdowns to 100%. A missing voltage rating remains unassessed.
 
 An assigned part stays in the design when a limit is exceeded. A red **FAIL**
 badge marks the physical resistor and its parts-list row; the rating panel and
