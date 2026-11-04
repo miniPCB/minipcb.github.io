@@ -1059,10 +1059,20 @@ and [Vishay RH/NH power resistor datasheet](https://www.vishay.com/docs/30201/rh
 Use the actual component's rating for its temperature and mounting; some
 high-power ratings require a specified heat sink.
 
-At the defaults, each 1/4 W resistor has Pstress = 1.44%. Vstress is unassessed
-(a dash) until a maximum working voltage is entered or supplied by a catalog
-part. For example, a 150 V working-voltage rating gives Vstress = 4% at a 6 V
-drop, independent of the resistor's power rating.
+At the defaults, each 1/4 W resistor has Pstress = 1.44% and Vstress = 12% at a
+6 V drop. Manual 0805 resistors start with a **50 V design reference**, the lower
+documented working-voltage rating of the supported TNPW/M55342 0805 families.
+This is a conservative reference for an unassigned part, not an assigned MPN.
+New physical resistors inherit explicit working-voltage ratings; an unrated seed
+gets the lower catalog reference for its package. Manual footprint changes also
+update that reference when no exact catalog part can be assigned. These limits
+survive manual value edits, series/parallel insertion and switching to Find VTOP
+with a current load. Assigned catalog parts use their actual manufacturer rating.
+Existing designs with an uninitialized working-voltage field recover the assigned
+manufacturer limit or package reference on recalculation. Deliberately clearing
+a rating still marks it unassessed, and that choice survives other circuit edits.
+For example, a 150 V working-voltage rating gives Vstress = 4% at a 6 V drop,
+independent of the resistor's power rating.
 
 Values above 100% exceed the applicable limit. With no maximum working voltage,
 the calculator still checks power but cannot assess the independent voltage

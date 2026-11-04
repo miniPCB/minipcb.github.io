@@ -53,13 +53,13 @@
         valid("Initial calculation");
         assert(schematicField("r1", "footprint") === "0805" && get("liveSchematic").querySelectorAll('[data-part-control][data-schematic-edit][role="button"]').length === 6, "SVG shows populated editable value/tolerance/package controls with the default manual footprint");
         assert(text("vout") === "6 V" && text("iin") === "600 µA" && text("ptotal") === "7.2 mW", "Original default operating point");
-        assert(stressOutputs().join(",") === "1.44,NaN,1.44,NaN", "Original default resistor stresses");
+        assert(stressOutputs().join(",") === "1.44,12,1.44,12", "Default resistor stresses include the 50 V working-voltage reference");
         assert(text("voutMin") === "5.994 V" && text("voutMax") === "6.006 V" && text("voutError") === "0.1%", "Default ±0.1% resistor output bounds");
         assert(get("targetVout").readOnly && !get("vin").readOnly, "VMID mode marks the calculated field");
         assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 4, "Fifteen common ratings retain selected highlights");
         assert(text("schematicVtop") === "12 V" && text("schematicVmid") === "6 V", "Schematic shows the default source, tolerance, and midpoint");
         assert(schematicField("r1", "resistance") === "10 kΩ" && schematicField("r1", "tolerance") === "±0.1%" && schematicField("r1", "rating") === "Rated 250 mW", "Schematic shows actual resistance, tolerance, and rating");
-        assert(["p", "v"].map(field => schematicField("r1", field)).join(",") === "1.44%,—", "Schematic shows default Pstress and unassessed voltage stress");
+        assert(["p", "v"].map(field => schematicField("r1", field)).join(",") === "1.44%,12.00%", "Schematic shows default independent power and voltage stress");
 
         set("rl", "100");
         valid("Loaded forward solution");
@@ -175,15 +175,15 @@
         }
 
         await reset(); set("p1", "0.0625"); set("p2", "2");
-        assert(stressOutputs().join(",") === "5.76,NaN,0.18,NaN", "Independent power rating regressions");
+        assert(stressOutputs().join(",") === "5.76,12,0.18,12", "Independent power rating regressions");
         await reset(); set("p1", "0.03"); set("p2", "50"); valid("Smallest and largest power presets");
-        assert(stressOutputs().join(",") === "12,NaN,0.0072,NaN", "30 mW and 50 W presets use their actual ratings");
+        assert(stressOutputs().join(",") === "12,12,0.0072,12", "30 mW and 50 W presets use their actual ratings");
         await reset(); set("vmax1", "3");
         assert(stressOutputs().slice(0, 2).join(",") === "1.44,200", "Working voltage stress cap retained");
         await reset(); set("vin", "100");
-        assert(stressOutputs().every((value, index) => index % 2 ? Number.isNaN(value) : value === 100), "Exact power limit remains 100% stress");
+        assert(stressOutputs().every(value => value === 100), "Exact power and working-voltage limits both remain 100% stress");
         set("vin", "200");
-        assert(stressOutputs().join(",") === "400,NaN,400,NaN", "Overload stress scaling retained");
+        assert(stressOutputs().join(",") === "400,200,400,200", "Independent power and voltage overload scaling retained");
 
         for (const [id, value] of [["r1", "0"], ["r2", "-1"], ["rl", "0"], ["vin", ""], ["tolR1", "-1"], ["tolR2", "100"], ["tolVin", ""], ["vmax1", "0"], ["vin", "1e309"]]) {
           await reset(); set(id, value); invalid(`Invalid ${id}=${value}`);
@@ -277,7 +277,7 @@
           near(part.current, 0.00015, "Equal parallel part current");
           near(part.power, 0.0009, "Equal parallel part dissipation");
         }
-        assert(ids("r1").every(id => schematicField(id, "resistance") === "40 kΩ" && schematicField(id, "p") === "0.36%" && schematicField(id, "v") === "—"), "Parallel schematic uses individual branch resistance and power stress without inventing voltage ratings");
+        assert(ids("r1").every(id => schematicField(id, "resistance") === "40 kΩ" && schematicField(id, "p") === "0.36%" && schematicField(id, "v") === "12.00%"), "Parallel schematic uses each branch resistance, power and inherited working-voltage rating");
 
         await reset(); set("tolR2", "1"); enableParts("r1"); set("r1Connection", "parallel");
         set(`${ids("r1")[0]}R`, "2"); set(`${ids("r1")[0]}Tol`, "10");
