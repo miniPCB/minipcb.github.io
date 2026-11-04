@@ -362,8 +362,9 @@ family's supported combinations. A live part-number preview shows the result.
 Power is read-only in the SVG editor and follows the selected catalog part's
 footprint, operating mode and ambient derating. Catalog working-voltage limits
 also update automatically. Saving applies the validated part number, tolerance,
-power and voltage limits to the circuit and BOM. Unsupported exact values and
-parts exceeding nominal power/voltage limits cannot be applied. Existing catalog
+power and voltage limits to the circuit and BOM. Unsupported exact catalog values
+cannot be applied; parts exceeding power/voltage limits apply with a **FAIL** status.
+Existing catalog
 parts reopen with their reliability, TCR, tolerance, footprint and conditions.
 
 For an unassigned resistor, **Manual · keep current limits** preserves its current
@@ -374,13 +375,14 @@ editable. A family can also be selected first for its footprint, TCR and
 reliability choices. Manual mode permits custom values and clears a prior catalog
 assignment when explicitly selected. Source/load tolerances retain numeric entry.
 If a manual value has no exact supported catalog part, a package choice records
-the physical footprint while retaining the manual tolerance, rating and voltage limit;
+the physical footprint and manual tolerance while updating power and voltage to
+conservative references for that package;
 the part number remains unassigned. This also permits independent footprint
 selection for values produced by splitting an arm, such as 2.5 kΩ.
 Applying a selection or saving advanced changes updates the existing forms and
 recalculates the selected result and stress
 while preserving the active Find mode. Cancel or Escape leaves the circuit unchanged.
-Inline choices use the same validation and stress checks before applying. In the
+Inline choices use the same validation and failure indicators. In the
 real-combination mode, footprint and tolerance choices update that arm or
 physical resistor's search constraints and invalidate changed results; run
 **Find Design Solutions** to generate replacements. They do not apply a preview
@@ -1027,12 +1029,24 @@ Vstress = |V| / Vdesign × 100%
 ```
 
 `Pallowed` is the manufacturer power allowed at the selected operating temperature;
-manual ratings are used as entered before applying the selected percentage. `Vmax` is the
+explicit manual ratings are used as entered before applying the selected percentage.
+When a manual footprint change cannot assign an exact catalog part, its power
+reference becomes the lowest documented default-mode rating for the new package,
+including ambient derating. The 70 °C references are 50 mW for both 0201 and 0402;
+these references do not assign a manufacturer part number. New series/parallel
+siblings inherit the reference, and an explicit manual power entry overrides it.
+`Vmax` is the
 specified maximum continuous working voltage. These limits are independent:
 changing the power rating changes Pstress,
 and changing the working-voltage rating changes Vstress. Both must meet any
 selected search stress limit. Actual resistor current remains available as an
 operating-point value; there is no derived current-stress percentage.
+
+Value edits recalculate nominal and worst-case stress for every physical part.
+Saved power ratings remain separate from temperature-adjusted analysis limits,
+so repeated edits preserve neighboring catalog assignments and cooling restores
+the appropriate allowed power. An edit that exceeds a rating still applies and
+marks the affected parts **FAIL**, keeping the displayed circuit and stress current.
 
 The design factors apply once to nominal stress, worst-case bounds and solution
 searches. Changing them invalidates previous solutions without changing assigned
@@ -1083,6 +1097,7 @@ voltage must satisfy both power and maximum working-voltage limits; see
 The calculator uses nominal, positive, finite resistances and an ideal DC source.
 Signed voltages and currents follow the positive-to-negative node directions
 above; power and stress are nonnegative. Catalog selections import power derated
-for their selected ambient; manual ratings are used as entered. Transients and
+for their selected ambient; explicit manual ratings are used as entered and
+manual package references follow ambient derating. Transients and
 independent datasheet current limits are not modeled. RL power is reported but
 its rating is not evaluated.

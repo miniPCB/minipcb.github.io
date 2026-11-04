@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Small-package stress and live editing checks</title>
+<style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:2200px;border:0}</style>
+<h1>0201 / 0402 ratings and stress updates</h1>
+<pre id="results">RUNNING</pre>
+<iframe id="calculator" title="Calculator under test" src="../voltage_divider.html?package-stress-test=1"></iframe>
+<script>
+"use strict";
+const checks = [], failures = [];
+const assert = (ok, label) => { checks.push(label); if (!ok) failures.push(label); };
+const near = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b), 1e-12);
+const pause = () => new Promise(resolve => setTimeout(resolve, 25));
+document.getElementById('calculator').addEventListener('load', async event => {
+  try {
+    const frame = event.target, w = frame.contentWindow, d = w.document, get = id => d.getElementById(id);
+    const state = () => w.eval('schematicState'), svg = () => get('liveSchematic');
+    const errors = []; w.addEventListener('error', event => errors.push(event.message));
+    assert(await w.resistorCatalogReady, 'Catalogs load'); await w.circuitLogoReady;
+    const catalog = await w.ResistorParts.load(), baseline = JSON.stringify(w.eval('environmentSettings'));
+    const set = (id, value) => { get(id).value = value; get(id).dispatchEvent(new w.Event('input', { bubbles: true })); };
+    const reset = async () => {
+      w.closeSchematicEditor(false); get('dividerForm').reset(); get('pairForm').reset(); await pause();
+      w.eval('environmentSettings=' + baseline + ';update()');
+    };
+    const open = (id, focus) => svg().querySelector(`[data-schematic-edit="${id}"][data-edit-focus="${focus}"]`).dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    const inline = () => svg().querySelector('[data-inline-editor]');
+    const value = (id, text) => {
+      open(id, 'value'); const input = inline().querySelector('input'); input.value = text;
+      input.dispatchEvent(new w.Event('input', { bubbles: true }));
+      input.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      assert(!inline(), id + ': Enter commits the value and closes its inline editor');
+    };
+    const footprint = (id, size) => {
+      open(id, 'power'); const select = inline().querySelector('select'); select.value = size;
+      select.dispatchEvent(new w.Event('change', { bubbles: true }));
+      assert(!inline(), id + ': package selection commits directly');
+    };
+    const topology = kind => {
+      if (kind === 'single') return;
+      for (const arm of ['r1', 'r2']) {
+        get(arm + 'Multiple').click(); get(arm + 'Split').click();
+        const ids = state().physical[arm].map(p => p.id);
+        if (kind === 'mixed') w.storeTopology(arm, { connection: 'series', children: [{ connection: 'parallel', children: ids.slice(0, 2) }, ...ids.slice(2)] });
+        else set(arm + 'Connection', kind);
+      }
+      w.update();
+    };
+    // Independent Ohm's-law traversal, using the actual network connections.
+    function voltages(s) {
+      const result = new Map(), load = s.circuit.rl === null ? 0 : 1 / s.circuit.rl;
+      const mid = (s.circuit.vin / s.circuit.r1 - (s.circuit.iload || 0)) / (1 / s.circuit.r1 + 1 / s.circuit.r2 + load);
+      for (const arm of ['r1', 'r2']) {
+        const parts = new Map(s.physical[arm].map(p => [p.id, p]));
+        const resistance = node => typeof node === 'string' ? parts.get(node).resistance : node.connection === 'series' ? node.children.reduce((sum, child) => sum + resistance(child), 0) : 1 / node.children.reduce((sum, child) => sum + 1 / resistance(child), 0);
+        const visit = (node, v) => {
+          if (typeof node === 'string') { result.set(node, v); return; }
+          for (const child of node.children) visit(child, node.connection === 'parallel' ? v : v * resistance(child) / resistance(node));
+        };
+        visit(s.networks[arm] ? w.armTopology(arm) : s.physical[arm][0].id, arm === 'r1' ? s.circuit.vin - mid : mid);
+      }
+      return result;
+    }
+    function verify(label, expectedRating) {
+      const s = state(), v = voltages(s), settings = s.environment.settings;
+      for (const p of Object.values(s.physical).flat()) {
+        const voltage = v.get(p.id), rating = expectedRating(p), power = voltage * voltage / p.resistance;
+        const ps = power / (rating * (1 - settings.derating.powerPct / 100)) * 100;
+        const vs = Math.abs(voltage) / (p.vmax * (1 - settings.derating.voltagePct / 100)) * 100;
+        const metric = key => svg().querySelector(`[data-resistor-stress="${p.id}"] [data-stress-metric="${key}"] [data-stress-value]`).textContent;
+        assert(near(p.rating, rating) && near(p.voltage, voltage) && near(p.power, power) && near(p.stress.p, ps) && near(p.stress.v, vs), label + '/' + p.id + ': independent per-part voltage, power and rating produce both stresses');
+        assert([['p', ps], ['v', vs]].every(([key, expected]) => /^\d+\.\d{2}%$/.test(metric(key)) && Math.abs(parseFloat(metric(key)) - expected) <= .005000001), label + '/' + p.id + ': both SVG stress readouts refresh immediately');
+        assert(s.worst.byPart[p.id].p >= ps - 1e-8 && s.worst.byPart[p.id].v >= vs - 1e-8, label + '/' + p.id + ': full-interval stress bounds include the new nominal point');
+      }
+    }
+    // A manual value unsupported by either catalog still needs a package-sized power limit.
+    for (const size of ['0201', '0402']) for (const kind of ['single', 'series', 'parallel', 'mixed']) for (const mode of ['vout', 'vin', 'r1', 'r2', 'rl', 'tolerance']) {
+      await reset(); topology(kind);
+      for (const p of Object.values(state().physical).flat()) { value(p.id, '12.345k'); footprint(p.id, size); }
+      w.setOperatingCondition('maxC', '85'); set('loadType', 'current'); set('loadCurrent', '0'); set('loadCurrentTolerance', '.1'); set('solveFor', mode);
+      const expected = size === '0201' ? .05 * 40 / 55 : .05 * 65 / 80;
+      for (const arm of ['r1', 'r2']) if (mode !== arm) {
+        const id = state().physical[arm][0].id; value(id, '15.234k'); value(id, '18.765k');
+      }
+      assert(Object.values(state().physical).flat().every(p => !p.catalog && p.inputRating === .05), `${size}/${kind}/${mode}: raw package references stay 50 mW without invented MPNs`);
+      verify(`${size}/${kind}/${mode}`, () => expected);
+      w.setOperatingCondition('maxC', '70'); verify(`${size}/${kind}/${mode}/cooled`, () => .05);
+    }
+    // Exact catalog assignments retain their chosen power mode, base ambient and MPNs.
+    for (const fixture of [
+      ['vishay-tnpw-e3', '0201', 'general', .05, 125], ['vishay-tnpw-e3', '0201', 'power', .075, 155],
+      ['vishay-tnpw-e3', '0402', 'general', .07, 125], ['vishay-tnpw-e3', '0402', 'power', .105, 155],
+      ['vishay-tnpw-e3', '0402', 'advanced', .13, 175], ['vishay-eh-m55342', '11', 'rated', .05, 150]
+    ]) for (const kind of ['single', 'series', 'parallel', 'mixed']) {
+      await reset(); topology(kind);
+      const [familyId, pkg, mode, rated, zero] = fixture;
+      const candidate = w.ResistorParts.evaluate(catalog, familyId, { package: pkg, mode, resistanceOhms: 10000, tolerancePct: .1, tcrCode: 'E', packaging: familyId === 'vishay-tnpw-e3' ? 'ED' : 'TS', temperatureC: 70 });
+      for (const p of Object.values(state().physical).flat()) w.applyCatalogPart(candidate, p.id, true);
+      w.setOperatingCondition('maxC', '85'); set('loadType', 'current'); set('loadCurrentTolerance', '.1'); set('solveFor', 'vin');
+      w.eval('environmentSettings.derating={powerPct:20,voltagePct:25};update()');
+      for (const arm of ['r1', 'r2']) for (const id of state().physical[arm].map(p => p.id)) { value(id, '12k'); value(id, '15k'); }
+      assert(Object.values(state().physical).flat().every(p => p.catalog?.familyId === familyId && p.catalog.mode === mode && p.inputRating === rated && p.catalog.resistanceOhms === 15000 && w.ResistorParts.decode(catalog, familyId, p.mpn).resistanceOhms === 15000), fixture.join('/') + '/' + kind + ': repeated edits retain all assignments, raw ratings and power modes');
+      verify(fixture.join('/') + '/' + kind, () => rated * (zero - 85) / (zero - 70));
+      w.setOperatingCondition('maxC', '100'); verify(fixture.join('/') + '/' + kind + '/hotter', () => rated * (zero - 100) / (zero - 70));
+      w.setOperatingCondition('maxC', '70'); verify(fixture.join('/') + '/' + kind + '/cooled', () => rated);
+    }
+    await reset(); get('r1Multiple').click(); get('r1Split').click();
+    const pendingIds = state().physical.r1.map(p => p.id); get(pendingIds[3] + 'Auto').click();
+    footprint(pendingIds[0], '0201'); value(pendingIds[0], '12.345k');
+    assert(Number(get(pendingIds[0] + 'Power').value) === .05 && get(pendingIds[0] + 'Power').dataset.powerFootprint === '0201', 'A package change while another resistor is undefined saves the new power reference');
+    get(pendingIds[3] + 'Auto').checked = false; set(pendingIds[3] + 'R', '2.5');
+    w.setOperatingCondition('maxC', '85'); verify('Resolved pending construction', p => p.id === pendingIds[0] ? .05 * 40 / 55 : .25);
+    await reset(); value('r1', '12.345k'); footprint('r1', '0201');
+    w.editResistorConstruction('r1', 'r1', 'series'); w.closeSchematicEditor(false);
+    assert(state().physical.r1.every(p => p.powerReference === '0201' && p.inputRating === .05), 'Inserted series siblings inherit the package reference');
+    w.setOperatingCondition('maxC', '85'); verify('Inserted siblings', p => p.id === 'r2' ? .25 : .05 * 40 / 55);
+    const first = state().physical.r1[0].id; set(first + 'Power', '.125'); value(first, '15.234k');
+    assert(state().physical.r1[0].inputRating === .125 && state().physical.r1[0].rating === .125 && !get(first + 'Power').dataset.powerFootprint, 'An explicit manual power override survives value and temperature edits');
+    await reset(); value('r1', '12.345k'); footprint('r1', '0402'); w.setOperatingCondition('maxC', '125');
+    value('r1', '15.234k'); assert(state().physical.r1[0].rating === 0 && state().physical.r1[0].stress.p === Infinity && w.partFailures(state().physical.r1[0], state()).length > 0, 'Zero available package-reference power retains the edited value and marks FAIL');
+    w.setOperatingCondition('maxC', '70'); verify('Reference restored after zero limit', p => p.id === 'r1' ? .05 : .25);
+    await reset(); footprint('r1', '0201'); footprint('r2', '0201'); set('vin', '40'); value('r1', '20k');
+    assert(state().physical.r1[0].resistance === 20000 && state().physical.r1[0].catalog && state().physical.r1[0].stress.v > 100 && w.partFailures(state().physical.r1[0], state()).length > 0, 'An overstressed catalog value commits with refreshed stress and FAIL');
+    value('r1', '10k'); assert(!w.partFailures(state().physical.r1[0], state()).length, 'A valid value clears FAIL while retaining the selected package and MPN');
+    for (const width of [390, 1440]) {
+      frame.style.width = width + 'px'; await pause(); value('r1', '12k'); verify(width + 'px live edit', () => .05);
+      const snapshot = w.circuitFrameSnapshot(), saved = new DOMParser().parseFromString(snapshot.markup, 'image/svg+xml');
+      assert(!saved.querySelector('[data-inline-editor],input,select') && saved.querySelector('[data-resistor-stress="r1"]').textContent === svg().querySelector('[data-resistor-stress="r1"]').textContent, width + 'px: framed export contains the newly calculated stress');
+    }
+    const model = w.circuitExportModel(state(), 'vout'), report = w.circuitLtspiceReport(model);
+    assert(report.measurements.some(line => line.startsWith('.meas op Pstress_pct ')) && w.schematicBomTsv().includes(state().physical.r1[0].stress.v.toFixed(2) + '%'), 'LTspice and copied BOM use the edited circuit and stress');
+    await reset(); assert(!get('p1').dataset.powerFootprint && !w.eval('leaveWarningActive'), 'Reset restores clean default rating ownership');
+    assert(!errors.length, 'No runtime errors: ' + errors.join('; '));
+  } catch (error) { failures.push(error.stack); }
+  document.getElementById('results').textContent = JSON.stringify({ status: failures.length ? 'FAIL' : 'PASS', count: checks.length, failures, checks }, null, 2);
+});
+</script>
+</html>

@@ -1277,6 +1277,17 @@
       return limits.length ? Math.min(...limits) : !resistorCatalog && footprint === "0805" ? Number(byId("vmax1").defaultValue) : null;
     }
 
+    function packagePowerReference(footprint, settings = null) {
+      // Unassigned parts use the lower default-mode limit for the actual package.
+      const limits = resistorCatalog?.families.flatMap(family => family.packages.filter(pkg => pkg.case === footprint).map(pkg => {
+        const ratedPowerW = pkg.powerW[family.defaults.mode];
+        return settings ? ResistorEnvironment.allowedPower({ familyId: family.id, mode: family.defaults.mode, ratedPowerW, powerW: ratedPowerW }, settings) : ratedPowerW;
+      })).filter(value => Number.isFinite(value) && value >= 0) || [];
+      return limits.length ? Math.min(...limits) : null;
+    }
+
+    function partPowerInput(id) { return byId(/^r[12]$/.test(id) ? `p${id[1]}` : `${id}Power`); }
+
     function readWorkingVoltage(id, label, partId, footprint) {
       const value = readInput(id, label, true, true), input = byId(id);
       if (value !== null || input.dataset.voltageUnassessed === "true") return value;
@@ -1293,6 +1304,7 @@
       return {
         resistance: byId(`${id}R`).valueAsNumber * Number(byId(`${id}Unit`).value),
         rating: byId(`${id}Power`).valueAsNumber,
+        powerReference: byId(`${id}Power`).dataset.powerFootprint || null,
         tolerance: byId(`${id}Tol`).valueAsNumber,
         vmax: readWorkingVoltage(`${id}Vmax`, "Maximum working voltage", id, footprint),
         footprint
@@ -1324,6 +1336,7 @@
       byId(`${arm}Parts`).append(row);
       byId(`${id}R`).value = Number.isFinite(seed.resistance) ? seed.resistance / 1000 : "";
       byId(`${id}Power`).value = Number.isFinite(seed.rating) ? seed.rating : "";
+      if (seed.powerReference) byId(`${id}Power`).dataset.powerFootprint = seed.powerReference;
       byId(`${id}Tol`).value = Number.isFinite(seed.tolerance) ? seed.tolerance : "";
       const footprint = seed.footprint || seed.catalog?.case || "0805";
       footprintPreferences.set(id, footprint);
@@ -1339,6 +1352,7 @@
         appendPart(arm, {
           resistance: byId(arm).valueAsNumber * Number(byId(`${arm}Unit`).value),
           rating: Number(byId(`p${index}`).value),
+          powerReference: byId(`p${index}`).dataset.powerFootprint || null,
           tolerance: byId(`tolR${index}`).valueAsNumber,
           vmax: readWorkingVoltage(`vmax${index}`, "Maximum working voltage", arm, resistorFootprint({ id: arm })),
           footprint: appliedCatalogParts.get(arm)?.case || footprintPreferences.get(arm) || "0805"
@@ -1359,6 +1373,7 @@
           id, name,
           resistance: byId(`${id}Auto`).checked ? automaticChoices.get(id)?.resistanceOhms ?? (() => { throw new Error(`${name} is undefined. Use Choose automatic values, or enter a fixed resistance.`); })() : readInput(`${id}R`, `${name} resistance`, false, true, Number(byId(`${id}Unit`).value)),
           rating: readInput(`${id}Power`, `${name} power rating`, false, true),
+          powerReference: byId(`${id}Power`).dataset.powerFootprint || null,
           tolerance: mode === "tolerance" ? 0 : readTolerance(`${id}Tol`, `${name} tolerance`),
           vmax: readWorkingVoltage(`${id}Vmax`, `${name} maximum working voltage`, id, resistorFootprint({ id }))
         };
@@ -1715,10 +1730,14 @@
       const collect = budget => { budget.issues.forEach(issue => issues.add(issue)); budget.requiredGaps.forEach(issue => requiredGaps.add(issue)); estimated ||= budget.estimated; return budget; };
       for (const arm of ARMS) {
         for (const part of physical[arm]) {
+          // Save the input rating separately; edits must never persist a thermal reduction.
+          part.inputRating = part.rating;
           if (part.catalog && settings.basis === "ambient-estimate") {
             const powerW = ResistorEnvironment.allowedPower(part.catalog, settings);
             part.rating = Math.min(part.rating, powerW);
             part.catalog = { ...part.catalog, powerW, temperatureC: Math.max(part.catalog.temperatureC, settings.thermal.maxC) };
+          } else if (part.powerReference) {
+            part.rating = Math.min(part.rating, packagePowerReference(part.powerReference, settings) ?? part.rating);
           }
           if (Number.isFinite(part.power)) part.stress = stress(part.resistance, part.voltage, part.current, part.power, part.rating, part.vmax, settings);
           part.environment = collect(ResistorEnvironment.interval(part, settings));
@@ -1923,14 +1942,14 @@
       const part = ratingEditContext.part, powerPct = 100 - Number(byId("designPowerDerating").value), voltagePct = 100 - Number(byId("designVoltageDerating").value);
       const valid = [powerPct, voltagePct].every(value => Number.isFinite(value) && value >= 0 && value < 100), limits = designRatings(part.rating, part.vmax, { derating: { powerPct, voltagePct } });
       const catalog = part.catalog;
-      byId("ratingPartName").textContent = catalog ? catalog.mpn : `Manual ratings · manufacturer unassigned${part.vmax !== null && part.vmax === packageVoltageReference(resistorFootprint(part)) ? " · package voltage reference" : ""}`;
+      byId("ratingPartName").textContent = catalog ? catalog.mpn : `Manual ratings · manufacturer unassigned${part.powerReference ? " · package rating references" : part.vmax !== null && part.vmax === packageVoltageReference(resistorFootprint(part)) ? " · package voltage reference" : ""}`;
       const rows = byId("ratingLimitRows"); rows.replaceChildren();
-      for (const [label, rated, design] of [["Power", format(catalog?.ratedPowerW ?? part.rating, "W"), valid ? format(limits.power, "W") : "—"], ["Voltage", part.vmax == null ? "Not set" : format(part.vmax, "V"), !valid ? "—" : limits.voltage === null ? "Unassessed" : format(limits.voltage, "V")]]) {
+      for (const [label, rated, design] of [["Power", format(catalog?.ratedPowerW ?? part.inputRating ?? part.rating, "W"), valid ? format(limits.power, "W") : "—"], ["Voltage", part.vmax == null ? "Not set" : format(part.vmax, "V"), !valid ? "—" : limits.voltage === null ? "Unassessed" : format(limits.voltage, "V")]]) {
         const row = rows.insertRow(), name = document.createElement("th"); name.scope = "row"; name.textContent = label; row.append(name);
         for (const value of [rated, design]) row.insertCell().textContent = value;
       }
-      byId("ratingTemperature").hidden = !catalog || catalogSame(part.rating, catalog.ratedPowerW);
-      byId("ratingTemperature").textContent = catalog ? `Power is adjusted to ${format(part.rating, "W")} at ${catalog.temperatureC} °C before applying the selected percentage.` : "";
+      byId("ratingTemperature").hidden = !(catalog || part.powerReference) || catalogSame(part.rating, catalog?.ratedPowerW ?? part.inputRating);
+      byId("ratingTemperature").textContent = catalog || part.powerReference ? `Power is adjusted to ${format(part.rating, "W")} at ${catalog?.temperatureC ?? ratingEditContext.state.environment.settings.thermal.maxC} °C before applying the selected percentage.` : "";
       const failures = valid ? partFailures(part, ratingEditContext.state, { derating: { powerPct, voltagePct } }) : [];
       byId("ratingFailure").hidden = !failures.length;
       byId("ratingFailure").textContent = failures.length ? "FAIL · " + failures.join("; ") + ". Part retained." : "";
@@ -3272,7 +3291,7 @@
 
     function schematicCatalogCandidate(resistanceOhms) {
       const familyId = byId("schematicEditFamily").value; if (!familyId) return null;
-      const family = ResistorParts.family(resistorCatalog, familyId), chosen = schematicEditContext.part.catalog;
+      const family = ResistorParts.family(resistorCatalog, familyId), chosen = appliedCatalogParts.get(schematicEditContext.part.id) || schematicEditContext.part.catalog;
       const pkg = family.packages.find(pkg => pkg.code === byId("schematicEditFootprint").value), tcrCode = byId("schematicEditTcr").value;
       if (!pkg || !tcrCode || byId("schematicEditPartTolerance").value === "") throw new Error("Choose a supported footprint, TCR and tolerance.");
       const packing = family.packaging.filter(item => pkg.packagingCodes.includes(item.code) && (!item.tcrCodes || item.tcrCodes.includes(tcrCode)));
@@ -3282,6 +3301,12 @@
       const candidate = ResistorParts.evaluate(resistorCatalog, familyId, options);
       if (same && ["package", "tcrCode", "tolerancePct", "failureRate", "mode", "temperatureC", "packaging"].every(key => candidate[key] === chosen[key]) && catalogSame(candidate.resistanceOhms, chosen.resistanceOhms)) return { ...chosen };
       return candidate;
+    }
+
+    function manualSchematicPower(context = schematicEditContext) {
+      const footprint = byId("schematicEditFootprint").value, changed = footprint !== resistorFootprint(context.part);
+      const powerReference = changed ? footprint : context.part.powerReference || partPowerInput(context.part.id)?.dataset.powerFootprint || null;
+      return { rating: changed ? packagePowerReference(footprint) ?? context.part.inputRating ?? context.part.rating : context.part.inputRating ?? context.part.rating, powerReference };
     }
 
     function updateSchematicCatalogPreview() {
@@ -3294,10 +3319,11 @@
       try {
         const value = readInput("schematicEditValue", "Resistance", false, true, Number(byId("schematicEditUnit").value));
         const candidate = schematicCatalogCandidate(value);
-        byId("schematicEditPower").value = candidate?.powerW ?? context.part.rating;
-        byId("schematicEditPowerLabel").textContent = candidate ? `Allowed power at ${candidate.temperatureC} °C (W)` : "Current power rating (W)";
+        const manual = manualSchematicPower(context);
+        byId("schematicEditPower").value = candidate?.powerW ?? manual.rating;
+        byId("schematicEditPowerLabel").textContent = candidate ? `Allowed power at ${candidate.temperatureC} °C (W)` : manual.powerReference ? "Package power reference at 70 °C (W)" : "Current power rating (W)";
         if (candidate) byId("schematicEditVmax").value = candidate.workingVoltageV;
-        byId("schematicEditPartStatus").textContent = candidate ? `${candidate.mpn} · ${candidate.temperatureC} °C · ${candidate.mode} mode. Power and voltage limits come from the catalog.` : `${resistorCatalog ? "Choose a footprint or family to preview a catalog part." : "Catalog options are unavailable."} Manual mode retains the current power rating.`;
+        byId("schematicEditPartStatus").textContent = candidate ? `${candidate.mpn} · ${candidate.temperatureC} °C · ${candidate.mode} mode. Power and voltage limits come from the catalog.` : manual.powerReference ? "Conservative package reference; no manufacturer assigned. Power follows the operating temperature." : `${resistorCatalog ? "Choose a footprint or family to preview a catalog part." : "Catalog options are unavailable."} Manual mode retains the current power rating.`;
       } catch (error) {
         byId("schematicEditPartStatus").textContent = error.message;
         byId("schematicEditPower").value = byId("schematicEditFamily").value ? "" : context.part.rating;
@@ -3454,7 +3480,7 @@
     function schematicEditDraft(context) {
       const { state, kind, arm, part } = context;
       const circuit = { ...state.circuit }, tolerances = { ...state.tolerances };
-      const physical = Object.fromEntries(ARMS.map(arm => [arm, state.physical[arm].map(part => ({ ...part }))]));
+      const physical = Object.fromEntries(ARMS.map(arm => [arm, state.physical[arm].map(part => ({ ...part, rating: part.inputRating ?? part.rating, catalog: part.catalog ? appliedCatalogParts.get(part.id) || part.catalog : null }))]));
       const networks = Object.fromEntries(ARMS.map(arm => [arm, state.networks[arm] ? { ...state.networks[arm], parts: physical[arm] } : null]));
       const resistance = ["part", "arm", "load"].includes(kind);
       const value = context.locks.value ? kind === "part" ? part.resistance : kind === "source" ? circuit.vin : circuit[arm] : readInput("schematicEditValue", byId("schematicEditValueLabel").textContent, kind === "load", resistance, resistance ? Number(byId("schematicEditUnit").value) : 1);
@@ -3466,7 +3492,7 @@
         assignment = schematicCatalogCandidate(value);
         const tolerance = context.locks.tolerance ? part.tolerance : Number(byId("schematicEditPartTolerance").value);
         if (byId("schematicEditPartTolerance").value === "" || !Number.isFinite(tolerance) || tolerance < 0 || tolerance > 99.999) throw new Error("Choose a supported resistor tolerance.");
-        Object.assign(physical[arm].find(item => item.id === part.id), { resistance: assignment?.resistanceOhms ?? value, tolerance: assignment?.tolerancePct ?? tolerance, rating: assignment?.powerW ?? part.rating, vmax: assignment ? assignment.workingVoltageV : readInput("schematicEditVmax", "Working voltage", true, true), catalog: assignment || null, mpn: assignment?.mpn || null });
+        Object.assign(physical[arm].find(item => item.id === part.id), { resistance: assignment?.resistanceOhms ?? value, tolerance: assignment?.tolerancePct ?? tolerance, ...(assignment ? { rating: assignment.powerW, powerReference: null } : manualSchematicPower(context)), vmax: assignment ? assignment.workingVoltageV : readInput("schematicEditVmax", "Working voltage", true, true), catalog: assignment || null, mpn: assignment?.mpn || null });
       } else if (kind === "arm") {
         networks[arm].connection = byId("schematicEditConnection").value === "mixed" ? networks[arm].connection : byId("schematicEditConnection").value;
         const scale = value / networkEquivalent(physical[arm], networks[arm].connection).resistance;
@@ -3494,11 +3520,9 @@
       }
       for (const arm of ARMS) if (networks[arm]) tolerances[arm] = networkEquivalent(physical[arm], networks[arm].connection).tolerance;
       const environment = circuitEnvironment(mode, solved, tolerances, physical, networks, allowedErrorPct), bounds = environment.bounds;
-      const worst = environmentWorstStress(solved, tolerances, physical, networks, environment);
       const numbers = [...Object.values(result), ...Object.values(bounds).filter(value => value !== null)];
       for (const arm of ARMS) for (const item of analyzeParts(physical[arm], networks[arm]?.connection || "series", arm === "r1" ? result.v1 : result.vout, arm === "r1" ? result.i1 : result.i2)) {
-        if (assignment && item.id === part.id && Math.max(worst.byPart[item.id].p, worst.byPart[item.id].v) > 100 + 1e-9) throw new Error("This part exceeds its modeled power or working-voltage limit. Choose a larger footprint or change the circuit.");
-        numbers.push(item.resistance, item.voltage, item.current, item.power, ...Object.values(item.stress).filter(value => value !== null));
+        numbers.push(item.resistance, item.voltage, item.current, item.power, ...Object.values(item.stress).filter(value => value !== null && !(value === Infinity && item.rating === 0)));
         for (const rating of RATINGS) numbers.push(...Object.values(stress(item.resistance, item.voltage, item.current, item.power, rating.watts, item.vmax)).filter(value => value !== null));
       }
       if (numbers.some(number => !Number.isFinite(number))) throw new Error("These values exceed the calculator's numeric range. Use less extreme values.");
@@ -3530,11 +3554,15 @@
         }
         if (context.pending && context.kind === "part") {
           if (context.fingerprint !== JSON.stringify(workFormValues(form))) throw new Error("The circuit changed. Reopen this field.");
-          const value = readInput("schematicEditValue", "Resistance", false, true, Number(byId("schematicEditUnit").value)), assignment = schematicCatalogCandidate(value), id = context.part.id;
+          const value = readInput("schematicEditValue", "Resistance", false, true, Number(byId("schematicEditUnit").value)), assignment = schematicCatalogCandidate(value), id = context.part.id, manual = manualSchematicPower(context);
           const tolerance = Number(byId("schematicEditPartTolerance").value); if (!Number.isFinite(tolerance) || tolerance < 0 || tolerance >= 100) throw new Error("Choose a valid tolerance.");
           byId(`${id}R`).value = (assignment?.resistanceOhms ?? value) / Number(byId(`${id}Unit`).value); byId(`${id}Tol`).value = assignment?.tolerancePct ?? tolerance;
           byId(`${id}Auto`).checked = false; byId(`${id}R`).readOnly = false; footprintPreferences.set(id, assignment?.case || byId("schematicEditFootprint").value);
-          if (assignment) { appliedCatalogParts.set(id, assignment); byId(`${id}Power`).value = assignment.powerW; byId(`${id}Vmax`).value = assignment.workingVoltageV; } else appliedCatalogParts.delete(id);
+          const power = byId(`${id}Power`);
+          power.value = assignment?.powerW ?? manual.rating;
+          if (!assignment && manual.powerReference) power.dataset.powerFootprint = manual.powerReference; else delete power.dataset.powerFootprint;
+          byId(`${id}Vmax`).value = assignment ? assignment.workingVoltageV : byId("schematicEditVmax").value;
+          if (assignment) appliedCatalogParts.set(id, assignment); else appliedCatalogParts.delete(id);
           closeSchematicEditor(false); invalidateAutomaticDesign(); update(); focusSchematicEditorTarget(context); return;
         }
         if (context.state !== (pairPreviewState || schematicState)) throw new Error("The circuit changed while this editor was open. Cancel and reopen it.");
@@ -3552,8 +3580,10 @@
             const voltageInput = byId(multiple ? `${part.id}Vmax` : `vmax${index + 1}`);
             voltageInput.value = part.vmax ?? ""; voltageInput.dataset.voltageUnassessed = String(part.vmax === null);
             const power = byId(multiple ? `${part.id}Power` : `p${index + 1}`);
-            if (!multiple && ![...power.options].some(option => Number(option.value) === part.rating)) power.add(new Option(`${format(part.rating, "W")} · custom`, part.rating));
-            power.value = part.rating;
+            const rating = part.inputRating ?? part.rating;
+            if (!multiple && ![...power.options].some(option => Number(option.value) === rating)) power.add(new Option(`${format(rating, "W")} · custom`, rating));
+            power.value = rating;
+            if (!part.catalog && part.powerReference) power.dataset.powerFootprint = part.powerReference; else delete power.dataset.powerFootprint;
           }
         }
         byId("solveFor").value = draft.mode;
@@ -5249,6 +5279,7 @@
       const power = byId(multiple ? `${targetId}Power` : `p${index}`);
       if (!multiple && ![...power.options].some(option => Number(option.value) === candidate.powerW)) power.add(new Option(`${format(candidate.powerW, "W")} · catalog limit`, candidate.powerW));
       power.value = candidate.powerW;
+      delete power.dataset.powerFootprint;
       appliedCatalogParts.set(targetId, { ...candidate });
       designGeneration++;
       if (byId(`${targetId}Auto`)?.checked) { byId(`${targetId}Auto`).checked = false; automaticChoices.delete(targetId); }
@@ -5390,8 +5421,8 @@
         const vmax2 = networks.r2 ? null : readWorkingVoltage("vmax2", "R2 maximum working voltage", "r2", resistorFootprint({ id: "r2" }));
         const result = analyze(vin, r1, r2, rl, circuit.iload);
         const physical = {
-          r1: analyzeParts(networks.r1 ? networks.r1.parts : [{ id: "r1", name: "R1", resistance: r1, tolerance: tolerances.r1, rating: Number(byId("p1").value), vmax: vmax1 }], networks.r1 ? networks.r1.connection : "series", result.v1, result.i1),
-          r2: analyzeParts(networks.r2 ? networks.r2.parts : [{ id: "r2", name: "R2", resistance: r2, tolerance: tolerances.r2, rating: Number(byId("p2").value), vmax: vmax2 }], networks.r2 ? networks.r2.connection : "series", result.vout, result.i2)
+          r1: analyzeParts(networks.r1 ? networks.r1.parts : [{ id: "r1", name: "R1", resistance: r1, tolerance: tolerances.r1, rating: Number(byId("p1").value), powerReference: byId("p1").dataset.powerFootprint || null, vmax: vmax1 }], networks.r1 ? networks.r1.connection : "series", result.v1, result.i1),
+          r2: analyzeParts(networks.r2 ? networks.r2.parts : [{ id: "r2", name: "R2", resistance: r2, tolerance: tolerances.r2, rating: Number(byId("p2").value), powerReference: byId("p2").dataset.powerFootprint || null, vmax: vmax2 }], networks.r2 ? networks.r2.connection : "series", result.vout, result.i2)
         };
         for (const part of ARMS.flatMap(arm => physical[arm])) {
           const chosen = catalogAssignment(part);
@@ -5536,6 +5567,7 @@
     function circuitInputChanged(event) {
       const input = event.target;
       if (/^vmax[12]$/.test(input.id) || /^r[12]part\d+Vmax$/.test(input.id)) input.dataset.voltageUnassessed = String(input.value === "");
+      if (/^p[12]$/.test(input.id) || /^r[12]part\d+Power$/.test(input.id)) delete input.dataset.powerFootprint;
       if (input.id === "circuitTitle") { renderSchematic(); return; }
       if (input.id === "solveFor" && input.value === "pairs") { update(); return; }
       if (input.id === "solveFor" && !["vout", "pairs"].includes(input.value)) fixChosenAutomaticValues();
@@ -5722,6 +5754,7 @@
       closeSchematicEditor(false);
       operatingConditionError = "";
       for (const input of form.querySelectorAll("[data-voltage-unassessed]")) input.removeAttribute("data-voltage-unassessed");
+      for (const input of form.querySelectorAll("[data-power-footprint]")) input.removeAttribute("data-power-footprint");
       closeRatingDialog();
       environmentSettings = { ...environmentSettings, derating: { powerPct: 0, voltagePct: 0 } };
       appliedCatalogParts.clear();
