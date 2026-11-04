@@ -772,9 +772,9 @@ shows an inline error and keeps the previous valid settings.
 
 The temperature default remains −55 to +70 °C. Temperature drift includes the
 existing self-heating allowance (10 °C by default); catalog power also follows
-maximum ambient temperature. **Part TCR** uses each ordered part rating and
-25 ppm/°C for unassigned resistors/RL. Selecting a numeric TCR sets an engineering
-allowance: an assigned part's higher ordered TCR is retained, so this cannot
+maximum ambient temperature. TCR defaults to **25 ppm/°C** and offers numeric
+choices only. The selected TCR sets an engineering allowance: an assigned part's
+higher ordered TCR is retained, so this cannot
 improve its actual specification or silently change its MPN. Unassigned parts
 and RL use the selected TCR. Reference temperatures remain 20 °C for TNPW and
 25 °C for M55342/unassigned parts.

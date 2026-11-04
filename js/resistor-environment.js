@@ -38,7 +38,7 @@
   function estimateDefaults() {
     return {
       basis: "ambient-estimate",
-      thermal: { enabled: true, minC: -55, maxC: 70, selfHeatingC: 10, manualTcrPpm: 25, manualReferenceC: 25, tcrPpm: null },
+      thermal: { enabled: true, minC: -55, maxC: 70, selfHeatingC: 10, manualTcrPpm: 25, manualReferenceC: 25, tcrPpm: 25 },
       radiation: { enabled: false, allowancePct: 0 },
       aging: { enabled: true, model: "allowance", tnpwPct: null, milPct: null, manualPct: 0.5, allowancePct: null }
     };
@@ -153,7 +153,8 @@
     const orderedTcr = profile ? catalog.tcrPpm : settings.thermal.manualTcrPpm;
     // A shared allowance may be more conservative than the ordered part, but
     // cannot improve an assigned part's actual TCR rating.
-    const tcrPpm = settings.thermal.tcrPpm == null ? orderedTcr : profile ? Math.max(orderedTcr, settings.thermal.tcrPpm) : settings.thermal.tcrPpm, referenceC = profile?.referenceC ?? settings.thermal.manualReferenceC;
+    const selectedTcr = settings.thermal.tcrPpm ?? settings.thermal.manualTcrPpm ?? 25;
+    const tcrPpm = profile ? Math.max(orderedTcr, selectedTcr) : selectedTcr, referenceC = profile?.referenceC ?? settings.thermal.manualReferenceC;
     const thermalPct = settings.thermal.enabled ? tcrPpm * Math.max(Math.abs(settings.thermal.minC - referenceC), Math.abs(settings.thermal.maxC + settings.thermal.selfHeatingC - referenceC)) / 10000 : 0;
     const key = profile?.key || "manual", override = settings.aging.allowancePct ?? settings.aging[`${key}Pct`], benchmark = profile?.life[catalog.mode]?.[0];
     const agingRelativePct = !settings.aging.enabled ? 0 : override ?? benchmark?.[1] ?? settings.aging.manualPct;
