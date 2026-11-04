@@ -762,25 +762,31 @@ inverse modes, common-tolerance solving, candidate previews and both search path
 
 ## Operating conditions and tolerance estimates
 
-One **OPERATING CONDITIONS** box below VTOP replaces the Mission, Thermal,
-Radiation and Aging boxes. Click it or press Enter/Space to set the ambient
-minimum and maximum. The default is −55 to +70 °C. No orbit, dose, mission life,
-or family-specific radiation classification is required to use the calculator.
+The **OPERATING CONDITIONS** box below VTOP contains five native dropdowns directly
+on the SVG: minimum and maximum ambient temperature, TCR in ppm/°C, radiation
+tolerance and aging tolerance. No operating-conditions dialog or dialog link is
+present. Changes apply immediately and invalidate previous design solutions;
+selecting the current value preserves the results. Common values are populated,
+and existing nonstandard values remain selectable. Invalid temperature ordering
+shows an inline error and keeps the previous valid settings.
 
-**Drift estimates · automatic by part** is collapsed by default. It contains a
-10 °C self-heating allowance, combined aging/radiation percentage overrides for
-each family, and the unassigned-resistor/RL assumptions (25 ppm/°C at 25 °C,
-±0.5% drift). The self-heating rise is an editable allowance, not a calculation
-of PCB thermal resistance. Temperature drift uses ambient minimum through
-ambient maximum plus that rise. The entered range must fit the catalog TCR
-range; catalog power is conservatively derated for the maximum ambient too.
+The temperature default remains −55 to +70 °C. Temperature drift includes the
+existing self-heating allowance (10 °C by default); catalog power also follows
+maximum ambient temperature. **Part TCR** uses each ordered part rating and
+25 ppm/°C for unassigned resistors/RL. Selecting a numeric TCR sets an engineering
+allowance: an assigned part's higher ordered TCR is retained, so this cannot
+improve its actual specification or silently change its MPN. Unassigned parts
+and RL use the selected TCR. Reference temperatures remain 20 °C for TNPW and
+25 °C for M55342/unassigned parts.
 
-The part's ordered TCR sets temperature drift, using TNPW's 20 °C or M55342's
-25 °C reference. Select TCR and screening/reliability in the existing part
-options. Reliability codes do not change drift or imply radiation qualification.
-No matched-TCR cancellation or statistical reduction is assumed.
+Radiation and aging are separate resistance percentages. Radiation defaults to
+0% (no added radiation allowance); this is an assumption, not radiation
+qualification. **Auto** shows the largest approximate aging percentage and keeps
+the existing per-part aging defaults.
+A numeric aging selection replaces the entire aging estimate, including any
+fixed-ohm endurance term. It does not add a second aging term.
 
-Automatic combined drift allowances use these catalog endurance benchmarks:
+Automatic aging estimates use these catalog endurance benchmarks:
 
 | Family / operating mode | Automatic allowance | Benchmark basis |
 | --- | --- | --- |
@@ -789,43 +795,29 @@ Automatic combined drift allowances use these catalog endurance benchmarks:
 | TNPW advanced | ±(0.2% of resistance + 0.05 Ω) | 1000 h endurance |
 | M55342 | ±0.5% | MIL 2000 h endurance requirement at 70 °C |
 
-These are **engineering estimates**, not a lifetime prediction or guaranteed
-mission worst case. TNPW's absolute-ohm term makes the percentage allowance
-larger for low values and stays absolute in the interval arithmetic. The
-M55342 default uses the MIL limit rather than lower typical Vishay performance.
-The operating mode, loading and published test conditions remain relevant to
-the benchmark; no lifetime, temperature acceleration or radiation response is
-extrapolated. An override replaces the whole family allowance, including the
-automatic fixed-ohm term, rather than adding a second copy of the drift.
+These are engineering estimates, not a mission-life or radiation qualification.
+TNPW's absolute-ohm term remains absolute in the bounds and therefore has more
+effect on low resistances. Reliability/screening codes do not improve a drift
+estimate or imply radiation qualification. Radiation is a separately selected
+allowance; no dose-to-drift response is assumed or inferred from catalog aging
+tests. Unknown future families still need their own estimate data.
 
-Neither datasheet publishes a universal dose-to-resistance-drift curve. The
-automatic benchmark includes **no characterized radiation contribution**.
-Use the combined allowance override for an application-specific aging/radiation
-estimate. The UI and exports explicitly retain this distinction; a screening
-code is not converted into an invented radiation coefficient. Unknown future
-families need their own data, rather than silently inheriting these benchmarks.
-
-For each physical part, with initial tolerance `t`, combined relative drift `a`,
-fixed drift `b` ohms and thermal drift `h` expressed as fractions:
+For initial tolerance `t`, aging fraction `a`, fixed aging drift `b` ohms,
+thermal fraction `h`, and independent radiation fraction `r`:
 
 `h = |TCR| × max(|ambient_min − Tref|, |ambient_max + rise − Tref|) / 10⁶`
 
-`Rmin = (Rnom × (1 − t) × (1 − a) − b) × (1 − h)`
+`Rmin = (Rnom × (1 − t) × (1 − a) − b) × (1 − h) × (1 − r)`
 
-`Rmax = (Rnom × (1 + t) × (1 + a) + b) × (1 + h)`
+`Rmax = (Rnom × (1 + t) × (1 + a) + b) × (1 + h) × (1 + r)`
 
-The calculator propagates these intervals through the actual series/parallel
-networks and load, then includes VTOP tolerance in VMID and stress estimates.
-Ordering tolerances and BOM part numbers remain unchanged. Circuit
-characteristics shows initial, thermal and combined drift terms, the compounded
-resistance limit and the resulting VMID range. All results using these defaults
-remain labeled as estimates, even when the complete configured interval fits
-the design target.
-
-Save changed conditions to invalidate previous search results. Cancel or save
-unchanged values to preserve them. Inputs share leave-page protection and apply
-across modes. SVG, Markdown, LTspice annotations and search CSV preserve the
-conditions and estimate scope. LTspice `.op` remains the nominal ideal circuit.
+Every calculator mode and solution search propagates these bounds through the
+physical series/parallel network, source and load. Find VTOP retains its inverse
+trip-voltage interpretation. Assigned parts stay in place; limits exceeded under
+the new conditions show FAIL. Circuit characteristics and SVG, Markdown, LTspice
+annotations and CSV exports preserve the independent terms. Static circuit images
+show the selected values and omit the native controls. LTspice `.op` remains the
+nominal ideal circuit. Inputs participate in leave-page protection.
 
 References reviewed 1 November 2026: [TNPW e3](https://www.vishay.com/docs/28758/tnpw_e3.pdf)
 (pp. 2, 12), [E/H M55342](https://www.vishay.com/docs/60018/eh.pdf) (pp. 1, 3).

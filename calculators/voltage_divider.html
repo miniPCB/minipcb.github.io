@@ -127,8 +127,6 @@
     .schematic-field.schematic-editable:focus-visible > rect { stroke-width: 2; }
     .environment-card:hover > rect, .environment-card:focus-visible > rect { fill: #1e3547; stroke: #8addff; stroke-width: 2; }
     .environment-card:focus-visible { outline: none; }
-    .environment-preset { width: 100%; }
-    .environment-custom-label { margin-top: 8px; font-size: 0.75rem; color: var(--muted); }
     #environmentPresetSources { overflow-wrap: anywhere; }
     .schematic-edit-surface { cursor: pointer; }
     .resistor-menu { position: fixed; z-index: 20; padding: 8px; min-width: 230px; max-width: calc(100vw - 24px); border: 0; border-radius: 12px; background: #1a2939; color: var(--text); box-shadow: 0 12px 36px #0008; }
@@ -185,6 +183,7 @@
     .schematic-inline { display: flex; gap: 3px; align-items: center; color: #c6e3ff; font: 14px ui-monospace, monospace; }
     .schematic-inline :is(select, input, button) { box-sizing: border-box; height: var(--schematic-control-height, 28px); min-height: 0; margin: 0; padding: 2px 5px; border: 1px solid #75d5ff; border-radius: 6px; background: #1e3547; color: inherit; font: inherit; }
     .schematic-inline select { width: 100%; }
+    .operating-condition-select { box-sizing: border-box; width: 100%; height: 30px; min-height: 0; margin: 0; padding: 3px 5px; border: 1px solid #365166; border-radius: 6px; background: #142535; color: #c6e3ff; font: 12px ui-monospace, monospace; cursor: pointer; }
     .schematic-inline input { width: 0; flex: 1; }
     .schematic-inline button { padding: 2px 7px; cursor: pointer; }
     .schematic-inline-error { margin-top: 4px; padding: 6px; border-radius: 5px; background: #502b35; color: #ffd1d1; font: 12px system-ui, sans-serif; }
@@ -552,21 +551,6 @@
         </details>
         <p id="ratingError" class="note" role="alert" hidden></p>
         <div class="actions"><button class="btn btn-accent" type="submit">Apply</button><button id="ratingCancel" class="btn" type="button">Cancel</button></div>
-      </form>
-    </dialog>
-    <dialog id="environmentEditor" class="schematic-editor" aria-labelledby="environmentHeading" aria-describedby="environmentHelp">
-      <form id="environmentForm" class="form-grid" novalidate>
-        <h3 id="environmentHeading">Operating conditions</h3>
-        <p id="environmentHelp" class="hint">Set the ambient operating range. Temperature drift follows each part’s ordered TCR; aging and radiation use a combined drift estimate.</p>
-        <div id="environmentFields" class="form-grid"></div>
-        <details id="environmentEstimates"><summary>Drift estimates · automatic by part</summary>
-          <div id="environmentEstimateFields" class="form-grid"></div>
-          <p class="hint">TNPW general: ±(0.05% + 0.01 Ω), adjusted for power mode and resistance. M55342: ±0.5% MIL endurance benchmark. Overrides replace the complete aging / radiation allowance.</p>
-          <p class="hint">Defaults are endurance benchmarks, not lifetime or radiation qualification. Neither family publishes a dose-to-drift curve; radiation is not modeled automatically. Increase the combined allowance using applicable data. Reliability codes do not change drift.</p>
-          <p id="environmentPresetSources" class="hint">Benchmarks: <a href="https://www.vishay.com/docs/28758/tnpw_e3.pdf" target="_blank" rel="noopener">TNPW</a> · <a href="https://www.vishay.com/docs/60018/eh.pdf" target="_blank" rel="noopener">M55342</a>.</p>
-        </details>
-        <p id="environmentError" class="error" role="alert" hidden></p>
-        <div class="actions"><button id="environmentSave" class="btn btn-accent" type="submit">Save conditions</button><button id="environmentCancel" class="btn" type="button">Cancel</button></div>
       </form>
     </dialog>
     <dialog id="calculatorDetails" class="schematic-editor calculator-details" data-view="inputs" aria-labelledby="calculatorDetailsHeading">
@@ -1034,7 +1018,7 @@
     ];
     const form = document.getElementById("dividerForm");
     const byId = id => document.getElementById(id);
-    let environmentSettings = { ...ResistorEnvironment.estimateDefaults(), derating: { powerPct: 0, voltagePct: 0 } }, initialEnvironmentWork = JSON.stringify(environmentSettings), environmentEditContext = null, ratingEditContext = null;
+    let environmentSettings = { ...ResistorEnvironment.estimateDefaults(), derating: { powerPct: 0, voltagePct: 0 } }, initialEnvironmentWork = JSON.stringify(environmentSettings), ratingEditContext = null, operatingConditionError = "";
     let initialCircuitWork = null, schematicDraftWork = null, leaveWarningActive = false;
     const initialPairWork = new Map();
 
@@ -1049,7 +1033,6 @@
       if (initialCircuitWork === null) return false;
       return JSON.stringify(workFormValues(form)) !== initialCircuitWork
         || JSON.stringify(environmentSettings) !== initialEnvironmentWork
-        || environmentEditContext && JSON.stringify(workFormValues(byId("environmentForm"))) !== environmentEditContext.draft
         || ratingEditContext && JSON.stringify(workFormValues(byId("ratingForm"))) !== ratingEditContext.draft
         || workFormValues(byId("pairForm")).some(([id, ...value]) => JSON.stringify(value) !== initialPairWork.get(id))
         || appliedCatalogParts.size > 0 || footprintPreferences.size > 0 || catalogDesignVmid !== null || pairSpec !== null || pairComparisons.size > 0 || pairConstruction !== null
@@ -1070,83 +1053,6 @@
       leaveWarningActive = active;
       if (active) window.addEventListener("beforeunload", confirmCircuitLeave);
       else window.removeEventListener("beforeunload", confirmCircuitLeave);
-    }
-
-    function environmentPresetChoices(effect, key) {
-      if (key.endsWith("Pct")) return { empty: "Automatic · catalog benchmark", values: [0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2].map(value => [value, `±${value}% · combined allowance`]) };
-      const values = key === "minC" ? [-55, -40, -20, 0, 20, 25] : key === "maxC" ? [25, 55, 70, 85, 105, 125] : key === "selfHeatingC" ? [0, 5, 10, 20, 30] : key === "manualTcrPpm" ? [10, 15, 25, 50, 100, 200, 300] : [20, 25];
-      const unit = key === "manualTcrPpm" ? "ppm/°C" : "°C";
-      return { empty: "Not set", values: values.map(value => [value, `${value} ${unit}`]) };
-    }
-
-    function addEnvironmentPresets(group, caption, input, effect, key, choices = environmentPresetChoices(effect, key)) {
-      const select = document.createElement("select"), customLabel = document.createElement("label");
-      select.id = `${input.id}Preset`; select.className = "environment-preset"; caption.htmlFor = select.id;
-      select.setAttribute("aria-describedby", choices.helpId || "environmentPresetSources");
-      select.add(new Option(choices.empty, ""));
-      for (const [value, label] of choices.values) select.add(new Option(label, String(value)));
-      select.add(new Option("Custom…", "custom"));
-      select.value = [...select.options].some(option => option.value === input.value) ? input.value : "custom";
-      customLabel.className = "environment-custom-label"; customLabel.htmlFor = input.id; customLabel.textContent = `Custom: ${caption.textContent}`;
-      const showCustom = () => { input.hidden = customLabel.hidden = select.value !== "custom"; };
-      select.addEventListener("change", () => {
-        if (select.value !== "custom") input.value = select.value;
-        showCustom(); if (!input.hidden) input.focus();
-      });
-      input.addEventListener("input", () => { select.value = "custom"; showCustom(); });
-      showCustom(); group.append(select, customLabel, input);
-    }
-
-    function openEnvironmentEditor() {
-      if (byId("environmentEditor").open) return;
-      const fields = byId("environmentFields"), estimates = byId("environmentEstimateFields");
-      fields.replaceChildren(); estimates.replaceChildren();
-      const definitions = [
-        ["thermal", "minC", "Minimum ambient temperature (°C)", fields],
-        ["thermal", "maxC", "Maximum ambient temperature (°C)", fields],
-        ["thermal", "selfHeatingC", "Resistor self-heating allowance (°C)", estimates],
-        ["aging", "tnpwPct", "TNPW · aging / radiation allowance ± (%)", estimates],
-        ["aging", "milPct", "M55342 · aging / radiation allowance ± (%)", estimates],
-        ["thermal", "manualTcrPpm", "Unassigned resistors / RL · TCR (ppm/°C)", estimates],
-        ["thermal", "manualReferenceC", "Unassigned resistors / RL · reference (°C)", estimates],
-        ["aging", "manualPct", "Unassigned resistors / RL · drift allowance ± (%)", estimates]
-      ];
-      for (const [effect, key, label, parent] of definitions) {
-        const group = document.createElement("div"), caption = document.createElement("label"), input = document.createElement("input");
-        group.className = "field"; caption.textContent = label;
-        input.id = `environment_${effect}_${key}`; input.type = "number"; input.step = "any";
-        input.min = ["minC", "maxC", "manualReferenceC"].includes(key) ? "-273.15" : "0";
-        input.value = environmentSettings[effect][key] ?? ""; input.dataset.environmentEffect = effect; input.dataset.environmentKey = key;
-        group.append(caption); addEnvironmentPresets(group, caption, input, effect, key); parent.append(group);
-      }
-      byId("environmentEstimates").open = false;
-      byId("environmentError").hidden = true;
-      environmentEditContext = { returnKey: "environment-conditions", fingerprint: JSON.stringify(environmentSettings), draft: JSON.stringify(workFormValues(byId("environmentForm"))) };
-      byId("environmentEditor").showModal(); fields.querySelector("select").focus();
-    }
-
-    function closeEnvironmentEditor() {
-      byId("environmentEditor").close(); environmentEditContext = null;
-      byId("liveSchematic").querySelector('[data-schematic-edit="environment-conditions"]')?.focus({ preventScroll: true });
-      refreshLeaveWarning();
-    }
-
-    function saveEnvironment(event) {
-      event.preventDefault();
-      try {
-        if (!environmentEditContext || environmentEditContext.fingerprint !== JSON.stringify(environmentSettings)) throw new Error("Environmental settings changed. Cancel and reopen this editor.");
-        const next = JSON.parse(JSON.stringify(environmentSettings));
-        for (const input of byId("environmentForm").querySelectorAll("[data-environment-key]")) {
-          if (input.validity.badInput) throw new Error("Enter finite operating-condition inputs.");
-          next[input.dataset.environmentEffect][input.dataset.environmentKey] = input.value === "" ? null : input.valueAsNumber;
-        }
-        ResistorEnvironment.validate(next);
-        if (JSON.stringify(next) !== JSON.stringify(environmentSettings)) {
-          environmentSettings = next; invalidateAutomaticDesign();
-          invalidatePairSearch("Operating conditions changed. Find Design Solutions to update the results."); update();
-        }
-        closeEnvironmentEditor();
-      } catch (error) { byId("environmentError").textContent = error.message; byId("environmentError").hidden = false; }
     }
 
     const resultTabs = [...byId("resultTabs").querySelectorAll('[role="tab"]')];
@@ -1817,7 +1723,7 @@
     function environmentScope(environment) {
       if (!environment) return "Initial tolerance only";
       if (!Object.values(environment.settings).some(effect => effect.enabled)) return "Initial tolerance only";
-      if (environment.settings.basis === "ambient-estimate") return "Estimated tolerance interval · initial tolerance + ambient/TCR + aging/radiation allowance. Radiation response is not modeled; catalog benchmarks are not mission qualification." + (environment.issues.length ? " " + environment.issues.join("; ") : "");
+      if (environment.settings.basis === "ambient-estimate") return "Estimated tolerance interval · initial tolerance + ambient/TCR + separate radiation and aging allowances. No radiation dose-response model is assumed; catalog benchmarks are not mission qualification." + (environment.issues.length ? " " + environment.issues.join("; ") : "");
       return [environment.settings.mission ? "Mission planning assumptions" : "", environment.estimated ? "Modeled interval · aging estimate" : "Configured drift interval", environment.issues.length ? `Uncharacterized: ${environment.issues.join("; ")}` : "All configured resistance-drift terms covered"].filter(Boolean).join(". ");
     }
 
@@ -2238,16 +2144,46 @@
       return height;
     }
 
+    function setOperatingCondition(key, value) {
+      const next = JSON.parse(JSON.stringify(environmentSettings)), defaults = ResistorEnvironment.estimateDefaults();
+      next.basis = "ambient-estimate";
+      next.thermal = { ...defaults.thermal, ...next.thermal };
+      next.thermal.manualTcrPpm ??= 25; next.thermal.manualReferenceC ??= 25;
+      next.radiation = { ...defaults.radiation, ...next.radiation };
+      next.aging = { ...defaults.aging, ...next.aging }; next.aging.manualPct ??= 0.5;
+      try {
+        if (value === "" || !["minC", "maxC", "tcrPpm", "radiationPct", "agingPct"].includes(key)) throw new Error("Choose an available value.");
+        const number = value === "auto" ? null : Number(value);
+        if (["minC", "maxC"].includes(key)) { next.thermal[key] = number; next.thermal.enabled = true; }
+        else if (key === "tcrPpm") { next.thermal.tcrPpm = number; next.thermal.enabled = true; }
+        else if (key === "radiationPct") { next.radiation.allowancePct = number; next.radiation.enabled = number > 0; }
+        else { next.aging.allowancePct = number; next.aging.enabled = true; }
+        ResistorEnvironment.validate(next);
+        operatingConditionError = "";
+        if (JSON.stringify(next) !== JSON.stringify(environmentSettings)) {
+          if (schematicEditContext?.inline) closeSchematicEditor(false);
+          environmentSettings = next; invalidateAutomaticDesign();
+          invalidatePairSearch("Operating conditions changed. Find Design Solutions to update the results."); update();
+        }
+      } catch (error) {
+        operatingConditionError = next.thermal.minC > next.thermal.maxC ? "Minimum must not exceed maximum." : error.message;
+        renderSchematic();
+      }
+      byId("liveSchematic").querySelector(`[data-operating-condition="${key}"]`)?.focus({ preventScroll: true });
+      refreshLeaveWarning();
+    }
+
     function environmentReportRows(state) {
       const settings = state?.environment?.settings || environmentSettings;
       const allowance = (key, automatic) => settings.aging[key] === null ? automatic : `±${percent(settings.aging[key])} override`;
+      const radiationAllowance = settings.basis === "ambient-estimate" ? `±${percent(settings.radiation.enabled ? settings.radiation.allowancePct ?? 0 : 0)} resistance allowance` : "Configured per-part radiation bounds (see the resistance table)";
       return [
         ...(state?.circuit && DividerCurrentLoad.enabled(state.circuit) ? [["Load current", `${currentText(state.circuit.iload)} ±${currentText(state.circuit.iloadTolerance)} (absolute); positive toward ground. Independent of resistor drift.`]] : []),
         ...(state?.environment?.sourceTolerance ? [["Calculated VTOP tolerance", state.environment.sourceTolerance.feasible === null ? "Unassessed: the resistor/load interval is not fully characterized." : `Trip-voltage range ${format(state.bounds.vinMin, "V", voltageDigits(state))} to ${format(state.bounds.vinMax, "V", voltageDigits(state))}; maximum deviation ${state.environment.sourceTolerance.deviation === null ? format(state.environment.sourceTolerance.absolute, "V") : `±${percent(state.tolerances.vin)}`}. Includes VMID threshold tolerance, every resistor's initial/temperature/aging/radiation interval, and load uncertainty.`]] : []),
         ["Ambient temperature", `${settings.thermal.minC} to ${settings.thermal.maxC} °C`],
-        ["Temperature drift", `Ordered part TCR / reference; +${settings.thermal.selfHeatingC} °C self-heating allowance. Unassigned/RL: ${settings.thermal.manualTcrPpm} ppm/°C at ${settings.thermal.manualReferenceC} °C.`],
-        ["Aging / radiation allowance", `TNPW: ${allowance("tnpwPct", "automatic 1000 h endurance benchmark: general ±(0.05% + 0.01 Ω), power ±(0.1% + 0.01 Ω), advanced ±(0.2% + 0.05 Ω)")}; M55342: ${allowance("milPct", "automatic ±0.5% MIL 2000 h endurance benchmark at 70 °C")}; unassigned/RL: ${allowance("manualPct", "not set")}. Estimated combined allowance, not a lifetime or dose rating.`],
-        ["Radiation assumption", "No automatic dose-response estimate. Catalog benchmarks contain no characterized radiation allowance; a custom combined allowance must cover the intended radiation exposure. Screening/reliability codes do not predict resistance drift."],
+        ["Temperature drift", `${settings.thermal.tcrPpm == null ? "Ordered part TCR" : `At least ${settings.thermal.tcrPpm} ppm/°C; higher ordered part TCR retained`} / part reference; +${settings.thermal.selfHeatingC} °C self-heating allowance. Unassigned/RL: ${settings.thermal.tcrPpm ?? settings.thermal.manualTcrPpm} ppm/°C at ${settings.thermal.manualReferenceC} °C.`],
+        ["Radiation tolerance", `${radiationAllowance}; independent of aging. No automatic dose-response estimate or radiation qualification is inferred.`],
+        ["Aging tolerance", settings.aging.allowancePct != null ? `±${percent(settings.aging.allowancePct)} resistance allowance for every part; replaces the automatic endurance estimate.` : `TNPW: ${allowance("tnpwPct", "automatic 1000 h endurance benchmark: general ±(0.05% + 0.01 Ω), power ±(0.1% + 0.01 Ω), advanced ±(0.2% + 0.05 Ω)")}; M55342: ${allowance("milPct", "automatic ±0.5% MIL 2000 h endurance benchmark at 70 °C")}; unassigned/RL: ${allowance("manualPct", "not set")}. Estimated aging allowance, not a lifetime rating.`],
         ["Scope", environmentScope(state?.environment)]
       ];
     }
@@ -2255,20 +2191,46 @@
     function renderEnvironmentBoxes(parent, state, x, y) {
       const settings = state?.environment?.settings || environmentSettings;
       const panel = schematicShape(parent, "g", { "data-environment": "conditions", class: "environment-card" });
-      const background = schematicInfoBox(panel, x, y, 224, 166); background.setAttribute("stroke", "#6a8ca5"); background.setAttribute("pointer-events", "all");
+      const height = operatingConditionError ? 248 : 222;
+      schematicInfoBox(panel, x, y, 224, height).setAttribute("stroke", "#6a8ca5");
       schematicText(panel, x + 14, y + 25, "OPERATING CONDITIONS", 15, "#75d5ff");
-      schematicText(panel, x + 14, y + 52, "Ambient temperature", 13, "#a8bece");
-      schematicText(panel, x + 14, y + 78, `${settings.thermal.minC} to ${settings.thermal.maxC} °C`, 22, "#eaf6ff");
-      schematicText(panel, x + 14, y + 108, "TCR + drift estimate", 14, "#c6d7e5");
-      const edited = settings.aging.tnpwPct !== null || settings.aging.milPct !== null || settings.aging.manualPct !== 0.5;
-      schematicText(panel, x + 14, y + 140, edited ? "Custom drift estimate" : "Automatic drift estimate", 12, "#ffd083");
+      const tolerances = [0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 5];
+      const partTcrs = [...new Set(ARMS.flatMap(arm => state?.physical[arm] || []).map(part => part.catalog?.tcrPpm ?? settings.thermal.manualTcrPpm).filter(Number.isFinite))];
+      const partTcr = partTcrs.length === 1 ? `Part: ${partTcrs[0]} ppm` : "Part TCR";
+      const agingValues = [...ARMS.flatMap(arm => state?.physical[arm] || []).map(part => part.environment?.agingPct), state?.environment?.load?.agingPct].filter(Number.isFinite);
+      const agingEstimate = settings.aging.allowancePct == null && agingValues.length ? `Auto ~±${percent(Math.max(...agingValues))}` : "Part estimate";
+      const fields = [
+        ["minC", "Min °C", settings.thermal.minC, [-55, -40, -20, 0, 20, 25], value => `${value} °C`],
+        ["maxC", "Max °C", settings.thermal.maxC, [25, 55, 70, 85, 105, 125], value => `${value} °C`],
+        ["tcrPpm", "TCR", settings.thermal.tcrPpm ?? "auto", ["auto", 10, 15, 25, 50, 100, 200, 300], value => value === "auto" ? partTcr : `${value} ppm/°C`],
+        ["radiationPct", "Radiation", settings.radiation.enabled ? settings.radiation.allowancePct ?? 0 : 0, tolerances, value => `±${value}%`],
+        ["agingPct", "Aging", settings.aging.allowancePct ?? "auto", ["auto", ...tolerances], value => value === "auto" ? agingEstimate : `±${value}%`]
+      ];
+      fields.forEach(([key, label, value, choices, describe], index) => {
+        const top = y + 40 + index * 34, left = x + 84, width = 126, text = describe(value);
+        const field = schematicShape(panel, "g", { "data-environment-field": key });
+        schematicText(field, x + 14, top + 20, label, key === "radiationPct" ? 11 : 12, "#a8bece");
+        schematicShape(field, "rect", { x: left, y: top, width, height: 30, rx: 6, fill: "#142535", stroke: "#365166" });
+        schematicText(field, left + 6, top + 20, text, Math.min(13, (width - 12) / (text.length * 0.62)), "#c6e3ff");
+        const object = schematicShape(field, "foreignObject", { x: left, y: top, width, height: 30, "data-schematic-controls": "" });
+        const select = document.createElement("select"); select.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"); select.className = "operating-condition-select";
+        select.dataset.operatingCondition = key; select.setAttribute("aria-label", { minC: "Minimum ambient temperature", maxC: "Maximum ambient temperature", tcrPpm: "TCR allowance in ppm per degree C", radiationPct: "Radiation resistance tolerance", agingPct: "Aging resistance tolerance" }[key]);
+        for (const choice of [...new Set([...choices, value])]) select.add(new Option(describe(choice), String(choice)));
+        select.value = String(value); select.addEventListener("change", () => setOperatingCondition(key, select.value)); object.append(select);
+        if (key === "tcrPpm") select.title = "Part TCR uses each ordered rating (25 ppm/°C for unassigned parts). A selected allowance retains any higher ordered TCR.";
+        if (key === "radiationPct") select.title = "Estimated resistance change due to radiation; independent of aging. No dose-response model is assumed.";
+        if (key === "agingPct") select.title = "Auto shows the largest approximate per-part aging estimate, using each family's endurance benchmark. A selected percentage replaces the complete aging allowance.";
+      });
+      if (operatingConditionError) {
+        const error = schematicShape(panel, "g", { role: "alert", "data-environment-error": "", "data-schematic-controls": "" });
+        schematicText(error, x + 14, y + 238, operatingConditionError, Math.min(10, 196 / (operatingConditionError.length * 0.62)), "#ff8e8e");
+      }
       schematicShape(panel, "title").textContent = environmentReportRows(state).map(([name, value]) => `${name}: ${value}`).join(". ");
-      schematicEditable(panel, "environment-conditions", "ambient operating temperature and drift estimates");
-      return y + 178;
+      return y + height + 12;
     }
 
     function environmentPartRows(state) {
-      const rows = [["Reference", "Initial tolerance", "Temperature drift", "Separate radiation term (excluded)", "Aging / radiation allowance", "Aging fixed term (ohm)", "Rmin (ohm)", "Rmax (ohm)"]];
+      const rows = [["Reference", "Initial tolerance", "Temperature drift", "Radiation tolerance", "Aging tolerance", "Aging fixed term (ohm)", "Rmin (ohm)", "Rmax (ohm)"]];
       const add = (name, budget) => { if (budget) rows.push([name, ...["initialPct", "thermalPct", "radiationPct", "agingRelativePct"].map(key => budget[key] === null ? "Uncharacterized" : `±${percent(budget[key])}`), budget.agingOhms ?? "Uncharacterized", budget.min, budget.max]); };
       for (const arm of ARMS) for (const part of state?.physical[arm] || []) add(part.name, part.environment);
       add("RL", state?.environment?.load);
@@ -2505,8 +2467,8 @@
         ["VTOP tolerance", environment.sourceTolerance?.feasible === null ? "Unassessed" : environment.sourceTolerance?.deviation === null ? `±${format(environment.sourceTolerance.absolute, "V")}` : `±${percent(state.tolerances.vin)}`, "stackSource", "Known-source variation is applied separately to the resistor intervals. Find VTOP propagates VMID threshold and load uncertainty through the resistor intervals; this is the larger trip-voltage endpoint deviation."],
         ["Initial R tolerance", summary("initialPct"), "stackInitial", description + detail("initialPct")],
         ["Thermal R drift", summary("thermalPct", "thermal"), "stackThermal", description + detail("thermalPct")],
-        ...(settings.basis === "ambient-estimate" ? [] : [["Radiation R drift", summary("radiationPct", "radiation"), "stackRadiation", description + detail("radiationPct")]]),
-        ["Aging / radiation allowance", summary("agingPct", "aging"), "stackAging", description + "Equivalent percent includes each part's fixed-ohm endurance term. " + detail("agingPct")],
+        ["Radiation R drift", summary("radiationPct", "radiation"), "stackRadiation", description + detail("radiationPct")],
+        ["Aging tolerance", summary("agingPct", "aging"), "stackAging", description + "Equivalent percent includes each part's fixed-ohm endurance term. " + detail("agingPct")],
         ["Combined R limit", summary("effectivePct"), "stackCombined", description + "Largest deviation from nominal after compounding the configured terms; fixed aging ohms remain absolute. Missing terms are not qualified as zero. " + detail("effectivePct") + ". " + environmentScope(environment)],
         ["VMID range", `${format(state.bounds.min, "V", voltageDigits(state))} to ${format(state.bounds.max, "V", voltageDigits(state))}`, "stackVmid", (environment.sourceTolerance ? "Known threshold interval used to calculate the VTOP trip-voltage range. " : "Modeled output interval from VTOP tolerance and the complete resistor stack, using the actual series/parallel network and load. ") + environmentScope(environment)]
       ];
@@ -2863,7 +2825,7 @@
       const diagram = ["flowchart TB", '  GND(("GND"))', '  VTOP(("VTOP"))', '  VMID(("VMID"))', `  GND -->|"V1 ${state.circuit.vin} V"| VTOP`, ...edges.map(edge => `  ${edge.from === "0" ? "GND" : edge.from} -->|"${edge.name} ${edge.part.resistance} ohm"| ${edge.to === "0" ? "GND" : edge.to}`)];
       if (state.circuit.rl !== null) diagram.push(`  VMID -->|"RL ${state.circuit.rl} ohm"| GND`);
       if (DividerCurrentLoad.enabled(state.circuit)) diagram.push(`  VMID -->|"ILOAD ${state.circuit.iload} A, +/-${state.circuit.iloadTolerance} A"| GND`);
-      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Operating Point Information", "", table([["Quantity", "Nominal value"], ...operatingPoint]), "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Environmental tolerance stack", "", table([["Effect", "Assumption / estimate"], ...environmentReportRows(state)]), "", "Resistance intervals compound independent percentage limits. Aging keeps any fixed ohms separate: Raged,min = Rnom * (1-initial/100) * (1-aging_relative/100) - aging_ohms; upper uses plus signs. Thermal/radiation factors then apply to that aged interval. The combined aging/radiation allowance is an estimate based on catalog endurance benchmarks or custom inputs; no radiation dose-response or mission-life guarantee is inferred. No cancellation, matching or RSS is assumed. Film temperature uses ambient plus the stated self-heating allowance. Known VTOP tolerance covers source variation; Find VTOP propagates VMID threshold uncertainty into the required source range.", "", table(environmentPartRows(state)), "", `Sources: ${Object.values(ResistorEnvironment.sources).join(" ; ")}`, "", "## Circuit connections", "", state.environment?.sourceTolerance ? `V1: VTOP to ground (0), ${state.circuit.vin} V DC nominal. Trip-voltage limits: ${state.environment.sourceTolerance.feasible ? `${state.bounds.vinMin} to ${state.bounds.vinMax} V` : "unassessed"}; these are calculated threshold limits, not an independent source tolerance.` : `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", DividerCurrentLoad.enabled(state.circuit) ? `ILOAD: ${state.circuit.iload} A from VMID to ground, absolute tolerance ±${currentText(state.circuit.iloadTolerance)}. Negative current injects into VMID. The .op simulation uses nominal current; the calculator bounds include the absolute current interval.` : state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Pstress is power / design power limit × 100%; Vstress is absolute voltage drop / design voltage limit × 100%. Design limits use the shared percentages of manufacturer rating reported above. Both limits apply independently. A missing working-voltage rating is unassessed (—), not a power-derived limit. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
+      return ["# Voltage divider — current circuit export", "", state.pair ? "Selected resistor combination preview. This circuit has not been applied to the work form." : "Circuit currently displayed in the calculator SVG.", "", `Analysis performed (UTC): ${state.analyzedAt}`, "", "[Voltage divider calculator](https://www.minipcb.com/calculators/voltage_divider.html)", "", "## Operating Point Information", "", table([["Quantity", "Nominal value"], ...operatingPoint]), "", "## Circuit characteristics", "", table([["Characteristic", "Value"], ...characteristics]), "", "## Environmental tolerance stack", "", table([["Effect", "Assumption / estimate"], ...environmentReportRows(state)]), "", "Resistance intervals compound independent percentage limits. Aging keeps any fixed ohms separate: Raged,min = Rnom * (1-initial/100) * (1-aging_relative/100) - aging_ohms; upper uses plus signs. Thermal/radiation factors then apply to that aged interval. Aging uses a catalog endurance estimate or selected percentage; radiation is a separate estimated percentage. No radiation dose-response or mission-life guarantee is inferred. No cancellation, matching or RSS is assumed. Film temperature uses ambient plus the stated self-heating allowance. Known VTOP tolerance covers source variation; Find VTOP propagates VMID threshold uncertainty into the required source range.", "", table(environmentPartRows(state)), "", `Sources: ${Object.values(ResistorEnvironment.sources).join(" ; ")}`, "", "## Circuit connections", "", state.environment?.sourceTolerance ? `V1: VTOP to ground (0), ${state.circuit.vin} V DC nominal. Trip-voltage limits: ${state.environment.sourceTolerance.feasible ? `${state.bounds.vinMin} to ${state.bounds.vinMax} V` : "unassessed"}; these are calculated threshold limits, not an independent source tolerance.` : `V1: VTOP to ground (0), ${state.circuit.vin} V DC, ±${state.tolerances.vin}% source tolerance.`, "", DividerCurrentLoad.enabled(state.circuit) ? `ILOAD: ${state.circuit.iload} A from VMID to ground, absolute tolerance ±${currentText(state.circuit.iloadTolerance)}. Negative current injects into VMID. The .op simulation uses nominal current; the calculator bounds include the absolute current interval.` : state.circuit.rl === null ? "RL: open circuit; no load resistor is included in the netlist or LTspice schematic." : `RL: ${state.circuit.rl} ohm from VMID to ground, ±${state.tolerances.rl}%. Load rating is not checked.`, "", table(connectivity), "", "```mermaid", ...diagram, "```", "", "## Parts list and electrical part stress", "", table(model.bom), "", "Part stresses above use the nominal operating point. Pstress is power / design power limit × 100%; Vstress is absolute voltage drop / design voltage limit × 100%. Design limits use the shared percentages of manufacturer rating reported above. Both limits apply independently. A missing working-voltage rating is unassessed (—), not a power-derived limit. Exact-family matches and nearest-value recommendations are labeled separately from selected MPNs; recommendations are not substituted into this circuit.", "", "## Nominal SPICE netlist", "", "```spice", model.netlist.trim(), "```", "", "The LTspice export uses these physical resistors, node connections, source and load values for an ideal nominal DC operating point (.op). Tolerances, ratings and part numbers are annotations; they do not implement tolerance sweeps, temperature drift or failure models. The calculator's VMID interval and stress method are reported above.", ""].join("\n");
     }
 
     function updateCircuitDownloads(state, mode) {
@@ -3394,7 +3356,6 @@
         const control = byId("liveSchematic").querySelector(`[data-schematic-edit="${key}"][data-edit-focus="power"]`);
         if (control) openSchematicEditor(control, true); return;
       }
-      if (key.startsWith("environment-")) { openEnvironmentEditor(); return; }
       if (focus === "value" && locks.value || focus === "tolerance" && locks.tolerance) return;
       if (byId("solveFor").value === "pairs") { openPairSchematicEditor(key, focus, inline ? node : null); return; }
       const state = pairPreviewState || schematicState || pendingConstructionState();
@@ -5707,15 +5668,12 @@
     byId("schematicEditValue").addEventListener("input", updateSchematicCatalogPreview);
     byId("schematicEditCancel").addEventListener("click", closeSchematicEditor);
     byId("schematicEditor").addEventListener("cancel", event => { event.preventDefault(); closeSchematicEditor(); });
-    byId("environmentForm").addEventListener("submit", saveEnvironment);
     byId("ratingForm").addEventListener("submit", saveDesignDerating);
     for (const id of ["designPowerDerating", "designVoltageDerating"]) byId(id).addEventListener("input", updateRatingLimits);
     byId("ratingFamily").addEventListener("change", configureRatingReference);
     byId("ratingMode").addEventListener("change", renderRatingReference);
     byId("ratingCancel").addEventListener("click", closeRatingDialog);
     byId("ratingDialog").addEventListener("cancel", event => { event.preventDefault(); closeRatingDialog(); });
-    byId("environmentCancel").addEventListener("click", closeEnvironmentEditor);
-    byId("environmentEditor").addEventListener("cancel", event => { event.preventDefault(); closeEnvironmentEditor(); });
     byId("circuitChoose").addEventListener("click", () => { window.automaticDesignReady = chooseAutomaticValues(); });
     byId("circuitCancelSearch").addEventListener("click", () => byId("pairCancel").click());
     byId("calculatorDetailsClose").addEventListener("click", closeCalculatorDetails);
@@ -5738,6 +5696,7 @@
     // The reset event precedes the browser restoring each control's default value.
     form.addEventListener("reset", () => setTimeout(() => {
       closeSchematicEditor(false);
+      operatingConditionError = "";
       closeRatingDialog();
       environmentSettings = { ...environmentSettings, derating: { powerPct: 0, voltagePct: 0 } };
       appliedCatalogParts.clear();
@@ -5775,7 +5734,6 @@
     for (const type of ["input", "change", "click", "submit"]) document.addEventListener(type, () => queueMicrotask(refreshLeaveWarning));
     document.addEventListener("reset", () => setTimeout(refreshLeaveWarning, 0));
     byId("schematicEditor").addEventListener("close", refreshLeaveWarning);
-    byId("environmentEditor").addEventListener("close", refreshLeaveWarning);
     window.addEventListener("pageshow", refreshLeaveWarning);
     window.resistorCatalogReady = initializeCatalog().then(ready => {
       // Catalog selects arrive asynchronously; preserve any inputs edited while loading.

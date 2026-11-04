@@ -38,9 +38,9 @@
   function estimateDefaults() {
     return {
       basis: "ambient-estimate",
-      thermal: { enabled: true, minC: -55, maxC: 70, selfHeatingC: 10, manualTcrPpm: 25, manualReferenceC: 25 },
-      radiation: { enabled: false },
-      aging: { enabled: true, model: "allowance", tnpwPct: null, milPct: null, manualPct: 0.5 }
+      thermal: { enabled: true, minC: -55, maxC: 70, selfHeatingC: 10, manualTcrPpm: 25, manualReferenceC: 25, tcrPpm: null },
+      radiation: { enabled: false, allowancePct: 0 },
+      aging: { enabled: true, model: "allowance", tnpwPct: null, milPct: null, manualPct: 0.5, allowancePct: null }
     };
   }
   function validate(settings) {
@@ -55,6 +55,9 @@
       }
       if (thermal.minC > thermal.maxC) throw new Error("Minimum ambient temperature must not exceed maximum ambient temperature.");
       for (const key of ["tnpwPct", "milPct", "manualPct"]) finite(aging[key], "Drift allowance", 0, 99.999);
+      if (thermal.tcrPpm !== undefined) finite(thermal.tcrPpm, "TCR allowance");
+      for (const effect of [radiation, aging]) if (effect.allowancePct !== undefined) finite(effect.allowancePct, "Resistance drift allowance", 0, 99.999);
+      if (radiation.enabled && !Number.isFinite(radiation.allowancePct)) throw new Error("Select a finite radiation resistance allowance.");
       if (aging.manualPct === null) throw new Error("Enter a drift allowance for unassigned resistors and RL.");
       return settings;
     }
@@ -147,22 +150,26 @@
   function estimateInterval(part, settings) {
     const catalog = part.catalog || part, profile = profiles[catalog.familyId];
     const resistance = part.resistance ?? part.resistanceOhms, initialPct = part.tolerance ?? part.tolerancePct;
-    const tcrPpm = profile ? catalog.tcrPpm : settings.thermal.manualTcrPpm, referenceC = profile?.referenceC ?? settings.thermal.manualReferenceC;
+    const orderedTcr = profile ? catalog.tcrPpm : settings.thermal.manualTcrPpm;
+    // A shared allowance may be more conservative than the ordered part, but
+    // cannot improve an assigned part's actual TCR rating.
+    const tcrPpm = settings.thermal.tcrPpm == null ? orderedTcr : profile ? Math.max(orderedTcr, settings.thermal.tcrPpm) : settings.thermal.tcrPpm, referenceC = profile?.referenceC ?? settings.thermal.manualReferenceC;
     const thermalPct = settings.thermal.enabled ? tcrPpm * Math.max(Math.abs(settings.thermal.minC - referenceC), Math.abs(settings.thermal.maxC + settings.thermal.selfHeatingC - referenceC)) / 10000 : 0;
-    const key = profile?.key || "manual", override = settings.aging[`${key}Pct`], benchmark = profile?.life[catalog.mode]?.[0];
+    const key = profile?.key || "manual", override = settings.aging.allowancePct ?? settings.aging[`${key}Pct`], benchmark = profile?.life[catalog.mode]?.[0];
     const agingRelativePct = !settings.aging.enabled ? 0 : override ?? benchmark?.[1] ?? settings.aging.manualPct;
     const agingOhms = settings.aging.enabled && override === null ? benchmark?.[2] ?? 0 : 0;
+    const radiationPct = settings.radiation.enabled ? settings.radiation.allowancePct ?? 0 : 0;
     const issues = [], requiredGaps = [];
     if (catalog.familyId && !profile) requiredGaps.push("No drift estimate profile for this resistor family");
     if (profile && settings.thermal.enabled && (settings.thermal.minC < profile.minC || settings.thermal.maxC + settings.thermal.selfHeatingC > profile.maxC)) requiredGaps.push("Temperature range including self heating is outside the catalog TCR range");
     if (profile && !benchmark && settings.aging.enabled && override === null) requiredGaps.push("No drift benchmark for this catalog operating mode");
-    const terms = [initialPct, thermalPct, agingRelativePct];
+    const terms = [initialPct, thermalPct, radiationPct, agingRelativePct];
     if (!Number.isFinite(resistance) || resistance <= 0 || terms.some(value => !Number.isFinite(value) || value < 0 || value >= 100)) throw new Error("The resistor drift stack must keep every resistance finite and positive.");
-    const min = (resistance * (1 - initialPct / 100) * (1 - agingRelativePct / 100) - agingOhms) * (1 - thermalPct / 100);
-    const max = (resistance * (1 + initialPct / 100) * (1 + agingRelativePct / 100) + agingOhms) * (1 + thermalPct / 100);
+    const min = (resistance * (1 - initialPct / 100) * (1 - agingRelativePct / 100) - agingOhms) * (1 - thermalPct / 100) * (1 - radiationPct / 100);
+    const max = (resistance * (1 + initialPct / 100) * (1 + agingRelativePct / 100) + agingOhms) * (1 + thermalPct / 100) * (1 + radiationPct / 100);
     if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0) throw new Error("The environmental resistance interval exceeds the numeric range.");
     issues.push(...requiredGaps);
-    return { min, max, initialPct, thermalPct, radiationPct: 0, agingPct: agingRelativePct + 100 * agingOhms / resistance, agingRelativePct, agingOhms, tcrPpm, referenceC, estimated: true, issues, requiredGaps, qualified: false, effectivePct: Math.max(resistance - min, max - resistance) / resistance * 100 };
+    return { min, max, initialPct, thermalPct, radiationPct, agingPct: agingRelativePct + 100 * agingOhms / resistance, agingRelativePct, agingOhms, tcrPpm, referenceC, estimated: true, issues, requiredGaps, qualified: false, effectivePct: Math.max(resistance - min, max - resistance) / resistance * 100 };
   }
   function allowedPower(catalog, settings) {
     const zeroAtC = profiles[catalog.familyId]?.filmC[catalog.mode];
