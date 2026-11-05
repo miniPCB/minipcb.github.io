@@ -62,4 +62,5 @@ HTML, Markdown, or JavaScript are valid.
 
 ## Notes
 - Avoid touching files not needed for the task.
+- Prefer European (IEC rectangular) resistor symbols in miniPCB schematic and calculator drawings.
 - For calculator work, including related JavaScript and exports, read [calculators/AGENTS.md](calculators/AGENTS.md).

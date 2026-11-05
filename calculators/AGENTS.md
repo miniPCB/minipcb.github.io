@@ -12,9 +12,12 @@ not add a permission or confirmation step to an authorized task.
   Keep an entire net, its branches, junction dots and terminal outlines consistent.
 - Component symbols retain their role colors: green for known, red for calculated,
   yellow for missing data. Do not extend symbol color along arbitrary wire runs.
+- Use European (IEC rectangular) resistor symbols for miniPCB calculator drawings,
+  including divider parts and the load. Keep an open load visible as a faint,
+  unfilled resistor with its Open label; it remains electrically absent.
 - Use 20 px symbol leads before changing to net color. This is the calculator's
   drawing convention, not a physical lead-length specification. Resistor bodies
-  are 52 px tall; keep both leads equal and the zigzag at its normal size.
+  are 52 px tall; keep both leads equal and the rectangular body at its normal size.
 - Center resistor symbols within their allocated rows. Grow the drawing for
   series, parallel and mixed networks; keep all resistor symbols vertical.
 - Draw connection dots at real three-way and four-way junctions. Do not add dots

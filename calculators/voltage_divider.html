@@ -2303,7 +2303,7 @@
         const bodyTop = y + (model.height - 52) / 2, bodyBottom = bodyTop + 52;
         wire(`M${x + 28} ${y}V${bodyTop - SYMBOL_LEAD_LENGTH}`, terminals.top, symbol);
         schematicShape(body, "path", { d: `M${x + 28} ${bodyTop - SYMBOL_LEAD_LENGTH}v${SYMBOL_LEAD_LENGTH}`, "data-symbol-lead": "top" });
-        schematicShape(body, "path", { d: `M${x + 28} ${bodyTop}l-10 5 20 10 -20 10 20 10 -20 10 10 7`, "data-resistor-core": "" });
+        schematicShape(body, "rect", { x: x + 18, y: bodyTop, width: 20, height: 52, rx: 2, "data-resistor-core": "" });
         schematicShape(body, "path", { d: `M${x + 28} ${bodyBottom}v${SYMBOL_LEAD_LENGTH}`, "data-symbol-lead": "bottom" });
         wire(`M${x + 28} ${bodyBottom + SYMBOL_LEAD_LENGTH}V${y + model.height}`, terminals.bottom, symbol);
         const info = schematicShape(symbol, "g", { "data-schematic-info": part.id, "data-part-fields": "", ...(model.seriesPart ? { "data-series-part-fields": "" } : {}) });
@@ -2411,19 +2411,21 @@
       schematicText(drawing, mainX + 28, bottom + 46, "GND", 16, NET_COLOR);
       const load = schematicShape(drawing, "g", { id: "schematicLoad", fill: "none", stroke: NET_COLOR, "stroke-width": 3 });
       const model = state?.circuit || readLoad(pairMode ? "pair" : "", null, false, false), currentLoad = DividerCurrentLoad.enabled(model), hasLoad = currentLoad || !!state && state.circuit.rl !== null;
-      const loadLead = hasLoad ? SYMBOL_LEAD_LENGTH : 0;
+      const loadLead = SYMBOL_LEAD_LENGTH;
       schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${loadX}V${loadY - 30 - loadLead}`, fill: "none", stroke: netColor, "stroke-width": 3, "stroke-dasharray": "7 6", "data-wire-net": "VMID" });
       schematicShape(load, "path", { d: `M${loadX} ${loadY + 30 + loadLead}V${bottom + 4}`, "data-wire-net": "GND" });
       schematicGround(load, loadX, bottom + 24);
       const loadSymbol = schematicRole(schematicShape(load, "g", { "data-load-body": "" }), "rl", roles, "stroke");
-      if (hasLoad) for (const [end, start] of [["top", loadY - 30 - SYMBOL_LEAD_LENGTH], ["bottom", loadY + 30]]) schematicShape(loadSymbol, "path", { d: `M${loadX} ${start}v${SYMBOL_LEAD_LENGTH}`, "data-symbol-lead": end });
+      for (const [end, start] of [["top", loadY - 30 - SYMBOL_LEAD_LENGTH], ["bottom", loadY + 30]]) schematicShape(loadSymbol, "path", { d: `M${loadX} ${start}v${SYMBOL_LEAD_LENGTH}`, "data-symbol-lead": end });
       if (currentLoad) {
         schematicShape(loadSymbol, "circle", { cx: loadX, cy: loadY, r: 30, fill: "#142535" });
         schematicShape(loadSymbol, "path", { d: `M${loadX} ${loadY - 16}v32m-7-8 7 8 7-8` });
         load.dataset.schematicLoadSymbol = "current";
         schematicShape(load, "title").textContent = "Positive IL flows from VMID toward ground; negative IL injects current into VMID.";
-      } else if (hasLoad) { schematicShape(loadSymbol, "rect", { x: loadX - 11, y: loadY - 30, width: 22, height: 60, rx: 2, "pointer-events": "all" }); load.dataset.schematicLoadSymbol = "rl"; }
-      else schematicShape(load, "rect", { x: loadX - 15, y: loadY - 30, width: 30, height: 60, fill: "transparent", stroke: "none", "pointer-events": "all" });
+      } else {
+        schematicShape(loadSymbol, "rect", { x: loadX - 11, y: loadY - 30, width: 22, height: 60, rx: 2, "pointer-events": "all" }); load.dataset.schematicLoadSymbol = "rl";
+        if (!hasLoad) { load.dataset.loadOpen = ""; schematicShape(load, "title").textContent = "Open load; the faint resistor is not connected. Click to change the load model."; }
+      }
       schematicEditable(load, "load-type", "load model", "type");
       const loadInfo = schematicShape(drawing, "g", { "data-schematic-info": "load" });
       schematicInfoBox(loadInfo, loadX + 36, loadY - 42, 148, hasLoad ? 112 : 78);
@@ -3042,7 +3044,7 @@
       byId("schematicR2Value").textContent = Number.isFinite(state?.circuit.r2) ? format(state.circuit.r2, "Ω") : "—";
       byId("schematicLoadValue").textContent = state ? loadText(state.circuit) : "—";
       for (const [id, key] of [["schematicR1Value", "r1"], ["schematicR2Value", "r2"], ["schematicLoadValue", "rl"]]) schematicRole(byId(id), key, roles);
-      byId("schematicLoad").setAttribute("opacity", roles.rl === "solving" || state && (DividerCurrentLoad.enabled(state.circuit) || state.circuit.rl !== null) ? "1" : "0.35");
+      byId("schematicLoad").setAttribute("opacity", state && (DividerCurrentLoad.enabled(state.circuit) || state.circuit.rl !== null) ? "1" : "0.35");
       const bottom = renderSchematicTable(partsGroup, state?.pending || state?.constructionSetup ? null : state, roles, detailsX, detailsY, detailsWidth, alternativeParts);
       let contentBottom = Math.max(controlsBottom + 20, bottom);
       if (mode === "pairs" && pairItems.length) {

@@ -252,11 +252,14 @@ and the divider returning to ground through RBOT. The displayed supply symbol
 does not change the DC source used in the circuit calculation or LTspice export.
 Each physical RTOP/RBOT resistor is annotated with its resistance, tolerance,
 footprint size, power rating, Pstress and Vstress. The drawing contains
-one vertical symbol per physical RTOP/RBOT resistor in the work form. Series
+one vertical European (IEC rectangular) symbol per physical RTOP/RBOT resistor in
+the work form, matching the load resistor style. Series
 parts stack vertically; parallel branches sit side by side, with every resistor
 still vertical. Nested networks use the same layout without rotating or squeezing
-their symbols. A finite RL adds its load symbol; an open RL has no
-resistor symbol. Each drawn part shows a large value field and two controls for
+their symbols. A finite RL shows its load symbol at full opacity. An open RL
+retains a faint, unfilled rectangular symbol with normal leads and an **Open**
+label; this is a visual placeholder and adds no load to the calculation or
+LTspice circuit. Each drawn part shows a large value field and two controls for
 tolerance (for example, **±1%**) and package size (for example, **0805**), without
 repeating Tol. or Footprint labels. Editable tolerance and footprint pills have a subtle
 border and dropdown chevron; the entire pill area is clickable and keyboard accessible.
