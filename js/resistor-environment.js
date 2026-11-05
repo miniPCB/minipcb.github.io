@@ -39,8 +39,8 @@
     return {
       basis: "ambient-estimate",
       thermal: { enabled: true, minC: -55, maxC: 70, selfHeatingC: 10, manualTcrPpm: 25, manualReferenceC: 25, tcrPpm: 25 },
-      radiation: { enabled: false, allowancePct: 0 },
-      aging: { enabled: true, model: "allowance", tnpwPct: null, milPct: null, manualPct: 0.5, allowancePct: null }
+      radiation: { enabled: true, allowancePct: 0.1 },
+      aging: { enabled: true, model: "allowance", tnpwPct: null, milPct: null, manualPct: 0.1, allowancePct: 0.1 }
     };
   }
   function validate(settings) {

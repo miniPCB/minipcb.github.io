@@ -781,14 +781,14 @@ improve its actual specification or silently change its MPN. Unassigned parts
 and RL use the selected TCR. Reference temperatures remain 20 °C for TNPW and
 25 °C for M55342/unassigned parts.
 
-Radiation and aging are separate resistance percentages. Radiation defaults to
-0% (no added radiation allowance); this is an assumption, not radiation
-qualification. **Auto** shows the largest approximate aging percentage and keeps
-the existing per-part aging defaults.
-A numeric aging selection replaces the entire aging estimate, including any
-fixed-ohm endurance term. It does not add a second aging term.
+Radiation and aging are separate, editable resistance percentages, both defaulting
+to **±0.1%** for every part and RL. Both dropdowns offer numeric values only.
+The selected aging percentage replaces the entire aging estimate, including any
+fixed-ohm endurance term. It does not add a second aging term. These are design
+allowances, not radiation or lifetime qualification.
 
-Automatic aging estimates use these catalog endurance benchmarks:
+Older configurations with per-family aging estimates retain these catalog
+endurance benchmarks; new designs use the selected numeric allowance:
 
 | Family / operating mode | Automatic allowance | Benchmark basis |
 | --- | --- | --- |

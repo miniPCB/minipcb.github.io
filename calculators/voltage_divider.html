@@ -2193,10 +2193,10 @@
       next.thermal = { ...defaults.thermal, ...next.thermal };
       next.thermal.manualTcrPpm ??= 25; next.thermal.manualReferenceC ??= 25;
       next.radiation = { ...defaults.radiation, ...next.radiation };
-      next.aging = { ...defaults.aging, ...next.aging }; next.aging.manualPct ??= 0.5;
+      next.aging = { ...defaults.aging, ...next.aging }; next.aging.manualPct ??= defaults.aging.manualPct;
       try {
-        if (value === "" || value === "auto" && key !== "agingPct" || !["minC", "maxC", "tcrPpm", "radiationPct", "agingPct"].includes(key)) throw new Error("Choose an available value.");
-        const number = value === "auto" ? null : Number(value);
+        if (value === "" || !Number.isFinite(Number(value)) || !["minC", "maxC", "tcrPpm", "radiationPct", "agingPct"].includes(key)) throw new Error("Choose an available value.");
+        const number = Number(value);
         if (["minC", "maxC"].includes(key)) { next.thermal[key] = number; next.thermal.enabled = true; }
         else if (key === "tcrPpm") { next.thermal.tcrPpm = number; next.thermal.enabled = true; }
         else if (key === "radiationPct") { next.radiation.allowancePct = number; next.radiation.enabled = number > 0; }
@@ -2238,14 +2238,12 @@
       schematicInfoBox(panel, x, y, 224, height).setAttribute("stroke", "#6a8ca5");
       schematicText(panel, x + 14, y + 25, "OPERATING CONDITIONS", 15, "#75d5ff");
       const tolerances = [0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 5];
-      const agingValues = [...ARMS.flatMap(arm => state?.physical[arm] || []).map(part => part.environment?.agingPct), state?.environment?.load?.agingPct].filter(Number.isFinite);
-      const agingEstimate = settings.aging.allowancePct == null && agingValues.length ? `Auto ~±${percent(Math.max(...agingValues))}` : "Part estimate";
       const fields = [
         ["minC", "Min °C", settings.thermal.minC, [-55, -40, -20, 0, 20, 25], value => `${value} °C`],
         ["maxC", "Max °C", settings.thermal.maxC, [25, 55, 70, 85, 105, 125], value => `${value} °C`],
         ["tcrPpm", "TCR", settings.thermal.tcrPpm ?? settings.thermal.manualTcrPpm ?? 25, [10, 15, 25, 50, 100, 200, 300], value => `${value} ppm/°C`],
         ["radiationPct", "Radiation", settings.radiation.enabled ? settings.radiation.allowancePct ?? 0 : 0, tolerances, value => `±${value}%`],
-        ["agingPct", "Aging", settings.aging.allowancePct ?? "auto", ["auto", ...tolerances], value => value === "auto" ? agingEstimate : `±${value}%`]
+        ["agingPct", "Aging", settings.aging.allowancePct ?? ResistorEnvironment.estimateDefaults().aging.allowancePct, tolerances, value => `±${value}%`]
       ];
       fields.forEach(([key, label, value, choices, describe], index) => {
         const top = y + 40 + index * 34, left = x + 84, width = 126, text = describe(value);
@@ -2260,7 +2258,7 @@
         select.value = String(value); select.addEventListener("change", () => setOperatingCondition(key, select.value)); object.append(select);
         if (key === "tcrPpm") select.title = "TCR allowance in ppm/°C; default 25. Any higher ordered part TCR is retained.";
         if (key === "radiationPct") select.title = "Estimated resistance change due to radiation; independent of aging. No dose-response model is assumed.";
-        if (key === "agingPct") select.title = "Auto shows the largest approximate per-part aging estimate, using each family's endurance benchmark. A selected percentage replaces the complete aging allowance.";
+        if (key === "agingPct") select.title = "Estimated resistance change due to aging. The selected percentage replaces the complete aging allowance.";
       });
       if (operatingConditionError) {
         const error = schematicShape(panel, "g", { role: "alert", "data-environment-error": "", "data-schematic-controls": "" });
