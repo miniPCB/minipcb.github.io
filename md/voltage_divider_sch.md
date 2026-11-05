@@ -18,6 +18,8 @@ DC operating-point analysis (`.op`). An open load is omitted. Values use full
 numeric precision in ohms/volts, avoiding SPICE suffix ambiguity. Tolerances,
 ratings and selected part numbers appear as annotations; they do not implement
 tolerance sweeps, temperature drift, derating or failure models in LTspice.
+Temperature annotations use plain `C`, such as `70 C` and `25 ppm/C`, to avoid
+degree-symbol encoding artifacts in LTspice.
 Its **Operating Point Report** lists VTOP, VMID, equivalent RTOP and RBOT,
 total operating power (including a connected load), and nominal Pstress/Vstress.
 Each aggregate stress is the highest utilization among the physical RTOP/RBOT

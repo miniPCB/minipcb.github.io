@@ -9,6 +9,7 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  const capture=async label=>{
   assert(enabled(),label+": both downloads offer generated current-circuit files");
   const [asc,md]=await Promise.all(links().map(async link=>(await fetch(link.href)).text())),s=state(),parts=[...s.physical.r1,...s.physical.r2],model=w.circuitExportModel(s,get("solveFor").value);
+  assert(!asc.includes('°')&&asc.includes(`Ambient temperature: ${s.environment.settings.thermal.minC} to ${s.environment.settings.thermal.maxC} C`)&&asc.includes('ppm/C'),label+': LTspice temperature and TCR annotations use plain C without degree-symbol encoding artifacts');
   assert(asc.startsWith("Version 4\r\n")&&(asc.match(/^SYMBOL res /gm)||[]).length===parts.length+(s.circuit.rl===null?0:1)&&(asc.match(/^SYMBOL voltage /gm)||[]).length===1,label+": LTspice contains every physical resistor, the actual load and one source");
   assert(parts.every(part=>asc.includes("SYMATTR Value "+part.resistance+"\r\n")&&md.includes(part.name)&&md.includes(String(part.resistance)))&&asc.includes("SYMATTR Value "+s.circuit.vin+"\r\n"),label+": exports preserve full-precision physical values and source voltage");
   assert(md.includes(model.netlist.trim())&&md.includes(s.analyzedAt)&&md.includes("https://www.minipcb.com/calculators/voltage_divider.html")&&md.includes("## Circuit characteristics")&&md.includes("```mermaid"),label+": Markdown includes matching connections/netlist, characteristics, link, diagram and original analysis time");
