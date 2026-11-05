@@ -1018,6 +1018,8 @@
     ];
     const form = document.getElementById("dividerForm");
     const byId = id => document.getElementById(id);
+    const calculatorRepository = "https://github.com/miniPCB/minipcb.github.io";
+    let calculatorBuild = null;
     let environmentSettings = { ...ResistorEnvironment.estimateDefaults(), derating: { powerPct: 0, voltagePct: 0 } }, initialEnvironmentWork = JSON.stringify(environmentSettings), ratingEditContext = null, operatingConditionError = "";
     let initialCircuitWork = null, schematicDraftWork = null, leaveWarningActive = false;
     const initialPairWork = new Map();
@@ -2907,12 +2909,29 @@
       return snapshot;
     }
 
-    function renderCircuitFrame(host, box, drawing, titleText) {
+    async function loadCalculatorBuild() {
+      try {
+        const response = await fetch("build.json", { cache: "no-cache" });
+        if (!response.ok) return null;
+        const build = await response.json();
+        if (!/^[a-f0-9]{40}$/i.test(build.commit) || typeof build.builtAt !== "string" || !Number.isFinite(Date.parse(build.builtAt))) return null;
+        calculatorBuild = Object.freeze({ commit: build.commit.toLowerCase(), builtAt: new Date(build.builtAt).toISOString() });
+        renderSchematic();
+        return calculatorBuild;
+      } catch (_) { return null; } // Plain local servers do not render GitHub Pages metadata.
+    }
+
+    function renderCircuitFrame(host, box, drawing, titleText, state) {
       const { x, y, width, height } = box, frame = schematicShape(host, "g", { id: "schematicFrame", "data-x": x, "data-y": y, "data-width": width, "data-height": height });
       schematicShape(frame, "rect", { x: x + 1, y: y + 1, width: width - 2, height: height - 2, rx: 18, fill: "#101823", stroke: "#39586f", "stroke-width": 1.5, "data-circuit-frame-border": "" });
       const brand = schematicShape(frame, "g", { "data-circuit-brand": "", role: "img", "aria-label": "miniPCB" });
       schematicShape(brand, "image", { x: x + 20, y: y + 14, width: 132, height: 42, href: circuitLogoDataUrl || "../logo.png", preserveAspectRatio: "xMinYMid meet", "data-circuit-logo": "" });
-      const title = schematicText(frame, x + width / 2, y + 80, titleText, Math.min(34, (width - 64) / (titleText.length * 0.62)), "#eaf6ff");
+      const build = calculatorBuild, date = build?.builtAt || state?.analyzedAt;
+      const stamp = schematicShape(frame, build ? "a" : "g", { "data-calculator-stamp": "", "data-built-at": build?.builtAt || "", "data-build-commit": build?.commit || "", ...(build ? { href: `${calculatorRepository}/commit/${build.commit}`, target: "_blank", rel: "noopener noreferrer", "aria-label": `Calculator built ${build.builtAt}; GitHub commit ${build.commit}` } : {}) });
+      const dateText = date ? date.slice(0, 19).replace("T", " ") + " UTC" : "Not analyzed";
+      schematicText(stamp, x + 20, y + 74, build ? `Built ${dateText} · ${build.commit.slice(0, 7)}` : `${dateText} · unpublished source`, 10.5, "#a8bece");
+      schematicShape(stamp, "title").textContent = build ? `Published calculator build: ${build.builtAt}\n${calculatorRepository}/commit/${build.commit}` : "Unpublished/local source. The date is the analysis time, not a published code revision.";
+      const title = schematicText(frame, x + width / 2, y + 112, titleText, Math.min(34, (width - 64) / (titleText.length * 0.62)), "#eaf6ff");
       title.id = "schematicTitle"; title.setAttribute("text-anchor", "middle"); title.setAttribute("font-weight", "600"); schematicEditable(title, "design-title", "design title");
       frame.append(drawing);
       const buttonX = x + width - 198, buttonY = y + 14;
@@ -2993,12 +3012,12 @@
       const detailsX = stacked ? 24 : drawingWidth + 40;
       const detailsWidth = (stacked ? viewportWidth : width) - detailsX - 16, informationWidth = stacked ? viewportWidth - 32 : detailsWidth;
       const characteristics = circuitCharacteristics(state, mode), operatingHeight = operatingPointHeight(informationWidth), analysisHeight = operatingHeight + characteristics.height + 16;
-      const drawingY = 156 + (stacked ? analysisHeight : 0);
+      const drawingY = 188 + (stacked ? analysisHeight : 0);
       const drawingBottom = drawingY + drawing.height;
       const partsGroup = byId("schematicParts"), drawingNode = byId("schematicDrawing"), drawingX = stacked ? (width - drawingWidth) / 2 : 12;
       partsGroup.replaceChildren();
       const frameBottom = drawingBottom + 16;
-      renderCircuitFrame(partsGroup, { x: drawingX - 8, y: drawingY - 108, width: drawingWidth + 16, height: drawing.height + 124 }, drawingNode, titleText);
+      renderCircuitFrame(partsGroup, { x: drawingX - 8, y: drawingY - 140, width: drawingWidth + 16, height: drawing.height + 156 }, drawingNode, titleText, state);
       let controlsBottom = frameBottom;
       const optionsHost = schematicShape(partsGroup, "g", { "data-schematic-controls": "" });
       const options = schematicPill(optionsHost, 218, 13, "Options", "#c6e3ff", 100);
@@ -5777,6 +5796,7 @@
     initializeBomControls("pairBom", true, () => { pairComparisonRevision++; renderPairComparison(true); });
     renderPairComparison();
     update();
+    window.calculatorBuildReady = loadCalculatorBuild();
     // Embed the original PNG bytes so saved SVGs and raster exports work offline.
     window.circuitLogoReady = fetch("../logo.png").then(response => {
       if (!response.ok) throw new Error("Logo unavailable");

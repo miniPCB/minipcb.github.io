@@ -43,6 +43,15 @@ These generated files are snapshots; later calculator edits require a new downlo
 The editable circuit title and schematic sit inside a frame using the original
 repository `logo.png`. The format picker uses the same logo, and downloads embed
 the original PNG bytes for offline use.
+Below the logo, published builds show a UTC build date/time and short Git commit
+ID. Click the stamp to open that exact public GitHub commit. GitHub Pages fills
+`calculators/build.json` from its build time and `site.github.build_revision`;
+the calculator does not query the latest repository commit at analysis time.
+The stamp stays fixed while inputs, selections and viewport size change, and
+remains visible in SVG, PNG, JPEG and BMP downloads. The separate **Analyzed**
+characteristic records the calculation time. Plain local previews or unavailable
+build metadata are explicitly marked **unpublished source**, with the analysis
+time shown instead of claiming a published revision.
 Its **Download circuit** button opens an icon picker for **SVG**, **PNG**,
 **JPEG** and **BMP**. The image includes the title, physical resistors, load,
 voltage readouts and operating conditions. The BOM, workspace summary, graphs,
