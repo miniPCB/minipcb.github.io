@@ -31,7 +31,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{
   assert(text('schematicVtop')==='24 V'&&d.activeElement===node('source'),'Saving refreshes the SVG and restores SVG focus');
   const beforeCancel=actual();open('source');set('schematicEditValue','5');cancel();assert(actual()===beforeCancel,'Cancel leaves inputs and BOM unchanged');
   open('source','value',' ');set('schematicEditValue','5');get('schematicEditor').dispatchEvent(new w.Event('cancel',{cancelable:true}));assert(!get('schematicEditor').open&&actual()===beforeCancel&&d.activeElement===node('source'),'Escape cancellation leaves the circuit unchanged and returns focus');
-  for(const mode of ['vout','vin','r1','r2','rl','vout','vin']){
+  for(const mode of ['vout','vin','r1','r2','vout','vin']){
    await reset();change('solveFor',mode);
    const sourceKnown=mode!=='vin',targetKnown=mode!=='vout',sourceTol=get('liveSchematic').querySelector('[data-field="vtopTolerance"]'),targetTol=get('liveSchematic').querySelector('[data-field="vmidTolerance"]');
    assert(!!node('source','tolerance')===sourceKnown&&get('tolVin').readOnly===!sourceKnown,`${mode}: VTOP tolerance follows its known/calculated role in both SVG and form`);
@@ -62,7 +62,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{
   assert(field('r1','resistance').textContent==='20 kΩ'&&d.querySelector('[data-schematic-part="r1"] > title').textContent.includes('Rated 140 mW')&&field('r1','v').textContent==='114.29%','SVG resistance, retained rating metadata and limited stress recalculate');
   open('r1','tolerance');assert(d.activeElement===get('schematicEditPartTolerance')&&get('schematicEditPartTolerance').tagName==='SELECT','Tolerance text opens directly at its dropdown');cancel();
   open('r1','power');assert(d.activeElement===get('schematicEditFootprint')&&!get('schematicEditFootprint').disabled&&get('schematicEditPower').readOnly,'An unset footprint opens its enabled size dropdown with derived power read-only');cancel();
-  for(const mode of ['vout','vin','r1','r2','rl']){
+  for(const mode of ['vout','vin','r1','r2']){
    await reset();change('solveFor',mode);
    for(const arm of ['r1','r2']){
     const before=actual(),resistance=get(arm).valueAsNumber,other=arm==='r1'?'r2':'r1',otherPn=field(other,'mpn')?.textContent;
@@ -81,13 +81,13 @@ document.getElementById('calculator').addEventListener('load',async event=>{
   await reset();open('load');set('schematicEditValue','100');set('schematicEditUnit','1000');set('schematicEditTolerance','3');save();
   assert(get('rl').valueAsNumber===100&&get('tolRl').valueAsNumber===3&&text('schematicLoadValue')==='100 kΩ','Finite RL and its tolerance are editable from the SVG');
   open('load');set('schematicEditValue','');save();assert(get('rl').value===''&&text('schematicLoadValue')==='Open','Blank load resistance restores an open circuit');
-  for(const [mode,expected,id]of [['r1',20,'r1'],['r2',5,'r2'],['vin',8,'vin'],['rl',10,'rl']]){
+  for(const [mode,expected,id]of [['r1',20,'r1'],['r2',5,'r2'],['vin',8,'vin']]){
    await reset();change('solveFor',mode);open('target');set('schematicEditValue','4');set('schematicEditSolve',mode);save();
    assert(!get('schematicEditor').open&&get('solveFor').value===mode&&text('vout')==='4 V',`Editing VMID solves ${mode}`);near(get(id).valueAsNumber,expected,`${mode} reaches the independently known 4 V operating point`);
   }
   await reset();change('solveFor','r2');open('target');set('schematicEditValue','15');set('schematicEditSolve','r2');const beforeInfeasible=actual();save();assert(get('schematicEditor').open&&!get('schematicEditError').hidden&&actual()===beforeInfeasible,'An infeasible target never mutates the applied circuit');cancel();
   open('target');set('schematicEditValue','4');set('schematicEditSolve','r1');save();open('source');set('schematicEditValue','24');save();assert(get('solveFor').value==='r1'&&text('vout')==='4 V','Editing a known SVG input preserves the Find mode and VMID target');near(get('r1').valueAsNumber,50,'The source edit recalculates RTOP to maintain the requested VMID');
-  for(const [mode,key,id]of [['vout','target','schematicVmid'],['vin','source','schematicVtop'],['r1','r1','schematicR1Value'],['r2','r2','schematicR2Value'],['rl','load','schematicLoadValue']]){
+  for(const [mode,key,id]of [['vout','target','schematicVmid'],['vin','source','schematicVtop'],['r1','r1','schematicR1Value'],['r2','r2','schematicR2Value']]){
    await reset();change('solveFor',mode);const before=actual(),result=get(id);
    assert(!node(key)&&!result.hasAttribute('tabindex')&&!result.classList.contains('schematic-editable'),`${mode}: Find value has no mouse/keyboard editing affordance`);
    result.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));result.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));w.openSchematicEditor(result);
@@ -97,8 +97,8 @@ document.getElementById('calculator').addEventListener('load',async event=>{
    await reset();change('solveFor',arm);open(arm,'tolerance');assert(get('schematicEditValue').readOnly&&get('schematicEditUnit').disabled,'A specification editor cannot change the calculated resistance or its unit');set('schematicEditValue','12345');set('schematicEditPartTolerance','0.5');save();
    assert(get('solveFor').value===arm&&get(arm).valueAsNumber===10&&get(arm==='r1'?'tolR1':'tolR2').valueAsNumber===0.5,'Specification edits preserve the computed resistance and Find mode even if the read-only field is modified programmatically');
   }
-  for(const [mode,key,edited,expected]of [['vin','r1','20',18],['r2','r1','20',20],['rl','source','24',2.5]]){
-   await reset();change('solveFor',mode);if(mode==='rl')change('targetVout','4');const target=text('vout');open(key);set('schematicEditValue',edited);save();
+  for(const [mode,key,edited,expected]of [['vin','r1','20',18],['r2','r1','20',20]]){
+   await reset();change('solveFor',mode);const target=text('vout');open(key);set('schematicEditValue',edited);save();
    assert(get('solveFor').value===mode&&text('vout')===target,`${mode}: editing a known property preserves the active Find mode and target`);near(get(mode).valueAsNumber,expected,`${mode}: the expected property is recalculated`);
   }
   await reset();change('solveFor','tolerance');assert(!node('r1','tolerance')&&!node('r2','tolerance')&&node('r1'),'Tolerance Find mode disables tolerance links while resistance remains an input');open('r1','power');assert(get('schematicEditPartTolerance').disabled,'Other resistor editors also lock the calculated tolerance');cancel();

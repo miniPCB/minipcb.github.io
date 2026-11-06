@@ -29,8 +29,11 @@ not add a permission or confirmation step to an authorized task.
 
 - Keep Value, Tolerance and Package directly editable on the diagram, populated
   and easy to use. Do not restore the whole-circuit Options dialog. Keep unique
-  search limits, automatic-value controls and data/comparison tools in compact,
-  collapsed sections; show search and automatic controls only when applicable.
+  search limits and automatic-value controls in compact, collapsed sections;
+  show search and automatic controls only when applicable. The experimental
+  Data & comparisons interface is excluded, not an optional disclosure.
+  Retain the backing source fields required by direct editors and the solver,
+  with their container hidden and inert; do not expose it during validation.
   A part's focused Options editor may still expose its catalog-specific settings.
 - Put Known/Unknown color keys inside the circuit frame so circuit-image exports
   retain them. Keep the four operating-point blocks without a section heading.
@@ -53,6 +56,14 @@ not add a permission or confirmation step to an authorized task.
   and compute nearest suggestions in ohms without applying a multiplier twice.
 - Let known/calculated roles determine editability in every mode. Preserve the
   selected mode and other physical parts when editing one resistor.
+- Do not restore Find RL/IL as a calculator mode. Resistor and current loads,
+  including their tolerances, remain known inputs in the other modes.
+- Keep each parts-list reference and its entire edit target within its row.
+  Use explicit row-local rectangles rather than text decoration that can extend
+  beyond the row. Increase table fonts on large screens, stack complete part
+  numbers on phones and avoid repeating exact-match specifications. Descriptions
+  include the physical part's TCR in ppm/C (assigned catalog TCR takes precedence
+  over the manual operating-condition default). Preserve full BOM/export data.
 - Keep Pstress and Vstress compact and tied to each actual part's ratings. Label
   nominal versus worst-case results accurately. Format stress as nonnegative
   percentages with two decimals; missing ratings are unassessed, not zero.

@@ -109,16 +109,11 @@
         valid("Negative-source resistance solution");
         near(get("r1").valueAsNumber, 20, "Negative source RTOP remains positive");
 
-        await reset(); set("solveFor", "rl");
-        valid("Open load solution");
-        assert(get("rl").value === "" && text("solutionValue") === "Open circuit", "Unloaded target solves RL as open");
-        set("targetVout", "4");
-        valid("Finite load solution");
-        near(get("rl").valueAsNumber, 10, "RL = 10 kΩ for a 4 V target");
-        assert(!get("tolRl").disabled, "Finite solved load enables load tolerance");
-        set("targetVout", "8"); invalid("Passive load cannot boost output");
-        assert(get("rl").value === "", "Infeasible load target clears the calculated RL field");
-        set("targetVout", "6"); valid("Open load recovers from infeasible target");
+        await reset();
+        assert(!d.querySelector('[data-solve-mode="rl"],#solveFor option[value="rl"]'), "Find RL/IL is absent from calculator choices");
+        set("rl", "10"); near(w.eval("schematicState.result.vout"), 4, "Entered 10 kohm load still produces 4 V");
+        assert(!get("tolRl").disabled && !get("rl").readOnly, "Finite load and tolerance remain editable inputs");
+        set("rl", ""); valid("Open load input recovers");
         assert(get("tolRl").disabled, "Open load disables unused tolerance input");
 
         await reset(); set("solveFor", "tolerance");
@@ -340,7 +335,7 @@
         assert(new Set([...d.querySelectorAll("[id]")].map(element => element.id)).size === d.querySelectorAll("[id]").length, "Dynamic physical part IDs remain unique");
         for (const connection of ["series", "parallel"]) {
           set("r1Connection", connection); enableParts("r2"); split("r2");
-          for (const mode of ["vout", "vin", "r1", "r2", "rl", "tolerance"]) {
+          for (const mode of ["vout", "vin", "r1", "r2", "tolerance"]) {
             if (mode === "tolerance") set("tolVin", "0");
             set("solveFor", mode); valid(`Network mode ${mode} with ${connection}`);
             for (const width of [320, 390, 768, 900, 1440]) {
@@ -363,49 +358,14 @@
         assert(!!toolsDocument.querySelector('a[href="calculators/voltage_divider.html"]'), "Tools page links to calculator");
         const visible = id => get(id).getBoundingClientRect().width > 0 && get(id).getBoundingClientRect().height > 0;
         const pick = mode => d.querySelector(`[data-solve-mode="${mode}"]`).click();
-        const resultTabs = [...get("resultTabs").querySelectorAll('[role="tab"]')];
         const activeView = () => d.querySelector('[role="tab"][aria-selected="true"]')?.id;
-        get("calculatorDetails").open = true;
-        assert(activeView() === "overviewTab" && visible("overviewPanel") && !visible("catalogPanel"), "Results start with only the operating overview visible");
-        const circuitBeforeTabs = [...get("dividerForm").elements].map(input => input.value).join("|");
-        for (const tab of resultTabs) {
-          tab.click();
-          assert(d.querySelectorAll('[role="tabpanel"]:not([hidden])').length === 1 && visible(tab.getAttribute("aria-controls")), `${tab.textContent}: shows only the selected result panel`);
-          assert(tab.getAttribute("aria-selected") === "true" && resultTabs.filter(item => item.tabIndex === 0).length === 1 && tab.tabIndex === 0, `${tab.textContent}: selection and keyboard tab stop agree`);
-          assert(visible("solutionValue") && !visible("vin") && visible("liveSchematic"), `${tab.textContent}: detailed results keep input forms out of view and preserve the circuit reference`);
-        }
-        assert([...get("dividerForm").elements].map(input => input.value).join("|") === circuitBeforeTabs, "Browsing every results tab preserves all circuit inputs");
-        const key = value => d.activeElement.dispatchEvent(new w.KeyboardEvent("keydown", { key: value, bubbles: true, cancelable: true }));
-        get("overviewTab").focus(); key("End");
-        assert(activeView() === "methodTab" && d.activeElement === get("methodTab") && visible("methodPanel"), "End focuses and activates the last results tab");
-        key("ArrowRight");
-        assert(activeView() === "overviewTab" && d.activeElement === get("overviewTab"), "Right arrow wraps from last to first tab");
-        key("ArrowLeft");
-        assert(activeView() === "methodTab" && d.activeElement === get("methodTab"), "Left arrow wraps from first to last tab");
-        key("Home"); key("ArrowRight");
-        assert(activeView() === "toleranceTab" && d.activeElement === get("toleranceTab"), "Home and right arrow activate the expected result view");
-        get("overviewTab").click(); get("catalogFamily").focus();
-        assert(d.activeElement !== get("catalogFamily") && !visible("catalogCandidates"), "Inactive parts controls are hidden and cannot receive focus");
-        get("toleranceTab").click(); set("vin", "24");
-        assert(activeView() === "toleranceTab" && text("voutMin") === "11.99 V", "Live edits update a selected view without changing tabs or input focus");
-        get("methodTab").click(); set("r1", "0"); get("calculatorDetails").open = true;
-        assert(!get("inputError").hidden && visible("schematicFeedback") && activeView() === "methodTab" && text("solutionValue") === "—", "Validation errors and cleared solved values remain visible from every tab");
+        assert(get("calculatorDetails").hidden && get("calculatorDetails").inert && !visible("resultTabs") && !visible("ratingRows"), "Rough data and comparison views are excluded");
+        set("r1", "0");
+        assert(visible("schematicFeedback") && !visible("calculatorDetails"), "Invalid inputs show SVG feedback without exposing excluded data");
         await reset(); pick("pairs"); get("searchLimits").open = true;
-        assert(activeView() === "pairTab" && visible("pairMinR") && !visible("pairVin") && !visible("dividerForm"), "Combination options expose the focused search form without the circuit form");
-        get("partsTab").click(); get("pairForm").requestSubmit(); await w.pairSearchReady;
-        assert(activeView() === "pairTab", "Finding pairs returns to the performance chart");
-        pick("vout");
-        assert(activeView() === "overviewTab", "Choosing a voltage calculation returns to the overview");
-        get("methodTab").click(); get("dividerForm").requestSubmit();
-        assert(activeView() === "overviewTab", "Calculate VMID returns to the overview");
-        get("calculatorDetails").open = true;
-        for (const width of [320, 390, 768, 900, 1440]) {
-          frame.style.width = `${width}px`; await new Promise(resolve => setTimeout(resolve, 5));
-          for (const tab of resultTabs) {
-            tab.click();
-            assert(d.documentElement.scrollWidth <= width && resultTabs.every(item => item.getBoundingClientRect().width >= 60), `${tab.textContent}: tab navigation and selected content fit at ${width}px`);
-          }
-        }
+        assert(visible("pairMinR") && !visible("pairVin") && !visible("dividerForm"), "Combination search exposes unique limits and keeps model fields hidden");
+        get("pairForm").requestSubmit(); await w.pairSearchReady;
+        assert(w.eval("pairPreviewState") && !visible("pairRows"), "Search keeps the SVG preview without exposing legacy tables");
         await reset();
         get("calculatorDetails").open = false; get("searchLimits").open = false;
         assert(activeView() === "overviewTab", "Reset restores the default results tab");
@@ -414,8 +374,7 @@
           ["vout", ["vin", "r1", "r2"], ["targetVout"]],
           ["vin", ["targetVout", "r1", "r2"], ["vin"]],
           ["r1", ["vin", "targetVout", "r2"], ["r1"]],
-          ["r2", ["vin", "targetVout", "r1"], ["r2"]],
-          ["rl", ["vin", "targetVout", "r1", "r2"], ["rl"]]
+          ["r2", ["vin", "targetVout", "r1"], ["r2"]]
         ];
         for (const [mode, known, calculated] of views) {
           await reset(); pick(mode); valid(`Visible mode choice ${mode}`);
@@ -435,7 +394,7 @@
         near(get("r1").valueAsNumber, 20, "Mode changes retain circuit values");
         assert(!!get("liveSchematic").querySelector('[data-schematic-edit="r1"][data-edit-focus="value"]') && !!get("liveSchematic").querySelector('[data-schematic-edit="source"][data-edit-focus="value"]') && !get("liveSchematic").querySelector('[data-schematic-edit="target"][data-edit-focus="value"]'), "Returning to VMID restores the proper input view");
         await reset(); set("tolR1", "-1");
-        assert(!get("inputError").hidden && visible("tolR1") && get("manualLimits").open && !d.querySelector('dialog[open]'), "Invalid manual data expands its inline limits for correction without opening a dialog");
+        assert(!get("inputError").hidden && !visible("tolR1") && get("manualLimits").open && !d.querySelector('dialog[open]'), "Invalid source data does not expose the excluded form or open a dialog");
         set("tolR1", "1"); valid("Revealed tolerance error recovers");
         get("manualLimits").open = false; set("vin", "24");
         assert(!get("manualLimits").open, "Normal edits preserve disclosure choices");
@@ -444,10 +403,10 @@
         assert(ids("r1").every(id => text(`${id}Description`).includes("2.5 kΩ") && text(`${id}Description`).includes("140 mW")), "Closed part summaries show resistance and power rating");
         const focusedPart = ids("r1")[0];
         get(`${focusedPart}Power`).focus(); set(`${focusedPart}Power`, "0.125");
-        assert(d.activeElement === get(`${focusedPart}Power`) && text(`${focusedPart}Description`).includes("125 mW"), "Part editing preserves focus and updates its summary");
+        assert(text(`${focusedPart}Description`).includes("125 mW"), "Source part editing updates its summary without exposing the internal form");
         get(focusedPart).open = false; get("r1PartsOptions").open = false;
         set(`${focusedPart}Power`, "0");
-        assert(get(focusedPart).open && get("r1PartsOptions").open && visible(`${focusedPart}Power`), "Nested invalid part settings expand for correction");
+        assert(get(focusedPart).open && get("r1PartsOptions").open && !visible(`${focusedPart}Power`), "Invalid nested source settings stay excluded");
         set(`${focusedPart}Power`, "0.125"); valid("Nested physical part error recovers");
         pick("r1");
         assert(get("manualLimits").contains(get("r1Field")) && ids("r1").length === 4, "Moving to an arm solve preserves physical parts");
@@ -455,7 +414,7 @@
         assert(get("manualLimits").contains(get("r1Field")) && ids("r1").length === 4, "Moving back restores the physical arm to known inputs");
         await reset();
         assert(!get("manualLimits").open && !get("r1PartsOptions").open && !get("r2PartsOptions").open, "Reset closes optional editors");
-        for (const mode of ["vout", "vin", "r1", "r2", "rl", "tolerance"]) {
+        for (const mode of ["vout", "vin", "r1", "r2", "tolerance"]) {
           await reset(); set("solveFor", mode); valid(`Mode ${mode} default transition`);
           for (const width of [320, 390, 768, 900, 1440]) {
             frame.style.width = `${width}px`;

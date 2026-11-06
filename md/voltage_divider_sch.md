@@ -80,8 +80,8 @@ Its value and tolerance edit directly on the SVG. The defaults are **0 µA** wit
 an **absolute ±0.1 µA** tolerance, suitable for entering a specified leakage
 range of −0.1 to +0.1 µA. Positive IL flows from VMID toward ground; negative
 IL injects current into VMID. Switching models retains the parked resistance
-and the previously entered current settings. The **Find RL** calculator becomes
-**Find IL** while this model is selected.
+and the previously entered current settings. RL and IL remain known inputs;
+there is no Find RL/IL calculator mode.
 
 With `Rth = RTOP || RBOT`, the nominal current-loaded equations are:
 
@@ -222,11 +222,11 @@ analysis, regardless of layout.
 
 There is no whole-circuit Options dialog. **Search limits** appears only when
 catalog solutions can be generated; **Automatic values** appears for automatic
-network parts. **Data & comparisons** contains detailed results, tables and
-comparisons, plus **Manual part limits & network tools** for custom tolerances,
-power/voltage ratings, resistance units and network construction. These sections
-start collapsed. Ordinary value, tolerance and package edits stay on the SVG;
-the focused part editor retains catalog-specific settings.
+network parts. The experimental **Data & comparisons** interface is excluded.
+Its backing source controls remain hidden and inert because direct SVG editors
+and calculation functions still use them. Validation does not reveal that form.
+Ordinary value, tolerance and package edits stay on the SVG; the focused part
+editor retains custom ratings and catalog-specific settings.
 These controls reuse the original state and calculation rules. Reset actions
 restore defaults for the current circuit/search mode. Errors, search progress
 and automatic-value status retain accessible announcements. Download links sit
@@ -305,19 +305,22 @@ color. Connection dots mark actual branch junctions; symbol sizes stay unchanged
 
 VTOP, RL and every physical resistor have rounded, borderless information boxes
 matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
-connections visible. The **Parts list and electrical part stress** table contains **Ref Des**,
+connections visible. The **Parts list** table contains **Ref Des**,
 **TNPW PN**, **M55342 PN**, **Description**, **Pstress** and **Vstress**
 columns and one row per physical resistor. The copied BOM also places Description
 after both family part numbers. Table and copied-BOM stress percentages use two
 decimal places, rounding tiny values to **0.00%** without scientific notation;
 unassessed voltage stress remains a dash. The description shows actual resistance,
-tolerance and footprint; unassigned footprints read **Footprint not set**. On
-smaller screens, each reference and description sit above the part-number and
-stress cells so the table stays readable without horizontal scrolling.
-Table type scales with the available table width, from 12 px in compact layouts
-to 16 px in wider layouts. Headings, secondary text, column spacing and row
-heights follow the same scale; long part numbers wrap at a readable size.
-The SVG download retains this typography and spacing.
+tolerance, footprint and TCR in ppm/°C. Assigned parts use their own catalog TCR;
+unassigned parts use the configured operating-condition TCR. Each reference and
+its complete edit rectangle are contained within its row, without wrapping.
+On phones, reference/stress values share the first line, followed by the
+description and separate full-width TNPW and M55342 numbers. Actions retain
+44 px touch targets. Wide screens use the six-column layout with 14–20 px main
+text that grows with screen width. Exact matches omit repeated specifications
+and status lines; nearest-value recommendations keep their changed-value notes.
+Rows grow only as needed for wrapping and controls. Download SVG and Copy BOM
+retain complete part numbers and TCR descriptions.
 An asterisk marks the selected
 part number; stress uses the current circuit or preview part's own ratings.
 A dash means no assigned or qualifying part number for that family. Click a
@@ -436,7 +439,7 @@ physical resistor's search constraints and invalidate changed results; run
 to the circuit. Calculated resistance and tolerance retain their existing locks.
 
 In inverse modes, click VMID to edit the entered target; the calculator tab
-selects whether VTOP, RTOP, RBOT or RL should be found. A calculated value has no edit link
+selects whether VTOP, RTOP or RBOT should be found. A calculated value has no edit link
 or keyboard button, including individual resistances in a calculated multi-part
 arm. Other specification editors keep calculated values and units read-only;
 calculated tolerance selections are disabled in tolerance analysis. The selected
@@ -502,7 +505,7 @@ calculated quantity and lists nominal total power, input current and source
 resistance Rth. Every mode reports worst-case Pstress and Vstress over its
 configured resistance-drift intervals. Two-part circuits use analytic extrema,
 including interior power peaks; networks use conservative per-part bounds.
-Applying a two-part solution retains its preview's stress basis. Find RL also shows load power; tolerance analysis shows the found
+Applying a two-part solution retains its preview's stress basis. Tolerance analysis shows the found
 per-resistor tolerance and allowed VMID error. If any part lacks a working-voltage
 rating, the overall Vstress is unassessed and the table lists how many parts have
 specified ratings. An explicit maximum Vstress filter excludes unassessed parts.
@@ -608,9 +611,9 @@ table selection; clicking overlapping points cycles their actual combinations.
 Dragging either plot adds its data-space bounds to the shared filters.
 
 The bottom action row has been removed, along with its SVG-only handlers and
-the former Axes dialog. Shared detailed-table, comparison, copying and Apply
-features retain their existing behavior. Plot Enter no longer adds hidden
-comparisons.
+the former Axes dialog. The rough HTML data tables and comparison interface are
+also excluded. Select designs through the SVG plots; Copy BOM and circuit
+downloads retain the selected preview. Plot Enter does not add comparisons.
 
 The summary uses separate colored RTOP and RBOT cards without a redundant heading,
 with large equivalent resistance values and real part counts or selected MPNs.
@@ -679,37 +682,19 @@ At the defaults, VMID is 6 V, I1 and I2 are 0.6 mA, and R1 and R2 each dissipate
 
 ## Solve modes
 
-RTOP is R1 and RBOT is R2. The calculator can solve for VMID, VTOP, RTOP, RBOT,
-or RL while the remaining nominal quantities are held at their entered values.
-Choose a calculation button at the top of the page. The sixth button,
-**Find real resistor combinations**, searches actual catalog parts for a target VMID.
-The **Method** tab names the goal, explains its inputs and shows its equation.
-Results update directly when known inputs change. The SVG and detailed result
-banner show the calculated quantity. Switching views
-preserves circuit data.
+RTOP is R1 and RBOT is R2. The calculator offers Find VMID, Find VTOP,
+Find RTOP, Find RBOT and Find real resistor combinations. Known inputs update
+the circuit immediately. Combination searches check catalog assignments against
+the target and tolerance interval. The internal common-tolerance calculation is
+retained. Find RL/IL has been removed; resistor loads and current-source loads
+with absolute current tolerance remain editable inputs in the remaining modes.
 
-Find RL/IL calculates the load needed to reach the entered VMID. With 12 V and
-two 10 kΩ arms, a 4 V target gives RL = 10 kΩ or IL = 400 µA. A 6 V target is
-already the unloaded divider voltage, so the result is Open or zero current.
-The calculated load value is read-only; change the known target to recompute it.
-
-The **Data & comparisons** section uses **Overview**, **Tolerances**, **Stress**,
-**Ratings**, **Parts**, **Parts (2)**, **Resistor combinations**, and **Method** tabs to show
-one focused panel at a time.
-The solved value stays visible above the tabs; all results continue updating as
-you edit. Switching result tabs preserves circuit data and selected parts.
-Combination searches open **Resistor combinations**; circuit calculation choices open
-**Overview**. Calculations select the relevant result view, and Reset
-restores **Overview**. Use Left/Right Arrow, Home, or End to navigate the tabs
-with a keyboard. The main page and its print view keep the circuit SVG prominent;
-optional sections remain collapsed until requested.
-
-Load and operating conditions edit directly on the SVG. Combination searches use
-the same direct voltage, tolerance and package editors, with unique constraints
-in Search limits. Invalid manual settings expand their containing section so
-they can be corrected. The page styling and integration
-remain in the HTML file; current-load interval mathematics, shared part catalogs
-and the numbering engine are loaded separately.
+The SVG contains the operating-point blocks, optional Circuit characteristics,
+parts list and Design Solutions plots. The experimental Data & comparisons
+section and its tab navigation are excluded from the workspace and print view.
+The underlying source fields still supply direct SVG editors and the solver.
+Load and operating conditions edit directly on the SVG; unique catalog search
+constraints are in Search limits. Validation stays in the circuit workspace.
 
 For the resistor-load model:
 
@@ -718,7 +703,6 @@ For the resistor-load model:
 - With `g = VMID / VTOP`, `RTOP = Rb × (1 − g) / g`.
 - To solve a lower resistance, first calculate `Rb = RTOP × g / (1 − g)`.
 - Unloaded: `RBOT = Rb`. Loaded: `RBOT = Rb / (1 − Rb / RL)`.
-- To solve the load: `RL = Rb / (1 − Rb / RBOT)`.
 
 Resistor-load resistance solutions require the same sign for VTOP and VMID with
 `0 < abs(VMID) < abs(VTOP)`. A passive load cannot increase the unloaded output
@@ -756,8 +740,7 @@ uniquely specify power, tolerance, or working voltage.
 The arm resistance and equivalent tolerance become calculated fields. Single
 resistor rating/working-voltage controls are replaced by the per-part controls.
 Power ratings are never pooled into a combined rating that could hide an
-overloaded part. The common-rating comparison lets you choose one physical part
-from each arm and includes custom power ratings entered for the selected parts.
+overloaded part. Each physical resistor retains its own entered or catalog rating.
 
 Solving RTOP or RBOT scales all its physical resistances by the same factor,
 preserving their ratios and each part's entered rating and tolerance. This is a
@@ -963,20 +946,11 @@ performance can overlap and can be cycled. Clear filters restores found results;
 search input or construction edits clear stale results and comparisons. Edits or
 cancellation also prevent an older asynchronous search from publishing.
 
-**Compare** keeps multiple combinations in selection order. The comparison table
-and **Copy table** contain one standard BOM row per physical resistor, grouped by
-option. Optional columns include real ratings, TCR/reliability, nominal operating
-values, conservative per-part stress bounds, target accuracy and power spread.
-Text/performance filters keep complete options together. Copy includes only
-visible rows and selected columns, with a manual-copy fallback.
-
-**Download filtered CSV** includes exactly the visible combinations;
-**Download all combinations CSV** includes every retained result. Network CSV is
-long-form: one row per physical resistor with its MPN, value, tolerance,
-footprint, TCR, ambient, power mode, reliability, source, ratings, nominal
-performance, individual stress bounds, VMID interval/error, power spread,
-connection trees, UTC analysis date and calculator link. The original two-part
-search retains its existing CSV format.
+The experimental comparison table and its CSV/copy controls are excluded from
+the public workspace. Select a solution in the SVG plots, then use Copy BOM or
+the circuit downloads. The copied BOM has one row per physical resistor with
+both family numbers, the actual description including TCR, and Pstress/Vstress.
+LTspice and Markdown retain the selected circuit's complete analysis.
 
 **Apply selected combination** copies source/load conditions, every selected
 physical value and catalog limit, and the full connection tree into the work

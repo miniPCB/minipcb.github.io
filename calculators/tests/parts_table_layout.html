@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Responsive parts table checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:2400px;border:0}</style></head><body><h1>Parts table fit, TCR and simplified modes</h1><pre id="results">RUNNING</pre><iframe id="calculator" title="Calculator under test" src="../voltage_divider.html?parts-layout-test=1"></iframe><script>
+"use strict";
+const checks=[],failures=[],assert=(ok,label)=>{checks.push(label);if(!ok)failures.push(label)},pause=()=>new Promise(resolve=>setTimeout(resolve,30));
+document.getElementById('calculator').addEventListener('load',async event=>{try{
+ const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get('liveSchematic'),state=()=>w.eval('schematicState'),table=()=>svg().querySelector('[data-schematic-table]'),rows=()=>[...table().querySelectorAll('[data-schematic-part]')],errors=[];
+ w.addEventListener('error',event=>errors.push(event.message));assert(await w.resistorCatalogReady,'Catalogs load');await w.circuitLogoReady;await w.calculatorBuildReady;
+ const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}))},reset=async()=>{w.closeSchematicEditor(false);get('dividerForm').reset();get('pairForm').reset();w.eval('schematicDesktopView=false;mobileAnalysisExpanded=true;renderSchematic()');await pause()};
+ const inside=(a,b)=>a.left>=b.left-.8&&a.right<=b.right+.8&&a.top>=b.top-.8&&a.bottom<=b.bottom+.8;
+ const fit=label=>{
+  assert(d.documentElement.scrollWidth<=w.innerWidth,label+': page fits the viewport');
+  assert(get('calculatorDetails').hidden&&get('calculatorDetails').inert&&get('calculatorDetails').getBoundingClientRect().height===0&&!get('calculatorDetails').querySelector(':scope > summary'),label+': rough data/comparisons are excluded');
+  const names=Object.values(state().physical).flat().map(part=>part.name);
+  assert(rows().length===names.length,label+': one row per physical resistor');
+  for(const [index,row] of rows().entries()){
+   const border=row.querySelector(':scope > rect').getBoundingClientRect(),ref=row.querySelector('[data-field="reference"]'),description=row.querySelector('[data-field="description"]');
+   assert(ref.textContent===names[index]&&!ref.querySelector('tspan')&&inside(ref.getBoundingClientRect(),border),label+'/'+names[index]+': full reference and edit target stay on their row');
+   assert([...row.querySelectorAll('text,[role="button"]')].every(node=>inside(node.getBoundingClientRect(),border)),label+'/'+names[index]+': descriptions, full part numbers and controls stay inside the row');
+   assert(description.textContent.includes('ppm/°C')&&Number(description.getAttribute('font-size'))>=14,label+'/'+names[index]+': readable description includes TCR');
+   if(svg().dataset.layout==='mobile')assert([...row.querySelectorAll('[role="button"]')].every(node=>node.getBoundingClientRect().height>=43.5),label+'/'+names[index]+': row controls have phone-sized touch targets');
+   if(index)assert(border.top>=rows()[index-1].querySelector(':scope > rect').getBoundingClientRect().bottom+2,label+'/'+names[index]+': rows never overlap');
+  }
+ };
+ for(const topology of ['single','series','parallel','mixed']){
+  await reset();
+  if(topology!=='single')for(const arm of ['r1','r2']){get(arm+'Multiple').click();get(arm+'Split').click();if(topology==='parallel')set(arm+'Connection','parallel');if(topology==='mixed'){const ids=[...get(arm+'Parts').children].map(row=>row.id);w.storeTopology(arm,{connection:'series',children:[ids[0],{connection:'parallel',children:ids.slice(1)}]});w.update();}}
+  for(const width of [320,390,768,1050,1440,1920]){frame.style.width=width+'px';await pause();fit(topology+'/'+width);}
+ }
+ await reset();get('r1Multiple').click();get('r1Split').click();while(state().physical.r1.length<12)d.querySelector('[data-add-part="r1"]').click();
+ for(const width of [320,1440]){frame.style.width=width+'px';await pause();fit('twelve references/'+width);assert(rows().some(row=>row.querySelector('[data-field="reference"]').textContent==='R1.12'),'Two-digit physical reference stays complete at '+width+'px');}
+ await reset();frame.style.width='1920px';await pause();const large=Number(rows()[0].querySelector('[data-field="description"]').getAttribute('font-size'));
+ assert(rows().every(row=>Number(row.firstElementChild.getAttribute('height'))<=80),'Standard desktop rows remove redundant status/spec lines and excess height');
+ frame.style.width='390px';await pause();assert(large>Number(rows()[0].querySelector('[data-field="description"]').getAttribute('font-size'))&&table().dataset.tableLayout==='cards','Fonts grow on large screens and phone rows use stacked part numbers');
+ assert([...table().querySelectorAll('[data-family] [data-field]')].every(node=>node.textContent.length>15),'Phone layout retains complete catalog part numbers');
+ const copy=svg().querySelector('[data-pair-action="copy-bom"]');assert(copy.getBoundingClientRect().height>=44,'Copy BOM has a full phone touch target');
+ set('r1','12.345');set('tolR1','.25');fit('nearby/phone');
+ assert(rows()[0].querySelectorAll('[data-field="mpnRecommendation"]').length===2&&rows()[0].textContent.includes('Nearest'),'Nearest-value recommendations remain labeled and unapplied');
+ frame.style.width='1440px';await pause();fit('nearby/desktop');
+ await reset();w.eval('environmentSettings.thermal.tcrPpm=50;environmentSettings.thermal.manualTcrPpm=50;update()');
+ assert(rows().every(row=>row.querySelector('[data-field="description"]').textContent.includes('±50 ppm/°C')),'Unassigned descriptions follow the configured TCR');
+ const catalog=w.eval('resistorCatalog'),assigned=w.ResistorParts.evaluate(catalog,'vishay-tnpw-e3',{resistanceOhms:10000,tolerancePct:.1,tcrCode:'E'});w.applyCatalogPart(assigned,'r1');
+ assert(w.partTcrPpm(state().physical.r1[0])===assigned.tcrPpm&&rows()[0].querySelector('[data-field="description"]').textContent.includes('±'+assigned.tcrPpm+' ppm/°C'),'Assigned descriptions use the actual part TCR ahead of the manual default');
+ set('vin','100');fit('failed/desktop');assert(rows().some(row=>row.dataset.partFailed==='true'),'Failed parts remain in their rows');
+ const tsv=w.schematicBomTsv().trim().split('\r\n').map(line=>line.split('\t')),col=tsv[0].indexOf('Description');assert(tsv[0][col-1]==='M55342 PN'&&tsv.slice(1).every(row=>row[col].includes('ppm/°C')),'Copied BOM preserves column order and TCR descriptions');
+ const exported=new DOMParser().parseFromString(await(await fetch(get('schematicDownload').href)).text(),'image/svg+xml');
+ assert(!exported.querySelector('parsererror,[data-schematic-edit],[data-pair-action],foreignObject')&&[...exported.querySelectorAll('[data-field="description"]')].every(node=>node.textContent.includes('ppm/°C')),'Full SVG export keeps TCR and table content without editing controls');
+ await reset();frame.style.width='390px';await pause();
+ assert([...get('mobileSolveMode').options].map(option=>option.value).join(',')==='vout,vin,r1,r2,pairs'&&!d.querySelector('[data-solve-mode="rl"],#solveFor option[value="rl"],#schematicEditSolve option[value="rl"]'),'Find RL/IL has no desktop, mobile or adjust-target entry');
+ get('schematicViewToggle').click();fit('phone/desktop-switch');
+ set('solveFor','rl');assert(get('solveFor').value==='vout'&&state()&&get('inputError').hidden,'A restored retired mode falls back to Find VMID without losing the circuit');
+ assert(!errors.length,'No runtime errors: '+errors.join('; '));
+}catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2)});
+</script></body></html>

@@ -95,7 +95,7 @@
         assert(get("tolR1").value === "0.1" && get("tolR2").value === "0.1", "Divider starts with 0.1% resistor tolerances");
         set("tolR1", "1"); set("tolR2", "1");
         get("calculatorDetails").open=true; get("partsTab").click();
-        assert(get("catalogControls").getBoundingClientRect().width > 0 && get("overviewPanel").hidden, "Parts tab reveals the catalog and hides the operating overview");
+        assert(get("catalogControls").getBoundingClientRect().width === 0 && get("overviewPanel").hidden, "Legacy catalog controls stay excluded even if their internal tab state changes");
         assert(get("catalogCandidates").children.length > 0 && get("catalogFamily").value === tid, "Divider suggests TNPW parts without altering manual defaults");
         use();
         assert(get("partsTab").getAttribute("aria-selected") === "true" && !get("catalogPanel").hidden, "Applying a part keeps the catalog view open for the next resistor");
@@ -146,7 +146,7 @@
         const bomCell = (id, key) => bomRow(id).querySelector(`[data-bom-column="${key}"]`);
         assert(get("parts2BomHead").querySelectorAll("th").length === 6, "The circuit BOM starts with six standard part columns");
         for (const key of ["tnpw", "mil", "conditions", "allowed", "pstress"]) { const toggle = get("parts2BomControls").querySelector(`[data-bom-column-toggle="${key}"]`); toggle.checked = true; toggle.dispatchEvent(new w.Event("input", { bubbles: true })); }
-        assert(get("parts2Controls").getBoundingClientRect().width > 0 && get("catalogPanel").hidden && get("partsTab"), "Parts (2) adds a separate visible table view while retaining Parts");
+        assert(get("parts2Controls").getBoundingClientRect().width === 0 && get("catalogPanel").hidden && get("partsTab"), "Both legacy catalog views remain excluded");
         const paired = valueRow("10000:1");
         assert(paired && paired.cells[3].textContent.includes("TNPW080510K0FEEA") && paired.cells[4].textContent.includes("M55342E06B10E0RTS"), "Same value/tolerance row includes TNPW and M55342 numbers side by side");
         for (const row of tableRows()) for (const [index, family] of [[3,tid],[4,mid]]) {
@@ -156,7 +156,7 @@
           assert(candidate.resistanceOhms === resistance && candidate.tolerancePct === tolerance && candidate.case === "0805" && candidate.tcrPpm === 25, "Paired table candidates decode to their displayed value, tolerance, size, and TCR");
         }
         chooseValue("10000:0.5");
-        assert(valueRow("10000:0.5").dataset.selected === "true" && d.activeElement === valueRow("10000:0.5").querySelector("input"), "Selecting a value highlights the row and preserves native radio focus");
+        assert(valueRow("10000:0.5").dataset.selected === "true" && !get("parts2Controls").getBoundingClientRect().height, "Internal selection updates catalog state without revealing excluded controls");
         assert(get("tolR1").valueAsNumber === 1 && get("parts2Preview").textContent.includes("VMID 6 V"), "Value selection previews without changing the circuit");
         set("parts2Family", "tnpw"); get("parts2Apply").click();
         assert(get("tolR1").valueAsNumber === 0.5 && Number(get("p1").value) === 0.14 && get("parts2Tab").getAttribute("aria-selected") === "true", "Applying a table selection imports its tolerance/rating and keeps Parts (2) open");
@@ -174,7 +174,7 @@
         assert(get("parts2CopyStatus").textContent.startsWith("BOM copied") && get("parts2CopyFallback").hidden, "Successful clipboard copy reports completion");
         Object.defineProperty(w.navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("Clipboard denied"); } } });
         get("parts2Copy").click(); await pause();
-        assert(!get("parts2CopyFallback").hidden && get("parts2CopyText").value === copied.replaceAll("\r\n", "\n") && get("parts2CopyText").selectionEnd === get("parts2CopyText").value.length && d.activeElement === get("parts2CopyText"), "Unavailable clipboard reveals and selects the complete BOM for manual copying");
+        assert(!get("parts2CopyFallback").hidden && get("parts2CopyText").value === copied.replaceAll("\r\n", "\n") && get("parts2CopyText").selectionEnd === get("parts2CopyText").value.length && !get("parts2CopyText").getBoundingClientRect().height, "Legacy clipboard state retains its text without exposing excluded UI");
         if (clipboardDescriptor) Object.defineProperty(w.navigator, "clipboard", clipboardDescriptor); else delete w.navigator.clipboard;
         assert(bomCell("r1", "qty").textContent === "1" && bomCell("r1", "value").textContent === "10 kΩ" && bomCell("r1", "footprint").textContent === "0805" && get("liveSchematic").querySelector('[data-schematic-symbol="r1"] [data-field="footprint"]').textContent === "0805", "Standard BOM and SVG show the applied physical footprint and quantity");
         set("parts2BomMaxP", "2.5");
@@ -237,7 +237,7 @@
         await reset(); get("parts2Tab").click();
         for (const width of [320, 390, 768, 900, 1440]) {
           frame.style.width = width + "px"; await pause();
-          assert(d.documentElement.scrollWidth <= width && get("parts2Panel").getBoundingClientRect().width > 0, `Selectable values and BOM fit their scroll regions at ${width}px`);
+          assert(d.documentElement.scrollWidth <= width && get("parts2Panel").getBoundingClientRect().width === 0, `Legacy catalog and BOM remain excluded at ${width}px`);
         }
         const valueRegion = get("parts2Rows").closest(".table-wrap");
         valueRegion.scrollTop = valueRegion.scrollHeight;

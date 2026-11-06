@@ -51,11 +51,11 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   get('pairNext').click();assert(get('pairPage').textContent.startsWith('51–'),'Next page exposes subsequent combinations');
   get('pairPrevious').click();assert(get('pairPage').textContent.startsWith('1–'),'Previous page returns to the first combinations');
   get('pairRows').rows[2].cells[2].click();
-  assert(get('pairRows').rows[2].dataset.selected==='true'&&d.activeElement===get('pairRows').rows[2].querySelector('input'),'Selecting a row updates the inspector and preserves radio focus');
+  assert(get('pairRows').rows[2].dataset.selected==='true'&&!get('pairRows').getBoundingClientRect().height,'Internal selection updates the preview while the legacy table stays excluded');
   for(const x of ['power','current','rth'])for(const y of ['error','nominalError','vmid','pstress','vstress']){set('pairAxisX',x);set('pairAxisY',y);assert(get('pairChart').width>0&&!get('pairInspector').hidden,`Chart supports ${x} versus ${y}`);}
   const rect=get('pairChart').getBoundingClientRect();let point=null;
   for(let y=30;y<285&&!point;y+=5)for(let x=65;x<rect.width-15&&!point;x+=5)point=w.nearestPairPoint({clientX:rect.left+x,clientY:rect.top+y});
-  assert(!!point,'The chart renders selectable performance points');
+  assert(!get('pairChart').getBoundingClientRect().width,'The rough legacy chart is excluded; SVG plot interaction is covered by pair_svg.html');
   if(point){get('pairChart').dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:rect.left+point.x,clientY:rect.top+point.y}));assert(get('pairInspector').textContent.includes(items[point.index].top.mpn),'Clicking a chart point selects the corresponding real pair');}
   set('pairSort','power');
   assert(items.every((p,i)=>i===0||items[i-1].result.total<=p.result.total+1e-15),'Sorting orders the full result set by performance');
@@ -65,7 +65,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   w.selectPair(0);
   const circuitBeforeComparison=['vin','r1','r2','tolVin','tolR1','tolR2','p1','p2'].map(id=>get(id).value).join('|'),bomBeforeComparison=w.catalogBomCsv(),svgBeforeComparison=get('liveSchematic').textContent;
   const compareA=items[Number(get('pairRows').rows[0].dataset.valueRow)];comparisonCheck(compareA).focus();comparisonCheck(compareA).click();
-  assert(comparisonKeys().join('|')===key(compareA)&&d.activeElement===comparisonCheck(compareA),'A Compare checkbox adds a row and preserves keyboard focus');
+  assert(comparisonKeys().join('|')===key(compareA)&&!get('pairComparisonRows').getBoundingClientRect().height,'Internal comparison state stays excluded from the workspace');
   assert(get('liveSchematic').textContent===svgBeforeComparison,'Checking Compare preserves the separate SVG preview selection');
   get('pairNext').click();const compareB=items[Number(get('pairRows').rows[0].dataset.valueRow)];comparisonCheck(compareB).click();
   assert(comparisonRows().length===2&&comparisonKeys()[0]===key(compareA)&&comparisonKeys()[1]===key(compareB),'Pairs selected on different pages remain in insertion order');
@@ -84,7 +84,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async value=>{copied=value;}}});get('pairComparisonCopy').click();await pause();
   assert(copied===comparisonTsv&&get('pairComparisonCopyStatus').textContent.startsWith('Comparison copied')&&get('pairComparisonCopyFallback').hidden,'Copy table writes the complete comparison TSV and reports success');
   Object.defineProperty(w.navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('Clipboard denied');}}});get('pairComparisonCopy').click();await pause();
-  assert(!get('pairComparisonCopyFallback').hidden&&get('pairComparisonCopyText').value===comparisonTsv.replaceAll('\r\n','\n')&&get('pairComparisonCopyText').selectionEnd===get('pairComparisonCopyText').value.length&&d.activeElement===get('pairComparisonCopyText'),'Clipboard denial reveals and selects all comparison text for manual copying');
+  assert(!get('pairComparisonCopyFallback').hidden&&get('pairComparisonCopyText').value===comparisonTsv.replaceAll('\r\n','\n')&&get('pairComparisonCopyText').selectionEnd===get('pairComparisonCopyText').value.length&&!get('pairComparisonCopyText').getBoundingClientRect().height,'Legacy copy state does not reveal the excluded comparison UI');
   const compared=[compareA,compareB,compareC],powers=compared.map(pair=>pair.worst.power*1000),powerLimit=(Math.min(...powers)+Math.max(...powers))/2;
   set('pairBomMaxPower',String(powerLimit));const qualified=compared.filter(pair=>pair.worst.power*1000<=powerLimit+1e-9);
   assert(comparisonRows().length===qualified.length&&get('pairComparisonRows').rows.length===qualified.length*2&&w.pairComparisonTsv().trim().split('\r\n').length===qualified.length*2+1,'Worst total-power table filtering keeps complete two-part BOMs and copies only qualifying options');
@@ -157,24 +157,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   assert(shown().length===0&&get('pairRows').rows.length===0&&get('pairFilteredCsv').disabled&&w.pairSearchCsv(true)===''&&!get('schematicHeading').textContent.includes('preview'),'An empty selection clears table, preview, filtered export and application');
   assert(w.pairSearchCsv().trim().split('\r\n').length===items.length+1,'An empty visualization selection preserves the full search for clearing/export');
   get('pairClearFilters').click();set('pairSort','power');
-  const pointer=(type,x,y,pointerId=61)=>{const bounds=get('pairChart').getBoundingClientRect();get('pairChart').dispatchEvent(new w.PointerEvent(type,{bubbles:true,cancelable:true,pointerId,pointerType:'mouse',isPrimary:true,button:0,buttons:type==='pointerup'?0:1,clientX:bounds.left+x,clientY:bounds.top+y}));};
-  const drag=(x1,y1,x2,y2)=>{pointer('pointerdown',x1,y1);pointer('pointermove',x2,y2);pointer('pointerup',x2,y2);const before=get('pairInspector').textContent,bounds=get('pairChart').getBoundingClientRect();get('pairChart').dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:bounds.left+x2,clientY:bounds.top+y2}));assert(get('pairInspector').textContent===before,'The compatibility click after dragging does not override the filtered selection');};
-  let chartWidth=get('pairChart').getBoundingClientRect().width;
-  const x1=62+(chartWidth-80)*0.2,x2=62+(chartWidth-80)*0.65,y1=27+260*0.25,y2=27+260*0.7;
-  drag(x1,y1,x2,y2);
-  const bounds=['pairFilterXMin','pairFilterXMax','pairFilterYMin','pairFilterYMax'].map(id=>get(id).valueAsNumber);
-  expected=items.filter(p=>p.result.total*1000>=bounds[0]-1e-10&&p.result.total*1000<=bounds[1]+1e-10&&p.error>=bounds[2]-1e-10&&p.error<=bounds[3]+1e-10);
-  assert(expected.length>0&&expected.length<items.length&&samePairs(shown(),expected),'Dragging a chart region filters table rows to its data-space rectangle');
-  const logValues=items.map(p=>Math.log10(p.result.total*1000)),logMin=Math.min(...logValues),logMax=Math.max(...logValues),logPad=Math.max(0.05,(logMax-logMin)*0.04);
-  near(bounds[0],10**(logMin-logPad+(logMax-logMin+2*logPad)*0.2),'Drag X minimum respects logarithmic axis conversion');
-  near(bounds[1],10**(logMin-logPad+(logMax-logMin+2*logPad)*0.65),'Drag X maximum respects logarithmic axis conversion');
-  drag(x2,y2,x1,y1);assert(samePairs(shown(),expected),'Dragging in reverse selects the same region');
-  const priorBounds=['pairFilterXMin','pairFilterXMax','pairFilterYMin','pairFilterYMax'].map(id=>get(id).value).join('|'),priorPreview=get('pairInspector').textContent;
-  pointer('pointerdown',x1,y1);pointer('pointermove',x2,y1+10);get('pairChart').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));pointer('pointerup',x2,y1+10);
-  get('pairChart').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
-  assert(['pairFilterXMin','pairFilterXMax','pairFilterYMin','pairFilterYMax'].map(id=>get(id).value).join('|')===priorBounds&&get('pairInspector').textContent===priorPreview,'Escape during dragging cancels the gesture without changing filters or preview');
-  pointer('pointerdown',x1,y1);pointer('pointermove',x2,y2);pointer('pointercancel',x2,y2);assert(samePairs(shown(),expected),'Pointer cancellation preserves the previously committed region');
-  frame.style.width='390px';await pause();assert(samePairs(shown(),expected),'Resize preserves drag filters in data coordinates');frame.style.width='1440px';await pause();
+  // The removed HTML chart has no interactive surface. Test actual SVG gestures in pair_svg.html.
   set('pairAxisX','current');assert(get('pairFilterXMin').value===''&&get('pairFilterYMin').value===''&&shown().length===items.length&&get('pairFilterXMaxLabel').textContent.includes('µA'),'Axis changes clear old coordinate bounds and relabel their units');
   setFamilies('mixed');set('pairFilterXMin','1');get('pairChart').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert(shown().length===items.length&&familyToggles.every(input=>input.checked),'Escape outside a gesture clears bounds and restores all legend families');
   get('pairClearFilters').click();

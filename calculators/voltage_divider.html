@@ -80,7 +80,7 @@
     .mode-picker { margin: 24px 0; }
     .mode-picker h2 { margin: 0 0 12px; font-size: 1rem; font-weight: 500; color: #d3e6f4; }
     .mode-picker > .hint { margin-top: 10px; }
-    .mode-choices { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+    .mode-choices { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
     .mode-choice {
       display: flex; flex-direction: column; gap: 7px; text-align: left;
       padding: 15px 14px; min-width: 0; border: 0; border-bottom: 2px solid transparent;
@@ -198,7 +198,6 @@
     .workspace-disclosure:not([open]) > :not(summary), #manualLimits:not([open]) > :not(summary) { display: none !important; }
     .workspace-disclosure .automatic-design { margin: 0 0 16px; }
     #manualLimits > summary { padding: 0 0 12px; cursor: pointer; color: var(--muted); }
-    #calculatorDetails > .column { padding-bottom: 16px; }
     .circuit-reference { margin: 20px 0 24px; }
     .circuit-reference h2 { font-size: 1.15rem; }
     .circuit-reference-body { display: grid; gap: 16px; padding: 0 20px 20px; }
@@ -423,7 +422,6 @@
         <button class="mode-choice" type="button" data-solve-mode="vin" aria-pressed="false" aria-controls="liveSchematic"><span>Given VMID, RTOP, RBOT</span><strong>Find VTOP</strong></button>
         <button class="mode-choice" type="button" data-solve-mode="r1" aria-pressed="false" aria-controls="liveSchematic"><span>Given VTOP, VMID, RBOT</span><strong>Find RTOP</strong></button>
         <button class="mode-choice" type="button" data-solve-mode="r2" aria-pressed="false" aria-controls="liveSchematic"><span>Given VTOP, VMID, RTOP</span><strong>Find RBOT</strong></button>
-        <button class="mode-choice" type="button" data-solve-mode="rl" aria-pressed="false" aria-controls="liveSchematic"><span>Given VTOP, VMID, RTOP, RBOT</span><strong>Find RL</strong></button>
         <button class="mode-choice" type="button" data-solve-mode="pairs" aria-pressed="false" aria-controls="liveSchematic"><span>Given VTOP, VMID, tolerances, construction</span><strong>Find real resistor combinations</strong></button>
       </div>
       <select id="mobileSolveMode" class="mobile-mode" aria-label="Calculator mode" aria-controls="liveSchematic"></select>
@@ -503,7 +501,7 @@
           <label id="schematicEditValueLabel" for="schematicEditValue">Value</label>
           <div class="input-unit"><input id="schematicEditValue" type="number" step="any" required /><select id="schematicEditUnit" aria-label="Resistance unit"><option value="0.000001">µΩ</option><option value="0.001">mΩ</option><option value="1">Ω</option><option value="1000">kΩ</option><option value="1000000">MΩ</option><option value="1000000000">GΩ</option></select><span id="schematicEditVolts" class="unit">V</span></div>
         </div>
-        <div id="schematicEditSolveField" class="field" hidden><label for="schematicEditSolve">Adjust to reach VMID</label><select id="schematicEditSolve"><option value="r1">RTOP</option><option value="r2">RBOT</option><option value="vin">VTOP</option><option value="rl">RL</option></select></div>
+        <div id="schematicEditSolveField" class="field" hidden><label for="schematicEditSolve">Adjust to reach VMID</label><select id="schematicEditSolve"><option value="r1">RTOP</option><option value="r2">RBOT</option><option value="vin">VTOP</option></select></div>
         <div id="schematicEditConnectionField" class="field" hidden><label for="schematicEditConnection">Arm connection</label><select id="schematicEditConnection"><option value="series">Series chain</option><option value="parallel">Parallel bank</option><option value="mixed" disabled>Mixed · follow schematic</option></select></div>
         <div id="schematicEditToleranceField" class="field"><label for="schematicEditTolerance">Tolerance · ± (%)</label><input id="schematicEditTolerance" type="number" min="0" max="99.999" step="any" required /></div>
         <div id="schematicEditCatalogFields" class="form-grid" hidden>
@@ -598,8 +596,9 @@
           <details><summary>How values are chosen</summary><p class="hint">Within the preferred nominal VMID band, the search favors similar power in non-trim RTOP/RBOT resistors. The trim uses the nearest safe catalog value. Outside the band, the closest result found is reported. Starting resistance sets a search scale; it is not a constraint. This bounded search checks nominal ratings at 70 °C and is not exhaustive. Circuit characteristics include the resulting tolerance interval.</p></details>
         </form>
       </details>
-      <details id="calculatorDetails" class="workspace-disclosure">
-        <summary>Data &amp; comparisons</summary>
+      <!-- Internal form/catalog state retained for the SVG editors and solver.
+           The experimental Data & comparisons interface is excluded. -->
+      <div id="calculatorDetails" hidden inert>
         <form id="dividerForm" class="panel-body form-grid" novalidate>
           <div hidden data-circuit-inputs>
             <!-- Active input model for the direct SVG editors and circuit solver. -->
@@ -609,7 +608,6 @@
                 <option value="vin">VTOP · Input voltage</option>
                 <option value="r1">RTOP · Upper resistor (R1)</option>
                 <option value="r2">RBOT · Lower resistor (R2)</option>
-                <option value="rl">RL · Output load</option>
                 <option value="pairs">Real resistor combinations · Target VMID and tolerances</option>
                 <option value="tolerance" hidden>Common tolerance analysis</option>
             </select></div>
@@ -896,7 +894,7 @@
           </div>
         </section>
       </div>
-  </details>
+      </div>
 </section>
   </main>
   <script src="../js/resistor-parts.js"></script>
@@ -1029,13 +1027,11 @@
       vin: { title: "Find the required input voltage", symbol: "VTOP", help: "Enter your target VMID and both resistances. The result is the source voltage needed to reach that output.", equation: "VTOP = VMID × (1 + RTOP / Rbottom)" },
       r1: { title: "Find the upper resistance", symbol: "RTOP", help: "Enter VTOP, your target VMID, and RBOT. Configure RTOP parts below if the upper arm uses several resistors.", equation: "RTOP = Rbottom × (VTOP / VMID − 1)" },
       r2: { title: "Find the lower resistance", symbol: "RBOT", help: "Enter VTOP, your target VMID, and RTOP. Configure RBOT parts below if the lower arm uses several resistors.", equation: "RBOT = RTOP × VMID / (VTOP − VMID)" },
-      rl: { title: "Find the output load resistance", symbol: "RL", help: "Enter VTOP, your target VMID, and both arm resistances. The calculated load can lower the output magnitude; it may be open circuit.", equation: "1 / RL = (VTOP − VMID) / (RTOP × VMID) − 1 / RBOT" },
       tolerance: { title: "Find the allowed resistor tolerance", symbol: "tolerance", help: "Set an allowed VMID error, the nominal circuit, and source/load variation. The result is the largest shared tolerance for every physical RTOP/RBOT part.", equation: "Keep VMID within nominal VMID ± the allowed error" }
     };
 
     function modeDetails(mode) {
       if (byId("loadType").value !== "current") return MODE_DETAILS[mode];
-      if (mode === "rl") return { title: "Find the load current", symbol: "IL", help: "Enter VTOP, target VMID and both resistances. Positive IL flows toward ground.", equation: "IL = (VTOP − VMID) / RTOP − VMID / RBOT" };
       const equations = { vout: "VMID = (VTOP / RTOP − IL) / (1 / RTOP + 1 / RBOT)", vin: "VTOP = VMID × (1 + RTOP / RBOT) + IL × RTOP", r1: "RTOP = (VTOP − VMID) / (VMID / RBOT + IL)", r2: "RBOT = VMID / ((VTOP − VMID) / RTOP − IL)" };
       return { ...MODE_DETAILS[mode], equation: equations[mode] || MODE_DETAILS[mode].equation };
     }
@@ -1737,7 +1733,10 @@
 
     function configureSolver() {
       refreshLoadFields(); refreshLoadFields("pair");
-      const mode = byId("solveFor").value;
+      // A browser may restore a retired mode from an older page's form state.
+      // Keep the entered circuit and return to the normal forward calculation.
+      let mode = byId("solveFor").value;
+      if (mode !== "pairs" && !MODE_DETAILS[mode]) byId("solveFor").value = mode = "vout";
       const enteringCombinations = mode === "pairs" && lastSolveMode !== "pairs";
       lastSolveMode = mode;
       if (enteringCombinations && ARMS.some(arm => byId(`${arm}Multiple`).checked)) importPairConstruction();
@@ -1755,12 +1754,9 @@
       }
       for (const arm of ARMS) prepareNetwork(arm);
       for (const id of ["vin", "r1", "r2", "rl", "targetVout", "tolR1", "tolR2"]) {
-        byId(id).readOnly = id === mode && !(id === "rl" && byId("loadType").value === "current") || (id === "targetVout" && ["vout", "tolerance"].includes(mode)) || (["tolR1", "tolR2"].includes(id) && mode === "tolerance");
+        byId(id).readOnly = id === mode || (id === "targetVout" && ["vout", "tolerance"].includes(mode)) || (["tolR1", "tolR2"].includes(id) && mode === "tolerance");
       }
-      byId("loadCurrent").readOnly = mode === "rl" && byId("loadType").value === "current";
-      const currentLoad = byId("loadType").value === "current";
-      document.querySelector('[data-solve-mode="rl"] strong').textContent = currentLoad ? "Find IL" : "Find RL";
-      byId("solveFor").querySelector('[value="rl"]').textContent = currentLoad ? "IL · Load current" : "RL · Output load";
+      byId("loadCurrent").readOnly = false;
       byId("tolVin").readOnly = schematicEditLocks("source").tolerance;
       byId("targetError").readOnly = mode === "vout";
       byId("targetErrorField").hidden = mode !== "tolerance";
@@ -2387,10 +2383,6 @@
       const loadValue = schematicText(loadInfo, loadX + 48, loadY + 10, loadText(model), 18, "#a8bece"); loadValue.id = "schematicLoadValue";
       if (hasLoad) { const tolerance = schematicText(loadInfo, loadX + 48, loadY + 44, currentLoad ? `±${currentText(model.iloadTolerance)}` : `±${percent(state.tolerances.rl)}`, 16, "#a8bece"); schematicEditable(tolerance, "load", "load tolerance", "tolerance"); }
       schematicEditable(loadValue, "load", "load value");
-      if (roles.rl === "solving") {
-        loadValue.setAttribute("data-calculated-load", "");
-        schematicShape(loadInfo, "title").textContent = `Calculated ${currentLoad ? "IL" : "RL"} for the known VTOP, target VMID and divider resistances. Change the target VMID to calculate a different load.`;
-      }
       schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${readoutX + 210}`, fill: "none", stroke: netColor, "stroke-width": mode === "vout" ? 4 : 3, "data-output-net": "VMID", "data-wire-net": "VMID" });
       for (const x of [mainX, loadX]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor, "data-wire-junction": "", "data-wire-net": "VMID" });
       schematicShape(drawing, "circle", { cx: readoutX + 216, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3, "data-wire-net": "VMID" });
@@ -2499,7 +2491,6 @@
       schematicShape(type, "rect", { x: 12, y: y + 10, width: 72, height: 44, rx: 6, fill: "#1e3547", stroke: "#6a8ca5" });
       schematicText(type, 24, y + 39, current ? "IL ▾" : "RL ▾", 18, SOLVE_ROLES[roles.rl].color); schematicEditable(type, "load-type", "load model", "type");
       const value = schematicField(info, width - 156, y + 10, loadText(model), "loadValue", null, "rl", roles, "load", "value", 144, 44); value.querySelector("text").id = "schematicLoadValue";
-      if (roles.rl === "solving") value.setAttribute("data-calculated-load", "");
       if (hasLoad) { schematicText(info, 12, y + 98, "Tolerance", 12, "#a8bece"); schematicField(info, width - 156, y + 70, current ? `±${currentText(model.iloadTolerance)}` : `±${percent(state?.tolerances.rl)}`, "loadTolerance", null, "rl", roles, "load", "tolerance", 144, 44); }
       y += (hasLoad ? 128 : 68) + 12;
       y = mobileDisclosure(drawing, "conditions", "Operating conditions", 0, y, width, mobileConditionsExpanded);
@@ -2574,7 +2565,7 @@
         const error = distance / Math.abs(target) * 100;
         return percent(error < 1e-10 ? 0 : error);
       };
-      const solved = !complete ? mode === "pairs" ? "No selected combination" : "—" : mode === "rl" && DividerCurrentLoad.enabled(state.circuit) ? currentText(state.circuit.iload) : mode === "pairs" ? "Combination preview" : mode === "tolerance" ? `±${percent(state.tolerances.r1)} each` : mode === "vout" ? value(state.result.vout, "V") : mode === "vin" ? value(state.circuit.vin, "V") : state.circuit[mode] === null ? "Open circuit" : value(state.circuit[mode], "Ω");
+      const solved = !complete ? mode === "pairs" ? "No selected combination" : "—" : mode === "pairs" ? "Combination preview" : mode === "tolerance" ? `±${percent(state.tolerances.r1)} each` : mode === "vout" ? value(state.result.vout, "V") : mode === "vin" ? value(state.circuit.vin, "V") : value(state.circuit[mode], "Ω");
       const rows = [
         [mode === "pairs" ? "Find RTOP + RBOT" : mode === "tolerance" ? "Find R tolerance" : `Find ${modeDetails(mode).symbol}`, solved, "findResult"],
         ["Nominal total power", complete ? value(state.result.total, "W") : "—", "nominalPower"],
@@ -2584,13 +2575,12 @@
       if (complete) rows.push(...circuitToleranceRows(state));
       if (complete && DividerCurrentLoad.enabled(state.circuit)) rows.push(["Load current", `${currentText(state.circuit.iload)} ±${currentText(state.circuit.iloadTolerance)}`, "loadCurrent"], ["Load current range", `${currentText(state.bounds.iloadMin)} to ${currentText(state.bounds.iloadMax)}`, "loadCurrentRange"]);
       if (state?.pair?.combination) rows.push(["Stress method", "Conservative interval bounds", "stressMethod"], ["Non-trim power spread", percent(state.pair.powerSpread), "powerSpread"]);
-      if (["pairs", "vin", "r1", "r2", "rl"].includes(mode) || mode === "vout" && Number.isFinite(target)) {
+      if (["pairs", "vin", "r1", "r2"].includes(mode) || mode === "vout" && Number.isFinite(target)) {
         rows.push([mode === "vout" ? "Nominal VMID target" : "Target VMID", value(target, "V"), "targetVmid"],
           ["Nominal target error", accuracy(Math.abs(state?.result.vout - target)), "nominalError"],
           ["Worst target error", accuracy(Math.max(Math.abs(state?.bounds.min - target), Math.abs(state?.bounds.max - target))), "worstError"]);
       } else rows.push(["VMID accuracy", !complete ? "—" : state.bounds.deviation === null ? value(Math.max(Math.abs(state.bounds.min - state.result.vout), Math.abs(state.bounds.max - state.result.vout)), "V") : `±${percent(state.bounds.deviation)}`, "vmidAccuracy"]);
       if (mode !== "vout") rows.push(["Allowed VMID error", Number.isFinite(state?.allowedErrorPct) ? `±${percent(state.allowedErrorPct)}` : "—", "allowedError"]);
-      if (mode === "rl") rows.push(["Load power", complete ? value(state.result.pl, "W") : "—", "loadPower"]);
       const parts = complete ? ARMS.flatMap(arm => state.physical[arm]) : [];
       if (complete && partsMissingVoltage(state)) rows.push(["Voltage ratings", `${parts.filter(part => part.stress.v !== null).length} / ${parts.length} specified`, "voltageRatings"]);
       const worst = state?.worst, worstVoltages = worst?.byPart ? Object.values(worst.byPart).map(part => part.v).filter(value => value !== null) : [];
@@ -2640,97 +2630,124 @@
       return Number.isFinite(value) ? Math.max(0, value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false }) + "%" : "—";
     }
 
+    function partTcrPpm(part) {
+      const value = part.catalog?.tcrPpm ?? part.environment?.tcrPpm ?? environmentSettings.thermal.tcrPpm ?? environmentSettings.thermal.manualTcrPpm;
+      return Number.isFinite(value) ? value : null;
+    }
+
     function renderSchematicTable(host, state, roles, x, y, width, alternativesByPart) {
-      const fontSize = Math.max(12, Math.min(16, Math.round(12 + (width - 320) / 160))), detailSize = Math.max(12, fontSize - 2), lineHeight = Math.ceil(fontSize * 1.45), baseline = fontSize + 10;
+      const fontSize = Math.max(14, Math.min(20, Math.round(12 + innerWidth / 210))), detailSize = Math.max(12, fontSize - 3), lineHeight = Math.ceil(fontSize * 1.3), baseline = 32;
       const tableText = (parent, x, y, content, width, size, color, field = null) => schematicTableText(parent, x, y, content, width, size, color, field, lineHeight);
-      const narrow = width < 720, refWidth = Math.max(64, fontSize * 5), descriptionWidth = narrow ? 0 : width * 0.21, stressWidth = Math.ceil(fontSize * 0.62 * 7) + 12;
-      const pnWidth = (width - (narrow ? 0 : refWidth + descriptionWidth) - 2 * stressWidth) / 2;
-      const widths = [refWidth, pnWidth, pnWidth, descriptionWidth, stressWidth, stressWidth];
-      const labels = ["Ref Des", "TNPW PN", "M55342 PN", "Description", "Pstress", "Vstress"], offsets = [0];
-      for (const size of widths) offsets.push(offsets.at(-1) + size);
-      // Narrow rows put the reference and description above the PN/stress cells.
-      if (narrow) offsets.splice(0, 6, 0, 0, pnWidth, refWidth, 2 * pnWidth, 2 * pnWidth + stressWidth);
       const entries = state ? ARMS.flatMap(arm => state.physical[arm].map(part => ({ arm, part }))) : [];
+      const narrow = width < 720, touch = byId("liveSchematic").dataset.layout === "mobile", actionHeight = touch ? 44 : 30;
+      const longestReference = Math.max(4, ...entries.map(({ part }) => part.name.length));
+      const refWidth = Math.max(narrow ? 76 : 100, Math.ceil(longestReference * fontSize * .64) + 20), descriptionWidth = narrow ? 0 : Math.floor(width * .22), stressWidth = Math.ceil(fontSize * .62 * 8) + 12;
+      const pnWidth = (width - refWidth - descriptionWidth - 2 * stressWidth) / 2;
+      const widths = [refWidth, pnWidth, pnWidth, descriptionWidth, stressWidth, stressWidth], offsets = [0];
+      for (const size of widths) offsets.push(offsets.at(-1) + size);
+      const labels = ["Ref Des", "TNPW PN", "M55342 PN", "Description", "Pstress", "Vstress"];
       const bom = [["Reference", "Qty", "Value", "Tolerance", "Footprint", "Manufacturer part number", "TNPW PN", "M55342 PN", "Description", "Pstress", "Vstress", "Part status", "TNPW recommendation (not applied)", "M55342 recommendation (not applied)"]];
       schematicBomChoices.clear(); schematicBomChoiceRevision++;
-      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Resistor descriptions, part numbers and nominal power/voltage stresses", "aria-colcount": 6, "aria-rowcount": entries.length + 1, "data-schematic-table": "" });
-      const title = tableText(table, 0, fontSize + 4, "Parts list and electrical part stress", width, fontSize + 4, "#eaf6ff"), headerTop = title.lines * lineHeight + 18;
-      const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 }), headerHeight = (narrow ? 3 : 1) * lineHeight + 16;
+      const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Parts list with resistance, tolerance, package, TCR and nominal power/voltage stress", "aria-colcount": 6, "aria-rowcount": entries.length + 1, "data-schematic-table": "", "data-table-layout": narrow ? "cards" : "columns" });
+      const title = tableText(table, 0, fontSize + 4, "Parts list", width, fontSize + 4, "#eaf6ff"), headerTop = title.lines * lineHeight + 14, headerHeight = lineHeight + 16;
+      const head = schematicShape(table, "g", { role: "row", "aria-rowindex": 1 });
       schematicInfoBox(head, 0, headerTop, width, headerHeight);
       labels.forEach((label, index) => {
-        const cell = schematicShape(head, "g", { role: "columnheader", "aria-colindex": index + 1 });
-        const lower = index !== 0 && index !== 3;
-        const lines = narrow && lower ? index < 3 ? label.split(" ") : [label[0], "stress"] : [label];
-        lines.forEach((line, i) => schematicText(cell, offsets[index] + 4, headerTop + baseline + (narrow && lower ? lineHeight : 0) + i * lineHeight, line, Math.max(12, fontSize - 1), "#a8bece"));
+        const cell = schematicShape(head, "g", { role: "columnheader", "aria-colindex": index + 1, "aria-label": label });
+        if (!narrow || [0, 4, 5].includes(index)) {
+          const left = narrow ? index === 0 ? 10 : width - (6 - index) * stressWidth : offsets[index] + 10;
+          schematicText(cell, left, headerTop + fontSize + 10, narrow && index === 0 ? "Part" : label, Math.max(12, fontSize - 1), "#a8bece");
+        }
       });
       let top = headerTop + headerHeight + 6;
       for (const [index, { arm, part }] of entries.entries()) {
         const row = schematicShape(table, "g", { transform: `translate(0 ${top})`, role: "row", "aria-rowindex": index + 2, "data-schematic-part": part.id });
         const background = schematicInfoBox(row, 0, 0, width, 0);
-        const derated = part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW);
-        const description = `${part.name}; ${format(part.resistance, "Ω")}; Tolerance ±${percent(part.tolerance)}; Footprint ${resistorFootprint(part) || "Not set"}; ${derated ? "Allowed" : "Rated"} ${format(part.rating, "W")}`;
+        const tcr = partTcrPpm(part), tcrText = tcr === null ? "TCR not set" : `±${percent(tcr).replace("%", "")} ppm/°C`;
+        const description = `${part.name}; ${format(part.resistance, "Ω")}; Tolerance ±${percent(part.tolerance)}; Footprint ${resistorFootprint(part) || "Not set"}; TCR ${tcrText}; ${part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW) ? "Allowed" : "Rated"} ${format(part.rating, "W")}`;
         schematicShape(row, "title").textContent = description;
+        // Explicit row-local rectangles contain the whole reference and hit area.
+        // Text-only decoration can extend above/left of a row on touch screens.
         const refCell = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
-        const reference = tableText(refCell, 4, baseline, part.name, refWidth - 8, fontSize, SOLVE_ROLES[roles[arm]].color), ref = reference.text;
+        const ref = schematicShape(refCell, "g", { class: "schematic-field", "data-field": "reference" });
+        schematicShape(ref, "rect", { x: 8, y: 6, width: refWidth - 16, height: 44, rx: 7, fill: "#142535", stroke: "#2b4152" });
+        schematicText(ref, 16, baseline, part.name, fontSize, SOLVE_ROLES[roles[arm]].color);
         schematicEditable(schematicRole(ref, arm, roles), part.id, `${description}; catalog specifications`, "specifications");
         const matches = schematicPartMatches(part, arm, state), candidates = matches.filter(match => match.kind !== "nearby").map(match => match.candidate);
         alternativesByPart.set(part.id, candidates.filter(candidate => candidate.mpn !== part.mpn));
-        const familyNumbers = { tnpw: candidates.find(item => item.familyId.includes("tnpw"))?.mpn, mil: candidates.find(item => item.familyId.includes("m55342"))?.mpn };
-        const cells = bomPartCells(part, part.catalog, familyNumbers);
+        const familyNumbers = { tnpw: candidates.find(item => item.familyId.includes("tnpw"))?.mpn, mil: candidates.find(item => item.familyId.includes("m55342"))?.mpn }, cells = bomPartCells(part, part.catalog, familyNumbers);
         const failures = partFailures(part, state), failed = failures.length > 0;
         if (failed) { row.dataset.partFailed = "true"; background.setAttribute("stroke", "#ff8e8e"); }
-        const actualDescription = `${cells.value} · ${cells.tolerance} · ${resistorFootprint(part) || "Footprint not set"}${failed ? " · FAIL" : ""}`;
+        const actualDescription = `${cells.value} · ${cells.tolerance} · ${resistorFootprint(part) || "Footprint not set"} · ${tcrText}${failed ? " · FAIL" : ""}`;
         const descriptionCell = schematicShape(row, "g", { role: "cell", "aria-colindex": 4 });
-        const described = tableText(descriptionCell, offsets[3] + 4, baseline, actualDescription, narrow ? width - refWidth - 8 : descriptionWidth - 8, fontSize, failed ? "#ff8e8e" : "#c6e3ff", "description");
+        const descriptionY = narrow ? 72 : baseline;
+        const described = tableText(descriptionCell, narrow ? 12 : offsets[3] + 10, descriptionY, actualDescription, narrow ? width - 24 : descriptionWidth - 20, fontSize, failed ? "#ff8e8e" : "#c6e3ff", "description");
         if (failed) schematicShape(descriptionCell, "title").textContent = failures.join("; ") + ". Part retained in the design.";
-        const recommendationText = family => { const match = matches.find(item => item.family === family && item.kind === "nearby"), delta = match ? (match.candidate.resistanceOhms / part.resistance - 1) * 100 : 0; return match ? `${match.candidate.mpn}; ${format(match.candidate.resistanceOhms, "Ω")}; ±${percent(match.candidate.tolerancePct)}; ${match.candidate.case}; ΔR ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "—"; };
+        const recommendationText = family => { const match = matches.find(item => item.family === family && item.kind === "nearby"), delta = match ? (match.candidate.resistanceOhms / part.resistance - 1) * 100 : 0; return match ? `${match.candidate.mpn}; ${format(match.candidate.resistanceOhms, "Ω")}; ±${percent(match.candidate.tolerancePct)}; ${match.candidate.case}; ±${match.candidate.tcrPpm} ppm/°C; ΔR ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "—"; };
         const assignmentStatus = part.catalog ? "Applied" : candidates.length ? "Exact-value matches; not applied" : "Unassigned; recommendations are not applied";
         bom.push([...["reference", "qty", "value", "tolerance", "footprint", "mpn", "tnpw", "mil"].map(key => cells[key]), actualDescription, partStressPercent(part.stress.p), partStressPercent(part.stress.v), failed ? `FAIL: ${failures.join("; ")}; ${assignmentStatus}` : assignmentStatus, recommendationText("tnpw"), recommendationText("mil")]);
-        const partTop = narrow ? baseline + Math.max(reference.lines, described.lines) * lineHeight + 8 : baseline;
-        let rowBottom = baseline + (Math.max(reference.lines, described.lines) - 1) * lineHeight + 10;
+        let rowBottom = Math.max(50, descriptionY + (described.lines - 1) * lineHeight + 8), familyTop = narrow ? rowBottom + 26 : baseline;
         for (const [column, family] of [[1, "tnpw"], [2, "mil"]]) {
           const match = matches.find(item => item.family === family), candidate = match?.candidate, selected = match?.kind === "selected", nearby = match?.kind === "nearby";
-          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": column + 1, "data-family": family === "mil" ? "m55342" : family });
+          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": column + 1, "aria-label": family === "mil" ? "M55342 part number" : "TNPW part number", "data-family": family === "mil" ? "m55342" : family });
           if (candidate) cell.dataset.partMatch = match.kind;
           const content = candidate?.mpn || "—", field = candidate ? selected ? "mpn" : nearby ? "mpnRecommendation" : "mpnAlternative" : null;
-          const wrapped = tableText(cell, offsets[column] + (selected ? 14 : 4), partTop, content, pnWidth - (selected ? 18 : 8), fontSize, candidate ? selected ? "#54d2ff" : nearby ? "#ffba52" : "#6ee7ac" : "#a8bece", field);
-          let cellBottom = partTop + wrapped.lines * lineHeight;
-          if (selected) schematicText(cell, offsets[column] + 4, partTop, "*", fontSize, "#54d2ff");
+          const left = narrow ? 12 : offsets[column] + 10, cellWidth = narrow ? width - 24 : pnWidth - 20;
+          const actionWidth = state.pair ? 80 : 70;
+          const inlineAction = !!candidate && !selected && (narrow || content.length * fontSize * .62 + actionWidth + 8 <= cellWidth);
+          const contentWidth = cellWidth - (inlineAction ? actionWidth + 8 : 0) - (selected ? 10 : 0);
+          const wrapped = tableText(cell, left + (selected ? 10 : 0), familyTop, content, contentWidth, fontSize, candidate ? selected ? "#54d2ff" : nearby ? "#ffba52" : "#6ee7ac" : "#a8bece", field);
+          let cellBottom = familyTop + (wrapped.lines - 1) * lineHeight + 8;
+          if (selected) schematicText(cell, left, familyTop, "*", fontSize, "#54d2ff");
           if (candidate) schematicShape(cell, "title", selected ? {} : { "data-field": nearby ? "recommendationLimits" : "alternativeLimits" }).textContent = `${selected ? "Selected" : nearby ? "Recommendation; not applied" : "Exact-value match; not applied"} ${candidate.mpn}; ${format(candidate.resistanceOhms, "Ω")}; ±${percent(candidate.tolerancePct)}; ${candidate.case}; ${format(candidate.powerW, "W")} allowed; ${candidate.workingVoltageV} V; ${candidate.temperatureC} °C; ${candidate.mode}; ±${candidate.tcrPpm} ppm/°C; reliability ${candidate.failureRate || "N/A"}${match.preview ? `; using this part gives VMID ${format(match.preview.result.vout, "V")}, selected-part maximum stress ${percent(match.preview.highest)}` : match.previewError ? `; cannot use: ${match.previewError}` : ""}`;
           if (candidate && !selected) {
-            const delta = (candidate.resistanceOhms / part.resistance - 1) * 100;
-            const label = nearby ? catalogSame(candidate.resistanceOhms, part.resistance) ? "Tolerance change" : `Nearest · ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}` : "Exact value";
-            const note = tableText(cell, offsets[column] + 4, cellBottom, label, pnWidth - 8, detailSize, nearby ? "#ffba52" : "#6ee7ac", "matchStatus"); cellBottom += note.lines * lineHeight;
-            const specs = tableText(cell, offsets[column] + 4, cellBottom, `${nearby ? format(candidate.resistanceOhms, "Ω") + " · " : ""}±${percent(candidate.tolerancePct)} · ${candidate.case}`, pnWidth - 8, detailSize, "#c6d7e5", "candidateDescription"); cellBottom += specs.lines * lineHeight;
             const locks = schematicEditLocks(part.id), locked = locks.value && !catalogSame(part.resistance, candidate.resistanceOhms) || locks.tolerance && (!catalogSame(part.tolerance, candidate.tolerancePct) || !catalogSame(part.resistance, candidate.resistanceOhms));
             const disabled = !!state.pair ? !match.pair : locked || !match.preview || match.preview.highest > 100 + 1e-9;
             if (!match.displayOnly) {
-              const action = `bom-use:${schematicBomChoiceRevision}:${part.id}:${family}`;
+              const action = `bom-use:${schematicBomChoiceRevision}:${part.id}:${family}`, actionY = inlineAction ? familyTop - 25 : cellBottom + 4;
               schematicBomChoices.set(action, { ...match, part, state, disabled });
-              const button = pairSvgAction(cell, offsets[column] + 4, cellBottom + 2, !!state.pair ? "Preview" : locked ? "Find value" : !match.preview ? "No solution" : disabled ? "Over rating" : "Use", action, { disabled, color: nearby ? "#ffba52" : "#6ee7ac", maxWidth: pnWidth - 8, label: `${state.pair ? "Preview" : "Use"} ${candidate.mpn} for ${part.name}; ${format(candidate.resistanceOhms, "Ω")}, ±${percent(candidate.tolerancePct)}, ${candidate.case}${locked ? "; calculated Find values are read-only" : ""}` });
-              button.pill.dataset.bomPart = part.id; button.pill.dataset.bomFamily = family; cellBottom += 34;
+              const button = pairSvgAction(cell, inlineAction ? left + cellWidth - actionWidth : left, actionY, !!state.pair ? "Preview" : locked ? "Locked" : !match.preview ? "N/A" : disabled ? "FAIL" : "Use", action, { disabled, color: nearby ? "#ffba52" : "#6ee7ac", maxWidth: inlineAction ? actionWidth : cellWidth, label: `${state.pair ? "Preview" : "Use"} ${candidate.mpn} for ${part.name}; ${format(candidate.resistanceOhms, "Ω")}, ±${percent(candidate.tolerancePct)}, ${candidate.case}, ±${candidate.tcrPpm} ppm/°C${locked ? "; calculated Find values are read-only" : !match.preview ? "; no valid circuit preview" : disabled ? "; exceeds a part rating" : ""}` });
+              button.pill.dataset.bomPart = part.id; button.pill.dataset.bomFamily = family;
+              button.pill.querySelector("rect").setAttribute("height", actionHeight); button.pill.querySelector("text").setAttribute("y", actionY + actionHeight / 2 + 5);
+              cellBottom = Math.max(cellBottom, actionY + actionHeight);
+            }
+            if (nearby) {
+              const delta = (candidate.resistanceOhms / part.resistance - 1) * 100, label = catalogSame(candidate.resistanceOhms, part.resistance) ? "Tolerance change" : `Nearest · ${delta < 0 ? "−" : "+"}${percent(Math.abs(delta))}`;
+              // Show only changes; the actual row description and PN tooltip
+              // already contain the shared tolerance, package and TCR specs.
+              const changes = [label];
+              if (!catalogSame(candidate.resistanceOhms, part.resistance)) changes.push(format(candidate.resistanceOhms, "Ω"));
+              if (!catalogSame(candidate.tolerancePct, part.tolerance)) changes.push(`±${percent(candidate.tolerancePct)}`);
+              if (candidate.case !== resistorFootprint(part)) changes.push(candidate.case);
+              if (!catalogSame(candidate.tcrPpm, tcr)) changes.push(`±${candidate.tcrPpm} ppm/°C`);
+              const note = tableText(cell, left, cellBottom + detailSize + 3, changes.join(" · "), cellWidth, detailSize, "#ffba52", "matchStatus"); cellBottom += note.lines * lineHeight + 4;
             }
           }
           rowBottom = Math.max(rowBottom, cellBottom);
+          if (narrow) familyTop = rowBottom + 30;
         }
         row.append(descriptionCell);
         for (const [metricIndex, key] of ["p", "v"].entries()) {
-          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 5 }), value = part.stress[key], content = partStressPercent(value);
+          const cell = schematicShape(row, "g", { role: "cell", "aria-colindex": metricIndex + 5 }), value = part.stress[key], content = partStressPercent(value), left = narrow ? width - (2 - metricIndex) * stressWidth : offsets[metricIndex + 4] + 10;
           const colors = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" };
-          const wrapped = tableText(cell, offsets[metricIndex + 4] + 4, partTop, content, stressWidth - 8, fontSize, colors[stressClass(value)], key);
-          rowBottom = Math.max(rowBottom, partTop + wrapped.lines * lineHeight);
+          const wrapped = tableText(cell, left, baseline, content, stressWidth - 12, fontSize, colors[stressClass(value)], key);
+          rowBottom = Math.max(rowBottom, baseline + (wrapped.lines - 1) * lineHeight + 8);
           if (key === "v") schematicShape(cell, "title").textContent = value === null ? "Vstress not assessed: maximum continuous working voltage is not specified." : `Voltage drop / design voltage limit (${designRatings(part.rating, part.vmax, state.environment?.settings || environmentSettings).voltage} V), using the selected percentage of rating.`;
         }
-        const height = Math.max(36, rowBottom + 6); background.setAttribute("height", height); top += height + 6;
+        const height = Math.max(58, rowBottom + 10); background.setAttribute("height", height); top += height + 6;
       }
-      if (!entries.length) { const note = tableText(table, 4, top + baseline, state?.pairSetup ? "Set inputs in the diagram, then Find Design Solutions." : "Enter valid circuit data.", width - 8, fontSize, "#ffba52"); top += Math.max(38, note.lines * lineHeight + 18); }
+      if (!entries.length) { const note = tableText(table, 12, top + baseline, state?.pairSetup ? "Set inputs in the diagram, then Find Design Solutions." : "Enter valid circuit data.", width - 24, fontSize, "#ff8e8e"); top += Math.max(38, note.lines * lineHeight + 18); }
       const previousBom = schematicBomTsv(); schematicBomData = bom;
       if (previousBom !== schematicBomTsv()) {
         schematicBomCopyGeneration++;
         byId("schematicBomCopyStatus").textContent = ""; byId("schematicBomCopyStatus").hidden = true;
         byId("schematicBomCopyFallback").hidden = true; byId("schematicBomCopyText").value = "";
       }
-      if (entries.length) { pairSvgAction(host, x, y + top + 6, "Copy BOM", "copy-bom", { maxWidth: width }); top += 40; }
+      if (entries.length) {
+        const copy = pairSvgAction(host, x, y + top + 6, "Copy BOM", "copy-bom", { maxWidth: width });
+        if (touch) { copy.pill.querySelector("rect").setAttribute("height", 44); copy.pill.querySelector("text").setAttribute("y", y + top + 33); }
+        top += touch ? 58 : 40;
+      }
       return y + top + 12;
     }
 
@@ -3541,7 +3558,7 @@
       byId("schematicEditUnit").value = unit; byId("schematicEditUnit").hidden = !resistance;
       byId("schematicEditVolts").hidden = resistance;
       byId("schematicEditSolveField").hidden = kind !== "target" || focus === "tolerance";
-      byId("schematicEditSolve").value = ["vin", "r1", "r2", "rl"].includes(byId("solveFor").value) ? byId("solveFor").value : "r1";
+      byId("schematicEditSolve").value = ["vin", "r1", "r2"].includes(byId("solveFor").value) ? byId("solveFor").value : "r1";
       byId("schematicEditConnectionField").hidden = kind !== "arm";
       if (kind === "arm") { byId("schematicEditConnection").querySelector('[value="mixed"]').disabled = typeof state.networks[key].connection !== "object"; byId("schematicEditConnection").value = connectionLabel(state.networks[key].connection); }
       byId("schematicEditToleranceField").hidden = !["source", "target", "load"].includes(kind);
@@ -5477,7 +5494,6 @@
       renderSchematic();
       renderCatalogMatches();
       for (const input of form.querySelectorAll('[aria-invalid="true"]')) {
-        if (byId("manualLimits").contains(input)) byId("calculatorDetails").open = true;
         for (let parent = input.parentElement; parent && parent !== form; parent = parent.parentElement) {
           if (parent.tagName === "DETAILS") parent.open = true;
         }
@@ -5511,7 +5527,7 @@
           vin: mode === "vin" ? null : readInput("vin", "Input voltage"),
           r1: mode === "r1" ? null : networks.r1 ? networks.r1.equivalent.resistance : readInput("r1", "RTOP resistance", false, true, Number(byId("r1Unit").value)),
           r2: mode === "r2" ? null : networks.r2 ? networks.r2.equivalent.resistance : readInput("r2", "RBOT resistance", false, true, Number(byId("r2Unit").value)),
-          ...readLoad("", null, mode === "rl")
+          ...readLoad()
         };
         const target = ["vout", "tolerance"].includes(mode) ? null : readInput("targetVout", "Target VMID");
         const allowedErrorPct = mode === "vout" ? null : readInput("targetError", "Allowed VMID error");
@@ -5577,7 +5593,6 @@
         byId("inputError").hidden = true;
         if (["vout", "tolerance"].includes(mode)) byId("targetVout").value = result.vout;
         else if (mode === "vin") { byId("vin").value = vin; byId("tolVin").value = environment.sourceTolerance.feasible ? tolerances.vin : ""; }
-        else if (mode === "rl" && DividerCurrentLoad.enabled(circuit)) writeLoad(circuit);
         else byId(mode).value = circuit[mode] === null ? "" : circuit[mode] / Number(byId(`${mode}Unit`).value);
         if (mode === "tolerance") {
           byId("tolR1").value = tolerances.r1;
@@ -5598,10 +5613,9 @@
         renderComparison("r1", physical.r1, selected1);
         renderComparison("r2", physical.r2, selected2);
         byId("tolRl").disabled = rl === null;
-        const names = { vin: "VTOP", vout: "VMID", r1: "RTOP (R1)", r2: "RBOT (R2)", rl: "RL", tolerance: "Common R1/R2 tolerance" };
+        const names = { vin: "VTOP", vout: "VMID", r1: "RTOP (R1)", r2: "RBOT (R2)", tolerance: "Common R1/R2 tolerance" };
         byId("solutionLabel").textContent = `3. Result · ${names[mode]}`;
-        if (mode === "rl" && DividerCurrentLoad.enabled(circuit)) byId("solutionLabel").textContent = "3. Result · IL";
-        byId("solutionValue").textContent = mode === "rl" && DividerCurrentLoad.enabled(circuit) ? currentText(circuit.iload) : mode === "tolerance" ? `±${tolerances.r1}% each` : mode === "vout" ? format(result.vout, "V") : mode === "vin" ? format(vin, "V") : circuit[mode] === null ? "Open circuit" : format(circuit[mode], "Ω");
+        byId("solutionValue").textContent = mode === "tolerance" ? `±${tolerances.r1}% each` : mode === "vout" ? format(result.vout, "V") : mode === "vin" ? format(vin, "V") : format(circuit[mode], "Ω");
         const voltagePrecision = voltageDigits({ circuit, bounds });
         byId("voutMin").textContent = format(bounds.min, "V", voltagePrecision);
         byId("voutMax").textContent = format(bounds.max, "V", voltagePrecision);
