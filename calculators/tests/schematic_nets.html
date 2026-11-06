@@ -5,7 +5,16 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),drawing=()=>get('schematicDrawing'),errors=[];w.addEventListener('error',event=>errors.push(event.message));assert(await w.resistorCatalogReady,'Catalogs load');await w.circuitLogoReady;
  const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));},reset=async()=>{get('dividerForm').reset();get('pairForm').reset();await pause();};
  const color=(net,mode)=>net==='VMID'&&mode==='vout'||net==='VTOP'&&mode==='vin'?'rgb(255, 142, 142)':'rgb(84, 210, 255)',point=(path,end)=>path.getPointAtLength(end?path.getTotalLength():0),same=(a,b)=>near(a.x,b.x)&&near(a.y,b.y);
+ const verifyOutput=(label,mode)=>{
+  const name=drawing().querySelector('[data-net-label="VMID"]'),pin=drawing().querySelector('[data-output-terminal="VMID"]'),mobile=get('liveSchematic').dataset.layout==='mobile';
+  assert(drawing().querySelectorAll('[data-net-label="VMID"]').length===1&&name?.textContent==='VMID'&&w.getComputedStyle(name).fill===color('VMID',mode),label+': output has one VMID net label with the current net color');
+  const text=name.getBBox(),terminal=pin.getBBox(),gap=mobile?terminal.y-text.y-text.height:text.x-terminal.x-terminal.width;
+  assert(gap>=3&&gap<=16&&(mobile?Math.abs(text.x+text.width-(terminal.x+terminal.width/2))<2:Math.abs(text.y+text.height/2-(terminal.y+terminal.height/2))<10),label+': VMID is next to the pin with a clear gap');
+  const snapshot=new DOMParser().parseFromString(w.circuitFrameSnapshot().markup,'image/svg+xml'),saved=snapshot.querySelector('[data-net-label="VMID"]');
+  assert(!snapshot.querySelector('parsererror')&&saved?.textContent==='VMID'&&saved.getAttribute('fill')===name.getAttribute('fill')&&snapshot.querySelector('[data-output-terminal="VMID"]'),label+': framed SVG retains the output label, terminal and role color');
+ };
  const verify=(label,mode)=>{
+  verifyOutput(label,mode);
   const nets=[...drawing().querySelectorAll('[data-wire-net]')];assert(nets.length>0&&nets.every(node=>{const style=w.getComputedStyle(node);return (node.hasAttribute('data-wire-junction')?style.fill:style.stroke)===color(node.dataset.wireNet,mode)}),label+': complete nets, internal links, dots and output outlines use their voltage role color');
   const parts=[...drawing().querySelectorAll('[data-schematic-symbol]')];let valid=true;
   for(const part of parts){const body=part.querySelector('[data-resistor-body]'),core=body.querySelector('[data-resistor-core]'),box=core.getBBox(),leads=[...body.querySelectorAll('[data-symbol-lead]')],nets=[...part.querySelectorAll(':scope > path[data-wire-net]')],top={x:box.x+box.width/2,y:box.y},bottom={x:top.x,y:box.y+box.height};valid&&=core.localName==='rect'&&near(box.height,52)&&near(box.width,20)&&leads.length===2&&leads.every(lead=>near(lead.getTotalLength(),20))&&same(point(leads[0],true),top)&&same(bottom,point(leads[1],false))&&nets.length===2&&same(point(nets[0],true),point(leads[0],false))&&same(point(leads[1],true),point(nets[1],false))&&near(point(leads[0],false).x,point(leads[0],true).x)&&near(point(leads[1],false).x,point(leads[1],true).x);}
@@ -25,7 +34,16 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  await reset();set('solveFor','r1');set('targetVout','');assert([...drawing().querySelectorAll('[data-wire-net=VMID]')].every(node=>{const style=w.getComputedStyle(node);return (node.hasAttribute('data-wire-junction')?style.fill:style.stroke)==='rgb(84, 210, 255)'}),'A missing known target does not masquerade as a calculated voltage net');
  const saved=new DOMParser().parseFromString(w.circuitFrameSnapshot().markup,'image/svg+xml');assert(!saved.querySelector('parsererror')&&saved.querySelectorAll('rect[data-resistor-core]').length===2&&saved.querySelector('[data-load-open] [data-load-body] rect')&&saved.querySelector('[data-load-open]').getAttribute('opacity')==='0.35'&&[...saved.querySelectorAll('[data-wire-net]')].every(node=>node.getAttribute('stroke')!=='#a8bece'&&node.getAttribute('fill')!=='#a8bece'),'Static framed export retains European divider symbols, faint open load and clean nets without grey wiring');
  const fallback=new DOMParser().parseFromString(await(await fetch('../../images/voltage_divider.svg')).text(),'image/svg+xml');assert(!fallback.querySelector('parsererror')&&fallback.querySelectorAll('rect[height="60"]').length===3&&fallback.querySelector('g[opacity="0.35"] rect'),'The static fallback uses European divider rectangles and a faint optional load');
- for(const width of [320,390,768,1440]){frame.style.width=width+'px';await pause();const matrix=drawing().getScreenCTM();assert(near(matrix.a,1)&&near(matrix.d,1)&&[...drawing().querySelectorAll('[data-resistor-body] [data-symbol-lead]')].every(node=>near(node.getTotalLength(),20)),width+'px: layout changes preserve symbol scale and lead lengths');}
+ for(const width of [320,390,768,1440]){
+  frame.style.width=width+'px';await pause();await reset();w.eval('schematicDesktopView=false;renderSchematic()');
+  const matrix=drawing().getScreenCTM();assert(near(matrix.a,1)&&near(matrix.d,1)&&[...drawing().querySelectorAll('[data-resistor-body] [data-symbol-lead]')].every(node=>near(node.getTotalLength(),20)),width+'px: layout changes preserve symbol scale and lead lengths');
+  for(const mode of ['vout','vin','r1','r2','pairs']){
+   set('solveFor',mode);verifyOutput(width+'px/'+mode,mode);
+   const text=drawing().querySelector('[data-net-label="VMID"]').getBoundingClientRect(),frameBox=get('schematicFrame').querySelector('[data-circuit-frame-border]').getBoundingClientRect();
+   assert(text.left>=frameBox.left&&text.right<=frameBox.right&&text.top>=frameBox.top&&text.bottom<=frameBox.bottom,width+'px/'+mode+': output label stays inside the circuit frame');
+   const full=new DOMParser().parseFromString(await(await fetch(get('schematicDownload').href)).text(),'image/svg+xml');assert(!full.querySelector('parsererror')&&full.querySelector('[data-net-label="VMID"]')?.textContent==='VMID',width+'px/'+mode+': full workspace SVG retains the output label');
+  }
+ }
  assert(errors.length===0,'No runtime errors: '+errors.join('; '));
 }catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);});
 </script></html>

@@ -254,7 +254,9 @@ above VMID.
 Editable values have brighter borders and shading; calculated fields have quieter
 borders. The old dotted underlines and small Find labels in these panels are removed.
 VMID sits
-at the end of an output wire extending just past the RL branch. The entire VMID
+at the end of an output wire extending just past the RL branch. A VMID net label
+sits beside that output terminal (above it in the compact phone layout), in both
+the live diagram and circuit-image downloads. The entire VMID
 net uses one color throughout: red when VMID is unknown and blue when it is known,
 including resistor terminal leads, connected parallel-network buses, the load
 branch and junction dots. Every three-way or

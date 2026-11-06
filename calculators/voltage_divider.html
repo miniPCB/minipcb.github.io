@@ -2385,7 +2385,8 @@
       schematicEditable(loadValue, "load", "load value");
       schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${readoutX + 210}`, fill: "none", stroke: netColor, "stroke-width": mode === "vout" ? 4 : 3, "data-output-net": "VMID", "data-wire-net": "VMID" });
       for (const x of [mainX, loadX]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor, "data-wire-junction": "", "data-wire-net": "VMID" });
-      schematicShape(drawing, "circle", { cx: readoutX + 216, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3, "data-wire-net": "VMID" });
+      schematicShape(drawing, "circle", { cx: readoutX + 216, cy: mid, r: 6, fill: "#101823", stroke: netColor, "stroke-width": 3, "data-wire-net": "VMID", "data-output-terminal": "VMID" });
+      schematicText(drawing, readoutX + 232, mid + 6, "VMID", 20, netColor).setAttribute("data-net-label", "VMID");
       schematicNetPanel(drawing, state, roles, "vout", readoutX, readoutY);
       if (pairMode) {
         const error = state?.pair?.error, allowed = byId("pairErrorPct").valueAsNumber;
@@ -2451,9 +2452,10 @@
         const value = schematicText(overview, main + 20, top + 34, "—", 15, SOLVE_ROLES[roles[arm]].color); value.id = arm === "r1" ? "schematicR1Value" : "schematicR2Value";
       }
       wire(`M${main} ${mid}v46M${main} ${mid}H${width - 14}`, net);
-      schematicText(overview, main + 20, mid - 10, "VMID", 14, net);
+      const outputLabel = schematicText(overview, width - 10, mid - 12, "VMID", 14, net);
+      outputLabel.setAttribute("text-anchor", "end"); outputLabel.setAttribute("data-net-label", "VMID");
       for (const cx of [main, loadX]) schematicShape(overview, "circle", { cx, cy: mid, r: 4, fill: net });
-      schematicShape(overview, "circle", { cx: width - 10, cy: mid, r: 4, fill: "#101823", stroke: net, "stroke-width": 2.5 });
+      schematicShape(overview, "circle", { cx: width - 10, cy: mid, r: 4, fill: "#101823", stroke: net, "stroke-width": 2.5, "data-output-terminal": "VMID" });
       wire(`M${main - 14} ${bottom}h28m-23 7h18m-13 7h8`);
       const model = state?.circuit || readLoad(byId("solveFor").value === "pairs" ? "pair" : "", null, false, false), current = DividerCurrentLoad.enabled(model), hasLoad = current || model.rl !== null;
       const load = schematicShape(overview, "g", { id: "schematicLoad", fill: "none", stroke: NET_COLOR, "stroke-width": 2.5, "data-schematic-load-symbol": current ? "current" : "rl" });

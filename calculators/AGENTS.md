@@ -10,6 +10,8 @@ not add a permission or confirmation step to an authorized task.
   Never use grey for electrical wiring. Neutral text and UI borders may stay grey.
 - A calculated voltage net uses red: VMID in Find VMID, VTOP in Find VTOP.
   Keep an entire net, its branches, junction dots and terminal outlines consistent.
+  Put the VMID net label beside the output terminal in desktop/mobile drawings
+  and exports; the separate voltage information box does not replace that label.
 - Component symbols retain their role colors: green for known, red for calculated,
   yellow for missing data. Do not extend symbol color along arbitrary wire runs.
 - Use European (IEC rectangular) resistor symbols for miniPCB calculator drawings,
