@@ -131,6 +131,7 @@
     .automatic-design { margin: 14px 16px 18px; padding: 16px; border-radius: 12px; background: #152332; }
     .automatic-design .rating-fields { margin: 12px 0; }
     [data-schematic-symbol] { cursor: context-menu; }
+    [data-schematic-symbol].schematic-selected-part { outline: 2px solid var(--accent); outline-offset: 4px; }
     .schematic-editable:hover, .schematic-editable:focus-visible { fill: #fff; }
     .schematic-pill.schematic-editable { text-decoration: none; }
     .schematic-pill.schematic-editable:hover rect, .schematic-pill.schematic-editable:focus-visible rect { fill: #2b465b; }
@@ -1932,6 +1933,7 @@
     let frameExportSnapshot = null, frameExportGeneration = 0;
     let circuitLogoDataUrl = null;
     let schematicEditContext = null;
+    let schematicSelectedPart = null;
     let schematicBomData = [];
     let schematicBomCopyGeneration = 0;
 
@@ -2056,6 +2058,28 @@
     }
 
     const schematicEditSurfaces = new WeakMap();
+
+    function refreshSchematicPartSelection() {
+      const svg = byId("liveSchematic");
+      const symbols = [...svg.querySelectorAll("[data-schematic-symbol]")];
+      if (!symbols.some(node => node.dataset.schematicSymbol === schematicSelectedPart)) schematicSelectedPart = null;
+      for (const node of symbols) {
+        const selected = node.dataset.schematicSymbol === schematicSelectedPart;
+        node.classList.toggle("schematic-selected-part", selected);
+        if (selected && !node.hasAttribute("tabindex")) node.setAttribute("tabindex", "-1");
+      }
+      for (const node of svg.querySelectorAll("[data-select-resistor]")) node.setAttribute("aria-pressed", String(node.dataset.selectResistor === schematicSelectedPart));
+    }
+
+    function selectSchematicPart(id) {
+      const symbol = [...byId("liveSchematic").querySelectorAll("[data-schematic-symbol]")].find(node => node.dataset.schematicSymbol === id);
+      if (!symbol || byId("schematicEditor").open) return;
+      if (schematicEditContext?.inline) closeSchematicEditor(false);
+      closeResistorMenu();
+      schematicSelectedPart = id; refreshSchematicPartSelection();
+      symbol.focus({ preventScroll: true });
+      symbol.scrollIntoView({ block: "center", inline: "center" });
+    }
 
     function decorateSchematicEditors(svg) {
       for (const node of svg.querySelectorAll('text[data-schematic-edit]')) {
@@ -2678,10 +2702,10 @@
         schematicShape(row, "title").textContent = `${part.name}; ${description}; ${part.catalog && !catalogSame(part.rating, part.catalog.ratedPowerW) ? "Allowed" : "Rated"} ${format(part.rating, "W")}`;
         // Keep the complete reference and its hit rectangle inside its own row.
         const refCell = schematicShape(row, "g", { role: "rowheader", "aria-colindex": 1 });
-        const ref = schematicShape(refCell, "g", { class: "schematic-field", "data-field": "reference" });
-        schematicShape(ref, "rect", { x: 8, y: 6, width: refWidth - 16, height: 44, rx: 7, fill: "#142535", stroke: "#2b4152" });
+        const ref = schematicShape(refCell, "g", { class: "schematic-field schematic-editable", "data-field": "reference", "data-select-resistor": part.id, role: "button", tabindex: 0, "aria-pressed": "false", "aria-label": `Select ${part.name} in the schematic` });
+        schematicShape(ref, "rect", { x: 8, y: 6, width: refWidth - 16, height: 44, rx: 7, fill: "#1e3547", stroke: "#6a8ca5" });
         schematicText(ref, 16, baseline, part.name, fontSize, SOLVE_ROLES[roles[arm]].color);
-        schematicEditable(schematicRole(ref, arm, roles), part.id, `${part.name}; ${description}; catalog specifications`, "specifications");
+        schematicRole(ref, arm, roles);
         const descriptionCell = schematicShape(row, "g", { role: "cell", "aria-colindex": 4 }), descriptionY = narrow ? 70 : baseline;
         const described = tableText(descriptionCell, narrow ? 12 : offsets[3] + 10, descriptionY, description, narrow ? width - 24 : widths[3] - 20, fontSize, failed ? "#ff8e8e" : "#c6e3ff", "description");
         if (failed) schematicShape(descriptionCell, "title").textContent = failures.join("; ") + ". Part retained in the design.";
@@ -2932,8 +2956,14 @@
     function staticSchematicSnapshot(source) {
       const snapshot = source.cloneNode(true); snapshot.setAttribute("role", "img");
       for (const node of snapshot.querySelectorAll("[data-resistor-hit], [data-inline-editor], [data-schematic-controls], [data-edit-surface], [data-axis-edit-surface]")) node.remove();
-      for (const node of snapshot.querySelectorAll("[data-schematic-symbol]")) for (const attribute of ["tabindex", "role", "aria-label"]) node.removeAttribute(attribute);
-      for (const node of snapshot.querySelectorAll("[data-schematic-edit]")) clearSchematicEditorAttributes(node);
+      for (const node of snapshot.querySelectorAll("[data-schematic-symbol]")) {
+        node.classList.remove("schematic-selected-part");
+        if (!node.getAttribute("class")) node.removeAttribute("class");
+        for (const attribute of ["tabindex", "role", "aria-label"]) node.removeAttribute(attribute);
+      }
+      for (const node of snapshot.querySelectorAll("[data-schematic-edit], [data-select-resistor]")) {
+        clearSchematicEditorAttributes(node); node.removeAttribute("data-select-resistor"); node.removeAttribute("aria-pressed");
+      }
       for (const node of snapshot.querySelectorAll("[data-rating-part]")) {
         node.querySelector("[data-rating-hit]")?.remove();
         for (const attribute of ["data-rating-part", "tabindex", "role", "aria-label", "aria-haspopup", "aria-controls"]) node.removeAttribute(attribute);
@@ -3129,6 +3159,7 @@
       byId("schematicFallback").hidden = true;
       svg.removeAttribute("hidden");
       decorateSchematicEditors(svg);
+      refreshSchematicPartSelection();
       // The existing full download and the framed export share static cleanup.
       const snapshot = staticSchematicSnapshot(svg);
       const markup = new XMLSerializer().serializeToString(snapshot);
@@ -3499,10 +3530,6 @@
       if (key === "load" && byId(loadIds(byId("solveFor").value === "pairs" ? "pair" : "").type).value === "current") { if (!(focus === "value" && locks.value)) openQuickField(node); return; }
       if (key === "design-title") { openQuickField(node); return; }
       if (key === "search-run") { findPairsFromSchematic({ key, focus }); return; }
-      if (focus === "specifications") {
-        const control = byId("liveSchematic").querySelector(`[data-schematic-edit="${key}"][data-edit-focus="power"]`);
-        if (control) openSchematicEditor(control, true); return;
-      }
       if (focus === "value" && locks.value || focus === "tolerance" && locks.tolerance) return;
       if (byId("solveFor").value === "pairs") { openPairSchematicEditor(key, focus, inline ? node : null); return; }
       const state = pairPreviewState || schematicState || pendingConstructionState();
@@ -5666,6 +5693,7 @@
     byId("pairUseCircuit").addEventListener("click", () => importPairConstruction());
     byId("pairForm").addEventListener("submit", event => { event.preventDefault(); window.pairSearchReady = searchResistorPairs(); });
     byId("pairForm").addEventListener("reset", () => setTimeout(() => {
+      schematicSelectedPart = null;
       pairSecondaryAxes.X = "rth"; pairSecondaryAxes.Y = "pstress";
       pairConstruction = null; pairConstructionNext = 0; refreshPairConstruction();
       invalidatePairSearch("Search defaults restored. Enter a target and find resistor combinations.");
@@ -5707,6 +5735,7 @@
     });
     byId("liveSchematic").addEventListener("click", event => {
       if (activateMobileControl(event)) return;
+      const reference = event.target.closest("[data-select-resistor]"); if (reference) { selectSchematicPart(reference.dataset.selectResistor); return; }
       if (event.target.closest("[data-frame-download]")) { openCircuitFrameExport(); return; }
       const rating = event.target.closest("[data-rating-part]"); if (rating) { openRatingDialog(rating); return; }
       const node = event.target.closest("[data-schematic-edit]") || schematicEditSurfaces.get(event.target); if (node) openSchematicEditor(node, true);
@@ -5737,6 +5766,7 @@
     byId("liveSchematic").addEventListener("keydown", event => {
       if (!["Enter", " "].includes(event.key)) return;
       if (activateMobileControl(event)) return;
+      const reference = event.target.closest("[data-select-resistor]"); if (reference) { event.preventDefault(); selectSchematicPart(reference.dataset.selectResistor); return; }
       if (event.target.closest("[data-frame-download]")) { event.preventDefault(); openCircuitFrameExport(); return; }
       const rating = event.target.closest("[data-rating-part]"); if (rating) { event.preventDefault(); openRatingDialog(rating); return; }
       const node = event.target.closest("[data-schematic-edit]"); if (!node) return;
@@ -5819,6 +5849,7 @@
     });
     // The reset event precedes the browser restoring each control's default value.
     form.addEventListener("reset", () => setTimeout(() => {
+      schematicSelectedPart = null;
       closeSchematicEditor(false);
       operatingConditionError = "";
       for (const input of form.querySelectorAll("[data-voltage-unassessed]")) input.removeAttribute("data-voltage-unassessed");

@@ -60,7 +60,10 @@ not add a permission or confirmation step to an authorized task.
   selected mode and other physical parts when editing one resistor.
 - Do not restore Find RL/IL as a calculator mode. Resistor and current loads,
   including their tolerances, remain known inputs in the other modes.
-- Keep each parts-list reference and its entire edit target within its row.
+- Keep each parts-list reference and its entire selection target within its row.
+  Reference activation selects, focuses and reveals that physical resistor block;
+  it does not open the package dropdown. Keep selection separate from circuit
+  inputs, search validity and exported diagrams, including on compact phones.
   Use explicit row-local rectangles rather than text decoration that can extend
   beyond the row. Size part-number columns to their contents, reserve a single
   line for Description in the column layout, and give spare width to Description.

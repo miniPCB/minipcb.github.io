@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Parts reference selection checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:1800px;border:0}</style></head><body><h1>Select a schematic resistor from the parts list</h1><pre id="results">RUNNING</pre><iframe id="calculator" title="Calculator under test" src="../voltage_divider.html?reference-selection-test=1"></iframe><script>
+"use strict";
+const checks=[],failures=[],assert=(ok,label)=>{checks.push(label);if(!ok)failures.push(label)},pause=()=>new Promise(resolve=>setTimeout(resolve,30));
+document.getElementById('calculator').addEventListener('load',async event=>{try{
+ const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get('liveSchematic'),state=()=>w.eval('schematicState'),errors=[];
+ w.addEventListener('error',event=>errors.push(event.message));assert(await w.resistorCatalogReady,'Catalogs load');await w.circuitLogoReady;await w.calculatorBuildReady;
+ const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}))},reset=async()=>{w.closeSchematicEditor(false);get('dividerForm').reset();get('pairForm').reset();await pause();w.eval('schematicDesktopView=false;mobileAnalysisExpanded=true;renderSchematic()')};
+ const reference=id=>svg().querySelector(`[data-select-resistor="${id}"]`),block=id=>svg().querySelector(`[data-schematic-symbol="${id}"]`),clean=()=>!d.querySelector('dialog[open]')&&!svg().querySelector('[data-inline-editor]');
+ const data=()=>JSON.stringify(w.workFormValues(get('dividerForm')))+'|'+JSON.stringify(w.workFormValues(get('pairForm')))+'|'+w.schematicBomTsv()+'|'+get('liveSchematicDesc').textContent;
+ const select=(id,key=null,label=id)=>{
+  const target=block(id),ref=reference(id),before=data(),frameBefore=w.circuitFrameSnapshot().markup,url=get('schematicDownload').href,model=state(),preview=w.eval('pairPreviewState'),spec=w.eval('pairSpec'),guard=w.eval('leaveWarningActive');
+  assert(ref?.getAttribute('aria-label').startsWith('Select ')&&!ref.hasAttribute('data-schematic-edit'),label+': reference is a selection control independent of editors');
+  ref.dispatchEvent(key?new w.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}):new w.MouseEvent('click',{bubbles:true}));
+  assert(d.activeElement===target&&target.classList.contains('schematic-selected-part')&&svg().querySelectorAll('.schematic-selected-part').length===1,label+': focuses and highlights only the corresponding physical resistor block');
+  assert(ref.getAttribute('aria-pressed')==='true'&&svg().querySelectorAll('[data-select-resistor][aria-pressed="true"]').length===1&&w.getComputedStyle(target).outlineStyle==='solid',label+': selection is visible and announced by the reference button');
+  assert(clean()&&d.activeElement.localName==='g',label+': no package dropdown, inline field or dialog opens');
+  assert(before===data()&&model===state()&&preview===w.eval('pairPreviewState')&&spec===w.eval('pairSpec')&&guard===w.eval('leaveWarningActive'),label+': inputs, analysis/build identity, preview, search and leave protection stay unchanged');
+  assert(frameBefore===w.circuitFrameSnapshot().markup&&url===get('schematicDownload').href,label+': selection does not change static downloads');
+ };
+ for(const topology of ['single','series','parallel','mixed'])for(const width of [1440,390]){
+  frame.style.width=width+'px';await pause();await reset();
+  if(topology!=='single')for(const arm of ['r1','r2']){get(arm+'Multiple').click();get(arm+'Split').click();if(topology==='parallel')set(arm+'Connection','parallel');if(topology==='mixed'){const ids=state().physical[arm].map(part=>part.id);w.storeTopology(arm,{connection:'series',children:[ids[0],{connection:'parallel',children:ids.slice(1)}]});w.update();}}
+  for(const mode of ['vout','vin','r1','r2']){
+   set('solveFor',mode);
+   for(const arm of ['r1','r2'])for(const id of [...new Set([state().physical[arm][0].id,state().physical[arm].at(-1).id])])select(id,mode==='vin'?'Enter':mode==='r2'?' ':null,`${topology}/${width}/${mode}/${id}`);
+  }
+ }
+ await reset();select('r1');assert(!w.eval('leaveWarningActive'),'Selecting a default part does not dirty the design');
+ const original=state(),stamp=get('liveSchematicDesc').textContent;frame.style.width='1440px';await pause();
+ assert(block('r1').classList.contains('schematic-selected-part')&&reference('r1').getAttribute('aria-pressed')==='true'&&original===state()&&stamp===get('liveSchematicDesc').textContent,'Selection survives resize without recalculation');
+ frame.style.width='390px';await pause();get('schematicViewToggle').click();
+ assert(svg().dataset.layout==='desktop'&&block('r1').classList.contains('schematic-selected-part'),'Desktop view preserves the selected physical resistor');get('schematicViewToggle').click();
+ assert(svg().dataset.layout==='mobile'&&block('r1').classList.contains('schematic-selected-part'),'Returning to phone view preserves selection');select('r2','Enter');
+ const saved=new DOMParser().parseFromString(w.circuitFrameSnapshot().markup,'image/svg+xml');assert(!saved.querySelector('parsererror,.schematic-selected-part,[data-select-resistor],[aria-pressed]'),'Framed SVG excludes selection outlines and controls');
+ const full=new DOMParser().parseFromString(await(await fetch(get('schematicDownload').href)).text(),'image/svg+xml');assert(!full.querySelector('parsererror,.schematic-selected-part,[data-select-resistor],[aria-pressed]'),'Full SVG excludes selection outlines and controls');
+ await reset();assert(!svg().querySelector('.schematic-selected-part,[data-select-resistor][aria-pressed="true"]'),'Reset clears the selected part');
+ get('r1Multiple').click();get('r1Split').click();while(state().physical.r1.length<12)d.querySelector('[data-add-part="r1"]').click();const last=state().physical.r1.at(-1);select(last.id,' ',last.name);
+ assert(reference(last.id).textContent==='R1.12'&&block(last.id).querySelector('[data-part-fields] > text').textContent==='R1.12','A two-digit reference selects the correct physical block');
+ d.querySelector(`[data-remove-part="${last.id}"]`).click();assert(!svg().querySelector('.schematic-selected-part'),'Removing the selected resistor clears stale selection');
+ await reset();set('solveFor','pairs');set('pairMinR','10000');set('pairMaxR','10000');get('pairForm').requestSubmit();const found=await w.pairSearchReady;assert(found.length>0,'Real catalog solutions are available');
+ const search=get('schematicDesignSearch').textContent;select('r1',null,'catalog preview/R1');select('r2','Enter','catalog preview/R2');
+ assert(get('schematicDesignSearch').textContent===search&&get('schematicDesignSearch').getAttribute('aria-disabled')==='true','Selecting a search-preview resistor retains the completed search and count');
+ await reset();select('r1');const value=svg().querySelector('[data-part-control="value"][data-schematic-edit="r1"]');value.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+ assert(svg().querySelector('[data-inline-editor] input')&&block('r1').classList.contains('schematic-selected-part'),'Explicit value editing still opens on the selected block');w.closeSchematicEditor(false);
+ const footprint=svg().querySelector('[data-part-control="power"][data-schematic-edit="r1"]');footprint.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(svg().querySelector('[data-inline-editor] select'),'The actual package control still opens its dropdown');w.closeSchematicEditor(false);
+ assert(!errors.length,'No runtime errors: '+errors.join('; '));
+}catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2)});
+</script></body></html>
