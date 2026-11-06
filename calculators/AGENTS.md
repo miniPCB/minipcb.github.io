@@ -15,10 +15,10 @@ not add a permission or confirmation step to an authorized task.
 - Use European (IEC rectangular) resistor symbols for miniPCB calculator drawings,
   including divider parts and the load. Keep an open load visible as a faint,
   unfilled resistor with its Open label; it remains electrically absent.
-- Use 20 px symbol leads before changing to net color. This is the calculator's
+- In the full schematic, use 20 px symbol leads before changing to net color. This is the calculator's
   drawing convention, not a physical lead-length specification. Resistor bodies
   are 52 px tall; keep both leads equal and the rectangular body at its normal size.
-- Center resistor symbols within their allocated rows. Grow the drawing for
+- Center full-view resistor symbols within their allocated rows. Grow the drawing for
   series, parallel and mixed networks; keep all resistor symbols vertical.
 - Draw connection dots at real three-way and four-way junctions. Do not add dots
   at ordinary bends or at unconnected crossings.
@@ -28,7 +28,29 @@ not add a permission or confirmation step to an authorized task.
 ## Interaction and information
 
 - Keep Value, Tolerance and Package directly editable on the diagram, populated
-  and easy to use. Open the advanced circuit dialog only through Options.
+  and easy to use. Do not restore the whole-circuit Options dialog. Keep unique
+  search limits, automatic-value controls and data/comparison tools in compact,
+  collapsed sections; show search and automatic controls only when applicable.
+  A part's focused Options editor may still expose its catalog-specific settings.
+- Put Known/Unknown color keys inside the circuit frame so circuit-image exports
+  retain them. Keep the four operating-point blocks without a section heading.
+- Offer Find Design Solutions only for catalog-combination searches and the
+  forward VMID mode with a multi-part network. Calculated inverse quantities
+  update directly from their known inputs without an unrelated search action.
+- Preserve the active source controls and their labels when reorganizing direct
+  SVG editors; these supply input state and metadata. Remove obsolete dialog
+  handlers and styling when removing their entry point.
+- On phones, default to a fitted compact circuit overview and readable settings
+  cards. Equivalent-arm symbols may be smaller; retain every physical part's
+  editable value, tolerance and package. Collapse secondary analysis and BOM data.
+  Use at least 44 px touch targets and 16 px native input text; ordinary input
+  configuration must not require sideways scrolling or a right click.
+- Offer Desktop view on phones to restore the complete schematic and information.
+  Layout/disclosure changes preserve circuit state, selected solutions, build
+  identity and clean leave protection. Keep touch construction menus accessible.
+- Resistance value editors use a multiplier dropdown (µΩ, mΩ, Ω, kΩ, MΩ, GΩ).
+  Continue accepting typed unit suffixes, synchronize the selected multiplier,
+  and compute nearest suggestions in ohms without applying a multiplier twice.
 - Let known/calculated roles determine editability in every mode. Preserve the
   selected mode and other physical parts when editing one resistor.
 - Keep Pstress and Vstress compact and tied to each actual part's ratings. Label

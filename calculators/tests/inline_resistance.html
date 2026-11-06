@@ -8,13 +8,13 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const type=value=>{input().value=value;input().dispatchEvent(new w.Event('input',{bubbles:true}));},key=value=>input().dispatchEvent(new w.KeyboardEvent('keydown',{key:value,bubbles:true,cancelable:true}));
  const reset=async()=>{w.closeSchematicEditor();get('dividerForm').reset();get('pairForm').reset();await pause();};
  const catalog=await w.ResistorParts.load(),nearest=(pool,target)=>[...new Set(pool)].sort((a,b)=>Math.abs(a-target)-Math.abs(b-target)||a-b).slice(0,6);
- open();assert(input()?.type==='text'&&!inline().querySelector('select')&&!get('schematicEditor').open,'Value opens directly as a text box without a dropdown or dialog');
+ open();assert(input()?.type==='text'&&inline().querySelector('select.resistance-unit')&&!get('schematicEditor').open,'Value opens directly as a text box with a unit dropdown and no dialog');
  assert(input().getAttribute('role')==='combobox'&&input().getAttribute('aria-autocomplete')==='list'&&input().getAttribute('aria-controls')===inline().querySelector('[role="listbox"]').id,'Text box exposes an accessible live suggestion list');
  assert(values().length===6&&values()[0]===10000&&new Set(values()).size===6,'Initial suggestions are distinct and start with the exact current resistance');
  assert(!w.eval('leaveWarningActive'),'Opening the input does not dirty the circuit');
  type('12.345');const first=values();assert(first[0]===12300&&first[1]===12400&&part().resistance===10000,'Bare input uses the displayed kΩ unit and ranks values by absolute distance without applying');
  type('47.2kΩ');assert(values()[0]===47000&&JSON.stringify(values())!==JSON.stringify(first),'Suggestions recompute from the current typed resistance and explicit units');
- assert(input().nextElementSibling.hidden,'Explicit units hide the redundant unit chip');
+ assert(!input().nextElementSibling.hidden&&input().nextElementSibling.value==='1000','Explicit units keep the multiplier dropdown visible and synchronized');
  type('12.345');key('Enter');assert(!inline()&&part().resistance===12345,'Enter commits the arbitrary typed manual value without snapping to a suggestion');
  for(const [typed,expected] of [['499R',499],['4k99',4990],['12.3 kΩ',12300],['1M',1e6],['1.2e4Ω',12000],['R499',.499],['4K7',4700],['10000 ohms',10000]]){
   await reset();open();type(typed);key('Enter');assert(!inline()&&part().resistance===expected,`${typed}: unit-aware text entry applies the intended resistance`);
@@ -65,7 +65,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
    assert(parts.filter(part=>part.id!==id).every(part=>part.resistance===before.find(original=>original.id===part.id).resistance&&part.catalog?.mpn===before.find(original=>original.id===part.id).mpn),`${connection}/${arm}/${fixture.familyId}: other physical values and assigned part numbers remain unchanged`);
   }
  }
- await reset();for(const width of [320,390,768,1440]){frame.style.width=width+'px';await pause();open();const box=inline().getBoundingClientRect(),list=inline().querySelector('[role="listbox"]').getBoundingClientRect(),anchor=svg().querySelector('[data-schematic-edit="r1"][data-edit-focus="value"]').getBoundingClientRect();assert(Math.abs(box.left-anchor.left)<2&&Math.abs(box.top-anchor.top)<2&&list.height>0&&list.bottom<=box.bottom+1,`${width}px: text box and nearest list are anchored together and fit their SVG overlay`);assert(svg().lastElementChild===inline(),`${width}px: suggestion overlay paints above the circuit`);key('Escape');}
+ await reset();for(const width of [320,390,768,1440]){frame.style.width=width+'px';await pause();open();const box=inline().getBoundingClientRect(),list=inline().querySelector('[role="listbox"]').getBoundingClientRect(),anchor=svg().querySelector('[data-schematic-edit="r1"][data-edit-focus="value"]').getBoundingClientRect();assert(Math.abs(box.top-anchor.top)<2&&(svg().dataset.layout==="mobile"?box.left>=svg().getBoundingClientRect().left&&box.right<=svg().getBoundingClientRect().right:Math.abs(box.left-anchor.left)<2)&&list.height>0&&list.bottom<=box.bottom+1,`${width}px: text box and nearest list are anchored together and fit their SVG overlay`);assert(svg().lastElementChild===inline(),`${width}px: suggestion overlay paints above the circuit`);key('Escape');}
  open();type('12.345k');const xml=await(await fetch(get('schematicDownload').href)).text(),saved=new DOMParser().parseFromString(xml,'image/svg+xml');assert(!saved.querySelector('foreignObject,input,button,[data-inline-editor]'),'SVG export excludes transient textbox and suggestions');key('Escape');
  assert(errors.length===0,'No runtime errors: '+errors.join('; '));
 }catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);});

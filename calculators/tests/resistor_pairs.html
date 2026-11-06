@@ -21,7 +21,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   const setFamilies=(...families)=>{for(const input of familyToggles)if(input.checked!==families.includes(input.dataset.pairFamily))input.click();};
   const pick=()=>d.querySelector('[data-solve-mode="pairs"]').click();
   const reset=async()=>{get('pairForm').reset();await pause();pick();};
-  const run=async()=>{get('pairForm').requestSubmit();const found=await w.pairSearchReady;w.openCalculatorDetails('results');return found;};
+  const run=async()=>{get('pairForm').requestSubmit();const found=await w.pairSearchReady;get('calculatorDetails').open=true;return found;};
   const key=pair=>pair.top.mpn+'|'+pair.bot.mpn;
   const thrown=fn=>{try{fn();return false;}catch(_){return true;}};
   for(const id of [tid,mid]){
@@ -221,7 +221,7 @@ document.getElementById('calculator').addEventListener('load',async()=>{
   assert(negative.map(key).sort().join('|')===positive.map(key).sort().join('|')&&negative.every(p=>p.bounds.min<0&&p.bounds.max<0),'Negative sources produce the corresponding valid pair set and signed voltage bounds');
   for(const [id,value]of [['pairVin','0'],['pairVmid','12'],['pairSourceTol','100'],['pairMinR','0'],['pairMaxR','1'],['pairMaxStress','101'],['pairRl','-1'],['pairTemperature','']]){
    await reset();set(id,value);assert((await run()).length===0&&!get('pairError').hidden&&get('pairResults').hidden,`Invalid search ${id}=${value} clears results and shows an error`);
-   const invalid=[...get('pairForm').querySelectorAll('[aria-invalid="true"]')];assert(invalid.length>0&&invalid.every(input=>!input.closest('details')||input.closest('details').open),`Invalid search ${id} exposes its field for correction`);
+   const invalid=[...get('pairForm').querySelectorAll('[aria-invalid="true"]')];assert(invalid.length>0&&invalid.every(input=>input.closest('[data-search-inputs]')?!get('pairError').hidden:get('searchLimits').open),`Invalid search ${id} announces direct circuit errors or exposes search limits for correction`);
   }
   await reset();set('pairTolTop','0.1');set('pairTolBot','0.1');set('pairMinR','100');set('pairMaxR','1000000');const pending=run();get('pairCancel').click();await pending;
   assert(get('pairStatus').textContent==='Search canceled.'&&get('pairResults').hidden&&get('pairFind').disabled===false,'Cancel discards incomplete search results');

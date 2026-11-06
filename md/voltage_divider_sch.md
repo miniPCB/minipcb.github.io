@@ -56,15 +56,16 @@ build metadata are explicitly marked **unpublished source**, with the analysis
 time shown instead of claiming a published revision.
 Its **Download circuit** button opens an icon picker for **SVG**, **PNG**,
 **JPEG** and **BMP**. The image includes the title, physical resistors, load,
-voltage readouts and operating conditions. The BOM, workspace summary, graphs,
-color key and action buttons stay outside this download. The existing toolbar
+voltage readouts, operating conditions and Known/Unknown color keys. The BOM,
+workspace summary, graphs and action buttons stay outside this download. The existing toolbar
 **Download SVG** still exports the full workspace.
 
 SVG remains vector. PNG is lossless; JPEG uses high quality; BMP is an
 uncompressed 24-bit image. Raster files normally render at twice the circuit's
 size, with an 8192-pixel edge / 16-megapixel limit for very large networks.
-All formats use the same dark background and keep the complete frame, including
-circuit areas outside the screen on a phone. The title supplies a safe filename.
+All formats use the same dark background and keep the complete frame. In the
+phone's Desktop view this includes circuit areas outside the screen. The title
+supplies a safe filename.
 
 The picker captures the diagram when it opens, including a selected combination
 preview or unknown fields in search setup. It removes live editors and controls;
@@ -153,7 +154,8 @@ to the next resistor's value, allowing a chain of values to be entered quickly.
 **Find Design Solutions** below the circuit searches catalog assignments for
 the same construction without opening a dialog.
 
-The advanced **Automatic values** section inside **Options** lets you set target VMID, a
+The collapsed **Automatic values** section appears when resistor values are
+marked automatic. It lets you set target VMID, a
 preferred nominal error, catalog family, footprint, TCR and starting RTOP + RBOT.
 Each physical resistor retains its own tolerance selection. Use the context menu
 or each part's checkbox to mark other resistances automatic; **Make all resistors
@@ -186,28 +188,49 @@ chosen resistances before the ordinary solver runs. Reset defaults clears
 construction, automatic roles and chosen parts. SVG downloads preserve the
 connection drawing as a static snapshot.
 
-The calculation choices appear above the live circuit SVG. Each choice lists
+The calculation choices appear above the live circuit SVG. On desktop, each choice lists
 **Given** inputs and the value to **Find**; the form and diagram use the same
 **Find** wording. The SVG updates VTOP, VMID, the equivalent arm resistances,
 and the open/finite RL value as you edit.
-The main page ends at the circuit region: the former lower forms, result panels,
-instructions and footer no longer appear beneath the SVG. Click diagram inputs
-and pills for their focused editors. The toolbar above the SVG shows only its
+Click diagram inputs and pills for their focused editors. Optional search,
+automatic-value and data controls sit in compact sections below the SVG.
+The toolbar above the SVG shows only its
 download buttons in every mode. A large, centered title sits directly above the
 schematic; click it to edit it in place. It defaults to **Voltage Divider**,
 accepts up to 80 characters and is included in the SVG download. Title changes
 participate in leave protection and circuit reset restores the default.
 The dynamic circuit summary remains the region's accessible label.
-The neutral **Options** button beside Known/Unknown is the only entry into the
-large Circuit options dialog. Its section selector exposes Circuit, Automatic
-values and Tables. Ordinary value, tolerance and package edits stay on the SVG;
-invalid inputs and clipboard failures never open Circuit options automatically.
-These controls reuse the original state and calculation rules.
-Done or Escape returns to the diagram, and calculation/search submission returns
-to the SVG. Form reset actions restore defaults for the current circuit/search mode.
-Errors, search progress/results and automatic-value status remain in their
-existing dialogs and accessible status announcements, without visible paragraphs
-above the SVG. Download links sit above the drawing.
+
+On phones and narrow screens, a native mode selector replaces the large mode
+tiles. The compact circuit overview uses smaller equivalent RTOP/RBOT symbols;
+every physical resistor keeps its own readable value, tolerance and package card
+below it. The **⋯** menu on each card adds series/parallel parts without a right
+click. Primary fields have at least 44 px touch targets, and input text stays at
+16 px or larger. Voltage cards retain Target/Calculated, tolerance and Min/Max.
+**Operating conditions** and **Analysis & parts list** start collapsed; expand
+them for the five temperature/drift menus, operating-point blocks, detailed
+characteristics and BOM. Small per-resistor stress readouts are omitted from the
+primary phone cards; full stress information remains in the analysis and data.
+
+**Desktop view** restores the complete schematic and information on a phone;
+**Mobile view** returns to the fitted layout. The preference is saved locally.
+Layout and disclosure changes preserve physical values, topology, selected
+catalogs, generated solutions, analysis time and leave protection. Circuit-image
+downloads capture the displayed layout; choose Desktop view for a full schematic
+image. LTspice and Markdown always retain the complete physical circuit and
+analysis, regardless of layout.
+
+There is no whole-circuit Options dialog. **Search limits** appears only when
+catalog solutions can be generated; **Automatic values** appears for automatic
+network parts. **Data & comparisons** contains detailed results, tables and
+comparisons, plus **Manual part limits & network tools** for custom tolerances,
+power/voltage ratings, resistance units and network construction. These sections
+start collapsed. Ordinary value, tolerance and package edits stay on the SVG;
+the focused part editor retains catalog-specific settings.
+These controls reuse the original state and calculation rules. Reset actions
+restore defaults for the current circuit/search mode. Errors, search progress
+and automatic-value status retain accessible announcements. Download links sit
+above the drawing.
 Voltage readouts are part of the circuit drawing. Both panels start with the net
 name, followed by **Target** (or **Calculated** for a solved voltage),
 **Tolerance**, **Max** and **Min**. A VMID target also retains a **Nominal** row
@@ -351,8 +374,11 @@ edit the circuit. VTOP edits voltage and source tolerance inline; RL edits resis
 tolerance (blank resistance means open circuit). Click a physical resistor's
 value to type **directly on the SVG**. A live list shows the six nearest catalog
 values to the resistance being typed, respecting the selected part's family,
-footprint, tolerance and TCR. Bare numbers use the unit shown beside the field;
-explicit units such as `499R`, `4k99`, `12.3 kΩ` and `1M` override it. Click a
+footprint, tolerance and TCR. The multiplier dropdown offers **µΩ, mΩ, Ω, kΩ,
+MΩ and GΩ**. Bare numbers use that selection; explicit units such as `499R`,
+`4k99`, `12.3 kΩ` and `1M` synchronize it. Changing the dropdown changes the
+numeric entry's multiplier, and suggestions continue using the resulting ohms.
+Equivalent-arm and load resistance editors offer the same units. Click a
 suggestion to apply it, or use the arrow keys and Enter. Enter or the checkmark
 without selecting a suggestion applies the typed value; manual parts allow
 arbitrary positive resistances. Tolerance and footprint retain their direct
@@ -454,7 +480,7 @@ Selecting a candidate preserves the applied circuit inputs and BOM. The heading
 identifies the preview, and Download SVG captures it. Leaving the visualization
 or selecting an empty region restores the combination-search input display.
 
-Four large, colorful **Operating Point Information** boxes show nominal **VMID**,
+Four large, colorful boxes, without a section heading, show nominal **VMID**,
 **total power**, **input current** (magnitude) and **Rth** above Circuit
 characteristics. Rth is the divider's source resistance, excluding RL. The boxes
 follow the active Find mode or selected combination preview, clear unavailable
@@ -511,13 +537,17 @@ source and its tolerance, the separate **Target** row for VMID and its allowed
 error, or RL for the optional load and its tolerance. Physical values are
 populated starting values before search; entering a value makes it fixed for
 a subsequent constrained search. Tolerance and package edit directly; family
-and TCR are available through Options. In the two-part variant these use arm defaults; network
+and shared TCR are available through **Search limits**; a part's focused editor
+retains its catalog overrides. In the two-part variant these use arm defaults; network
 parts can have independent overrides. The arm heading edits shared defaults.
-The SVG's red **Unknown** and green **Known** tiles explain its circuit colors.
-Beside the color tiles, the neutral **Options** button opens Circuit options, including the resistance range,
-ambient temperature, shared TCR, maximum stress and optional total-power limit.
-Below the ground symbol, **Find Design Solutions** runs the combination search
-directly from the diagram.
+The red **Unknown** and green **Known** tiles inside the circuit frame explain
+its colors and remain in circuit downloads. **Search limits** contains the
+resistance range, search temperature, shared TCR, maximum stress and optional
+total-power limit. Ambient/drift settings edit directly in Operating Conditions.
+Below the frame, **Find Design Solutions** runs the combination search directly
+from the diagram. It appears in Find real resistor combinations, and in Find VMID
+when a multi-part resistor network is configured. Other modes calculate directly
+from their known inputs and do not show this search button.
 It is red when a search is needed, amber while searching and green when the results
 match the current specifications, including a completed search with zero matches.
 After completion, it reads **# Design Solutions Found** and stays disabled until a
@@ -646,25 +676,31 @@ RTOP is R1 and RBOT is R2. The calculator can solve for VMID, VTOP, RTOP, RBOT,
 or RL while the remaining nominal quantities are held at their entered values.
 Choose a calculation button at the top of the page. The sixth button,
 **Find real resistor combinations**, searches actual catalog parts for a target VMID.
-Each circuit-analysis view names the goal, explains its inputs, and shows a
-matching equation and Calculate action in the Options dialog. Only known quantities
-appear as primary inputs; the SVG and detailed result banner show the calculated quantity. Switching views
+The **Method** tab names the goal, explains its inputs and shows its equation.
+Results update directly when known inputs change. The SVG and detailed result
+banner show the calculated quantity. Switching views
 preserves circuit data.
 
-The **Details & tables** dialog uses **Overview**, **Tolerances**, **Stress**,
+Find RL/IL calculates the load needed to reach the entered VMID. With 12 V and
+two 10 kΩ arms, a 4 V target gives RL = 10 kΩ or IL = 400 µA. A 6 V target is
+already the unloaded divider voltage, so the result is Open or zero current.
+The calculated load value is read-only; change the known target to recompute it.
+
+The **Data & comparisons** section uses **Overview**, **Tolerances**, **Stress**,
 **Ratings**, **Parts**, **Parts (2)**, **Resistor combinations**, and **Method** tabs to show
 one focused panel at a time.
 The solved value stays visible above the tabs; all results continue updating as
 you edit. Switching result tabs preserves circuit data and selected parts.
 Combination searches open **Resistor combinations**; circuit calculation choices open
-**Overview**. The Calculate action opens the relevant result view, and Reset
+**Overview**. Calculations select the relevant result view, and Reset
 restores **Overview**. Use Left/Right Arrow, Home, or End to navigate the tabs
 with a keyboard. The main page and its print view keep the circuit SVG prominent;
-closed dialogs do not add the old lower panels to the printout.
+optional sections remain collapsed until requested.
 
-Output load and tolerance/rating settings are collapsible. Combination searches have
-their own target and tolerance form. An invalid setting automatically opens its
-containing sections so it can be corrected. The page styling and integration
+Load and operating conditions edit directly on the SVG. Combination searches use
+the same direct voltage, tolerance and package editors, with unique constraints
+in Search limits. Invalid manual settings expand their containing section so
+they can be corrected. The page styling and integration
 remain in the HTML file; current-load interval mathematics, shared part catalogs
 and the numbering engine are loaded separately.
 
