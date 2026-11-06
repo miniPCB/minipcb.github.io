@@ -53,13 +53,13 @@
         valid("Initial calculation");
         assert(schematicField("r1", "footprint") === "0805" && get("liveSchematic").querySelectorAll('[data-part-control][data-schematic-edit][role="button"]').length === 6, "SVG shows populated editable value/tolerance/package controls with the default manual footprint");
         assert(text("vout") === "6 V" && text("iin") === "600 µA" && text("ptotal") === "7.2 mW", "Original default operating point");
-        assert(stressOutputs().join(",") === "1.44,12,1.44,12", "Default resistor stresses include the 50 V working-voltage reference");
+        assert(stressOutputs().join(",") === "2.57,12,2.57,12", "Default resistor stresses include the 50 V working-voltage reference");
         assert(text("voutMin") === "5.994 V" && text("voutMax") === "6.006 V" && text("voutError") === "0.1%", "Default ±0.1% resistor output bounds");
         assert(get("targetVout").readOnly && !get("vin").readOnly, "VMID mode marks the calculated field");
-        assert(get("ratingRows").rows.length === 15 && get("ratingRows").querySelectorAll(".chosen").length === 4, "Fifteen common ratings retain selected highlights");
+        assert(get("ratingRows").rows.length === 16 && get("ratingRows").querySelectorAll(".chosen").length === 4, "Common ratings plus the 0805 reference retain selected highlights");
         assert(text("schematicVtop") === "12 V" && text("schematicVmid") === "6 V", "Schematic shows the default source, tolerance, and midpoint");
-        assert(schematicField("r1", "resistance") === "10 kΩ" && schematicField("r1", "tolerance") === "±0.1%" && schematicField("r1", "rating") === "Rated 250 mW", "Schematic shows actual resistance, tolerance, and rating");
-        assert(["p", "v"].map(field => schematicField("r1", field)).join(",") === "1.44%,12.00%", "Schematic shows default independent power and voltage stress");
+        assert(schematicField("r1", "resistance") === "10 kΩ" && schematicField("r1", "tolerance") === "±0.1%" && schematicField("r1", "rating") === "Rated 140 mW", "Schematic shows actual resistance, tolerance, and rating");
+        assert(["p", "v"].map(field => schematicField("r1", field)).join(",") === "2.57%,12.00%", "Schematic shows default independent power and voltage stress");
 
         set("rl", "100");
         valid("Loaded forward solution");
@@ -179,8 +179,8 @@
         await reset(); set("p1", "0.03"); set("p2", "50"); valid("Smallest and largest power presets");
         assert(stressOutputs().join(",") === "12,12,0.0072,12", "30 mW and 50 W presets use their actual ratings");
         await reset(); set("vmax1", "3");
-        assert(stressOutputs().slice(0, 2).join(",") === "1.44,200", "Working voltage stress cap retained");
-        await reset(); set("vin", "100");
+        assert(stressOutputs().slice(0, 2).join(",") === "2.57,200", "Working voltage stress cap retained");
+        await reset(); set("p1", "0.25"); set("p2", "0.25"); set("vin", "100");
         assert(stressOutputs().every(value => value === 100), "Exact power and working-voltage limits both remain 100% stress");
         set("vin", "200");
         assert(stressOutputs().join(",") === "400,200,400,200", "Independent power and voltage overload scaling retained");
@@ -215,7 +215,7 @@
         assert(text("vout") === "6 V" && get("stressCards").children.length === 5, "Every physical part has a stress card");
         assert(get("operatingRows").rows.length === 6, "Operating table includes arm totals and each series part");
         assert(d.querySelectorAll('[data-schematic-part]').length === 5 && text("schematicR1Value") === "10 kΩ", "Schematic lists all physical parts beside the equivalent arm");
-        assert(ids("r1").every(id => schematicField(id, "resistance") === "2.5 kΩ" && schematicField(id, "p") === "0.36%"), "Four-part schematic uses individual values and dissipation");
+        assert(ids("r1").every(id => schematicField(id, "resistance") === "2.5 kΩ" && schematicField(id, "p") === "0.64%"), "Four-part schematic uses individual values and dissipation");
         assert([...get("schematicDrawing").querySelectorAll('[data-arm="r1"]')].every(node => node.dataset.connection === "series" && node.querySelector("path")), "Series work-form parts are drawn as individual connected resistor symbols");
         for (const part of armParts("r1")) {
           near(part.voltage, 1.5, "Equal series part voltage");
@@ -233,7 +233,7 @@
         const seriesBounds = w.networkEquivalent(w.readNetwork("r1", "vout").parts, "series");
         near(seriesBounds.min, 9750, "Series minimum sums individual limits");
         near(seriesBounds.max, 10250, "Series maximum sums individual limits");
-        assert(stressOutputs().filter((value, index) => index % 2 === 0).join(",") === "0.72,0.9,1.44,0.45,1.44", "Each part uses its unique power rating");
+        assert(stressOutputs().filter((value, index) => index % 2 === 0).join(",") === "0.72,0.9,1.44,0.45,2.57", "Each part uses its unique power rating");
         assert(ids("r1").map(id => schematicField(id, "rating")).join(",") === "Rated 125 mW,Rated 100 mW,Rated 62.5 mW,Rated 200 mW", "Schematic retains unique physical power ratings");
         assert(ids("r1").map(id => schematicField(id, "tolerance")).join(",") === "±1%,±2%,±3%,±4%", "Schematic retains unique physical tolerances");
         set(`${ids("r1")[0]}Vmax`, "1");
@@ -245,7 +245,7 @@
         assert(snapshot.querySelectorAll('[data-schematic-part]').length === 5 && snapshot.getElementById("schematicVmid").textContent === "6 V" && snapshot.querySelector(`[data-schematic-part="${ids("r1")[0]}"] [data-field="v"]`).textContent === "150.00%", "SVG download captures all current values and stresses");
         assert(!snapshot.querySelector("script, link") && snapshot.querySelectorAll("image").length === 1 && [...snapshot.querySelectorAll("image")].every(image => image.hasAttribute("data-circuit-logo") && image.getAttribute("href").startsWith("data:image/png;base64,")) && !get("schematicViewport").querySelector('a[target="_blank"], a[href$=".svg"]') && snapshotLink.download === "voltage_divider.svg" && !snapshotLink.target, "Schematic has no separate image-opening links and retains a self-contained SVG download");
         choosePart("r1", ids("r1")[3]);
-        assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 16, "Comparison selector includes custom individual power rating");
+        assert(text("compareR1Heading").includes("R1.4") && get("ratingRows").rows.length === 17, "Comparison selector includes custom individual power rating");
         assert(get("ratingRows").querySelectorAll(".chosen").length === 4, "Custom and standard chosen ratings are highlighted");
 
         await reset(); enableParts("r1"); split("r1");
@@ -277,7 +277,7 @@
           near(part.current, 0.00015, "Equal parallel part current");
           near(part.power, 0.0009, "Equal parallel part dissipation");
         }
-        assert(ids("r1").every(id => schematicField(id, "resistance") === "40 kΩ" && schematicField(id, "p") === "0.36%" && schematicField(id, "v") === "12.00%"), "Parallel schematic uses each branch resistance, power and inherited working-voltage rating");
+        assert(ids("r1").every(id => schematicField(id, "resistance") === "40 kΩ" && schematicField(id, "p") === "0.64%" && schematicField(id, "v") === "12.00%"), "Parallel schematic uses each branch resistance, power and inherited working-voltage rating");
 
         await reset(); set("tolR2", "1"); enableParts("r1"); set("r1Connection", "parallel");
         set(`${ids("r1")[0]}R`, "2"); set(`${ids("r1")[0]}Tol`, "10");
@@ -441,7 +441,7 @@
         assert(!get("manualLimits").open, "Normal edits preserve disclosure choices");
         await reset(); get("calculatorDetails").open = true; get("manualLimits").open = true; get("r1PartsOptions").open = true; enableParts("r1"); split("r1");
         assert(ids("r1").filter(id => get(id).open).length === 1, "Four-part editor opens one part and summarizes the rest");
-        assert(ids("r1").every(id => text(`${id}Description`).includes("2.5 kΩ") && text(`${id}Description`).includes("250 mW")), "Closed part summaries show resistance and power rating");
+        assert(ids("r1").every(id => text(`${id}Description`).includes("2.5 kΩ") && text(`${id}Description`).includes("140 mW")), "Closed part summaries show resistance and power rating");
         const focusedPart = ids("r1")[0];
         get(`${focusedPart}Power`).focus(); set(`${focusedPart}Power`, "0.125");
         assert(d.activeElement === get(`${focusedPart}Power`) && text(`${focusedPart}Description`).includes("125 mW"), "Part editing preserves focus and updates its summary");

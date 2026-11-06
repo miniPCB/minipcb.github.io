@@ -56,6 +56,22 @@ not add a permission or confirmation step to an authorized task.
 - Keep Pstress and Vstress compact and tied to each actual part's ratings. Label
   nominal versus worst-case results accurately. Format stress as nonnegative
   percentages with two decimals; missing ratings are unassessed, not zero.
+- A footprint alone does not identify a manufacturer or power mode. Unassigned
+  parts, including fresh/reset 0805 defaults and inserted siblings, use the lowest
+  documented package references across supported families. A package-only edit
+  must not assign an MPN. Preserve an explicitly assigned family/mode when its
+  footprint changes, and honor explicit manual power/voltage overrides.
+  Route assignments through `storeCatalogAssignment` to replace the package
+  reference flag and stored power allowance together, including search Apply
+  and automatic values; a stale reference flag can overwrite a real rating.
+- Compute each physical part's P = I²R = V²/R. Pstress and Vstress divide that
+  part's power and absolute voltage by independent design limits; never replace
+  continuous working voltage with sqrt(Pallowed*R) or the insulation-test rating.
+  Keep raw P70/base ratings separate from ambient derating, apply shared design
+  percentages once, and verify fresh -> other package -> original package gives
+  identical stresses when the part specification is unchanged. Interior
+  matched-load power maxima and conservative network bounds are documented by
+  the stress functions; zero load at zero allowance must not produce NaN.
 - Carry configured initial, thermal, radiation/aging and load uncertainty through
   every mode. Distinguish inverse trip-voltage ranges from allowable source
   tolerance budgets; avoid counting derived uncertainty twice.

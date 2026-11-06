@@ -532,7 +532,7 @@
           <div class="field"><label for="designPowerDerating">Power limit</label><select id="designPowerDerating"></select></div>
           <div class="field"><label for="designVoltageDerating">Voltage limit</label><select id="designVoltageDerating"></select></div>
         </div>
-        <p id="ratingHelp" class="hint">80% means use 80% of the manufacturer rating. Shared by all divider resistors.</p>
+        <p id="ratingHelp" class="hint">80% means use 80% of the part rating or package reference. Shared by all divider resistors.</p>
         <table id="ratingLimits"><thead><tr><th></th><th>Part rating</th><th>Design limit</th></tr></thead><tbody id="ratingLimitRows"></tbody></table>
         <p id="ratingTemperature" class="hint" hidden></p>
         <p id="ratingFailure" class="note" role="status" hidden></p>
@@ -885,7 +885,7 @@
                   <p><code>Pdesign = Pallowed × power limit / 100</code></p>
                   <p><code>Vdesign = Vmax × voltage limit / 100</code></p>
                   <p><code>Vstress = |V| / Vdesign × 100%</code><br />Without Vmax, voltage stress is not assessed. Current remains an operating-point result.</p>
-                  <p>Nominal DC operating point with independent tolerance intervals for VTOP, R1, R2, and RL. Catalog parts use the allowed power at their selected ambient; manual ratings are used as entered. Transients and independent datasheet current limits are not modeled.</p>
+                  <p>Nominal DC operating point with independent tolerance intervals for VTOP, R1, R2, and RL. Assigned parts use their catalog family and power mode. Unassigned parts use conservative package references with ambient derating; explicit manual ratings are used as entered. Transients and independent datasheet current limits are not modeled.</p>
                 </div>
               </div>
               <p class="note">Inverse solutions use <code>g = VMID / VTOP</code>, <code>Rb = RTOP × g / (1 − g)</code>, <code>RTOP = Rb × (1 − g) / g</code>, and <code>RBOT = Rb / (1 − Rb / RL)</code> when loaded. A finite positive divider needs 0 &lt; g &lt; 1. RL may be open when the target equals the unloaded output.</p>
@@ -1041,11 +1041,14 @@
     }
 
     for (const id of ["p1", "p2"]) {
+      // Bootstrap the unassigned 0805 reference before the catalog fetch finishes.
+      // 0.14 W = min(TNPW general 0.14 W, M55342/06 0.15 W), both at 70 C.
+      const reference = new Option("140 mW · 0805 package reference", "0.14"); reference.defaultSelected = true; byId(id).add(reference);
       for (const rating of RATINGS) {
         const option = new Option(`${rating.label} (${rating.watts} W)`, rating.watts);
-        option.defaultSelected = rating.watts === 0.25;
         byId(id).add(option);
       }
+      byId(id).dataset.powerFootprint = "0805";
     }
 
     function format(value, unit, digits = 4) {
@@ -1139,6 +1142,10 @@
     }
 
     function analyzeParts(parts, connection, voltage, current) {
+      // Solve each physical resistor, not an equivalent arm's rating. In series
+      // the current is common and Vi = I*Ri; in parallel voltage is common and
+      // Ii = V/Ri. P = Vi*Ii = Ii^2*Ri = Vi^2/Ri >= 0 for these passive parts,
+      // including negative supply voltages and current injected by the load.
       if (typeof connection === "object") {
         const values = new Map(parts.map(part => [part.id, part])), measured = new Map();
         const resistance = node => typeof node === "string" ? values.get(node).resistance : node.connection === "series" ? node.children.reduce((sum, child) => sum + resistance(child), 0) : node.children.map(resistance).reduce(parallel);
@@ -1166,15 +1173,53 @@
     }
 
     function packagePowerReference(footprint, settings = null) {
-      // Unassigned parts use the lower default-mode limit for the actual package.
+      // A footprint is not a manufacturer/family/power-mode specification.
+      // Unassigned parts use the lower default-mode allowance across supported
+      // families, evaluated at temperature BEFORE taking the minimum. The family
+      // governing that envelope can change with temperature. This is a reference,
+      // never an assigned MPN or proof that any resistor in that size is suitable.
       const limits = resistorCatalog?.families.flatMap(family => family.packages.filter(pkg => pkg.case === footprint).map(pkg => {
         const ratedPowerW = pkg.powerW[family.defaults.mode];
         return settings ? ResistorEnvironment.allowedPower({ familyId: family.id, mode: family.defaults.mode, ratedPowerW, powerW: ratedPowerW }, settings) : ratedPowerW;
       })).filter(value => Number.isFinite(value) && value >= 0) || [];
-      return limits.length ? Math.min(...limits) : null;
+      if (limits.length) return Math.min(...limits);
+      // The initial 0805 reference must also derate while catalogs are loading
+      // or unavailable. TNPW general (140 mW, zero at 125 C) governs this lower
+      // envelope at/above 70 C; M55342/06 is 150 mW, zero at 150 C.
+      if (!resistorCatalog && footprint === "0805") {
+        const reference = { familyId: "vishay-tnpw-e3", mode: "general", ratedPowerW: .14, powerW: .14 };
+        return settings ? ResistorEnvironment.allowedPower(reference, settings) : reference.ratedPowerW;
+      }
+      return null;
     }
 
     function partPowerInput(id) { return byId(/^r[12]$/.test(id) ? `p${id[1]}` : `${id}Power`); }
+
+    function readPowerRating(id, label) {
+      const input = byId(id), reference = input.dataset.powerFootprint && packagePowerReference(input.dataset.powerFootprint);
+      if (Number.isFinite(reference)) {
+        if (input.tagName === "SELECT" && ![...input.options].some(option => Number(option.value) === reference)) input.add(new Option(`${format(reference, "W")} · package reference`, reference));
+        input.value = reference;
+      }
+      // The stored value is always P70 (or an explicit manual/assigned allowance),
+      // not the result of the previous thermal calculation. Direct manual input
+      // clears powerFootprint in circuitInputChanged; never overwrite that input.
+      const value = Number(input.value);
+      if (!input.value.trim() || !Number.isFinite(value) || value <= 0) { input.setAttribute("aria-invalid", "true"); throw new Error(`${label}: enter a number greater than zero.`); }
+      return value;
+    }
+
+    function storeCatalogAssignment(id, candidate) {
+      const power = partPowerInput(id);
+      if (power.tagName === "SELECT" && ![...power.options].some(option => Number(option.value) === candidate.powerW)) power.add(new Option(`${format(candidate.powerW, "W")} · catalog limit`, candidate.powerW));
+      power.value = candidate.powerW;
+      // Rating provenance is exclusive: an assigned part's family/mode/base
+      // allowance replaces the generic package envelope. Every assignment path
+      // (BOM, search Apply, automatic choice, editor, topology transfer) uses this
+      // helper so a later recalculation cannot replace a real part's denominator.
+      delete power.dataset.powerFootprint;
+      appliedCatalogParts.set(id, candidate);
+    }
 
     function readWorkingVoltage(id, label, partId, footprint) {
       const value = readInput(id, label, true, true), input = byId(id);
@@ -1260,7 +1305,7 @@
         return {
           id, name,
           resistance: byId(`${id}Auto`).checked ? automaticChoices.get(id)?.resistanceOhms ?? (() => { throw new Error(`${name} is undefined. Use Choose automatic values, or enter a fixed resistance.`); })() : readInput(`${id}R`, `${name} resistance`, false, true, Number(byId(`${id}Unit`).value)),
-          rating: readInput(`${id}Power`, `${name} power rating`, false, true),
+          rating: readPowerRating(`${id}Power`, `${name} power rating`),
           powerReference: byId(`${id}Power`).dataset.powerFootprint || null,
           tolerance: mode === "tolerance" ? 0 : readTolerance(`${id}Tol`, `${name} tolerance`),
           vmax: readWorkingVoltage(`${id}Vmax`, `${name} maximum working voltage`, id, resistorFootprint({ id }))
@@ -1324,7 +1369,7 @@
       byId(`${arm}Multiple`).checked = true; prepareNetwork(arm);
       const id = byId(`${arm}Parts`).firstElementChild.id;
       footprintPreferences.set(id, footprint);
-      if (chosen) { appliedCatalogParts.delete(arm); appliedCatalogParts.set(id, chosen); }
+      if (chosen) { appliedCatalogParts.delete(arm); storeCatalogAssignment(id, chosen); }
     }
 
     function makeAutomatic(id) {
@@ -1357,7 +1402,7 @@
       }
       const fixed = action === "fixed" ? appliedCatalogParts.get(id) : null;
       invalidateAutomaticDesign();
-      if (fixed) appliedCatalogParts.set(id, fixed);
+      if (fixed) storeCatalogAssignment(id, fixed);
       byId("solveFor").value = "vout"; catalogDesignVmid = null;
       refreshAutomaticDesign();
       if (action !== "fixed") byId("designTrim").value = id;
@@ -1504,8 +1549,8 @@
         if (generation !== designGeneration) return;
         automaticChoices.clear();
         for (const [id, candidate] of best.assignment) {
-          automaticChoices.set(id, candidate); appliedCatalogParts.set(id, candidate);
-          byId(`${id}Power`).value = candidate.powerW; byId(`${id}Vmax`).value = candidate.workingVoltageV;
+          automaticChoices.set(id, candidate); storeCatalogAssignment(id, candidate);
+          byId(`${id}Vmax`).value = candidate.workingVoltageV;
         }
         byId("solveFor").value = "vout"; catalogDesignVmid = target;
         update();
@@ -1618,6 +1663,9 @@
       const collect = budget => { budget.issues.forEach(issue => issues.add(issue)); budget.requiredGaps.forEach(issue => requiredGaps.add(issue)); estimated ||= budget.estimated; return budget; };
       for (const arm of ARMS) {
         for (const part of physical[arm]) {
+          // These intervals affect worst-case circuit analysis, not the nominal
+          // entered R or its nominal I^2*R dissipation. Only the power allowance
+          // below is temperature adjusted in this nominal per-part stress path.
           // Save the input rating separately; edits must never persist a thermal reduction.
           part.inputRating = part.rating;
           if (part.catalog && settings.basis === "ambient-estimate") {
@@ -1752,6 +1800,9 @@
     }
 
     function designRatings(rating, vmax, settings = environmentSettings) {
+      // rating is the temperature-qualified power allowance, not dissipation.
+      // UI "80% of rating" means a denominator of 0.8*rating, independently for
+      // power and continuous working voltage. Do not scale the actual load here.
       return { power: rating * (1 - (settings.derating?.powerPct ?? 0) / 100), voltage: vmax == null ? null : vmax * (1 - (settings.derating?.voltagePct ?? 0) / 100) };
     }
 
@@ -1759,9 +1810,22 @@
       return `Design limits: power ${Number((100 - (settings.derating?.powerPct ?? 0)).toPrecision(12))}% of rating; voltage ${Number((100 - (settings.derating?.voltagePct ?? 0)).toPrecision(12))}% of rating.`;
     }
 
+    function ratingStressPercent(value, limit) {
+      return limit === null ? null : limit === 0 ? value > 0 ? Infinity : 0 : value / limit * 100;
+    }
+
     function stress(resistance, voltage, current, power, rating, vmax, settings = environmentSettings) {
+      // Dimensionless utilization, displayed as percent:
+      //   Pstress = 100*Ppart / Pdesign; Vstress = 100*abs(Vpart) / Vdesign.
+      // Both constraints apply independently. sqrt(Pdesign*R) is the voltage
+      // imposed by the POWER limit; it must not replace the manufacturer's
+      // continuous working-voltage limit (nor its separate insulation rating).
+      // With no voltage rating return unassessed, not 0%. At zero allowable
+      // power, any positive dissipation is a failure (Infinity); no load is 0%.
+      // Callers choose nominal values or conservative interval maxima explicitly;
+      // a worst power and a worst voltage need not occur at the same corner.
       const limits = designRatings(rating, vmax, settings), vlimit = limits.voltage;
-      return { p: limits.power === 0 ? power > 0 ? Infinity : 0 : power / limits.power * 100, v: vlimit === null ? null : Math.abs(voltage) / vlimit * 100, vlimit };
+      return { p: ratingStressPercent(power, limits.power), v: ratingStressPercent(Math.abs(voltage), vlimit), vlimit };
     }
 
     function openRatingDialog(node) {
@@ -1796,7 +1860,7 @@
     function renderRatingReference() {
       const family = resistorCatalog?.families.find(family => family.id === byId("ratingFamily").value), part = ratingEditContext.part;
       const mode = family?.powerModes.find(mode => mode.id === byId("ratingMode").value), rows = byId("ratingReferenceRows"); rows.replaceChildren();
-      byId("ratingReferenceNote").textContent = family ? `${part.catalog ? "Assigned part" : "Reference only · no manufacturer assigned"}. Power at ${mode.ratedAtC} °C; decreases to zero at ${mode.zeroAtC} °C. Both power and working-voltage limits apply independently.` : "Catalog ratings unavailable. Entered limits are retained.";
+      byId("ratingReferenceNote").textContent = family ? `${part.catalog ? "Assigned part" : part.powerReference ? "Unassigned part: main limits use the lowest package references across the supported families. This table shows only the selected family" : "Reference only · no manufacturer assigned"}. Power at ${mode.ratedAtC} °C; decreases to zero at ${mode.zeroAtC} °C. Both power and working-voltage limits apply independently.` : "Catalog ratings unavailable. Entered limits are retained.";
       for (const pkg of family?.packages || []) {
         const power = pkg.powerW[mode.id]; if (!Number.isFinite(power)) continue;
         const row = rows.insertRow(); if (pkg.code === part.catalog?.package || pkg.case === resistorFootprint(part)) row.className = "chosen";
@@ -3325,21 +3389,15 @@
     }
 
     function changeSchematicFootprint() {
-      const size = byId("schematicEditFootprint").value, manual = !byId("schematicEditFamily").value, tolerance = byId("schematicEditPartTolerance").value, vmax = byId("schematicEditVmax").value;
-      if (!byId("schematicEditFamily").value && size && resistorCatalog) {
-        const families = resistorCatalog.families.filter(family => family.packages.some(pkg => pkg.case === size && pkg.powerW[family.defaults.mode]));
-        const family = families.find(family => family.id === byId("catalogFamily").value) || families[0];
-        if (family) {
-          byId("schematicEditFamily").value = family.id;
-          configureSchematicCatalog(true);
-          byId("schematicEditFootprint").value = family.packages.find(pkg => pkg.case === size).code;
-        }
-      }
-      configureSchematicCatalog();
-      if (manual && byId("schematicEditFamily").value && (byId("schematicEditSave").disabled || byId("schematicEditPartTolerance").value !== tolerance)) {
-        // A footprint alone must not require an exact catalog value or change a manual tolerance.
-        byId("schematicEditFamily").value = ""; configureSchematicCatalog(true);
-        byId("schematicEditFootprint").value = size; byId("schematicEditPartTolerance").value = tolerance; byId("schematicEditVmax").value = packageVoltageReference(size) ?? vmax; updateSchematicCatalogPreview();
+      const size = byId("schematicEditFootprint").value;
+      // Changing only a manual package must not silently assign a manufacturer.
+      // Otherwise 0805 -> 0402 -> 0805 changes the denominator from a manual
+      // limit to TNPW's 150 V limit despite an unchanged final visible package.
+      if (!byId("schematicEditFamily").value) {
+        byId("schematicEditVmax").value = packageVoltageReference(size) ?? "";
+        updateSchematicCatalogPreview();
+      } else {
+        configureSchematicCatalog();
       }
     }
 
@@ -3616,7 +3674,7 @@
           power.value = assignment?.powerW ?? manual.rating;
           if (!assignment && manual.powerReference) power.dataset.powerFootprint = manual.powerReference; else delete power.dataset.powerFootprint;
           byId(`${id}Vmax`).value = assignment ? assignment.workingVoltageV : byId("schematicEditVmax").value;
-          if (assignment) appliedCatalogParts.set(id, assignment); else appliedCatalogParts.delete(id);
+          if (assignment) storeCatalogAssignment(id, assignment); else appliedCatalogParts.delete(id);
           closeSchematicEditor(false); invalidateAutomaticDesign(); update(); focusSchematicEditorTarget(context); return;
         }
         if (context.state !== (pairPreviewState || schematicState)) throw new Error("The circuit changed while this editor was open. Cancel and reopen it.");
@@ -3643,7 +3701,7 @@
         byId("solveFor").value = draft.mode;
         if (context.kind === "part") {
           if (byId(`${context.part.id}Auto`)?.checked) { byId(`${context.part.id}Auto`).checked = false; automaticChoices.delete(context.part.id); }
-          if (draft.assignment) appliedCatalogParts.set(context.part.id, { ...draft.assignment });
+          if (draft.assignment) storeCatalogAssignment(context.part.id, { ...draft.assignment });
           else appliedCatalogParts.delete(context.part.id);
           const footprint = draft.assignment?.case || (byId("schematicEditFamily").value ? resistorFootprint(context.part) : byId("schematicEditFootprint").value);
           if (footprint) footprintPreferences.set(context.part.id, footprint);
@@ -3951,12 +4009,16 @@
         };
         // Monotone interval propagation supplies conservative bounds, including
         // interior power peaks; it does not substitute nominal arm stress.
+        // Each leaf obeys P <= Vmax*Imax, Vmax^2/Rmin, and Imax^2*Rmax.
+        // The minimum of these independent upper bounds is still conservative;
+        // Vmax, Imax and Rmax need not be simultaneously attainable. Splits use
+        // common voltage in parallel and common current in series, recursively.
         const visit = (node, voltage, current) => {
           const interval = range(node);
           if (typeof node === "string") {
             const part = parts.get(node), power = Math.min(voltage * current, (voltage / interval.min) * voltage, (current * interval.max) * current);
             const limits = designRatings(part.rating, part.vmax, state.environment?.settings || spec.environment || ResistorEnvironment.initialOnly());
-            byPart[node] = { p: power / limits.power * 100, v: limits.voltage === null ? null : voltage / limits.voltage * 100, power, voltage, current };
+            byPart[node] = { p: ratingStressPercent(power, limits.power), v: ratingStressPercent(voltage, limits.voltage), power, voltage, current };
           } else for (const child of node.children) {
             const childRange = range(child);
             if (node.connection === "parallel") visit(child, voltage, Math.min(current, voltage / childRange.min));
@@ -4088,17 +4150,21 @@
       const loadMin = load?.min ?? null, loadMax = load?.max ?? null;
       if (environment?.sourceTolerance || DividerCurrentLoad.enabled(spec)) {
         const limits = environment?.bounds || DividerCurrentLoad.ranges({ ...spec, r1: top.resistanceOhms, r2: bot.resistanceOhms }, { vin: spec.sourceTolerance }, { r1: [a, b], r2: [c, d], rl: [loadMin, loadMax] }), absolute = environment?.sourceTolerance?.stress || DividerCurrentLoad.stress(limits);
-        const stressFor = (part, value) => { const limits = designRatings(ResistorEnvironment.allowedPower(part, settings), part.workingVoltageV, settings); return { p: value.power / limits.power * 100, v: limits.voltage === null ? null : value.voltage / limits.voltage * 100 }; };
+        const stressFor = (part, value) => { const limits = designRatings(ResistorEnvironment.allowedPower(part, settings), part.workingVoltageV, settings); return { p: ratingStressPercent(value.power, limits.power), v: ratingStressPercent(value.voltage, limits.voltage) }; };
         return { top: stressFor(top, absolute.top), bot: stressFor(bot, absolute.bot), power: absolute.power, current: absolute.current, absolute: { top: absolute.top, bot: absolute.bot } };
       }
       const lowerMin = loadMin === null ? c : parallel(c, loadMin), lowerMax = loadMax === null ? d : parallel(d, loadMax);
       const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
-      // Power can peak inside a resistance interval: evaluate the matched-load point.
+      // For a Thevenin source, P(R) = Vth^2*R/(Rth+R)^2, so dP/dR changes
+      // sign at R = Rth. Clamp that matched-load peak to the permitted interval;
+      // checking resistance endpoints alone can miss the actual worst power.
+      // For R1 the opposing resistance is RBOT||RL; for R2 its Thevenin
+      // resistance is RTOP||RL. Voltage maxima use their own monotone corners.
       const pTop = analyze(v, clamp(lowerMin, a, b), c, loadMin).p1;
       const botThevenin = loadMax === null ? a : parallel(a, loadMax);
       const pBot = analyze(v, a, clamp(botThevenin, c, d), loadMax).p2;
       const vTop = v / (1 + lowerMin / b), vBot = v / (1 + a / lowerMax);
-      const stressFor = (part, power, voltage) => { const limits = designRatings(ResistorEnvironment.allowedPower(part, settings), part.workingVoltageV, settings); return { p: power / limits.power * 100, v: limits.voltage === null ? null : voltage / limits.voltage * 100 }; };
+      const stressFor = (part, power, voltage) => { const limits = designRatings(ResistorEnvironment.allowedPower(part, settings), part.workingVoltageV, settings); return { p: ratingStressPercent(power, limits.power), v: ratingStressPercent(voltage, limits.voltage) }; };
       const maximumCurrent = analyze(v, a, c, loadMin).i1;
       return { top: stressFor(top, pTop, vTop), bot: stressFor(bot, pBot, vBot), power: v * maximumCurrent, current: maximumCurrent, absolute: { top: { power: pTop, voltage: vTop, current: maximumCurrent }, bot: { power: pBot, voltage: vBot, current: analyze(v, a, c, loadMax).i2 } } };
     }
@@ -5016,10 +5082,9 @@
           byId(arm).value = pair.circuit[arm] / Number(byId(`${arm}Unit`).value);
           if (!multiple) {
             const part = parts[0], chosen = part.catalog; byId(`tolR${index}`).value = part.tolerance; byId(`vmax${index}`).value = part.vmax;
-            const rating = byId(`p${index}`); if (![...rating.options].some(option => Number(option.value) === part.rating)) rating.add(new Option(format(part.rating, "W"), part.rating)); rating.value = part.rating;
-            appliedCatalogParts.set(arm, { ...chosen });
+            storeCatalogAssignment(arm, { ...chosen });
           } else {
-            for (const part of parts) { const row = appendPart(arm, part); mapping.set(part.id, row.id); appliedCatalogParts.set(row.id, { ...part.catalog }); }
+            for (const part of parts) { const row = appendPart(arm, part); mapping.set(part.id, row.id); storeCatalogAssignment(row.id, { ...part.catalog }); }
             storeTopology(arm, mapTopology(spec.construction[arm].connection, id => mapping.get(id)));
           }
         }
@@ -5028,8 +5093,7 @@
       for (const [arm, index, part] of [["r1", "1", pair.top], ["r2", "2", pair.bot]]) {
         byId(`${arm}Multiple`).checked = false; byId(arm).value = part.resistanceOhms / Number(byId(`${arm}Unit`).value);
         byId(`tolR${index}`).value = part.tolerancePct; byId(`vmax${index}`).value = part.workingVoltageV;
-        const rating = byId(`p${index}`); if (![...rating.options].some(option => Number(option.value) === part.powerW)) rating.add(new Option(`${format(part.powerW, "W")} · catalog limit`, part.powerW)); rating.value = part.powerW;
-        appliedCatalogParts.set(arm, { ...part });
+        storeCatalogAssignment(arm, { ...part });
       }
       byId("solveFor").value = "vout"; update(); selectResultTab("parts2Tab");
     }
@@ -5333,11 +5397,7 @@
       resistance.value = candidate.resistanceOhms / Number(unit.value);
       byId(multiple ? `${targetId}Tol` : `tolR${index}`).value = candidate.tolerancePct;
       byId(multiple ? `${targetId}Vmax` : `vmax${index}`).value = candidate.workingVoltageV;
-      const power = byId(multiple ? `${targetId}Power` : `p${index}`);
-      if (!multiple && ![...power.options].some(option => Number(option.value) === candidate.powerW)) power.add(new Option(`${format(candidate.powerW, "W")} · catalog limit`, candidate.powerW));
-      power.value = candidate.powerW;
-      delete power.dataset.powerFootprint;
-      appliedCatalogParts.set(targetId, { ...candidate });
+      storeCatalogAssignment(targetId, { ...candidate });
       designGeneration++;
       if (byId(`${targetId}Auto`)?.checked) { byId(`${targetId}Auto`).checked = false; automaticChoices.delete(targetId); }
       if (automaticRows().length) invalidateAutomaticDesign();
@@ -5370,7 +5430,7 @@
         initializePairSearch();
         configureDesignCatalog(true);
         configureCatalogFamily(true);
-        renderSchematic();
+        update();
         return true;
       } catch (error) {
         byId("catalogStatus").textContent = `Part suggestions unavailable: ${error.message} Serve this page over HTTP to load the shared JSON catalogs. Manual circuit analysis remains available.`;
@@ -5479,8 +5539,8 @@
         const vmax2 = networks.r2 ? null : readWorkingVoltage("vmax2", "R2 maximum working voltage", "r2", resistorFootprint({ id: "r2" }));
         const result = analyze(vin, r1, r2, rl, circuit.iload);
         const physical = {
-          r1: analyzeParts(networks.r1 ? networks.r1.parts : [{ id: "r1", name: "R1", resistance: r1, tolerance: tolerances.r1, rating: Number(byId("p1").value), powerReference: byId("p1").dataset.powerFootprint || null, vmax: vmax1 }], networks.r1 ? networks.r1.connection : "series", result.v1, result.i1),
-          r2: analyzeParts(networks.r2 ? networks.r2.parts : [{ id: "r2", name: "R2", resistance: r2, tolerance: tolerances.r2, rating: Number(byId("p2").value), powerReference: byId("p2").dataset.powerFootprint || null, vmax: vmax2 }], networks.r2 ? networks.r2.connection : "series", result.vout, result.i2)
+          r1: analyzeParts(networks.r1 ? networks.r1.parts : [{ id: "r1", name: "R1", resistance: r1, tolerance: tolerances.r1, rating: readPowerRating("p1", "R1 power rating"), powerReference: byId("p1").dataset.powerFootprint || null, vmax: vmax1 }], networks.r1 ? networks.r1.connection : "series", result.v1, result.i1),
+          r2: analyzeParts(networks.r2 ? networks.r2.parts : [{ id: "r2", name: "R2", resistance: r2, tolerance: tolerances.r2, rating: readPowerRating("p2", "R2 power rating"), powerReference: byId("p2").dataset.powerFootprint || null, vmax: vmax2 }], networks.r2 ? networks.r2.connection : "series", result.vout, result.i2)
         };
         for (const part of ARMS.flatMap(arm => physical[arm])) {
           const chosen = catalogAssignment(part);
@@ -5636,7 +5696,7 @@
       }
       if (/^r[12]Connection$/.test(input.id) && input.value !== "mixed") { delete byId(`${input.id.slice(0, 2)}Parts`).dataset.topology; input.querySelector('[value="mixed"]').disabled = true; }
       invalidateAutomaticDesign();
-      if (fixed) appliedCatalogParts.set(fixedId, fixed);
+      if (fixed) storeCatalogAssignment(fixedId, fixed);
       catalogDesignVmid = null; update();
     }
     form.addEventListener("input", circuitInputChanged);
@@ -5814,6 +5874,7 @@
       operatingConditionError = "";
       for (const input of form.querySelectorAll("[data-voltage-unassessed]")) input.removeAttribute("data-voltage-unassessed");
       for (const input of form.querySelectorAll("[data-power-footprint]")) input.removeAttribute("data-power-footprint");
+      for (const id of ["p1", "p2"]) byId(id).dataset.powerFootprint = "0805";
       closeRatingDialog();
       environmentSettings = { ...environmentSettings, derating: { powerPct: 0, voltagePct: 0 } };
       appliedCatalogParts.clear();

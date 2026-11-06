@@ -173,6 +173,16 @@
     return { min, max, initialPct, thermalPct, radiationPct, agingPct: agingRelativePct + 100 * agingOhms / resistance, agingRelativePct, agingOhms, tcrPpm, referenceC, estimated: true, issues, requiredGaps, qualified: false, effectivePct: Math.max(resistance - min, max - resistance) / resistance * 100 };
   }
   function allowedPower(catalog, settings) {
+    // Manufacturer P70 curves: Pallowed = P70 * clamp((Tzero - Tambient,max)
+    // / (Tzero - 70 C), 0, 1), limited further by the selected base allowance.
+    // TNPW: https://www.vishay.com/docs/28758/tnpw_e3.pdf (pp. 1-2, 6-7).
+    // M55342: https://www.vishay.com/docs/60018/eh.pdf (pp. 2-3).
+    // The chosen TNPW operation mode determines P70 and Tzero; it is not a
+    // different ordering-code resistor. PCB thermal management must meet the
+    // datasheet conditions. The TCR self-heating allowance models resistance
+    // drift only; adding it to this ambient-based curve would derate twice.
+    // Always start from the original P70/base data; never feed the previous
+    // computed powerW back as a new base or cooling cannot restore the allowance.
     const zeroAtC = profiles[catalog.familyId]?.filmC[catalog.mode];
     if (settings.basis !== "ambient-estimate" || !zeroAtC || !Number.isFinite(catalog.ratedPowerW)) return catalog.powerW;
     return Math.min(catalog.powerW, catalog.ratedPowerW * Math.max(0, Math.min(1, (zeroAtC - settings.thermal.maxC) / (zeroAtC - 70))));

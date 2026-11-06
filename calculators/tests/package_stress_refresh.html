@@ -111,18 +111,18 @@ document.getElementById('calculator').addEventListener('load', async event => {
     footprint(pendingIds[0], '0201'); value(pendingIds[0], '12.345k');
     assert(Number(get(pendingIds[0] + 'Power').value) === .05 && get(pendingIds[0] + 'Power').dataset.powerFootprint === '0201', 'A package change while another resistor is undefined saves the new power reference');
     get(pendingIds[3] + 'Auto').checked = false; set(pendingIds[3] + 'R', '2.5');
-    w.setOperatingCondition('maxC', '85'); verify('Resolved pending construction', p => p.id === pendingIds[0] ? .05 * 40 / 55 : .25);
+    w.setOperatingCondition('maxC', '85'); verify('Resolved pending construction', p => (p.id === pendingIds[0] ? .05 : .14) * 40 / 55);
     await reset(); value('r1', '12.345k'); footprint('r1', '0201');
     w.editResistorConstruction('r1', 'r1', 'series'); w.closeSchematicEditor(false);
     assert(state().physical.r1.every(p => p.powerReference === '0201' && p.inputRating === .05), 'Inserted series siblings inherit the package reference');
-    w.setOperatingCondition('maxC', '85'); verify('Inserted siblings', p => p.id === 'r2' ? .25 : .05 * 40 / 55);
+    w.setOperatingCondition('maxC', '85'); verify('Inserted siblings', p => (p.id === 'r2' ? .14 : .05) * 40 / 55);
     const first = state().physical.r1[0].id; set(first + 'Power', '.125'); value(first, '15.234k');
     assert(state().physical.r1[0].inputRating === .125 && state().physical.r1[0].rating === .125 && !get(first + 'Power').dataset.powerFootprint, 'An explicit manual power override survives value and temperature edits');
     await reset(); value('r1', '12.345k'); footprint('r1', '0402'); w.setOperatingCondition('maxC', '125');
     value('r1', '15.234k'); assert(state().physical.r1[0].rating === 0 && state().physical.r1[0].stress.p === Infinity && w.partFailures(state().physical.r1[0], state()).length > 0, 'Zero available package-reference power retains the edited value and marks FAIL');
-    w.setOperatingCondition('maxC', '70'); verify('Reference restored after zero limit', p => p.id === 'r1' ? .05 : .25);
+    w.setOperatingCondition('maxC', '70'); verify('Reference restored after zero limit', p => p.id === 'r1' ? .05 : .14);
     await reset(); footprint('r1', '0201'); footprint('r2', '0201'); set('vin', '40'); value('r1', '20k');
-    assert(state().physical.r1[0].resistance === 20000 && state().physical.r1[0].catalog && state().physical.r1[0].stress.v > 100 && w.partFailures(state().physical.r1[0], state()).length > 0, 'An overstressed catalog value commits with refreshed stress and FAIL');
+    assert(state().physical.r1[0].resistance === 20000 && !state().physical.r1[0].catalog && state().physical.r1[0].powerReference === '0201' && state().physical.r1[0].stress.v > 100 && w.partFailures(state().physical.r1[0], state()).length > 0, 'An overstressed package-reference value commits with refreshed stress and FAIL');
     value('r1', '10k'); assert(!w.partFailures(state().physical.r1[0], state()).length, 'A valid value clears FAIL while retaining the selected package and MPN');
     // This fixture checks the full per-part stress display, including the phone's desktop option.
     w.eval('schematicDesktopView = true; renderSchematic()');
@@ -133,7 +133,7 @@ document.getElementById('calculator').addEventListener('load', async event => {
     }
     const model = w.circuitExportModel(state(), 'vout'), report = w.circuitLtspiceReport(model);
     assert(report.measurements.some(line => line.startsWith('.meas op Pstress_pct ')) && w.schematicBomTsv().includes(state().physical.r1[0].stress.v.toFixed(2) + '%'), 'LTspice and copied BOM use the edited circuit and stress');
-    await reset(); assert(!get('p1').dataset.powerFootprint && !w.eval('leaveWarningActive'), 'Reset restores clean default rating ownership');
+    await reset(); assert(get('p1').dataset.powerFootprint === '0805' && !w.eval('leaveWarningActive'), 'Reset restores clean default package-reference ownership');
     assert(!errors.length, 'No runtime errors: ' + errors.join('; '));
   } catch (error) { failures.push(error.stack); }
   document.getElementById('results').textContent = JSON.stringify({ status: failures.length ? 'FAIL' : 'PASS', count: checks.length, failures, checks }, null, 2);

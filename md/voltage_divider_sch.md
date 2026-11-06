@@ -288,8 +288,13 @@ repeating Tol. or Footprint labels. Editable tolerance and footprint pills have 
 border and dropdown chevron; the entire pill area is clickable and keyboard accessible.
 Hover/focus identifies the control.
 Accessible labels and reference tooltips retain the full parameter names.
-Packages start at **0805**, independently of the manual power rating; this
-physical footprint does not assign a catalog part number or infer a rating.
+Packages start at **0805** with conservative unassigned-part references:
+**140 mW at 70 C** and **50 V** continuous working voltage. These are the lowest
+default-mode limits for that footprint across the supported families, not an
+assigned part number. Changing only the package retains that reference basis;
+an explicitly assigned family/power mode stays assigned. Explicit manual power
+and voltage entries remain authoritative until the corresponding specification
+is changed.
 Equivalent arm labels allow total-resistance editing when that arm is an
 input; calculated arm values are read-only.
 Ordinary electrical nets and ground use blue throughout, including internal
@@ -410,11 +415,13 @@ parts reopen with their reliability, TCR, tolerance, footprint and conditions.
 For an unassigned resistor, **Manual · keep current limits** preserves its current
 power rating and offers a tolerance dropdown and optional working-voltage input.
 Footprint and editable tolerance controls include dropdown chevrons. Selecting
-a size applies a compatible catalog family and its actual limits. **Options** keeps the family
+a size keeps an unassigned part on conservative package references. An assigned
+part retains its family and power mode and regenerates its compatible MPN and
+actual limits. **Options** keeps the family
 editable. A family can also be selected first for its footprint, TCR and
 reliability choices. Manual mode permits custom values and clears a prior catalog
 assignment when explicitly selected. Source/load tolerances retain numeric entry.
-If a manual value has no exact supported catalog part, a package choice records
+For an unassigned resistor, a package choice records
 the physical footprint and manual tolerance while updating power and voltage to
 conservative references for that package;
 the part number remains unassigned. This also permits independent footprint
@@ -638,8 +645,8 @@ between RTOP and RBOT. Both voltages are measured relative to ground.
 | R2 | Lower divider resistor | 10 kΩ | VMID | 0 (ground) |
 | RL | Optional output load | Open; 100 kΩ when enabled in LTspice | VMID | 0 (ground) |
 
-R1 and R2 default to 1/4 W in the calculator. Power ratings and optional maximum
-working voltages are analysis inputs; the ideal LTspice resistors do not model
+R1 and R2 default to the unassigned 0805 reference of 140 mW at 70 C and 50 V.
+Power ratings and optional maximum working voltages are analysis inputs; the ideal LTspice resistors do not model
 rating limits or failure.
 
 ## Netlist
@@ -1080,8 +1087,9 @@ Vstress = |V| / Vdesign × 100%
 
 `Pallowed` is the manufacturer power allowed at the selected operating temperature;
 explicit manual ratings are used as entered before applying the selected percentage.
-When a manual footprint change cannot assign an exact catalog part, its power
-reference becomes the lowest documented default-mode rating for the new package,
+Unassigned parts use the lowest documented default-mode rating for their package
+from the initial circuit onward. Package-only edits do not assign a family or
+MPN. Their power reference follows the same rule for the new package,
 including ambient derating. The 70 °C references are 50 mW for both 0201 and 0402;
 these references do not assign a manufacturer part number. New series/parallel
 siblings inherit the reference, and an explicit manual power entry overrides it.
@@ -1123,13 +1131,34 @@ and [Vishay RH/NH power resistor datasheet](https://www.vishay.com/docs/30201/rh
 Use the actual component's rating for its temperature and mounting; some
 high-power ratings require a specified heat sink.
 
-At the defaults, each 1/4 W resistor has Pstress = 1.44% and Vstress = 12% at a
+For an independent check of the default circuit, 12 V across two 10 kΩ resistors
+gives 600 µA, 6 V per resistor, and `P = V²/R = 3.6 mW`. The unassigned 0805
+references give `Pstress = 100 × 3.6/140 = 2.5714%` and
+`Vstress = 100 × 6/50 = 12%`. The reference envelope takes each limit separately:
+140 mW comes from TNPW general operation, while 50 V comes from M55342/06.
+It does not describe an invented hybrid part. If a TNPW0805 is explicitly
+assigned, its 150 V continuous limit gives **4% Vstress**; an M55342/06 uses
+150 mW / 50 V, giving **2.4% Pstress / 12% Vstress** at the same operating point.
+These are different specified parts, unlike a package-only round trip.
+Sources: [Vishay TNPW, pp. 1–2](https://www.vishay.com/docs/28758/tnpw_e3.pdf)
+and [Vishay E/H M55342, p. 2](https://www.vishay.com/docs/60018/eh.pdf).
+
+Above 70 C, the selected manufacturer's ambient curve supplies
+`Pallowed = P70 × clamp((Tzero − Tambient,max)/(Tzero − 70), 0, 1)`, also capped
+by any selected base allowance. Unassigned parts take the minimum of those
+temperature-qualified family references. The extra power/voltage percentages
+are then applied once to form the design denominators. Cooling must recompute
+from the original rating. The configured self-heating allowance affects the
+resistance drift interval, not this ambient derating curve a second time; the
+datasheet mounting and film-temperature requirements still apply.
+
+At the defaults, each 140 mW reference resistor has Pstress = 2.57% and Vstress = 12% at a
 6 V drop. Manual 0805 resistors start with a **50 V design reference**, the lower
 documented working-voltage rating of the supported TNPW/M55342 0805 families.
 This is a conservative reference for an unassigned part, not an assigned MPN.
 New physical resistors inherit explicit working-voltage ratings; an unrated seed
 gets the lower catalog reference for its package. Manual footprint changes also
-update that reference when no exact catalog part can be assigned. These limits
+update that reference while retaining unassigned manufacturer status. These limits
 survive manual value edits, series/parallel insertion and switching to Find VTOP
 with a current load. Assigned catalog parts use their actual manufacturer rating.
 Existing designs with an uninitialized working-voltage field recover the assigned
