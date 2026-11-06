@@ -41,7 +41,7 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
   assert(guarded()&&!get("schematicEditor").open&&get("vin").value==="18","Saved SVG changes protect the actual circuit");
   await reset();open("r1","tolerance");set("schematicEditPartTolerance","0.5");await pause();assert(guarded(),"An unsaved resistor dropdown edit is protected");
   get("schematicEditor").dispatchEvent(new w.Event("cancel",{cancelable:true}));await pause();assert(!guarded(),"Escape cancellation clears a discarded dropdown edit");
-  const chosen=[...w.eval("schematicBomChoices").values()].find(choice=>choice.part.id==="r1"&&choice.family==="tnpw");
+  const chosen={candidate:w.ResistorParts.evaluate(await w.ResistorParts.load(),"vishay-tnpw-e3",{resistanceOhms:10000,tolerancePct:.1})};
   w.applyCatalogPart(chosen.candidate,"r1",true);await pause();assert(guarded()&&w.eval("appliedCatalogParts").size===1,"Real-part adoption is protected even without a form input event");
   await reset();assert(!guarded(),"Resetting assigned parts returns to a clean circuit");
   set("pairVmid","5");await pause();assert(guarded(),"Pair-search targets are protected independently of the applied circuit");

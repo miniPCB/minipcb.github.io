@@ -317,14 +317,17 @@ tolerance, footprint and TCR in ppm/°C. Assigned parts use their own catalog TC
 unassigned parts use the configured operating-condition TCR. Each reference and
 its complete edit rectangle are contained within its row, without wrapping.
 On phones, reference/stress values share the first line, followed by the
-description and separate full-width TNPW and M55342 numbers. Actions retain
-44 px touch targets. Wide screens use the six-column layout with 14–20 px main
-text that grows with screen width. Exact matches omit repeated specifications
-and status lines; nearest-value recommendations keep their changed-value notes.
-Rows grow only as needed for wrapping and controls. Download SVG and Copy BOM
-retain complete part numbers and TCR descriptions.
-An asterisk marks the selected
-part number; stress uses the current circuit or preview part's own ratings.
+description and separate full-width TNPW and M55342 numbers. References and
+Copy BOM retain 44 px phone touch targets. On wider screens, the part-number
+columns are sized to the actual codes with a small gap; Description receives
+the remaining space and stays on one line. Main text grows from 14 to 20 px as
+space permits. If all six columns cannot fit at a readable size, the table uses
+stacked rows; phone descriptions may wrap to preserve readable text.
+The list reports part numbers without Use/Preview buttons, nearest-value notes
+or duplicated candidate specifications. Select values, packages and catalog
+parts using the circuit editors above the list. Stress uses the current circuit
+or preview part's own ratings. Download SVG and Copy BOM retain complete part
+numbers, TCR descriptions and assignment status.
 A dash means no assigned or qualifying part number for that family. Click a
 reference to edit the resistor and its catalog options. Reference tooltips retain
 value, tolerance, footprint and rating; part-number tooltips retain each family's
@@ -352,32 +355,17 @@ selected part number, both family part numbers and nominal P/V stress. In combin
 mode it copies the preview without applying it to the circuit. If clipboard
 access is unavailable, the text is selected below the diagram for manual copying.
 
-The SVG BOM shows exact resistance/tolerance matches even before a catalog part
-has been applied. Unassigned parts use the package, ambient and TCR selected in
-**Parts (2)** for suggestions; assigned parts retain their own package and
-conditions. If a family has no exact match, its cell shows an amber **Nearest**
-recommendation with the proposed resistance, signed percentage change, tolerance
-and footprint. Unsupported tolerances are visibly labeled **Tolerance change**.
-The nearest resistance uses the current tolerance where supported. Otherwise,
-the closest supported tighter tolerance is preferred; a looser tolerance is shown
-only when no tighter option exists.
+The SVG BOM shows exact resistance/tolerance ordering codes even before a
+catalog part is applied. Assigned parts retain their selected code, package and
+conditions; exact other-family codes remain informational. A family without an
+exact supported code displays a dash. The report never substitutes a nearby
+value or different tolerance into the displayed or copied physical circuit.
+The nearest-value list remains in each resistor's value editor above the table.
 
-**Use** adopts that one physical resistor's resistance, tolerance, footprint,
-power rating, working-voltage limit and real part number, then recalculates the
-circuit and BOM while preserving the active Find mode. Calculated Find values
-remain read-only. Over-rating or infeasible recommendations cannot be applied;
-their tooltip shows the candidate's limits and preview result or reason.
-In the two-resistor search, **Preview** selects a validated visible combination
-with the other resistor unchanged. Network previews also show exact-value
-other-family matches when a full-combination substitution passes the limits;
-these are unapplied informational matches. **Apply combination** transfers the
-selected complete result to the circuit.
-
-**Copy BOM** includes the description and assignment status. Exact matches appear
-in the family PN columns; nearby-value or different-tolerance proposals appear
-in separate **recommendation (not applied)** columns, preserving the actual
-values and selected PN until adoption. Static SVG downloads keep descriptions
-and recommendation labels while removing live adoption controls.
+Copy BOM includes the actual description, selected MPN, exact-family codes and
+assignment status. It omits the retired recommendation columns. Full SVG and
+Markdown downloads preserve the same report. Catalog assignment, physical-part
+edits and design-solution selection remain available in the circuit workspace.
 
 Click a bordered SVG value or a pill, or focus it and press Enter/Space, to
 edit the circuit. VTOP edits voltage and source tolerance inline; RL edits resistance and load

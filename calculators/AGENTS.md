@@ -62,9 +62,12 @@ not add a permission or confirmation step to an authorized task.
   including their tolerances, remain known inputs in the other modes.
 - Keep each parts-list reference and its entire edit target within its row.
   Use explicit row-local rectangles rather than text decoration that can extend
-  beyond the row. Increase table fonts on large screens, stack complete part
-  numbers on phones and avoid repeating exact-match specifications. Descriptions
-  include the physical part's TCR in ppm/C (assigned catalog TCR takes precedence
+  beyond the row. Size part-number columns to their contents, reserve a single
+  line for Description in the column layout, and give spare width to Description.
+  Keep the list a report: no Use/Preview buttons or nearby-value recommendations;
+  select parts with the circuit editors above. Unmatched catalog codes show a dash.
+  Increase table fonts on large screens and stack complete numbers on phones.
+  Descriptions include the physical part's TCR in ppm/C (assigned catalog TCR takes precedence
   over the manual operating-condition default). Preserve full BOM/export data.
 - Keep Pstress and Vstress compact and tied to each actual part's ratings. Label
   nominal versus worst-case results accurately. Format stress as nonnegative
