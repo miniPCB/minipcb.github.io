@@ -330,7 +330,10 @@ or preview part's own ratings. Download SVG and Copy BOM retain complete part
 numbers, TCR descriptions and assignment status.
 A dash means no assigned or qualifying part number for that family. Click a
 reference (or press Enter/Space) to select, highlight and bring its physical
-resistor block into view. This focuses the block without opening an editor;
+resistor block into view. A soft, rounded gradient glow around its information
+card fades away after about four seconds. Repeating the selection replays the
+effect; reduced-motion settings keep the gradient still. Focus remains on the
+block after the glow fades, without opening an editor;
 value, tolerance, package and catalog edits remain on the block itself. Selection
 does not change the design or appear in downloaded diagrams. Reference tooltips retain
 value, tolerance, footprint and rating; part-number tooltips retain each family's

@@ -131,7 +131,17 @@
     .automatic-design { margin: 14px 16px 18px; padding: 16px; border-radius: 12px; background: #152332; }
     .automatic-design .rating-fields { margin: 12px 0; }
     [data-schematic-symbol] { cursor: context-menu; }
-    [data-schematic-symbol].schematic-selected-part { outline: 2px solid var(--accent); outline-offset: 4px; }
+    [data-schematic-symbol].schematic-selected-part { outline: none; }
+    [data-part-highlight] {
+      pointer-events: none;
+      filter: drop-shadow(0 0 4px #79bfff38);
+      animation: schematic-part-locate var(--highlight-duration) ease-out both;
+      animation-delay: var(--highlight-delay, 0ms);
+    }
+    @keyframes schematic-part-locate {
+      0%, 100% { opacity: 0; }
+      8%, 55% { opacity: 1; }
+    }
     .schematic-editable:hover, .schematic-editable:focus-visible { fill: #fff; }
     .schematic-pill.schematic-editable { text-decoration: none; }
     .schematic-pill.schematic-editable:hover rect, .schematic-pill.schematic-editable:focus-visible rect { fill: #2b465b; }
@@ -1934,6 +1944,8 @@
     let circuitLogoDataUrl = null;
     let schematicEditContext = null;
     let schematicSelectedPart = null;
+    const SCHEMATIC_PART_HIGHLIGHT_MS = 4200;
+    let schematicHighlightStartedAt = null, schematicHighlightTimer = null;
     let schematicBomData = [];
     let schematicBomCopyGeneration = 0;
 
@@ -2059,14 +2071,37 @@
 
     const schematicEditSurfaces = new WeakMap();
 
+    function renderSchematicPartHighlight(symbol) {
+      if (schematicHighlightStartedAt === null) return;
+      const elapsed = performance.now() - schematicHighlightStartedAt;
+      const box = symbol.querySelector("[data-part-fields] > [data-schematic-info-box]");
+      if (!box || elapsed >= SCHEMATIC_PART_HIGHLIGHT_MS) return;
+      const layer = schematicShape(box.parentNode, "g", { "data-part-highlight": "", "data-schematic-controls": "", "aria-hidden": "true" });
+      layer.style.setProperty("--highlight-duration", SCHEMATIC_PART_HIGHLIGHT_MS + "ms");
+      layer.style.setProperty("--highlight-delay", -elapsed + "ms");
+      const defs = schematicShape(layer, "defs"), id = "schematicPartHighlightGradient";
+      const gradient = schematicShape(defs, "linearGradient", { id, x1: "0%", y1: "0%", x2: "100%", y2: "100%" });
+      schematicShape(gradient, "stop", { offset: "0%", "stop-color": "#54d2ff" });
+      const sheen = schematicShape(gradient, "stop", { offset: "45%", "stop-color": "#aebaff" });
+      schematicShape(gradient, "stop", { offset: "100%", "stop-color": "#68dcc8" });
+      schematicShape(layer, "rect", { x: Number(box.getAttribute("x")) - 4, y: Number(box.getAttribute("y")) - 4, width: Number(box.getAttribute("width")) + 8, height: Number(box.getAttribute("height")) + 8, rx: 14, fill: `url(#${id})`, "fill-opacity": .035, stroke: `url(#${id})`, "stroke-opacity": .8, "stroke-width": 1.5 });
+      if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const motion = schematicShape(sheen, "animate", { attributeName: "offset", from: ".15", to: ".85", dur: SCHEMATIC_PART_HIGHLIGHT_MS + "ms", begin: "indefinite", fill: "freeze" });
+        motion.beginElementAt?.(-elapsed / 1000);
+      }
+    }
+
     function refreshSchematicPartSelection() {
       const svg = byId("liveSchematic");
+      for (const layer of svg.querySelectorAll("[data-part-highlight]")) layer.remove();
       const symbols = [...svg.querySelectorAll("[data-schematic-symbol]")];
       if (!symbols.some(node => node.dataset.schematicSymbol === schematicSelectedPart)) schematicSelectedPart = null;
+      if (schematicSelectedPart === null) { clearTimeout(schematicHighlightTimer); schematicHighlightTimer = null; schematicHighlightStartedAt = null; }
       for (const node of symbols) {
         const selected = node.dataset.schematicSymbol === schematicSelectedPart;
         node.classList.toggle("schematic-selected-part", selected);
         if (selected && !node.hasAttribute("tabindex")) node.setAttribute("tabindex", "-1");
+        if (selected) renderSchematicPartHighlight(node);
       }
       for (const node of svg.querySelectorAll("[data-select-resistor]")) node.setAttribute("aria-pressed", String(node.dataset.selectResistor === schematicSelectedPart));
     }
@@ -2076,7 +2111,14 @@
       if (!symbol || byId("schematicEditor").open) return;
       if (schematicEditContext?.inline) closeSchematicEditor(false);
       closeResistorMenu();
-      schematicSelectedPart = id; refreshSchematicPartSelection();
+      clearTimeout(schematicHighlightTimer);
+      const startedAt = performance.now();
+      schematicSelectedPart = id; schematicHighlightStartedAt = startedAt; refreshSchematicPartSelection();
+      schematicHighlightTimer = setTimeout(() => {
+        if (schematicHighlightStartedAt !== startedAt) return;
+        schematicHighlightStartedAt = null; schematicHighlightTimer = null;
+        for (const layer of byId("liveSchematic").querySelectorAll("[data-part-highlight]")) layer.remove();
+      }, SCHEMATIC_PART_HIGHLIGHT_MS);
       symbol.focus({ preventScroll: true });
       symbol.scrollIntoView({ block: "center", inline: "center" });
     }

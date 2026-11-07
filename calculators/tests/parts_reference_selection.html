@@ -12,7 +12,8 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
   assert(ref?.getAttribute('aria-label').startsWith('Select ')&&!ref.hasAttribute('data-schematic-edit'),label+': reference is a selection control independent of editors');
   ref.dispatchEvent(key?new w.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}):new w.MouseEvent('click',{bubbles:true}));
   assert(d.activeElement===target&&target.classList.contains('schematic-selected-part')&&svg().querySelectorAll('.schematic-selected-part').length===1,label+': focuses and highlights only the corresponding physical resistor block');
-  assert(ref.getAttribute('aria-pressed')==='true'&&svg().querySelectorAll('[data-select-resistor][aria-pressed="true"]').length===1&&w.getComputedStyle(target).outlineStyle==='solid',label+': selection is visible and announced by the reference button');
+  const halo=target.querySelector('[data-part-highlight]'),shape=halo?.querySelector('rect');
+  assert(ref.getAttribute('aria-pressed')==='true'&&svg().querySelectorAll('[data-select-resistor][aria-pressed="true"]').length===1&&shape?.getAttribute('rx')==='14'&&halo.querySelector('linearGradient')&&w.getComputedStyle(target).outlineStyle==='none',label+': selection has a rounded gradient locator without a hard outline');
   assert(clean()&&d.activeElement.localName==='g',label+': no package dropdown, inline field or dialog opens');
   assert(before===data()&&model===state()&&preview===w.eval('pairPreviewState')&&spec===w.eval('pairSpec')&&guard===w.eval('leaveWarningActive'),label+': inputs, analysis/build identity, preview, search and leave protection stay unchanged');
   assert(frameBefore===w.circuitFrameSnapshot().markup&&url===get('schematicDownload').href,label+': selection does not change static downloads');
@@ -43,6 +44,20 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  await reset();select('r1');const value=svg().querySelector('[data-part-control="value"][data-schematic-edit="r1"]');value.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
  assert(svg().querySelector('[data-inline-editor] input')&&block('r1').classList.contains('schematic-selected-part'),'Explicit value editing still opens on the selected block');w.closeSchematicEditor(false);
  const footprint=svg().querySelector('[data-part-control="power"][data-schematic-edit="r1"]');footprint.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(svg().querySelector('[data-inline-editor] select'),'The actual package control still opens its dropdown');w.closeSchematicEditor(false);
+ await reset();select('r1',null,'fade lifecycle');const stable=data(),image=w.circuitFrameSnapshot().markup;
+ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),halo=()=>svg().querySelector('[data-part-highlight]');
+ await sleep(1100);assert(Number(w.getComputedStyle(halo()).opacity)>.9,'The locator is visible briefly before fading');
+ w.renderSchematic();await pause();const progress=halo().getAnimations()[0].effect.getComputedTiming().progress;
+ assert(progress>.15&&progress<.5,'A redraw continues the existing locator rather than restarting its duration');
+ if(w.matchMedia('(prefers-reduced-motion: reduce)').matches)assert(!halo().querySelector('animate'),'Reduced motion uses a still gradient');
+ else assert(halo().querySelector('animate')&&halo().querySelectorAll('stop')[1].offset.animVal>0.2,'The gradient sheen moves gently during the locator');
+ await sleep(1100);select('r1',null,'replay locator');await sleep(2300);
+ assert(halo()&&Number(w.getComputedStyle(halo()).opacity)>.8,'Repeated activation restarts the effect and cancels the previous expiry');
+ await sleep(1300);const fading=Number(w.getComputedStyle(halo()).opacity);assert(fading>0&&fading<.6,'The locator eases out before removal');
+ await sleep(900);assert(!halo()&&block('r1').classList.contains('schematic-selected-part')&&d.activeElement===block('r1')&&w.getComputedStyle(block('r1')).outlineStyle==='none','The glow disappears after several seconds while keyboard focus remains');
+ assert(data()===stable&&w.circuitFrameSnapshot().markup===image&&!w.eval('leaveWarningActive'),'Animation and expiry leave the circuit, downloads and clean state unchanged');
+ select('r2',null,'switch locator');assert(svg().querySelectorAll('[data-part-highlight]').length===1&&block('r2').querySelector('[data-part-highlight]'),'Switching parts replaces the previous glow');await reset();
+ assert(!svg().querySelector('[data-part-highlight]'),'Reset removes the transient locator');
  assert(!errors.length,'No runtime errors: '+errors.join('; '));
 }catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2)});
 </script></body></html>
