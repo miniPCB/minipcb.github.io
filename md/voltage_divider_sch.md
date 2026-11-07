@@ -488,14 +488,17 @@ Selecting a candidate preserves the applied circuit inputs and BOM. The heading
 identifies the preview, and Download SVG captures it. Leaving the visualization
 or selecting an empty region restores the combination-search input display.
 
-Four large, colorful boxes, without a section heading, show nominal **VMID**,
+Four large, colorful boxes, without a section heading, show nominal **RTOP : RBOT**,
 **total power**, **input current** (magnitude) and **Rth** inside the circuit frame,
-beneath the circuit and above the Known/Unknown key. VMID uses a blue information
-tile in every mode; red remains the Unknown role color in the schematic. Rth is
-the divider's source resistance, excluding RL. The boxes follow the active Find
-mode or selected combination preview, clear unavailable values, reflow on small
-screens and remain in full SVG and framed SVG/PNG/JPEG/BMP downloads. The current
-Markdown export includes the same operating-point table.
+beneath the circuit and above the Known/Unknown key. The blue ratio tile divides
+the equivalent RTOP resistance by the equivalent RBOT resistance, excluding the
+load, and normalizes RBOT to 1 (for example, **100 : 1** or **0.5 : 1**). It works
+with single, series, parallel and mixed resistor networks. Red remains the Unknown
+role color in the schematic. Rth is the divider's source resistance, excluding RL.
+The boxes follow the active Find mode or selected combination preview, clear
+unavailable values, reflow on small screens and remain in full SVG and framed
+SVG/PNG/JPEG/BMP downloads. The current Markdown export includes the same
+operating-point table.
 
 The common **Circuit characteristics** table starts collapsed in every Find mode,
 beside the circuit on larger screens and above it on smaller screens. Click its

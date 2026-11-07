@@ -2571,7 +2571,12 @@
     function operatingPointRows(state) {
       const complete = !!state && !state.pairSetup && !state.pending;
       const current = !!state && DividerCurrentLoad.enabled(state.circuit);
-      return [["VMID", complete ? state.result.vout : null, "V", "vmid", "#75d5ff", "#12354b"], [current ? "Source power" : "Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? current ? state.result.i1 : Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
+      return [["RTOP : RBOT", complete ? state.circuit.r1 / state.circuit.r2 : null, "ratio", "ratio", "#75d5ff", "#12354b"], [current ? "Source power" : "Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? current ? state.result.i1 : Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
+    }
+
+    function operatingPointText(value, unit) {
+      if (!Number.isFinite(value)) return "—";
+      return unit === "ratio" ? `${Number(value.toPrecision(4))} : 1` : format(value, unit);
     }
 
     function operatingPointHeight(width) {
@@ -2583,13 +2588,13 @@
       const columns = width >= 900 ? 4 : 2, gap = 12, cardWidth = (width - gap * (columns - 1)) / columns;
       operatingPointRows(state).forEach(([label, value, unit, key, accent, background], index) => {
         const left = (index % columns) * (cardWidth + gap), top = Math.floor(index / columns) * 100;
-        const card = schematicShape(group, "g", { transform: `translate(${left} ${top})`, role: "group", "aria-label": `${label}: ${Number.isFinite(value) ? format(value, unit, unit === "V" ? voltageDigits(state) : 4) : "unavailable"}${state?.pair ? "; selected preview, nominal" : "; nominal"}`, "data-operating-point": key });
+        const content = operatingPointText(value, unit);
+        const card = schematicShape(group, "g", { transform: `translate(${left} ${top})`, role: "group", "aria-label": `${label}: ${Number.isFinite(value) ? content : "unavailable"}${state?.pair ? "; selected preview, nominal" : "; nominal"}`, "data-operating-point": key });
         schematicShape(card, "rect", { width: cardWidth, height: 88, rx: 12, fill: background });
         schematicShape(card, "rect", { x: 0, y: 14, width: 4, height: 60, rx: 2, fill: accent });
         schematicText(card, 14, 23, label, 13, accent);
-        const content = Number.isFinite(value) ? format(value, unit, unit === "V" ? voltageDigits(state) : 4) : "—";
         schematicText(card, 14, 66, content, Math.min(34, (cardWidth - 28) / (content.length * 0.62)), "#f4fbff", `operating${key}`);
-        schematicShape(card, "title").textContent = `${state?.pair ? "Selected combination preview; nominal" : "Nominal operating point"}${key === "rth" ? "; output source resistance, load excluded" : ""}.`;
+        schematicShape(card, "title").textContent = `${state?.pair ? "Selected combination preview; nominal" : "Nominal operating point"}${key === "ratio" ? "; equivalent RTOP / equivalent RBOT, normalized to RBOT = 1; load excluded" : key === "rth" ? "; output source resistance, load excluded" : ""}.`;
       });
     }
 
@@ -2971,7 +2976,7 @@
       const cell = value => String(value ?? "—").replaceAll("|", "&#124;").replace(/[\r\n]/g, " ");
       const table = rows => rows.map((row, index) => "| " + row.map(cell).join(" | ") + " |" + (index === 0 ? "\n| " + row.map(() => "---").join(" | ") + " |" : "")).join("\n");
       const characteristics = circuitCharacteristics(state, mode).rows.map(([label, value]) => [label, value]);
-      const operatingPoint = operatingPointRows(state).map(([label, value, unit]) => [label, value === null ? "—" : format(value, unit, unit === "V" ? voltageDigits(state) : 4)]);
+      const operatingPoint = operatingPointRows(state).map(([label, value, unit]) => [label, operatingPointText(value, unit)]);
       const connectivity = [["Reference", "LTspice name", "Arm", "From node", "To node", "Resistance (ohm)", DividerCurrentLoad.enabled(state.circuit) ? "Tolerance (resistors %, IL absolute)" : "Tolerance (%)", "Allowed power (W)", "Working voltage (V)", "Selected MPN"]];
       for (const edge of edges) { const limits = designRatings(edge.part.rating, edge.part.vmax, state.environment?.settings || ResistorEnvironment.initialOnly()); connectivity.push([edge.part.name, edge.name, edge.arm === "r1" ? "RTOP" : "RBOT", edge.from, edge.to, edge.part.resistance, edge.part.tolerance, limits.power, limits.voltage ?? "Not specified", edge.part.mpn || "Unassigned"]); }
       if (state.circuit.rl !== null) connectivity.push(["RL", "RL", "Load", "VMID", "0", state.circuit.rl, state.tolerances.rl, "Not checked", "Not checked", "Unassigned"]);
