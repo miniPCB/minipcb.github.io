@@ -57,6 +57,16 @@ not add a permission or confirmation step to an authorized task.
 - Offer Desktop view on phones to restore the complete schematic and information.
   Layout/disclosure changes preserve circuit state, selected solutions, build
   identity and clean leave protection. Keep touch construction menus accessible.
+- Calculation memory belongs outside the SVG in a collapsible sidebar on wide
+  screens, with a collapsed disclosure above the circuit on phones. Group completed
+  valid edits after a one-second pause; skip drafts, invalid inputs and layout-only
+  changes. Keep Save now, autosave on/off and bounded browser-local history.
+  Serialize input values, physical IDs/topology, catalog/rating provenance,
+  automatic assignments and environmental/load tolerances; recalculate on recall.
+  A search snapshot retains its selected assignment, not the full solution pool;
+  allow a fresh full search and do not claim those results were all recalled.
+  History must stay out of exports and leave-warning input baselines. Report
+  blocked storage as visit-only memory rather than implying it survived reload.
 - Resistance value editors use a multiplier dropdown (µΩ, mΩ, Ω, kΩ, MΩ, GΩ).
   Continue accepting typed unit suffixes, synchronize the selected multiplier,
   and compute nearest suggestions in ohms without applying a multiplier twice.

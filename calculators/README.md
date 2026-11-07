@@ -1,7 +1,7 @@
 # Moving the Voltage Divider Calculator to another website
 
 The calculator is a static, browser-based application. A functional copy needs
-the calculator HTML, four JavaScript modules, the local resistor catalogs and a
+the calculator HTML, five JavaScript modules, the local resistor catalogs and a
 few image assets. There is no application server, database, package installation,
 API key or third-party JavaScript CDN dependency. GitLab Pages and ordinary
 static web hosting can serve it.
@@ -21,6 +21,7 @@ Paths in this table are relative to the repository root.
 | [js/resistor-environment.js](../js/resistor-environment.js) | Initial/thermal/radiation/aging resistance intervals, environmental defaults and family-specific drift models. This is executable calculation logic, separate from the ordering catalogs. |
 | [js/divider-current-load.js](../js/divider-current-load.js) | Signed current-load analysis, inverse calculations and tolerance/stress bounds, including Find VTOP trip-voltage ranges. |
 | [js/circuit-image-export.js](../js/circuit-image-export.js) | Framed SVG, PNG, JPEG and BMP encoding, raster size limits and download filenames. |
+| [js/divider-memory.js](../js/divider-memory.js) | Collapsible calculation history, grouped autosaving, local browser storage, duplicate suppression and recall controls. The HTML adapter serializes circuit inputs and recalculates recalled designs. |
 | [parts/index.json](../parts/index.json) | Catalog manifest and preferred-value series. Names both family JSON files to fetch. |
 | [parts/resistors/vishay-tnpw-e3.json](../parts/resistors/vishay-tnpw-e3.json) | Supported Vishay TNPW e3 ordering rules, packages, tolerances, TCR options, operating modes, electrical limits and dated source evidence. |
 | [parts/resistors/vishay-eh-m55342.json](../parts/resistors/vishay-eh-m55342.json) | Corresponding Vishay E/H M55342/D55342 rules and limits. This is a specific manufacturer's supported subset of the specification family. |
@@ -61,7 +62,8 @@ site-root/
 │   ├── resistor-parts.js
 │   ├── resistor-environment.js
 │   ├── divider-current-load.js
-│   └── circuit-image-export.js
+│   ├── circuit-image-export.js
+│   └── divider-memory.js
 ├── parts/
 │   ├── index.json
 │   ├── schema.json                    # Recommended; not fetched at runtime
@@ -81,7 +83,7 @@ fallback image from `../images/`, and build metadata from `build.json` beside th
 page. `resistor-parts.js` locates `../parts/` **relative to its own script URL**,
 then loads `index.json` and the manifest's family paths. Moving only the page
 or only that script requires corresponding path changes. Keep filename case
-exact on Linux hosts. Keep the four classic script tags in their existing order,
+exact on Linux hosts. Keep the five classic script tags in their existing order,
 before the main inline script; do not add `async` or change them to modules.
 
 ## Hosting and browser considerations
@@ -107,9 +109,14 @@ before the main inline script; do not add `async` or change them to modules.
   URLs are reference links, not runtime catalog APIs. There is no service worker
   or installed offline application; a local HTTP server can operate without
   internet access once the copied files are available.
-- Only the desktop/mobile view preference is saved in local storage
-  (`minipcb-divider-view`). Circuit inputs and search results are not a saved
-  project. Reloading/navigating can lose work; the leave warning is intentional.
+- Calculation memory uses local storage (`minipcb-divider-memory-v1`) for up to
+  50 recent valid calculations and its autosave preference. It groups completed
+  edits after a one-second pause, with Save now available. Recalling rebuilds
+  inputs and recalculates; a search snapshot retains only its selected design,
+  not the full result pool. The desktop/mobile view preference uses
+  `minipcb-divider-view`. Storage belongs to this browser profile and website
+  origin: moving to a different domain does not transfer existing memory.
+  Uncommitted editor drafts are not saved; the leave warning remains intentional.
 - Publish matching HTML, scripts, catalog data and metadata together. Avoid
   indefinitely caching unversioned files; `build.json` requests revalidation
   with `cache: "no-cache"`. Exported files are snapshots and need a new download
@@ -182,6 +189,7 @@ deploy-divider:
           "calculators/voltage_divider.html",
           "js/resistor-parts.js", "js/resistor-environment.js",
           "js/divider-current-load.js", "js/circuit-image-export.js",
+          "js/divider-memory.js",
           "parts/index.json", "parts/schema.json",
           "parts/resistors/vishay-tnpw-e3.json",
           "parts/resistors/vishay-eh-m55342.json",
@@ -250,7 +258,7 @@ For a project-prefix check, also serve its parent directory and open
 `/public/calculators/voltage_divider.html`; this catches accidental root-relative
 paths before deployment.
 
-1. Check the browser Network/Console panels. All four scripts, the catalog
+1. Check the browser Network/Console panels. All five scripts, the catalog
    manifest and both family files, logo, fallback SVG, favicon and generated
    `build.json` should load without missing files or JSON parsing errors.
 2. Change value, tolerance and package; add series/parallel parts; check Find
@@ -265,6 +273,8 @@ paths before deployment.
    Open exported images without relying on the original miniPCB website.
 5. Test a phone-width screen, desktop view, direct input editing and the parts
    list. Confirm the leave/reload warning and clipboard fallback remain usable.
+   Save and recall a calculation, reload the page and confirm browser memory is
+   retained. If storage is blocked, memory must report that it lasts for the visit.
 
 For automated browser coverage, copy `calculators/tests/` into the development
 tree and open its HTML pages over the same local server. Each reports JSON with
@@ -272,9 +282,9 @@ tree and open its HTML pages over the same local server. Each reports JSON with
 `voltage_divider.html`, `resistor_pairs.html`, `package_tolerance_search.html`,
 `current_load_modes.html`, `package_rating_consistency.html`,
 `package_stress_refresh.html`, `mobile_workspace.html`, `parts_table_layout.html`,
-`schematic_bom.html`, `frame_export.html`, `circuit_downloads.html` and
-`calculator_stamp.html`. These filenames in this paragraph refer to test pages
-inside `calculators/tests/`, not the application entry point.
+`schematic_bom.html`, `frame_export.html`, `circuit_downloads.html`,
+`calculator_stamp.html` and `calculator_memory.html`. These filenames refer to
+test pages inside `calculators/tests/`, not the application entry point.
 
 Some tests assert the original miniPCB/GitHub URLs and branding; adapt those
 expectations when testing a fork. `resistor_parts.html` also tests

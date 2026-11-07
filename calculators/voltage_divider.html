@@ -202,6 +202,33 @@
     .schematic-nearby-more { margin-top: 4px; padding: 2px; border: 0; background: #142535; color: #75d5ff; font: 11px system-ui, sans-serif; cursor: pointer; }
     .circuit-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; }
     .circuit-toolbar .resource-links { margin: 0 0 0 auto; }
+    .calculator-workspace { display: grid; gap: 12px; align-items: start; }
+    .calculator-memory { min-width: 0; margin: 0 16px; border-radius: 12px; background: #101e2b; }
+    .calculator-memory > summary { min-height: 44px; padding: 12px; color: #c6e3ff; cursor: pointer; }
+    .calculator-memory > summary span { color: var(--muted); font-size: .8rem; margin-left: 6px; }
+    .memory-body { padding: 0 10px 12px; }
+    .memory-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .memory-actions .btn { min-height: 44px; padding: 8px; }
+    .memory-auto { display: flex; align-items: center; gap: 6px; min-height: 44px; color: var(--muted); font-size: .8rem; }
+    .memory-auto input { width: 18px; height: 18px; }
+    .memory-note, .memory-status { color: var(--muted); font-size: .75rem; line-height: 1.5; margin: 8px 2px; }
+    .memory-status:empty { display: none; }
+    .memory-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 12px 0; max-height: 52vh; overflow-y: auto; }
+    .memory-entry { display: flex; min-width: 0; background: #162a39; border-radius: 10px; border-left: 3px solid transparent; }
+    .memory-entry[aria-current="true"] { background: #1b384a; border-left-color: #54d2ff; }
+    .memory-restore { flex: 1; min-width: 0; padding: 10px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
+    .memory-restore strong, .memory-restore span, .memory-restore small { display: block; overflow-wrap: anywhere; }
+    .memory-restore strong { font-size: .85rem; font-weight: 500; }
+    .memory-restore span { font: .75rem var(--mono); color: #9edbff; margin-top: 6px; }
+    .memory-restore small { color: var(--muted); font-size: .7rem; margin-top: 6px; }
+    .memory-delete { align-self: start; flex: 0 0 44px; min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+    .memory-restore:hover, .memory-delete:hover { background: #254458; border-radius: 8px; }
+    .memory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; min-height: 44px; padding: 6px; font-size: .75rem; }
+    @media (min-width: 1320px) {
+      .calculator-workspace.memory-open { grid-template-columns: 240px minmax(0, 1fr); gap: 0; }
+      .memory-open .calculator-memory { position: sticky; top: 12px; margin-right: 0; }
+      .memory-open .circuit-reference-body { padding-left: 12px; }
+    }
     .mobile-mode, #schematicViewToggle { display: none; }
     #schematicFeedback { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .workspace-tools { display: grid; gap: 12px; margin-top: 16px; }
@@ -404,7 +431,8 @@
     }
     @media print {
       body { background: #fff; color: #111; }
-      .tool-path-nav, .actions, .result-tabs, .parts-table-title .btn, footer { display: none; }
+      .tool-path-nav, .actions, .result-tabs, .parts-table-title .btn, footer, .calculator-memory { display: none; }
+      .calculator-workspace.memory-open { display: block; }
       .column { margin-bottom: 16px; }
       .panel, .header { box-shadow: none; break-inside: avoid; }
       .result-panel, .result-panel[hidden] { display: block !important; margin-bottom: 16px; }
@@ -450,6 +478,17 @@
         </div>
       </div>
       <p id="schematicFeedback" class="hint" role="status" hidden></p>
+      <div id="calculatorWorkspace" class="calculator-workspace">
+      <details id="calculatorMemory" class="calculator-memory" hidden>
+        <summary>Memory <span id="memoryCount">0</span></summary>
+        <div class="memory-body">
+          <div class="memory-actions"><button id="memorySave" class="btn" type="button">Save now</button><label class="memory-auto"><input id="memoryAuto" type="checkbox" checked />Autosave</label></div>
+          <p class="memory-note">This browser · 50 recent calculations</p>
+          <p id="memoryStatus" class="memory-status" role="status" aria-live="polite"></p>
+          <ol id="memoryList" class="memory-list" aria-label="Saved calculations"></ol>
+          <button id="memoryClear" class="memory-clear" type="button">Clear memory</button>
+        </div>
+      </details>
       <figure class="circuit-reference-body">
         <div id="schematicViewport" tabindex="0" role="region" aria-label="Circuit schematic; scroll horizontally to view larger circuits">
           <div>
@@ -468,6 +507,7 @@
           <div id="schematicBomCopyFallback" hidden><label for="schematicBomCopyText">BOM text · copy into a spreadsheet</label><textarea id="schematicBomCopyText" class="bom-copy-text" rows="6" readonly spellcheck="false"></textarea></div>
         </figcaption>
       </figure>
+      </div>
     </section>
     <div id="resistorMenu" class="resistor-menu" role="menu" aria-label="Resistor construction" hidden>
       <p id="resistorMenuTitle" class="hint"></p>
@@ -913,6 +953,7 @@
   <script src="../js/resistor-environment.js"></script>
   <script src="../js/divider-current-load.js"></script>
   <script src="../js/circuit-image-export.js"></script>
+  <script src="../js/divider-memory.js"></script>
   <script>
     "use strict";
 
@@ -967,6 +1008,7 @@
     }
 
     function refreshLeaveWarning() {
+      window.dividerMemory?.schedule();
       const active = hasCircuitWork();
       if (active === leaveWarningActive) return;
       leaveWarningActive = active;
@@ -977,7 +1019,7 @@
     const resultTabs = [...byId("resultTabs").querySelectorAll('[role="tab"]')];
     function refreshSchematicControls() {
       const searching = byId("solveFor").value === "pairs", automatic = !byId("automaticDesign").hidden;
-      const busy = !byId("pairCancel").hidden, current = searching && !!pairSpec;
+      const busy = !byId("pairCancel").hidden, current = searching && !!pairSpec && !pairSpec.memoryRecall;
       const searchLabel = busy ? "Finding solutions…" : current ? `${pairItems.length.toLocaleString()} Design Solutions Found` : "Find Design Solutions";
       if (byId("pairFind").textContent !== searchLabel) byId("pairFind").textContent = searchLabel;
       const search = byId("schematicDesignSearch");
@@ -3141,6 +3183,122 @@
       return !!resistorCatalog && (mode === "pairs" || mode === "vout" && ARMS.some(arm => byId(`${arm}Multiple`).checked));
     }
 
+    // Store input provenance, not DOM markup or derived stress values. Recalling
+    // rebuilds stable physical IDs and runs the same solver/export paths again.
+    function captureMemoryState() {
+      const controls = [form, byId("pairForm"), byId("automaticDesign")].flatMap(owner => [...owner.querySelectorAll("input[id], select[id]")].map(input => [input.id, input.type === "checkbox" || input.type === "radio" ? input.checked : input.value, input.dataset.powerFootprint || null, input.dataset.voltageUnassessed || null]));
+      const live = id => /^r[12]$/.test(id) || !!byId(id)?.matches("[data-part]");
+      const state = {
+        version: 1, controls, environment: environmentSettings,
+        arms: Object.fromEntries(ARMS.map(arm => [arm, { next: nextPart[arm], rows: [...byId(`${arm}Parts`).children].map(row => ({ number: Number(row.id.replace(`${arm}part`, "")), name: row.dataset.name })), topology: byId(`${arm}Parts`).dataset.topology || null }])),
+        assignments: [...appliedCatalogParts].filter(([id]) => live(id)), footprints: [...footprintPreferences].filter(([id]) => live(id)), automatic: [...automaticChoices].filter(([id]) => live(id)),
+        target: catalogDesignVmid, construction: pairConstruction, constructionNext: pairConstructionNext, search: null
+      };
+      if (byId("solveFor").value === "pairs" && pairSpec) {
+        const { analyzedAt, searchChecked, searchTruncated, memoryRecall, ...spec } = pairSpec;
+        state.search = { spec, selected: pairSelected ? pairSelected.combination ? { assignment: [...pairSelected.assignment] } : { top: pairSelected.top, bot: pairSelected.bot } : null };
+      }
+      return JSON.parse(JSON.stringify(state));
+    }
+
+    function captureMemoryCalculation() {
+      if (schematicEditContext || byId("ratingDialog").open || !byId("pairCancel").hidden || byId("designChoose").disabled && automaticRows().length) return null;
+      const mode = byId("solveFor").value, state = mode === "pairs" ? pairPreviewState : schematicState;
+      if (mode === "pairs" ? !pairSpec || pairItems.length && !state : !state || state.pending || !byId("inputError").hidden) return null;
+      const title = byId("circuitTitle").value.trim(), circuit = state?.circuit;
+      return {
+        title: title && title !== "Voltage Divider" ? title : mode === "pairs" ? "Design solution" : `Find ${modeDetails(mode).symbol}`,
+        summary: circuit ? `${format(circuit.vin, "V")} → ${format(state.result.vout, "V")} · ${operatingPointText(circuit.r1 / circuit.r2, "ratio")}` : `${format(pairSpec.vin, "V")} → ${format(pairSpec.target, "V")} · 0 solutions`,
+        build: calculatorBuild, state: captureMemoryState()
+      };
+    }
+
+    function validateMemoryState(saved) {
+      if (saved?.version !== 1 || !Array.isArray(saved.controls) || saved.controls.length > 10000 || !saved.arms || !Array.isArray(saved.assignments) || !Array.isArray(saved.footprints) || !Array.isArray(saved.automatic)) throw new Error("Unsupported saved inputs.");
+      ResistorEnvironment.validate(saved.environment);
+      const ids = new Set(["r1", "r2"]);
+      for (const arm of ARMS) {
+        const group = saved.arms[arm];
+        if (!Array.isArray(group?.rows) || group.rows.length > 500 || !Number.isSafeInteger(group.next) || group.next < 0) throw new Error("Invalid saved resistor network.");
+        for (const row of group.rows) {
+          const id = `${arm}part${row.number}`;
+          if (!Number.isSafeInteger(row.number) || row.number < 1 || row.number > group.next || ids.has(id) || !/^R[12](?:\.\d+)?$/.test(row.name)) throw new Error("Invalid saved resistor identity.");
+          ids.add(id);
+        }
+        if (group.topology) {
+          const leaves = [];
+          const visit = (node, depth = 0) => {
+            if (depth > 500) throw new Error("Invalid saved topology.");
+            if (typeof node === "string") { if (!ids.has(node) || !node.startsWith(arm + "part")) throw new Error("Missing saved resistor."); leaves.push(node); return; }
+            if (!node || !["series", "parallel"].includes(node.connection) || !Array.isArray(node.children) || !node.children.length) throw new Error("Invalid saved topology.");
+            node.children.forEach(child => visit(child, depth + 1));
+          };
+          visit(JSON.parse(group.topology));
+          if (new Set(leaves).size !== group.rows.length || leaves.length !== group.rows.length) throw new Error("Incomplete saved topology.");
+        }
+      }
+      if (![...saved.assignments, ...saved.footprints, ...saved.automatic].every(item => Array.isArray(item) && ids.has(item[0]))) throw new Error("Invalid saved part settings.");
+      if (!saved.controls.every(item => Array.isArray(item) && typeof item[0] === "string" && ["string", "boolean"].includes(typeof item[1]))) throw new Error("Invalid saved control values.");
+    }
+
+    function applyMemoryState(saved) {
+      closeSchematicEditor(false); closeRatingDialog(); closeResistorMenu();
+      designGeneration++; invalidatePairSearch(); schematicSelectedPart = null;
+      automaticChoices.clear(); appliedCatalogParts.clear(); footprintPreferences.clear();
+      environmentSettings = JSON.parse(JSON.stringify(saved.environment)); operatingConditionError = "";
+      for (const arm of ARMS) {
+        const group = saved.arms[arm]; byId(`${arm}Parts`).replaceChildren(); delete byId(`${arm}Parts`).dataset.topology;
+        byId(`${arm}Connection`).querySelector('[value="mixed"]').disabled = !group.topology;
+        for (const row of group.rows) {
+          nextPart[arm] = row.number - 1;
+          appendPart(arm, { name: row.name, resistance: 10000, rating: .14, tolerance: .1, vmax: 50 });
+        }
+        nextPart[arm] = group.next;
+        if (group.topology) byId(`${arm}Parts`).dataset.topology = group.topology;
+      }
+      const restoreControls = () => {
+        for (const [id, value, power, voltage] of saved.controls) {
+          const input = byId(id);
+          if (!input || ![form, byId("pairForm"), byId("automaticDesign")].some(owner => owner.contains(input)) || !input.matches("input,select")) continue;
+          if (input.type === "checkbox" || input.type === "radio") input.checked = value === true;
+          else {
+            if (/^p[12]$/.test(id) && input.tagName === "SELECT" && ![...input.options].some(option => option.value === value) && Number(value) > 0) input.add(new Option(format(Number(value), "W"), value));
+            input.value = value;
+          }
+          if (power) input.dataset.powerFootprint = power; else delete input.dataset.powerFootprint;
+          if (voltage) input.dataset.voltageUnassessed = voltage; else delete input.dataset.voltageUnassessed;
+        }
+      };
+      restoreControls();
+      for (const [id, candidate] of saved.assignments) storeCatalogAssignment(id, candidate);
+      footprintPreferences.clear(); for (const [id, footprint] of saved.footprints) footprintPreferences.set(id, footprint);
+      for (const [id, candidate] of saved.automatic) automaticChoices.set(id, candidate);
+      restoreControls();
+      catalogDesignVmid = saved.target; pairConstruction = saved.construction; pairConstructionNext = saved.constructionNext || 0;
+      configureDesignCatalog(); refreshAutomaticDesign(); refreshPairConstruction(); restoreControls();
+      lastSolveMode = byId("solveFor").value; parts2Selection = null; parts2Target = null;
+      update(); selectResultTab(lastSolveMode === "pairs" ? "pairTab" : "overviewTab");
+      if (saved.search) {
+        const spec = JSON.parse(JSON.stringify(saved.search.spec)), choice = saved.search.selected;
+        const pair = choice ? choice.assignment ? evaluateResistorCombination(spec, new Map(choice.assignment)) : evaluateResistorPair(spec, choice.top, choice.bot) : null;
+        if (choice && !pair) throw new Error("This design no longer meets the current calculation limits.");
+        spec.memoryRecall = true;
+        publishPairSearch(spec, pair ? [pair] : [], "Recalled saved calculation. Find Design Solutions searches the full catalog again.");
+        byId("pairFind").disabled = !resistorCatalog; refreshSchematicControls();
+      } else if (byId("solveFor").value !== "pairs" && (!schematicState || !byId("inputError").hidden)) throw new Error(byId("inputError").textContent || "Saved inputs could not be calculated.");
+      refreshLeaveWarning();
+    }
+
+    function restoreMemoryCalculation(saved) {
+      validateMemoryState(saved);
+      const previous = captureMemoryState();
+      try {
+        applyMemoryState(saved); byId("schematicFrame").scrollIntoView({ block: "start", inline: "nearest" });
+        if (saved.search) return { message: "Saved search recalled. Find Design Solutions runs a full search." };
+      }
+      catch (error) { try { applyMemoryState(previous); } catch (_) { /* Preserve the original error for the memory status. */ } throw error; }
+    }
+
     function renderSchematic() {
       closePairAxisMenu();
       const svg = byId("liveSchematic");
@@ -3234,6 +3392,7 @@
       byId("pairForm").hidden = !designSolutionsAvailable(mode);
       byId("automaticSettings").hidden = byId("automaticDesign").hidden;
       refreshSchematicControls();
+      window.dividerMemory?.schedule();
     }
 
     function configureSchematicCatalog(reset = false) {
@@ -5957,6 +6116,10 @@
       // Catalog selects arrive asynchronously; preserve any inputs edited while loading.
       for (const [id, ...value] of workFormValues(byId("pairForm"))) if (!initialPairWork.has(id)) initialPairWork.set(id, JSON.stringify(value));
       refreshLeaveWarning();
+      if (window.DividerMemory) window.dividerMemory = DividerMemory.create({
+        capture: captureMemoryCalculation, restore: restoreMemoryCalculation,
+        layout: () => { closeSchematicEditor(false); renderSchematic(); }
+      });
       return ready;
     });
   </script>

@@ -222,6 +222,33 @@ downloads capture the displayed layout; choose Desktop view for a full schematic
 image. LTspice and Markdown always retain the complete physical circuit and
 analysis, regardless of layout.
 
+### Calculation memory
+
+**Memory** opens beside the circuit on wide desktop screens and can be collapsed
+to return the space to the diagram. On phones it starts collapsed above the circuit.
+Autosave groups completed, valid input changes after a one-second pause; it does
+not save each typed character, unfinished editor drafts, invalid inputs or layout
+changes. **Save now** records the current calculation immediately. Autosave can
+be turned off, and duplicate input states share an existing entry.
+
+The history keeps up to 50 recent calculations in this browser, including the
+title, mode, physical resistor identities and topology, catalog/automatic part
+assignments, rating provenance, source/load tolerances and environmental settings.
+Click an entry to rebuild its inputs and recalculate with the current calculator.
+The saved timestamp remains a history label; a recalled analysis receives a new
+analysis time and retains the current published calculator build identity.
+
+A saved search preview retains its selected physical design rather than the
+thousands of other search results. Recall displays that design as a preview;
+**Find Design Solutions** can search the complete catalog again. The saved design
+is not applied to the underlying work circuit by recalling the preview.
+
+Memory persists across reloads on the same website/browser profile. Blocked or
+full browser storage is reported as visit-only memory. Entries can be deleted,
+or the history cleared, without changing the circuit. Clearing browser site data
+also removes the history. Memory controls and history are outside the SVG and
+never appear in full-workspace or circuit-image downloads.
+
 There is no whole-circuit Options dialog. **Search limits** appears only when
 catalog solutions can be generated; **Automatic values** appears for automatic
 network parts. The experimental **Data & comparisons** interface is excluded.
