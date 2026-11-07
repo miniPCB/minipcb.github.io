@@ -225,7 +225,13 @@ analysis, regardless of layout.
 ### Calculation memory
 
 **Memory** opens beside the circuit on wide desktop screens and can be collapsed
-to return the space to the diagram. On phones it starts collapsed above the circuit.
+horizontally to a narrow reopen rail, returning the space to the diagram without
+adding a row above it. On phones it starts collapsed above the circuit.
+Right-click Memory or an entry for **Save now**, **Autosave**, **Delete** and
+**Clear memory**. Shift+F10, the Context Menu key and a touch long press open the
+same menu. Entry timestamps are available on hover and in the menu; routine save
+messages are announced to screen readers without adding text to the pane.
+Storage and recall failures remain visible. Click an entry normally to recall it.
 Autosave groups completed, valid input changes after a one-second pause; it does
 not save each typed character, unfinished editor drafts, invalid inputs or layout
 changes. **Save now** records the current calculation immediately. Autosave can
@@ -235,7 +241,7 @@ The history keeps up to 50 recent calculations in this browser, including the
 title, mode, physical resistor identities and topology, catalog/automatic part
 assignments, rating provenance, source/load tolerances and environmental settings.
 Click an entry to rebuild its inputs and recalculate with the current calculator.
-The saved timestamp remains a history label; a recalled analysis receives a new
+The saved timestamp remains history metadata; a recalled analysis receives a new
 analysis time and retains the current published calculator build identity.
 
 A saved search preview retains its selected physical design rather than the

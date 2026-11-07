@@ -57,10 +57,16 @@ not add a permission or confirmation step to an authorized task.
 - Offer Desktop view on phones to restore the complete schematic and information.
   Layout/disclosure changes preserve circuit state, selected solutions, build
   identity and clean leave protection. Keep touch construction menus accessible.
-- Calculation memory belongs outside the SVG in a collapsible sidebar on wide
-  screens, with a collapsed disclosure above the circuit on phones. Group completed
-  valid edits after a one-second pause; skip drafts, invalid inputs and layout-only
-  changes. Keep Save now, autosave on/off and bounded browser-local history.
+- Calculation memory belongs outside the SVG in a horizontally collapsible sidebar
+  on wide screens; keep a slim reopen rail beside the circuit when collapsed.
+  Use a collapsed disclosure above the circuit on phones. Keep only design
+  summaries in normal view; put save/autosave/delete/clear in a context menu
+  available by right-click, Shift+F10/Context Menu key and touch long press.
+  Keep timestamps in tooltips/menu details and routine status screen-reader-only;
+  show actual storage or recall failures. Preserve menu focus and scrolling.
+  Group completed valid edits after a one-second pause; skip drafts, invalid
+  inputs and layout-only changes. Keep Save now, autosave on/off and bounded
+  browser-local history.
   Serialize input values, physical IDs/topology, catalog/rating provenance,
   automatic assignments and environmental/load tolerances; recalculate on recall.
   A search snapshot retains its selected assignment, not the full solution pool;

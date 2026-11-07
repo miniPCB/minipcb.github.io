@@ -204,30 +204,34 @@
     .circuit-toolbar .resource-links { margin: 0 0 0 auto; }
     .calculator-workspace { display: grid; gap: 12px; align-items: start; }
     .calculator-memory { min-width: 0; margin: 0 16px; border-radius: 12px; background: #101e2b; }
-    .calculator-memory > summary { min-height: 44px; padding: 12px; color: #c6e3ff; cursor: pointer; }
-    .calculator-memory > summary span { color: var(--muted); font-size: .8rem; margin-left: 6px; }
+    .calculator-memory > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px; color: #c6e3ff; cursor: pointer; list-style: none; -webkit-touch-callout: none; }
+    .calculator-memory > summary::-webkit-details-marker { display: none; }
+    .memory-chevron { flex: 0 0 18px; color: #9edbff; }
+    .calculator-memory > summary[data-error] .memory-chevron { color: #ffba52; }
+    .calculator-memory[open] .memory-chevron { transform: rotate(180deg); }
+    #memoryCount { color: var(--muted); font-size: .75rem; }
     .memory-body { padding: 0 10px 12px; }
-    .memory-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .memory-actions .btn { min-height: 44px; padding: 8px; }
-    .memory-auto { display: flex; align-items: center; gap: 6px; min-height: 44px; color: var(--muted); font-size: .8rem; }
-    .memory-auto input { width: 18px; height: 18px; }
-    .memory-note, .memory-status { color: var(--muted); font-size: .75rem; line-height: 1.5; margin: 8px 2px; }
+    .memory-status:not([data-error]) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+    .memory-status[data-error] { color: #ffba52; font-size: .75rem; line-height: 1.5; margin: 8px 2px; }
     .memory-status:empty { display: none; }
-    .memory-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 12px 0; max-height: 52vh; overflow-y: auto; }
+    .memory-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; max-height: 65vh; overflow-y: auto; }
     .memory-entry { display: flex; min-width: 0; background: #162a39; border-radius: 10px; border-left: 3px solid transparent; }
     .memory-entry[aria-current="true"] { background: #1b384a; border-left-color: #54d2ff; }
     .memory-restore { flex: 1; min-width: 0; padding: 10px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
-    .memory-restore strong, .memory-restore span, .memory-restore small { display: block; overflow-wrap: anywhere; }
+    .memory-restore strong, .memory-restore span { display: block; overflow-wrap: anywhere; }
     .memory-restore strong { font-size: .85rem; font-weight: 500; }
     .memory-restore span { font: .75rem var(--mono); color: #9edbff; margin-top: 6px; }
-    .memory-restore small { color: var(--muted); font-size: .7rem; margin-top: 6px; }
-    .memory-delete { align-self: start; flex: 0 0 44px; min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
-    .memory-restore:hover, .memory-delete:hover { background: #254458; border-radius: 8px; }
-    .memory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; min-height: 44px; padding: 6px; font-size: .75rem; }
+    .memory-restore { -webkit-touch-callout: none; }
+    .memory-restore:hover { background: #254458; border-radius: 8px; }
+    .memory-menu button { position: relative; padding-left: 32px; }
+    .memory-menu [role="menuitemcheckbox"][aria-checked="true"]::before { content: "✓"; position: absolute; left: 12px; color: #54d2ff; }
     @media (min-width: 1320px) {
-      .calculator-workspace.memory-open { grid-template-columns: 240px minmax(0, 1fr); gap: 0; }
-      .memory-open .calculator-memory { position: sticky; top: 12px; margin-right: 0; }
-      .memory-open .circuit-reference-body { padding-left: 12px; }
+      .calculator-workspace.memory-ready { grid-template-columns: 56px minmax(0, 1fr); gap: 0; }
+      .calculator-workspace.memory-ready.memory-open { grid-template-columns: 240px minmax(0, 1fr); }
+      .memory-ready .calculator-memory { position: sticky; top: 12px; margin-left: 12px; margin-right: 0; }
+      .memory-ready .circuit-reference-body { padding-left: 12px; }
+      .memory-ready .calculator-memory:not([open]) > summary { flex-direction: column; gap: 4px; padding: 10px 0; min-width: 44px; }
+      .memory-ready .calculator-memory:not([open]) .memory-label { display: none; }
     }
     .mobile-mode, #schematicViewToggle { display: none; }
     #schematicFeedback { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -431,8 +435,8 @@
     }
     @media print {
       body { background: #fff; color: #111; }
-      .tool-path-nav, .actions, .result-tabs, .parts-table-title .btn, footer, .calculator-memory { display: none; }
-      .calculator-workspace.memory-open { display: block; }
+      .tool-path-nav, .actions, .result-tabs, .parts-table-title .btn, footer, .calculator-memory, .memory-menu { display: none; }
+      .calculator-workspace.memory-ready { display: block; }
       .column { margin-bottom: 16px; }
       .panel, .header { box-shadow: none; break-inside: avoid; }
       .result-panel, .result-panel[hidden] { display: block !important; margin-bottom: 16px; }
@@ -480,13 +484,10 @@
       <p id="schematicFeedback" class="hint" role="status" hidden></p>
       <div id="calculatorWorkspace" class="calculator-workspace">
       <details id="calculatorMemory" class="calculator-memory" hidden>
-        <summary>Memory <span id="memoryCount">0</span></summary>
-        <div class="memory-body">
-          <div class="memory-actions"><button id="memorySave" class="btn" type="button">Save now</button><label class="memory-auto"><input id="memoryAuto" type="checkbox" checked />Autosave</label></div>
-          <p class="memory-note">This browser · 50 recent calculations</p>
+        <summary aria-controls="memoryBody" aria-haspopup="menu" title="Memory actions: right-click, Shift+F10 or long press"><svg class="memory-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg><span class="memory-label">Memory</span><span id="memoryCount">0</span></summary>
+        <div id="memoryBody" class="memory-body">
           <p id="memoryStatus" class="memory-status" role="status" aria-live="polite"></p>
           <ol id="memoryList" class="memory-list" aria-label="Saved calculations"></ol>
-          <button id="memoryClear" class="memory-clear" type="button">Clear memory</button>
         </div>
       </details>
       <figure class="circuit-reference-body">
@@ -509,6 +510,14 @@
       </figure>
       </div>
     </section>
+    <div id="memoryMenu" class="resistor-menu memory-menu" role="menu" aria-label="Memory actions" hidden>
+      <p id="memoryMenuInfo" class="hint" hidden></p>
+      <button type="button" role="menuitem" data-memory-action="restore">Restore calculation</button>
+      <button id="memorySave" type="button" role="menuitem" data-memory-action="save">Save now</button>
+      <button id="memoryAuto" type="button" role="menuitemcheckbox" aria-checked="true" data-memory-action="auto">Autosave</button>
+      <button type="button" role="menuitem" data-memory-action="delete">Delete calculation</button>
+      <button id="memoryClear" type="button" role="menuitem" data-memory-action="clear">Clear memory</button>
+    </div>
     <div id="resistorMenu" class="resistor-menu" role="menu" aria-label="Resistor construction" hidden>
       <p id="resistorMenuTitle" class="hint"></p>
       <button type="button" role="menuitem" data-resistor-action="series">Add resistor in series</button>

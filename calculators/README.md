@@ -111,7 +111,9 @@ before the main inline script; do not add `async` or change them to modules.
   internet access once the copied files are available.
 - Calculation memory uses local storage (`minipcb-divider-memory-v1`) for up to
   50 recent valid calculations and its autosave preference. It groups completed
-  edits after a one-second pause, with Save now available. Recalling rebuilds
+  edits after a one-second pause. Right-click Memory or an entry for Save now,
+  autosave, delete and clear; Shift+F10 and touch long press open the same menu.
+  The desktop pane collapses horizontally into a slim rail. Recalling rebuilds
   inputs and recalculates; a search snapshot retains only its selected design,
   not the full result pool. The desktop/mobile view preference uses
   `minipcb-divider-view`. Storage belongs to this browser profile and website
