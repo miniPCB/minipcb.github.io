@@ -69,7 +69,8 @@ not add a permission or confirmation step to an authorized task.
   redraws preserve its deadline, and reduced-motion mode omits gradient movement.
   Use explicit row-local rectangles rather than text decoration that can extend
   beyond the row. Size part-number columns to their contents, reserve a single
-  line for Description in the column layout, and give spare width to Description.
+  line for Description in the column layout, and distribute spare width equally
+  between columns rather than assigning it to one column.
   Keep the list a report: no Use/Preview buttons or nearby-value recommendations;
   select parts with the circuit editors above. Unmatched catalog codes show a dash.
   Increase table fonts on large screens and stack complete numbers on phones.

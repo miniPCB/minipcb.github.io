@@ -319,8 +319,8 @@ its complete edit rectangle are contained within its row, without wrapping.
 On phones, reference/stress values share the first line, followed by the
 description and separate full-width TNPW and M55342 numbers. References and
 Copy BOM retain 44 px phone touch targets. On wider screens, the part-number
-columns are sized to the actual codes with a small gap; Description receives
-the remaining space and stays on one line. Main text grows from 14 to 20 px as
+columns are sized to their contents, with spare width distributed evenly between
+all six columns. Description stays on one line. Main text grows from 14 to 20 px as
 space permits. If all six columns cannot fit at a readable size, the table uses
 stacked rows; phone descriptions may wrap to preserve readable text.
 The list reports part numbers without Use/Preview buttons, nearest-value notes

@@ -11,14 +11,21 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
   assert(get('calculatorDetails').hidden&&get('calculatorDetails').inert&&get('calculatorDetails').getBoundingClientRect().height===0&&!get('calculatorDetails').querySelector(':scope > summary'),label+': rough data/comparisons are excluded');
   const names=Object.values(state().physical).flat().map(part=>part.name);
   assert(rows().length===names.length,label+': one row per physical resistor');
+  {
+   const columns=table().dataset.tableLayout==='columns'?[1,2,3,4,5,6]:[1,5,6];
+   const bounds=columns.map(index=>{const boxes=[...table().querySelectorAll(`[aria-colindex="${index}"]`)].map(node=>node.getBoundingClientRect()).filter(box=>box.width>0);return {left:Math.min(...boxes.map(box=>box.left)),right:Math.max(...boxes.map(box=>box.right))};});
+   const gaps=bounds.slice(0,-1).map((box,index)=>bounds[index+1].left-box.right);
+   assert(gaps.every(gap=>gap>=10)&&Math.max(...gaps)-Math.min(...gaps)<=8,label+': spare space is balanced between all columns without overlap');
+  }
   for(const [index,row] of rows().entries()){
    const border=row.querySelector(':scope > rect').getBoundingClientRect(),ref=row.querySelector('[data-field="reference"]'),description=row.querySelector('[data-field="description"]');
    assert(ref.textContent===names[index]&&!ref.querySelector('tspan')&&inside(ref.getBoundingClientRect(),border),label+'/'+names[index]+': full reference and edit target stay on their row');
    assert([...row.querySelectorAll('text,[role="button"]')].every(node=>inside(node.getBoundingClientRect(),border)),label+'/'+names[index]+': descriptions, full part numbers and controls stay inside the row');
    assert(description.textContent.includes('ppm/°C')&&Number(description.getAttribute('font-size'))>=14,label+'/'+names[index]+': readable description includes TCR');
+   assert([...row.querySelectorAll('[data-field="p"],[data-field="v"]')].every(node=>node.querySelectorAll('tspan').length<=1),label+'/'+names[index]+': stress percentages stay on one line');
    if(svg().dataset.layout==='mobile')assert([...row.querySelectorAll('[role="button"]')].every(node=>node.getBoundingClientRect().height>=43.5),label+'/'+names[index]+': row controls have phone-sized touch targets');
    assert(!row.querySelector('[data-bom-part],[data-field="matchStatus"],[data-field="mpnRecommendation"]'),label+'/'+names[index]+': part-number cells are a read-only summary');
-   if(table().dataset.tableLayout==='columns'){assert(description.querySelectorAll('tspan').length===1&&[...row.querySelectorAll('[data-family] > text')].every(node=>node.querySelectorAll('tspan').length===1),label+'/'+names[index]+': descriptions and part numbers stay on one line');const numbers=[...row.querySelectorAll('[data-family] > text')];if(numbers.every(node=>node.textContent.length>10)){const gap=numbers[1].getBoundingClientRect().left-numbers[0].getBoundingClientRect().right;assert(gap>=10&&gap<=48,label+'/'+names[index]+': known part-number columns have a compact gap');}}
+   if(table().dataset.tableLayout==='columns')assert(description.querySelectorAll('tspan').length<=1&&[...row.querySelectorAll('[data-family] > text')].every(node=>node.querySelectorAll('tspan').length<=1),label+'/'+names[index]+': descriptions and part numbers stay on one line');
    if(index)assert(border.top>=rows()[index-1].querySelector(':scope > rect').getBoundingClientRect().bottom+2,label+'/'+names[index]+': rows never overlap');
   }
  };
