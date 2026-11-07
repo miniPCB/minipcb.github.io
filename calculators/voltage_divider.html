@@ -2570,9 +2570,8 @@
 
     function operatingPointRows(state) {
       const complete = !!state && !state.pairSetup && !state.pending;
-      const findVmid = byId("solveFor").value === "vout";
       const current = !!state && DividerCurrentLoad.enabled(state.circuit);
-      return [["VMID", complete ? state.result.vout : null, "V", "vmid", findVmid ? "#ff8e8e" : "#75d5ff", findVmid ? "#3b2530" : "#12354b"], [current ? "Source power" : "Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? current ? state.result.i1 : Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
+      return [["VMID", complete ? state.result.vout : null, "V", "vmid", "#75d5ff", "#12354b"], [current ? "Source power" : "Total power", complete ? state.result.total : null, "W", "power", "#d0acff", "#2c2348"], ["Input current", complete ? current ? state.result.i1 : Math.abs(state.result.i1) : null, "A", "current", "#81e6b8", "#143d35"], ["Rth", complete ? state.result.rth : null, "Ω", "rth", "#ffd083", "#44331c"]];
     }
 
     function operatingPointHeight(width) {
@@ -3065,6 +3064,9 @@
       if (compact) mobileTitleLines(titleText, width).forEach((line, index) => schematicShape(title, "tspan", { x: x + width / 2, y: y + 112 + index * 24 }).textContent = line);
       title.id = "schematicTitle"; title.setAttribute("text-anchor", "middle"); title.setAttribute("font-weight", "600"); schematicEditable(title, "design-title", "design title");
       frame.append(drawing);
+      // Keep nominal results in the frame so circuit-only images include them.
+      const operatingWidth = width - 40;
+      renderOperatingPoint(frame, state, x + 20, y + height - 44 - operatingPointHeight(operatingWidth), operatingWidth);
       const key = schematicShape(frame, "g", { id: "schematicSolveStatus", transform: `translate(${x + 20} ${y + height - 38})`, "aria-label": "Circuit color key: red is unknown, green is known" });
       for (const [left, label, background, color, keyWidth] of [[0, "Unknown", "#462b32", "#ff8e8e", 100], [108, "Known", "#173b31", "#6ee7ac", 86]]) {
         schematicShape(key, "rect", { x: left, y: 0, width: keyWidth, height: 28, rx: 8, fill: background });
@@ -3159,14 +3161,14 @@
       const drawingWidth = drawing.width;
       const detailsX = stacked ? 24 : drawingWidth + 40;
       const detailsWidth = (stacked ? viewportWidth : width) - detailsX - 16, informationWidth = stacked ? viewportWidth - 32 : detailsWidth;
-      const characteristics = circuitCharacteristics(state, mode), operatingHeight = operatingPointHeight(informationWidth), analysisHeight = operatingHeight + characteristics.height + 16;
+      const characteristics = circuitCharacteristics(state, mode), analysisHeight = characteristics.height + 16;
       const frameHeader = compact ? 140 + (mobileTitleLines(titleText, drawingWidth + 16).length - 1) * 24 : 140;
       const drawingY = compact ? 16 + frameHeader : 156 + (stacked ? analysisHeight : 0);
       const drawingBottom = drawingY + drawing.height;
       const partsGroup = byId("schematicParts"), drawingNode = byId("schematicDrawing"), drawingX = stacked ? (width - drawingWidth) / 2 : 12;
       partsGroup.replaceChildren();
-      const frameBottom = drawingBottom + 44;
-      renderCircuitFrame(partsGroup, { x: drawingX - 8, y: drawingY - frameHeader, width: drawingWidth + 16, height: drawing.height + frameHeader + 44, compact }, drawingNode, titleText, state);
+      const frameBottom = drawingBottom + operatingPointHeight(drawingWidth - 24) + 56;
+      renderCircuitFrame(partsGroup, { x: drawingX - 8, y: drawingY - frameHeader, width: drawingWidth + 16, height: frameBottom - drawingY + frameHeader, compact }, drawingNode, titleText, state);
       let controlsBottom = frameBottom;
       if (designSolutionsAvailable(mode)) {
         const left = drawingX, top = frameBottom + 12;
@@ -3182,8 +3184,7 @@
       const detailsY = compact ? analysisTop + analysisHeight : stacked ? controlsBottom + 22 : 16 + analysisHeight;
       const informationX = stacked ? 16 : detailsX, informationY = compact ? analysisTop : 16;
       const analysisHost = compact ? schematicShape(partsGroup, "g", { "data-mobile-analysis": "", ...(!mobileAnalysisExpanded ? { display: "none" } : {}) }) : partsGroup;
-      renderOperatingPoint(analysisHost, state, informationX, informationY, informationWidth);
-      const characteristicsDescription = renderCircuitCharacteristics(analysisHost, state, characteristics, mode, informationX, informationY + operatingHeight, informationWidth);
+      const characteristicsDescription = renderCircuitCharacteristics(analysisHost, state, characteristics, mode, informationX, informationY, informationWidth);
       const alternativeParts = new Map();
       byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY})`);
       byId("schematicR1Value").textContent = Number.isFinite(state?.circuit.r1) ? format(state.circuit.r1, "Ω") : "—";

@@ -56,8 +56,9 @@ build metadata are explicitly marked **unpublished source**, with the analysis
 time shown instead of claiming a published revision.
 Its **Download circuit** button opens an icon picker for **SVG**, **PNG**,
 **JPEG** and **BMP**. The image includes the title, physical resistors, load,
-voltage readouts, operating conditions and Known/Unknown color keys. The BOM,
-workspace summary, graphs and action buttons stay outside this download. The existing toolbar
+voltage readouts, operating conditions, four nominal operating-point tiles and
+Known/Unknown color keys. The BOM, detailed characteristics, graphs and action
+buttons stay outside this download. The existing toolbar
 **Download SVG** still exports the full workspace.
 
 SVG remains vector. PNG is lossless; JPEG uses high quality; BMP is an
@@ -207,8 +208,9 @@ every physical resistor keeps its own readable value, tolerance and package card
 below it. The **⋯** menu on each card adds series/parallel parts without a right
 click. Primary fields have at least 44 px touch targets, and input text stays at
 16 px or larger. Voltage cards retain Target/Calculated, tolerance and Min/Max.
-**Operating conditions** and **Analysis & parts list** start collapsed; expand
-them for the five temperature/drift menus, operating-point blocks, detailed
+The four operating-point tiles remain visible inside the circuit frame, beneath
+the circuit settings. **Operating conditions** and **Analysis & parts list** start
+collapsed; expand them for the five temperature/drift menus, detailed
 characteristics and BOM. Small per-resistor stress readouts are omitted from the
 primary phone cards; full stress information remains in the analysis and data.
 
@@ -487,10 +489,12 @@ identifies the preview, and Download SVG captures it. Leaving the visualization
 or selecting an empty region restores the combination-search input display.
 
 Four large, colorful boxes, without a section heading, show nominal **VMID**,
-**total power**, **input current** (magnitude) and **Rth** above Circuit
-characteristics. Rth is the divider's source resistance, excluding RL. The boxes
-follow the active Find mode or selected combination preview, clear unavailable
-values, reflow on small screens and remain in the SVG download. The current
+**total power**, **input current** (magnitude) and **Rth** inside the circuit frame,
+beneath the circuit and above the Known/Unknown key. VMID uses a blue information
+tile in every mode; red remains the Unknown role color in the schematic. Rth is
+the divider's source resistance, excluding RL. The boxes follow the active Find
+mode or selected combination preview, clear unavailable values, reflow on small
+screens and remain in full SVG and framed SVG/PNG/JPEG/BMP downloads. The current
 Markdown export includes the same operating-point table.
 
 The common **Circuit characteristics** table starts collapsed in every Find mode,

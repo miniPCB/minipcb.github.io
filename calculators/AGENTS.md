@@ -38,7 +38,10 @@ not add a permission or confirmation step to an authorized task.
   with their container hidden and inert; do not expose it during validation.
   A part's focused Options editor may still expose its catalog-specific settings.
 - Put Known/Unknown color keys inside the circuit frame so circuit-image exports
-  retain them. Keep the four operating-point blocks without a section heading.
+  retain them. Keep the four nominal operating-point blocks inside the frame,
+  beneath the circuit and above the keys, without a section heading. Reflow them
+  on phones and include them in framed image exports. Use a blue VMID information
+  tile in every mode so it is distinct from the red Unknown role color.
 - Offer Find Design Solutions only for catalog-combination searches and the
   forward VMID mode with a multi-part network. Calculated inverse quantities
   update directly from their known inputs without an unrelated search action.
