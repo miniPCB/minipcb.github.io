@@ -361,7 +361,9 @@ matching the VMID readout. Parallel-bank boxes keep the resistor symbols and
 connections visible. The **Parts list** table contains **Ref Des**,
 **TNPW PN**, **M55342 PN**, **Description**, **Pstress** and **Vstress**
 columns and one row per physical resistor. The copied BOM also places Description
-after both family part numbers. Table and copied-BOM stress percentages use two
+after both family part numbers. The list stays below the complete circuit frame
+at every screen width, including zoomed-out desktop views; the page continues to
+use the available viewport width. Table and copied-BOM stress percentages use two
 decimal places, rounding tiny values to **0.00%** without scientific notation;
 unassessed voltage stress remains a dash. The description shows actual resistance,
 tolerance, footprint and TCR in ppm/°C. Assigned parts use their own catalog TCR;

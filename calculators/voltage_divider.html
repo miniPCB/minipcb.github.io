@@ -3425,15 +3425,13 @@
       const desktopDrawing = renderSchematicDrawing(state, roles);
       if (!compact) byId("schematicDrawing").removeAttribute("data-mobile-layout");
       const drawing = compact ? renderMobileDrawing(state, roles, viewportWidth - 32) : desktopDrawing, width = compact ? viewportWidth : Math.max(viewportWidth, drawing.width + 32);
-      const stacked = compact || viewportWidth < drawing.width + 480;
       const drawingWidth = drawing.width;
-      const detailsX = stacked ? 24 : drawingWidth + 40;
-      const detailsWidth = (stacked ? viewportWidth : width) - detailsX - 16, informationWidth = stacked ? viewportWidth - 32 : detailsWidth;
+      const detailsX = 24, detailsWidth = viewportWidth - detailsX - 16, informationWidth = viewportWidth - 32;
       const characteristics = circuitCharacteristics(state, mode), analysisHeight = characteristics.height + 16;
       const frameHeader = compact ? 140 + (mobileTitleLines(titleText, drawingWidth + 16).length - 1) * 24 : 140;
-      const drawingY = compact ? 16 + frameHeader : 156 + (stacked ? analysisHeight : 0);
+      const drawingY = compact ? 16 + frameHeader : 156 + analysisHeight;
       const drawingBottom = drawingY + drawing.height;
-      const partsGroup = byId("schematicParts"), drawingNode = byId("schematicDrawing"), drawingX = stacked ? (width - drawingWidth) / 2 : 12;
+      const partsGroup = byId("schematicParts"), drawingNode = byId("schematicDrawing"), drawingX = (width - drawingWidth) / 2;
       partsGroup.replaceChildren();
       const frameBottom = drawingBottom + operatingPointHeight(drawingWidth - 24) + 56;
       renderCircuitFrame(partsGroup, { x: drawingX - 8, y: drawingY - frameHeader, width: drawingWidth + 16, height: frameBottom - drawingY + frameHeader, compact }, drawingNode, titleText, state);
@@ -3449,12 +3447,12 @@
         controlsBottom = top + 58;
       }
       const analysisTop = compact ? mobileDisclosure(partsGroup, "analysis", "Analysis & parts list", 16, controlsBottom + 16, viewportWidth - 32, mobileAnalysisExpanded) : 16;
-      const detailsY = compact ? analysisTop + analysisHeight : stacked ? controlsBottom + 22 : 16 + analysisHeight;
-      const informationX = stacked ? 16 : detailsX, informationY = compact ? analysisTop : 16;
+      const detailsY = compact ? analysisTop + analysisHeight : controlsBottom + 22;
+      const informationX = 16, informationY = compact ? analysisTop : 16;
       const analysisHost = compact ? schematicShape(partsGroup, "g", { "data-mobile-analysis": "", ...(!mobileAnalysisExpanded ? { display: "none" } : {}) }) : partsGroup;
       const characteristicsDescription = renderCircuitCharacteristics(analysisHost, state, characteristics, mode, informationX, informationY, informationWidth);
       const alternativeParts = new Map();
-      byId("schematicDrawing").setAttribute("transform", `translate(${stacked ? (width - drawingWidth) / 2 : 12} ${drawingY})`);
+      byId("schematicDrawing").setAttribute("transform", `translate(${drawingX} ${drawingY})`);
       byId("schematicR1Value").textContent = Number.isFinite(state?.circuit.r1) ? format(state.circuit.r1, "Ω") : "—";
       byId("schematicR2Value").textContent = Number.isFinite(state?.circuit.r2) ? format(state.circuit.r2, "Ω") : "—";
       byId("schematicLoadValue").textContent = state ? loadText(state.circuit) : "—";
