@@ -362,9 +362,10 @@ connections visible. The **Parts list** table contains **Ref Des**,
 **TNPW PN**, **M55342 PN**, **Description**, **Pstress** and **Vstress**
 columns and one row per physical resistor. The copied BOM also places Description
 after both family part numbers. The list stays below the complete circuit frame
-at every screen width, including zoomed-out desktop views; the page continues to
-use the available viewport width. Table and copied-BOM stress percentages use two
-decimal places, rounding tiny values to **0.00%** without scientific notation;
+at every screen width, including zoomed-out desktop views. Its width is capped at
+1280 px and centered; smaller screens use the available space. The calculator
+page continues to use the full viewport. Table and copied-BOM stress percentages
+use two decimal places, rounding tiny values to **0.00%** without scientific notation;
 unassessed voltage stress remains a dash. The description shows actual resistance,
 tolerance, footprint and TCR in ppm/°C. Assigned parts use their own catalog TCR;
 unassigned parts use the configured operating-condition TCR. Each reference and
@@ -373,8 +374,8 @@ On phones, reference/stress values share the first line, followed by the
 description and separate full-width TNPW and M55342 numbers. References and
 Copy BOM retain 44 px phone touch targets. On wider screens, the part-number
 columns are sized to their contents, with spare width distributed evenly between
-all six columns. Description stays on one line. Main text grows from 14 to 20 px as
-space permits. If all six columns cannot fit at a readable size, the table uses
+all six columns. Description stays on one line. Main text stays at 16 px rather
+than growing with the viewport. If all six columns cannot fit, the table uses
 stacked rows; phone descriptions may wrap to preserve readable text.
 The list reports part numbers without Use/Preview buttons, nearest-value notes
 or duplicated candidate specifications. Select values, packages and catalog

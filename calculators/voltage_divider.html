@@ -2784,10 +2784,9 @@
         return Math.ceil(measured || text.length * size * .62);
       };
       // Reserve each column's content width, then share spare space between them.
-      // Descriptions keep their full width instead of wrapping to make room.
-      const fitColumns = size => labels.map((label, index) => Math.max(index === 0 ? 44 : 0, measure(label, Math.max(12, size - 1)), ...values.map(row => measure(row[index], size) + (index === 0 ? 12 : 0))) + 20);
-      let fontSize = Math.max(14, Math.min(20, Math.round(12 + innerWidth / 210))), widths = fitColumns(fontSize);
-      while (fontSize > 14 && widths.reduce((sum, size) => sum + size, 0) > width) widths = fitColumns(--fontSize);
+      // Keep text at a stable size; reflow to cards when the columns do not fit.
+      const fontSize = 16;
+      const widths = labels.map((label, index) => Math.max(index === 0 ? 44 : 0, measure(label, fontSize - 1), ...values.map(row => measure(row[index], fontSize) + (index === 0 ? 12 : 0))) + 20);
       const contentWidth = widths.reduce((sum, size) => sum + size, 0);
       const narrow = contentWidth > width, touch = byId("liveSchematic").dataset.layout === "mobile";
       const columnGap = narrow ? 0 : (width - contentWidth) / (widths.length - 1);
@@ -3426,7 +3425,8 @@
       if (!compact) byId("schematicDrawing").removeAttribute("data-mobile-layout");
       const drawing = compact ? renderMobileDrawing(state, roles, viewportWidth - 32) : desktopDrawing, width = compact ? viewportWidth : Math.max(viewportWidth, drawing.width + 32);
       const drawingWidth = drawing.width;
-      const detailsX = 24, detailsWidth = viewportWidth - detailsX - 16, informationWidth = viewportWidth - 32;
+      // Bound the report independently of the full-width calculator and drawing.
+      const detailsWidth = Math.min(1280, viewportWidth - 40), detailsX = Math.max(24, (viewportWidth - detailsWidth) / 2), informationWidth = viewportWidth - 32;
       const characteristics = circuitCharacteristics(state, mode), analysisHeight = characteristics.height + 16;
       const frameHeader = compact ? 140 + (mobileTitleLines(titleText, drawingWidth + 16).length - 1) * 24 : 140;
       const drawingY = compact ? 16 + frameHeader : 156 + analysisHeight;

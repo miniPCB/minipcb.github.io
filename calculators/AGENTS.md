@@ -97,6 +97,9 @@ not add a permission or confirmation step to an authorized task.
 - Keep the parts list below the circuit frame at every viewport width, including
   wide or zoomed-out desktop views. Keep the page full width and the schematic
   at its existing scale; do not move the table beside the circuit to use space.
+  Cap the parts list at 1280 px and center it within the available viewport;
+  smaller screens still use a fitted width. This cap must not constrain the page,
+  circuit frame, characteristics or design-solution charts.
   Keep each parts-list reference and its entire selection target within its row.
   Reference activation selects, focuses and reveals that physical resistor block;
   it does not open the package dropdown. Keep selection separate from circuit
@@ -110,7 +113,9 @@ not add a permission or confirmation step to an authorized task.
   between columns rather than assigning it to one column.
   Keep the list a report: no Use/Preview buttons or nearby-value recommendations;
   select parts with the circuit editors above. Unmatched catalog codes show a dash.
-  Increase table fonts on large screens and stack complete numbers on phones.
+  Keep parts-list text at a stable 16 px across viewport sizes; reflow columns
+  into stacked rows when needed rather than scaling text to fit the screen.
+  Preserve ordinary browser zoom and complete part numbers on phones.
   Descriptions include the physical part's TCR in ppm/C (assigned catalog TCR takes precedence
   over the manual operating-condition default). Preserve full BOM/export data.
 - Keep Pstress and Vstress compact and tied to each actual part's ratings. Label

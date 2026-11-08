@@ -9,6 +9,9 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const fit=label=>{
   assert(d.documentElement.scrollWidth<=w.innerWidth,label+': page fits the viewport');
   assert(table().getBoundingClientRect().top>get('schematicFrame').getBoundingClientRect().bottom,label+': parts list remains below the complete circuit frame');
+  const tableBounds=table().getBoundingClientRect(),viewport=get('schematicViewport').getBoundingClientRect();
+  assert(tableBounds.width<=1280.5&&tableBounds.left>=viewport.left&&tableBounds.right<=viewport.right+1,label+': table has a bounded width and fits its viewport');
+  if(tableBounds.width>=1279.5)assert(Math.abs((tableBounds.left+tableBounds.right-viewport.left-viewport.right)/2)<=5,label+': capped table stays centered below the circuit');
   assert(get('calculatorDetails').hidden&&get('calculatorDetails').inert&&get('calculatorDetails').getBoundingClientRect().height===0&&!get('calculatorDetails').querySelector(':scope > summary'),label+': rough data/comparisons are excluded');
   const names=Object.values(state().physical).flat().map(part=>part.name);
   assert(rows().length===names.length,label+': one row per physical resistor');
@@ -22,7 +25,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
    const border=row.querySelector(':scope > rect').getBoundingClientRect(),ref=row.querySelector('[data-field="reference"]'),description=row.querySelector('[data-field="description"]');
    assert(ref.textContent===names[index]&&!ref.querySelector('tspan')&&inside(ref.getBoundingClientRect(),border),label+'/'+names[index]+': full reference and edit target stay on their row');
    assert([...row.querySelectorAll('text,[role="button"]')].every(node=>inside(node.getBoundingClientRect(),border)),label+'/'+names[index]+': descriptions, full part numbers and controls stay inside the row');
-   assert(description.textContent.includes('ppm/°C')&&Number(description.getAttribute('font-size'))>=14,label+'/'+names[index]+': readable description includes TCR');
+   assert(description.textContent.includes('ppm/°C')&&Number(description.getAttribute('font-size'))===16,label+'/'+names[index]+': description includes TCR at a consistent 16 px size');
    assert([...row.querySelectorAll('[data-field="p"],[data-field="v"]')].every(node=>node.querySelectorAll('tspan').length<=1),label+'/'+names[index]+': stress percentages stay on one line');
    if(svg().dataset.layout==='mobile')assert([...row.querySelectorAll('[role="button"]')].every(node=>node.getBoundingClientRect().height>=43.5),label+'/'+names[index]+': row controls have phone-sized touch targets');
    assert(!row.querySelector('[data-bom-part],[data-field="matchStatus"],[data-field="mpnRecommendation"]'),label+'/'+names[index]+': part-number cells are a read-only summary');
@@ -39,7 +42,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  for(const width of [320,1440]){frame.style.width=width+'px';await pause();fit('twelve references/'+width);assert(rows().some(row=>row.querySelector('[data-field="reference"]').textContent==='R1.12'),'Two-digit physical reference stays complete at '+width+'px');}
  await reset();frame.style.width='1920px';await pause();const large=Number(rows()[0].querySelector('[data-field="description"]').getAttribute('font-size'));
  assert(table().dataset.tableLayout==='columns'&&rows().every(row=>Number(row.firstElementChild.getAttribute('height'))<=60),'Desktop rows use compact single-line records below the circuit');
- frame.style.width='390px';await pause();assert(large>Number(rows()[0].querySelector('[data-field="description"]').getAttribute('font-size'))&&table().dataset.tableLayout==='cards','Fonts grow on large screens and phone rows use stacked part numbers');
+ frame.style.width='390px';await pause();assert(large===16&&large===Number(rows()[0].querySelector('[data-field="description"]').getAttribute('font-size'))&&table().dataset.tableLayout==='cards','Text stays the same size on wide screens and phones while rows reflow');
  assert([...table().querySelectorAll('[data-family] [data-field]')].every(node=>node.textContent.length>15),'Phone layout retains complete catalog part numbers');
  const copy=svg().querySelector('[data-pair-action="copy-bom"]');assert(copy.getBoundingClientRect().height>=44,'Copy BOM has a full phone touch target');
  set('r1','12.345');set('tolR1','.25');fit('nearby/phone');
@@ -52,7 +55,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  set('vin','100');fit('failed/desktop');assert(rows().some(row=>row.dataset.partFailed==='true'),'Failed parts remain in their rows');
  const tsv=w.schematicBomTsv().trim().split('\r\n').map(line=>line.split('\t')),col=tsv[0].indexOf('Description');assert(tsv[0][col-1]==='M55342 PN'&&tsv.slice(1).every(row=>row[col].includes('ppm/°C')),'Copied BOM preserves column order and TCR descriptions');
  const exported=new DOMParser().parseFromString(await(await fetch(get('schematicDownload').href)).text(),'image/svg+xml');
- assert(!exported.querySelector('parsererror,[data-schematic-edit],[data-pair-action],foreignObject')&&[...exported.querySelectorAll('[data-field="description"]')].every(node=>node.textContent.includes('ppm/°C')),'Full SVG export keeps TCR and table content without editing controls');
+ assert(!exported.querySelector('parsererror,[data-schematic-edit],[data-pair-action],foreignObject')&&[...exported.querySelectorAll('[data-field="description"]')].every(node=>node.textContent.includes('ppm/°C')&&node.getAttribute('font-size')==='16'),'Full SVG export keeps stable text sizing and TCR without editing controls');
  await reset();frame.style.width='390px';await pause();
  assert([...get('mobileSolveMode').options].map(option=>option.value).join(',')==='vout,vin,r1,r2,pairs'&&!d.querySelector('[data-solve-mode="rl"],#solveFor option[value="rl"],#schematicEditSolve option[value="rl"]'),'Find RL/IL has no desktop, mobile or adjust-target entry');
  get('schematicViewToggle').click();fit('phone/desktop-switch');
