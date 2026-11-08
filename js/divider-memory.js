@@ -8,6 +8,7 @@
     let entries = [], active = null, pending = null, timer = null, restoring = false, persistent = true, ignored = null;
     let auto = true, expanded = innerWidth >= 1320;
     let menuEntry = null, menuOrigin = null, press = null, suppressClickUntil = 0;
+    let original = null, originalSignature = null, originalSettings = null, descriptions = new WeakMap(), nameEdit = null;
     const clone = value => JSON.parse(JSON.stringify(value));
     const signature = state => JSON.stringify(state);
     function reflectSummary() {
@@ -24,38 +25,115 @@
     };
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
-      if (saved?.version === 1 && Array.isArray(saved.entries)) {
+      if ([1, 2].includes(saved?.version) && Array.isArray(saved.entries)) {
         entries = saved.entries.filter(entry => typeof entry.id === "string" && typeof entry.title === "string" && typeof entry.summary === "string" && Number.isFinite(Date.parse(entry.savedAt)) && entry.state && typeof entry.state === "object").slice(0, limit);
+        original = saved.original?.version === 1 ? saved.original : entries.at(-1)?.state || null;
+        originalSignature = original ? signature(original) : null;
         auto = saved.auto !== false; expanded = innerWidth >= 1320 && (typeof saved.expanded === "boolean" ? saved.expanded : true);
       }
     } catch (_) { /* Invalid or inaccessible stored history must not stop the calculator. */ }
 
-    function persist() {
+    function describe(entry) {
+      if (descriptions.has(entry)) return descriptions.get(entry);
+      const changes = [], initial = signature(entry.state) === originalSignature;
+      try {
+        const current = adapter.describe(entry.state);
+        originalSettings ||= adapter.describe(original);
+        const prior = new Map(originalSettings.fields.map(field => [field.id, field])), priorParts = new Map(originalSettings.parts.map(part => [part.name, part]));
+        if (initial) {
+          for (const field of current.fields.filter(field => ["vtop", "vmid"].includes(field.id))) changes.push({ text: `${field.label}: ${field.value}` });
+          for (const part of current.parts) changes.push({ text: `${part.name}: ${part.summary}` });
+          for (const field of current.fields.filter(field => !["vtop", "vmid"].includes(field.id))) changes.push({ text: `${field.label}: ${field.value}` });
+        } else {
+          for (const field of current.fields) {
+            const before = prior.get(field.id);
+            if (!before || before.value !== field.value) changes.push({ id: field.id, text: `${field.label}: ${before ? before.value + " → " : ""}${field.value}`, name: `${field.label}: ${field.value}` });
+          }
+          for (const part of current.parts) {
+            const before = priorParts.get(part.name);
+            if (!before) changes.push({ text: `Added ${part.name}: ${part.summary}`, name: `Added ${part.name}` });
+            else for (const [key, field] of Object.entries(part.values)) {
+              const old = before.values[key];
+              if (field.active !== false && (!old || old.active === false || old.value !== field.value)) changes.push({ text: `${part.name} ${field.label}: ${old && old.active !== false ? old.value + " → " : ""}${field.value}`, name: `${part.name} ${field.label}: ${field.value}` });
+            }
+          }
+          const names = new Set(current.parts.map(part => part.name));
+          for (const part of originalSettings.parts) if (!names.has(part.name)) changes.push({ text: `Removed ${part.name}`, name: `Removed ${part.name}` });
+        }
+      } catch (_) { /* Older or damaged snapshots remain available for validated recall. */ }
+      const lead = changes.find(change => change.id !== "reference" && change.name) || changes[0];
+      const title = initial ? "Original state" : changes.length ? lead.name + (changes.length > 1 ? ` (${changes.length} changes)` : "") : "Equivalent to original";
+      const description = { initial, title, changes: changes.length ? changes : [{ text: initial ? entry.summary : "No electrical settings differ from the original state." }] };
+      descriptions.set(entry, description); return description;
+    }
+    // Names and descriptions are metadata; neither changes snapshot identity.
+    const entryName = entry => typeof entry.name === "string" && entry.name.trim() ? entry.name : describe(entry).title;
+    function trim() {
+      const baseline = entries.find(entry => signature(entry.state) === originalSignature);
+      entries = entries.slice(0, limit);
+      if (baseline && !entries.includes(baseline)) entries[limit - 1] = baseline;
+    }
+    // Keep the reference even if its row is deleted or older variants are pruned.
+    const stored = () => JSON.stringify({ version: 2, auto, expanded, original, entries });
+
+    function persist(protectedEntry = null) {
       try {
         // Keep storage bounded even when a saved network has many physical parts.
-        let data = JSON.stringify({ version: 1, auto, expanded, entries });
-        while (data.length > 1500000 && entries.length > 1) { entries.pop(); data = JSON.stringify({ version: 1, auto, expanded, entries }); }
+        let data = stored();
+        while (data.length > 1500000 && entries.length > 1) {
+          const index = entries.findLastIndex((entry, index) => index > 0 && entry !== protectedEntry && signature(entry.state) !== originalSignature);
+          if (index < 0) break;
+          entries.splice(index, 1); data = stored();
+        }
         localStorage.setItem(key, data); persistent = true;
       } catch (_) { persistent = false; status("Browser storage is unavailable. Memory lasts for this visit."); }
     }
     function render() {
+      if (nameEdit) return;
       const scrollTop = list.scrollTop;
       get("memoryCount").textContent = String(entries.length);
       list.replaceChildren();
       for (const entry of entries) {
+        const description = describe(entry);
         const row = document.createElement("li"); row.className = "memory-entry"; row.dataset.memoryId = entry.id;
         row.setAttribute("aria-current", String(active === entry.id));
-        const button = document.createElement("button"); button.type = "button"; button.className = "memory-restore";
-        button.dataset.memoryRestore = entry.id; button.disabled = restoring;
-        button.setAttribute("aria-label", `Restore ${entry.title}; ${entry.summary}; saved ${new Date(entry.savedAt).toLocaleString()}`);
-        button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-controls", "memoryMenu");
-        button.title = `${new Date(entry.savedAt).toLocaleString()} · Right-click for actions`;
-        for (const [tag, text] of [["strong", entry.title], ["span", entry.summary]]) {
-          const node = document.createElement(tag); node.textContent = text; button.append(node);
+        row.append(nameButton(entry));
+        const bullets = items => { const ul = document.createElement("ul"); ul.className = "memory-changes"; for (const change of items) { const item = document.createElement("li"); item.textContent = change.text; ul.append(item); } return ul; };
+        row.append(bullets(description.changes.slice(0, 3)));
+        if (description.changes.length > 3) {
+          const more = document.createElement("details"); more.className = "memory-more";
+          const label = document.createElement("summary"); label.textContent = `${description.changes.length - 3} more ${description.initial ? "settings" : "changes"}`;
+          more.append(label, bullets(description.changes.slice(3))); row.append(more);
         }
-        row.append(button); list.append(row);
+        list.append(row);
       }
       list.scrollTop = scrollTop;
+    }
+    function nameButton(entry) {
+      const button = document.createElement("button"); button.type = "button"; button.className = "memory-restore";
+      button.dataset.memoryRestore = entry.id; button.disabled = restoring;
+      button.setAttribute("aria-label", `Restore ${entryName(entry)}; ${entry.summary}; saved ${new Date(entry.savedAt).toLocaleString()}`);
+      button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-controls", "memoryMenu");
+      button.title = `${new Date(entry.savedAt).toLocaleString()} · Right-click for actions; F2 to rename`;
+      const title = document.createElement("strong"); title.textContent = entryName(entry); button.append(title); return button;
+    }
+    function rename(id) {
+      const entry = entries.find(entry => entry.id === id), button = list.querySelector(`[data-memory-restore="${CSS.escape(id)}"]`);
+      if (!entry || !button || restoring) return;
+      cancel();
+      const input = document.createElement("input");
+      input.className = "memory-name-input"; input.type = "text"; input.maxLength = 100; input.value = entryName(entry).slice(0, 100); input.setAttribute("aria-label", "Memory name");
+      nameEdit = input; button.replaceWith(input); input.focus({ preventScroll: true }); input.select();
+      const finish = (commit, focus) => {
+        if (nameEdit !== input) return;
+        if (commit && !input.value.trim() && focus) { status("Enter a memory name.", true); return; }
+        if (commit && input.value.trim()) { entry.name = input.value.trim().slice(0, 100); persist(entry); }
+        nameEdit = null; const replacement = nameButton(entry); input.replaceWith(replacement);
+        if (focus) replacement.focus({ preventScroll: true });
+        status(commit ? "Memory name updated." : "Rename cancelled."); schedule();
+      };
+      input.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); event.stopPropagation(); finish(event.key === "Enter", true); } });
+      input.addEventListener("blur", () => finish(true, false));
     }
     function cancel() { clearTimeout(timer); timer = null; pending = null; }
     function capture() { try { return adapter.capture(); } catch (_) { return null; } }
@@ -65,13 +143,14 @@
       const fingerprint = signature(candidate.state), existing = entries.find(entry => signature(entry.state) === fingerprint);
       if (existing) { active = existing.id; render(); if (announce) status("This calculation is already saved."); return existing; }
       const entry = { ...clone(candidate), id: root.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`, savedAt: new Date().toISOString() };
+      if (!original) { original = clone(entry.state); originalSignature = signature(original); originalSettings = null; descriptions = new WeakMap(); }
       ignored = null;
-      entries.unshift(entry); entries = entries.slice(0, limit); active = entry.id; persist(); render();
+      entries.unshift(entry); trim(); active = entry.id; persist(); render();
       if (persistent) status(announce ? "Calculation saved in this browser." : "Saved.");
       return entry;
     }
     function schedule() {
-      if (restoring) return;
+      if (restoring || nameEdit) return;
       const candidate = capture();
       if (!candidate) { cancel(); return; }
       const fingerprint = signature(candidate.state), existing = entries.find(entry => signature(entry.state) === fingerprint);
@@ -103,8 +182,9 @@
       }
     }
     list.addEventListener("click", event => {
-      const restoreButton = event.target.closest("[data-memory-restore]");
-      if (restoreButton) restore(restoreButton.dataset.memoryRestore);
+      if (event.target.closest("summary,input")) return;
+      const row = event.target.closest("[data-memory-id]");
+      if (row) restore(row.dataset.memoryId);
     });
     function closeMenu(focus = false) {
       if (menu.hidden) return;
@@ -116,7 +196,7 @@
       const row = target.closest("[data-memory-id]"); menuEntry = row?.dataset.memoryId || null; menuOrigin = menuEntry;
       const entry = entries.find(item => item.id === menuEntry), info = get("memoryMenuInfo");
       info.hidden = !entry; info.textContent = entry ? new Date(entry.savedAt).toLocaleString() : "";
-      for (const action of ["restore", "delete"]) menu.querySelector(`[data-memory-action="${action}"]`).hidden = !entry;
+      for (const action of ["restore", "rename", "delete"]) menu.querySelector(`[data-memory-action="${action}"]`).hidden = !entry;
       get("memoryClear").hidden = !entries.length;
       get("memoryAuto").setAttribute("aria-checked", String(auto));
       menu.hidden = false;
@@ -126,6 +206,7 @@
     }
     panel.addEventListener("contextmenu", event => { event.preventDefault(); event.stopPropagation(); openMenu(event.target, event.clientX, event.clientY); });
     panel.addEventListener("keydown", event => {
+      if (event.key === "F2" && !event.target.matches("input")) { const id = event.target.closest("[data-memory-id]")?.dataset.memoryId; if (id) { event.preventDefault(); rename(id); } return; }
       if (event.key === "ContextMenu" || event.shiftKey && event.key === "F10") {
         event.preventDefault(); const box = event.target.getBoundingClientRect(); openMenu(event.target, box.left + 8, box.bottom);
       }
@@ -135,12 +216,13 @@
       if (!action) return;
       closeMenu();
       if (action === "restore") { restore(id); return; }
+      if (action === "rename") { rename(id); return; }
       if (action === "save") save(capture(), true);
       else if (action === "auto") { auto = !auto; get("memoryAuto").setAttribute("aria-checked", String(auto)); cancel(); persist(); if (auto) schedule(); status(auto ? "Autosave on." : "Autosave off."); }
       else if (action === "delete") {
         if (active === id) ignored = signature(capture()?.state);
         entries = entries.filter(entry => entry.id !== id); persist(); render(); status("Saved calculation deleted.");
-      } else if (action === "clear") { cancel(); ignored = signature(capture()?.state); entries = []; active = null; persist(); render(); status("Memory cleared."); }
+      } else if (action === "clear") { cancel(); ignored = signature(capture()?.state); entries = []; active = null; original = null; originalSignature = null; originalSettings = null; descriptions = new WeakMap(); persist(); render(); status("Memory cleared."); }
       (menuOrigin && list.querySelector(`[data-memory-restore="${CSS.escape(menuOrigin)}"]`) || summary).focus({ preventScroll: true });
     });
     document.addEventListener("keydown", event => {

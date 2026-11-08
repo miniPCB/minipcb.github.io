@@ -227,7 +227,7 @@ analysis, regardless of layout.
 **Memory** opens beside the circuit on wide desktop screens and can be collapsed
 horizontally to a narrow reopen rail, returning the space to the diagram without
 adding a row above it. On phones it starts collapsed above the circuit.
-Right-click Memory or an entry for **Save now**, **Autosave**, **Delete** and
+Right-click Memory or an entry for **Save now**, **Rename**, **Autosave**, **Delete** and
 **Clear memory**. Shift+F10, the Context Menu key and a touch long press open the
 same menu. Entry timestamps are available on hover and in the menu; routine save
 messages are announced to screen readers without adding text to the pane.
@@ -237,7 +237,21 @@ not save each typed character, unfinished editor drafts, invalid inputs or layou
 changes. **Save now** records the current calculation immediately. Autosave can
 be turned off, and duplicate input states share an existing entry.
 
-The history keeps up to 50 recent calculations in this browser, including the
+The first saved calculation is the **Original state**. Each later entry gets a
+name based on its changes and a bullet list comparing settings, resistor values,
+connections and actual part numbers against that fixed original. Calculated
+outputs are not listed as input changes. Longer lists expand to show every
+change. Use **Rename** in an entry's context menu, or focus it and press F2, to
+edit its name; Enter saves and Escape cancels. Names persist in this browser.
+
+Recalled states remain fully editable. Changing one saves a new state without
+overwriting the prior named version. Each entry stores a complete circuit,
+rather than a patch that depends on other history entries. Existing history uses
+its oldest available state as the original reference. The original stays within
+the 50-entry limit unless deleted; deleting its row keeps the comparison
+reference, while **Clear memory** resets it.
+
+The history keeps up to 50 calculations in this browser, including the
 title, mode, physical resistor identities and topology, catalog/automatic part
 assignments, rating provenance, source/load tolerances and environmental settings.
 Click an entry to rebuild its inputs and recalculate with the current calculator.

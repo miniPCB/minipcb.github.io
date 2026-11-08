@@ -21,7 +21,7 @@ Paths in this table are relative to the repository root.
 | [js/resistor-environment.js](../js/resistor-environment.js) | Initial/thermal/radiation/aging resistance intervals, environmental defaults and family-specific drift models. This is executable calculation logic, separate from the ordering catalogs. |
 | [js/divider-current-load.js](../js/divider-current-load.js) | Signed current-load analysis, inverse calculations and tolerance/stress bounds, including Find VTOP trip-voltage ranges. |
 | [js/circuit-image-export.js](../js/circuit-image-export.js) | Framed SVG, PNG, JPEG and BMP encoding, raster size limits and download filenames. |
-| [js/divider-memory.js](../js/divider-memory.js) | Collapsible calculation history, grouped autosaving, local browser storage, duplicate suppression and recall controls. The HTML adapter serializes circuit inputs and recalculates recalled designs. |
+| [js/divider-memory.js](../js/divider-memory.js) | Collapsible calculation history, editable names, changes from the original state, grouped autosaving, local browser storage, duplicate suppression and recall controls. The HTML adapter describes and serializes full circuit inputs and recalculates recalled designs. |
 | [parts/index.json](../parts/index.json) | Catalog manifest and preferred-value series. Names both family JSON files to fetch. |
 | [parts/resistors/vishay-tnpw-e3.json](../parts/resistors/vishay-tnpw-e3.json) | Supported Vishay TNPW e3 ordering rules, packages, tolerances, TCR options, operating modes, electrical limits and dated source evidence. |
 | [parts/resistors/vishay-eh-m55342.json](../parts/resistors/vishay-eh-m55342.json) | Corresponding Vishay E/H M55342/D55342 rules and limits. This is a specific manufacturer's supported subset of the specification family. |
@@ -110,9 +110,15 @@ before the main inline script; do not add `async` or change them to modules.
   or installed offline application; a local HTTP server can operate without
   internet access once the copied files are available.
 - Calculation memory uses local storage (`minipcb-divider-memory-v1`) for up to
-  50 recent valid calculations and its autosave preference. It groups completed
-  edits after a one-second pause. Right-click Memory or an entry for Save now,
-  autosave, delete and clear; Shift+F10 and touch long press open the same menu.
+  50 valid calculations, including the retained original, and its autosave
+  preference. It groups completed edits after a one-second pause. Right-click
+  Memory or an entry for Save now, rename, autosave, delete and clear; Shift+F10
+  and touch long press open the same menu.
+  F2 renames a focused entry. Names and bullet changes from a fixed Original state
+  describe full independent snapshots: editing a recalled state saves a new one.
+  Existing history uses its oldest available state as the original reference;
+  the version-2 storage envelope reads old entries without changing their
+  version-1 circuit snapshots. Clearing history resets the reference.
   The desktop pane collapses horizontally into a slim rail. Recalling rebuilds
   inputs and recalculates; a search snapshot retains only its selected design,
   not the full result pool. The desktop/mobile view preference uses
@@ -276,7 +282,9 @@ paths before deployment.
 5. Test a phone-width screen, desktop view, direct input editing and the parts
    list. Confirm the leave/reload warning and clipboard fallback remain usable.
    Save and recall a calculation, reload the page and confirm browser memory is
-   retained. If storage is blocked, memory must report that it lasts for the visit.
+   retained, including custom names. Change a recalled design and confirm the
+   previous snapshot remains intact and the bullets compare against the original.
+   If storage is blocked, memory must report that it lasts for the visit.
 
 For automated browser coverage, copy `calculators/tests/` into the development
 tree and open its HTML pages over the same local server. Each reports JSON with
@@ -285,8 +293,9 @@ tree and open its HTML pages over the same local server. Each reports JSON with
 `current_load_modes.html`, `package_rating_consistency.html`,
 `package_stress_refresh.html`, `mobile_workspace.html`, `parts_table_layout.html`,
 `schematic_bom.html`, `frame_export.html`, `circuit_downloads.html`,
-`calculator_stamp.html` and `calculator_memory.html`. These filenames refer to
-test pages inside `calculators/tests/`, not the application entry point.
+`calculator_stamp.html`, `calculator_memory.html` and `calculator_memory_names.html`.
+These filenames refer to test pages inside `calculators/tests/`, not the
+application entry point.
 
 Some tests assert the original miniPCB/GitHub URLs and branding; adapt those
 expectations when testing a fork. `resistor_parts.html` also tests

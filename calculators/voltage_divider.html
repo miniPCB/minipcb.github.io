@@ -215,15 +215,17 @@
     .memory-status[data-error] { color: #ffba52; font-size: .75rem; line-height: 1.5; margin: 8px 2px; }
     .memory-status:empty { display: none; }
     .memory-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; max-height: 65vh; overflow-y: auto; }
-    .memory-entry { display: flex; min-width: 0; background: #162a39; border-radius: 10px; border-left: 3px solid transparent; }
+    .memory-entry { display: block; min-width: 0; background: #162a39; border-radius: 10px; border-left: 3px solid transparent; }
     .memory-entry[aria-current="true"] { background: #1b384a; border-left-color: #54d2ff; }
-    .memory-restore { flex: 1; min-width: 0; padding: 10px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
-    .memory-restore strong, .memory-restore span { display: block; overflow-wrap: anywhere; }
-    .memory-restore strong { font-size: .85rem; font-weight: 500; }
-    .memory-restore span { font: .75rem var(--mono); color: #9edbff; margin-top: 6px; }
-    .memory-restore { -webkit-touch-callout: none; }
+    .memory-restore { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; -webkit-touch-callout: none; }
+    .memory-restore strong { display: block; overflow-wrap: anywhere; font-size: .85rem; font-weight: 500; }
+    .memory-changes { margin: 0; padding: 0 12px 10px 26px; color: #9edbff; font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
+    .memory-changes li + li { margin-top: 5px; }
+    .memory-more > summary { min-height: 44px; padding: 8px 10px; color: var(--muted); cursor: pointer; font-size: .75rem; }
+    .memory-name-input { box-sizing: border-box; width: calc(100% - 12px); min-height: 44px; margin: 6px; padding: 8px; border: 1px solid #54d2ff; border-radius: 6px; background: #101e2b; color: var(--text); font-size: 16px; }
     .memory-restore:hover { background: #254458; border-radius: 8px; }
     .memory-menu button { position: relative; padding-left: 32px; }
+    .memory-menu { max-height: calc(100vh - 24px); overflow-y: auto; }
     .memory-menu [role="menuitemcheckbox"][aria-checked="true"]::before { content: "✓"; position: absolute; left: 12px; color: #54d2ff; }
     @media (min-width: 1320px) {
       .calculator-workspace.memory-ready { grid-template-columns: 56px minmax(0, 1fr); gap: 0; }
@@ -513,6 +515,7 @@
     <div id="memoryMenu" class="resistor-menu memory-menu" role="menu" aria-label="Memory actions" hidden>
       <p id="memoryMenuInfo" class="hint" hidden></p>
       <button type="button" role="menuitem" data-memory-action="restore">Restore calculation</button>
+      <button type="button" role="menuitem" data-memory-action="rename">Rename</button>
       <button id="memorySave" type="button" role="menuitem" data-memory-action="save">Save now</button>
       <button id="memoryAuto" type="button" role="menuitemcheckbox" aria-checked="true" data-memory-action="auto">Autosave</button>
       <button type="button" role="menuitem" data-memory-action="delete">Delete calculation</button>
@@ -3220,6 +3223,96 @@
         summary: circuit ? `${format(circuit.vin, "V")} → ${format(state.result.vout, "V")} · ${operatingPointText(circuit.r1 / circuit.r2, "ratio")}` : `${format(pairSpec.vin, "V")} → ${format(pairSpec.target, "V")} · 0 solutions`,
         build: calculatorBuild, state: captureMemoryState()
       };
+    }
+
+    // Compare editable design specifications, not calculated outputs or UI state.
+    // Keep full snapshots for recall; these semantic fields only explain changes.
+    function describeMemorySettings(saved) {
+      if (!Array.isArray(saved?.controls) || !saved.controls.some(row => row[0] === "solveFor")) return { fields: [], parts: [] };
+      const controls = new Map((saved.controls || []).map(([id, value]) => [id, value])), raw = new Map((saved.controls || []).map(row => [row[0], row]));
+      const get = (id, fallback = "") => controls.get(id) ?? fallback, num = (id, fallback = 0) => Number(get(id, fallback));
+      const spec = saved.search?.spec, choice = saved.search?.selected, mode = get("solveFor", "vout"), fields = [], parts = [];
+      const add = (id, label, value) => { if (value !== undefined && value !== null) fields.push({ id, label, value: String(value) }); };
+      const measurement = (value, unit) => value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? "Not set" : format(Number(value), unit, 12);
+      const ppm = value => Number.isFinite(value) ? `±${value} ppm/C` : "Not set";
+      const pct = value => Number.isFinite(Number(value)) ? `±${Number(value)}%` : "Not set", family = id => ({ all: "All families", "vishay-tnpw-e3": "TNPW", "vishay-eh-m55342": "M55342" })[id] || id;
+      add("mode", "Mode", mode === "pairs" ? "Find design solutions" : `Find ${modeDetails(mode).symbol}`);
+      add("title", "Circuit title", get("circuitTitle", "Voltage Divider"));
+      if (mode !== "vin") { add("vtop", "VTOP", measurement(spec ? spec.vin : get("vin"), "V")); add("vtopTol", "VTOP tolerance", pct(spec ? spec.sourceTolerance : num("tolVin"))); }
+      if (!["vout", "tolerance"].includes(mode)) { add("vmid", "VMID target", measurement(spec ? spec.target : get("targetVout"), "V")); add("vmidTol", "VMID tolerance", pct(spec ? spec.errorPct : num("targetError"))); }
+      if (mode === "tolerance") add("error", "Allowed VMID error", pct(num("targetError")));
+      if (saved.target !== null && saved.target !== undefined && mode === "vout") add("reference", "VMID reference", measurement(saved.target, "V"));
+      const current = (spec?.loadType || get("loadType")) === "current", load = spec ? spec.rl : get("rl") === "" ? null : num("rl") * num("rlUnit", 1000);
+      add("load", "Load", current ? "Current source" : load === null ? "Open" : "Resistor");
+      if (current) {
+        add("il", "Load current", measurement(spec ? spec.iload : num("loadCurrent") * 1e-6, "A"));
+        add("ilTol", "Load current tolerance", "±" + measurement(spec ? spec.iloadTolerance : num("loadCurrentTolerance") * 1e-6, "A"));
+      } else if (load !== null) { add("rl", "Load resistance", measurement(load, "Ω")); add("rlTol", "Load resistance tolerance", pct(spec ? spec.loadTolerance : num("tolRl"))); }
+      const assigned = new Map(saved.assignments || []), automatic = new Map(saved.automatic || []), footprints = new Map(saved.footprints || []), selected = new Map(choice?.assignment || []);
+      for (const arm of ARMS) {
+        const index = arm[1], multiple = get(`${arm}Multiple`) === true, construction = spec?.construction?.[arm];
+        let rows = construction ? construction.parts : spec && choice ? [{ id: arm, name: `R${index}` }] : multiple ? (saved.arms?.[arm]?.rows || []).map(row => ({ id: `${arm}part${row.number}`, name: row.name })) : [{ id: arm, name: `R${index}` }];
+        if (spec && !choice) rows = construction?.parts || [];
+        const names = new Map(rows.map(row => [row.id, row.name]));
+        const tree = construction?.connection || (multiple && saved.arms?.[arm]?.topology ? JSON.parse(saved.arms[arm].topology) : multiple ? { connection: get(`${arm}Connection`, "series"), children: rows.map(row => row.id) } : arm);
+        const connection = node => typeof node === "string" ? names.get(node) || node : `(${node.children.map(connection).join(node.connection === "parallel" ? " ∥ " : " + ")})`;
+        add(`${arm}Network`, arm === "r1" ? "RTOP network" : "RBOT network", connection(tree));
+        for (const row of rows) {
+          const single = row.id === arm, valueId = single ? arm : row.id + "R", unitId = single ? arm + "Unit" : row.id + "Unit";
+          const tolId = single ? `tolR${index}` : row.id + "Tol", powerId = single ? `p${index}` : row.id + "Power", voltageId = single ? `vmax${index}` : row.id + "Vmax";
+          let candidate = spec ? selected.get(row.id) || choice?.[arm === "r1" ? "top" : "bot"] : automatic.get(row.id) || assigned.get(row.id);
+          const resistance = spec ? candidate?.resistanceOhms ?? row.resistance : automatic.get(row.id)?.resistanceOhms ?? num(valueId) * num(unitId, 1000);
+          const tolerance = spec ? candidate?.tolerancePct ?? row.settings?.tolerancePct ?? spec[arm === "r1" ? "toleranceTop" : "toleranceBot"] : num(tolId), power = spec ? candidate?.powerW : num(powerId), voltage = spec ? candidate?.workingVoltageV : get(voltageId) === "" ? null : num(voltageId);
+          if (!spec && candidate && (!catalogSame(candidate.resistanceOhms, resistance) || !catalogSame(candidate.tolerancePct, tolerance) || !catalogSame(candidate.powerW, power) || !catalogSame(candidate.workingVoltageV, voltage) || raw.get(powerId)?.[2])) candidate = null;
+          const calculated = !spec && mode === arm, calculatedTol = !spec && mode === "tolerance", env = spec?.environment || saved.environment;
+          const values = {
+            value: { label: "value", value: calculated ? "Calculated" : measurement(resistance, "Ω"), active: !calculated },
+            tolerance: { label: "tolerance", value: calculatedTol ? "Calculated" : pct(tolerance), active: !calculatedTol },
+            package: { label: "package", value: candidate?.case || row.settings?.package || (spec ? spec[arm === "r1" ? "packageTop" : "packageBot"] : footprints.get(row.id)) || "0805" },
+            tcr: { label: "TCR", value: ppm(candidate?.tcrPpm ?? row.settings?.tcrPpm ?? spec?.tcrPpm ?? env?.thermal?.tcrPpm ?? env?.thermal?.manualTcrPpm), active: !!candidate || row.settings?.tcrPpm !== undefined },
+            mpn: { label: "part number", value: candidate?.mpn || "Unassigned" },
+            power: { label: "power rating input", value: measurement(power, "W") },
+            voltage: { label: "voltage rating", value: measurement(voltage, "V") },
+            automatic: { label: "value choice", value: (spec ? row.automatic : get(row.id + "Auto")) ? "Automatic" : "Fixed" }
+          };
+          const summary = [values.value.value, values.tolerance.value, values.package.value, values.tcr.value, candidate?.mpn, `Pmax ${values.power.value}`, `Vmax ${values.voltage.value}`, values.automatic.value === "Automatic" ? "Automatic" : null].filter(Boolean).join(", ");
+          parts.push({ name: row.name, values, summary });
+        }
+      }
+      const env = spec?.environment || saved.environment || {}, thermal = env.thermal || {}, radiation = env.radiation || {}, aging = env.aging || {};
+      add("thermal", "Thermal drift", thermal.enabled ? "Included" : "Excluded");
+      add("temperature", "Temperature range", `${thermal.minC} C to ${thermal.maxC} C`);
+      add("tcr", "Default TCR", ppm(thermal.tcrPpm ?? thermal.manualTcrPpm));
+      add("referenceC", "Reference temperature", `${thermal.manualReferenceC} C`);
+      if (thermal.selfHeatingC !== undefined) add("heating", "Self-heating allowance", `${thermal.selfHeatingC} C`);
+      add("radiation", "Radiation drift", radiation.enabled ? "Included" : "Excluded");
+      add("radiationPct", "Radiation allowance", radiation.allowancePct == null ? "Not set" : pct(radiation.allowancePct));
+      add("aging", "Aging drift", aging.enabled ? "Included" : "Excluded");
+      add("agingPct", "Aging allowance", (aging.allowancePct ?? aging.manualPct) == null ? "Not set" : pct(aging.allowancePct ?? aging.manualPct));
+      add("agingModel", "Aging model", aging.model);
+      if (aging.model !== "allowance") add("agingHours", "Operating life", `${aging.hours} h`);
+      if (env.basis !== "ambient-estimate") {
+        for (const [key, label, unit] of [["doseKrad", "Radiation dose", "krad"], ["qualifiedKrad", "Qualified dose", "krad"], ["tnpwPct", "TNPW radiation allowance", "%"], ["milPct", "M55342 radiation allowance", "%"], ["manualPct", "Manual radiation allowance", "%"]]) if (radiation[key] != null) add("radiation." + key, label, `${radiation[key]} ${unit}`);
+        for (const [key, label, unit] of [["tnpwPct", "TNPW aging allowance", "%"], ["milPct", "M55342 aging allowance", "%"], ["milReferenceFilmC", "M55342 aging reference", "C"]]) if (aging[key] != null) add("aging." + key, label, `${aging[key]} ${unit}`);
+      }
+      for (const [id, label] of [["powerPct", "Power rating allowed"], ["voltagePct", "Voltage rating allowed"]]) add(id, label, `${100 - (env.derating?.[id] ?? 0)}%`);
+      const partName = id => (spec ? ARMS.flatMap(arm => spec.construction?.[arm]?.parts || []) : ARMS.flatMap(arm => (saved.arms?.[arm]?.rows || []).map(row => ({ id: `${arm}part${row.number}`, name: row.name })))).find(row => row.id === id)?.name || ({ r1: "R1", r2: "R2" })[id] || "Automatic";
+      if (spec) {
+        for (const [id, label, value] of [
+          ["familyTop", "RTOP search family", family(spec.familyTop)], ["familyBot", "RBOT search family", family(spec.familyBot)],
+          ["packageTop", "RTOP search package", spec.packageTop], ["packageBot", "RBOT search package", spec.packageBot],
+          ["toleranceTop", "RTOP search tolerance", pct(spec.toleranceTop)], ["toleranceBot", "RBOT search tolerance", pct(spec.toleranceBot)],
+          ["range", "Search resistance range", `${measurement(spec.minOhms, "Ω")} to ${measurement(spec.maxOhms, "Ω")}`],
+          ["searchTcr", "Search TCR", `±${spec.tcrPpm} ppm/C`], ["searchTemperature", "Rating ambient", `${spec.temperatureC} C`],
+          ["maxStress", "Search stress ceiling", `${spec.maxStress}%`], ["maxPower", "Search power ceiling", spec.maxPower == null ? "No extra limit" : measurement(spec.maxPower, "W")],
+          ["valuePolicy", "Value search", spec.valuePolicy === "fixed" ? "Keep fixed values" : "All catalog values"], ["trim", "Ratio trim", partName(spec.trimId)],
+          ["spread", "Power spread ceiling", spec.maxSpread == null ? "No extra limit" : `${spec.maxSpread}%`]
+        ]) add(id, label, value);
+      }
+      if (parts.some(part => part.values.automatic.value === "Automatic") && !spec) {
+        for (const [id, label, value] of [["designFamily", "Automatic family", family(get("designFamily"))], ["designPackage", "Automatic package", get("designPackage")], ["designTcr", "Automatic TCR", `±${get("designTcr")} ppm/C`], ["designTarget", "Automatic VMID target", measurement(get("designTarget"), "V")], ["designScale", "Starting resistance", measurement(get("designScale"), "Ω")], ["designError", "Preferred error", pct(get("designError"))], ["designTrim", "Automatic trim", partName(get("designTrim"))]]) add(id, label, value);
+      }
+      return { fields, parts };
     }
 
     function validateMemoryState(saved) {
@@ -6126,7 +6219,7 @@
       for (const [id, ...value] of workFormValues(byId("pairForm"))) if (!initialPairWork.has(id)) initialPairWork.set(id, JSON.stringify(value));
       refreshLeaveWarning();
       if (window.DividerMemory) window.dividerMemory = DividerMemory.create({
-        capture: captureMemoryCalculation, restore: restoreMemoryCalculation,
+        capture: captureMemoryCalculation, restore: restoreMemoryCalculation, describe: describeMemorySettings,
         layout: () => { closeSchematicEditor(false); renderSchematic(); }
       });
       return ready;

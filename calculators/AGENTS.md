@@ -67,6 +67,17 @@ not add a permission or confirmation step to an authorized task.
   Group completed valid edits after a one-second pause; skip drafts, invalid
   inputs and layout-only changes. Keep Save now, autosave on/off and bounded
   browser-local history.
+  Keep a fixed Original state as the comparison reference (the oldest available
+  entry when migrating existing history). Show concise bullet changes to inputs,
+  topology and actual part numbers; exclude derived output changes. Expand long
+  lists rather than hiding changes permanently. Allow names to be edited through
+  Rename in the context menu or F2; names are metadata, not circuit inputs.
+  Preserve full independent snapshots: editing a recalled named state saves a
+  new state and never overwrites its prior version. Keep the original within the
+  50-entry limit unless explicitly deleted; deleting its row must not rebase
+  descriptions. Clear memory resets the reference. Read old storage envelopes;
+  the version-2 envelope adds names/reference metadata without changing the
+  version-1 circuit snapshot schema or local-storage key.
   Serialize input values, physical IDs/topology, catalog/rating provenance,
   automatic assignments and environmental/load tolerances; recalculate on recall.
   A search snapshot retains its selected assignment, not the full solution pool;
