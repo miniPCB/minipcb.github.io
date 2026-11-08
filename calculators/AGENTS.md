@@ -63,10 +63,17 @@ not add a permission or confirmation step to an authorized task.
   identity and clean leave protection. Keep touch construction menus accessible.
 - Calculation memory belongs outside the SVG in a horizontally collapsible sidebar
   on wide screens; keep a slim reopen rail beside the circuit when collapsed.
-  Let the desktop list use the full remaining viewport height, scrolling only
-  when needed. On smaller screens let it grow with the page. Provide a draggable,
+  Extend the expanded desktop pane itself to the screen bottom, even with few
+  entries or collapsed groups; let the list use the available space and scroll
+  only when needed. On smaller screens let it grow with the page. Provide a draggable,
   keyboard-accessible width separator (220–520 px, default 300 px) and persist its
   width as a browser preference; keep layout changes out of circuit snapshots.
+  Group memories by a shared custom circuit title, otherwise by same-day sessions
+  with at most five minutes between entries. Custom memory names label nearby
+  revisions and distinct names can start new sessions. Keep groups collapsible,
+  ordered by most recent member, with accurate counts. Grouping never merges or
+  rewrites snapshots. Reveal a recalled entry's group and preserve pointer targets
+  and keyboard focus when renaming updates group membership or headings.
   Use a collapsed disclosure above the circuit on phones. Each entry starts with
   only its name and a separate accessible chevron to show all changes from the
   original; clicking the name recalls the circuit. Keep disclosure state separate

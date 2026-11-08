@@ -21,7 +21,7 @@ Paths in this table are relative to the repository root.
 | [js/resistor-environment.js](../js/resistor-environment.js) | Initial/thermal/radiation/aging resistance intervals, environmental defaults and family-specific drift models. This is executable calculation logic, separate from the ordering catalogs. |
 | [js/divider-current-load.js](../js/divider-current-load.js) | Signed current-load analysis, inverse calculations and tolerance/stress bounds, including Find VTOP trip-voltage ranges. |
 | [js/circuit-image-export.js](../js/circuit-image-export.js) | Framed SVG, PNG, JPEG and BMP encoding, raster size limits and download filenames. |
-| [js/divider-memory.js](../js/divider-memory.js) | Collapsible calculation history, editable names, changes from the original state, grouped autosaving, local browser storage, duplicate suppression and recall controls. The HTML adapter describes and serializes full circuit inputs and recalculates recalled designs. |
+| [js/divider-memory.js](../js/divider-memory.js) | Collapsible calculation history, automatic time/title groups, editable names, changes from the original state, grouped autosaving, local browser storage, duplicate suppression and recall controls. The HTML adapter describes and serializes full circuit inputs and recalculates recalled designs. |
 | [parts/index.json](../parts/index.json) | Catalog manifest and preferred-value series. Names both family JSON files to fetch. |
 | [parts/resistors/vishay-tnpw-e3.json](../parts/resistors/vishay-tnpw-e3.json) | Supported Vishay TNPW e3 ordering rules, packages, tolerances, TCR options, operating modes, electrical limits and dated source evidence. |
 | [parts/resistors/vishay-eh-m55342.json](../parts/resistors/vishay-eh-m55342.json) | Corresponding Vishay E/H M55342/D55342 rules and limits. This is a specific manufacturer's supported subset of the specification family. |
@@ -120,12 +120,16 @@ before the main inline script; do not add `async` or change them to modules.
   describe full independent snapshots: editing a recalled state saves a new one.
   Entries start collapsed to their names; each chevron reveals the full change
   list without recalling a circuit. Clicking the name restores the saved design.
+  Collapsible groups collect shared custom circuit titles, or same-day sessions
+  with gaps of no more than five minutes; custom names label nearby revisions.
+  Grouping retains every independent snapshot and opens a recalled entry's group.
   Existing history uses its oldest available state as the original reference;
   the version-2 storage envelope reads old entries without changing their
   version-1 circuit snapshots. Clearing history resets the reference.
   The desktop pane collapses horizontally into a slim rail; drag its right edge
   or focus the separator and use arrow keys to adjust its width. The width is
-  remembered in this browser. The list fills the remaining window height; on
+  remembered in this browser. The pane extends to the screen bottom even with
+  few entries or collapsed groups; the list uses the available space. On
   smaller screens it grows with the page. Recalling rebuilds
   inputs and recalculates; a search snapshot retains only its selected design,
   not the full result pool. The desktop/mobile view preference uses
@@ -300,7 +304,8 @@ tree and open its HTML pages over the same local server. Each reports JSON with
 `current_load_modes.html`, `package_rating_consistency.html`,
 `package_stress_refresh.html`, `mobile_workspace.html`, `parts_table_layout.html`,
 `schematic_bom.html`, `frame_export.html`, `circuit_downloads.html`,
-`calculator_stamp.html`, `calculator_memory.html` and `calculator_memory_names.html`.
+`calculator_stamp.html`, `calculator_memory.html`, `calculator_memory_names.html`
+and `calculator_memory_groups.html`.
 These filenames refer to test pages inside `calculators/tests/`, not the
 application entry point.
 

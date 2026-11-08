@@ -7,9 +7,9 @@
     const menu = get("memoryMenu"), summary = panel.querySelector("summary"), workspace = get("calculatorWorkspace"), resizer = get("memoryResize");
     let entries = [], active = null, pending = null, timer = null, restoring = false, persistent = true, ignored = null;
     let auto = true, expanded = innerWidth >= 1320, paneWidth = 300, drag = null, layoutFrame = null;
-    let menuEntry = null, menuOrigin = null, press = null, suppressClickUntil = 0;
+    let menuEntry = null, menuOrigin = null, press = null, suppressClickUntil = 0, pointerActive = false, groupsDirty = false, groupTimer = null;
     let original = null, originalSignature = null, originalSettings = null, descriptions = new WeakMap(), nameEdit = null;
-    const expandedEntries = new Set();
+    const expandedEntries = new Set(), groupExpansion = new Map();
     const clone = value => JSON.parse(JSON.stringify(value));
     const signature = state => JSON.stringify(state);
     function reflectSummary() {
@@ -67,11 +67,37 @@
       descriptions.set(entry, description); return description;
     }
     // Names and descriptions are metadata; neither changes snapshot identity.
-    function entryName(entry) {
-      if (typeof entry.name === "string" && entry.name.trim()) return entry.name;
-      const date = new Date(entry.savedAt), pad = value => String(value).padStart(2, "0");
-      const stamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-      return (describe(entry).initial ? "Original · " : "") + stamp;
+    function localStamp(savedAt) {
+      const date = new Date(savedAt), pad = value => String(value).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
+    const entryName = entry => typeof entry.name === "string" && entry.name.trim() ? entry.name : (describe(entry).initial ? "Original · " : "") + localStamp(entry.savedAt);
+    // Grouping is presentation only. Every member retains its independent snapshot.
+    function groupedEntries() {
+      const groups = new Map(); let session = null;
+      for (const entry of [...entries].reverse().sort((a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt))) {
+        const value = Array.isArray(entry.state.controls) ? entry.state.controls.find(row => Array.isArray(row) && row[0] === "circuitTitle")?.[1] : "";
+        const title = typeof value === "string" && value.trim().toLowerCase() !== "voltage divider" ? value.trim() : "";
+        const name = typeof entry.name === "string" && !/^(?:Original · )?\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(entry.name) ? entry.name.trim() : "";
+        const time = Date.parse(entry.savedAt), day = localStamp(entry.savedAt).slice(0, 10); let group;
+        if (title) {
+          const key = "title:" + title.toLowerCase();
+          if (!groups.has(key)) groups.set(key, { key, label: title, entries: [] });
+          group = groups.get(key); session = null;
+        } else {
+          if (!session || session.day !== day || time - session.time > 5 * 60 * 1000 || name && session.label && name.toLowerCase() !== session.label.toLowerCase()) {
+            const key = "time:" + entry.id; session = { key, label: "", day, entries: [] }; groups.set(key, session);
+          }
+          group = session; if (name) group.label = name;
+        }
+        group.entries.push(entry); group.time = time;
+      }
+      return [...groups.values()].sort((a, b) => b.time - a.time || entries.indexOf(a.entries.at(-1)) - entries.indexOf(b.entries.at(-1)));
+    }
+    function groupLabel(group) {
+      if (group.label) return group.label;
+      const first = localStamp(group.entries[0].savedAt), last = localStamp(group.entries.at(-1).savedAt);
+      return `${first.slice(0, 10)} · ${first.slice(11, 16)}${first.slice(11, 16) !== last.slice(11, 16) ? "–" + last.slice(11, 16) : ""}`;
     }
     function trim() {
       const baseline = entries.find(entry => signature(entry.state) === originalSignature);
@@ -82,7 +108,10 @@
     const stored = () => JSON.stringify({ version: 2, auto, expanded, paneWidth, original, entries });
 
     function fitHeight() {
-      list.style.maxHeight = innerWidth >= 1320 && expanded ? `${Math.max(120, innerHeight - Math.max(12, list.getBoundingClientRect().top) - 16)}px` : "none";
+      if (innerWidth >= 1320 && expanded) {
+        panel.style.height = `${Math.max(180, innerHeight - Math.max(0, panel.getBoundingClientRect().top) - 12)}px`;
+        list.style.maxHeight = `${Math.max(80, panel.getBoundingClientRect().bottom - list.getBoundingClientRect().top - 12)}px`;
+      } else { panel.style.removeProperty("height"); list.style.maxHeight = "none"; }
     }
     function setPaneWidth(value, redraw = true) {
       paneWidth = Math.max(220, Math.min(520, Math.round(value)));
@@ -106,26 +135,50 @@
     }
     function render() {
       if (nameEdit) return;
+      groupsDirty = false;
       const scrollTop = list.scrollTop;
+      const focused = list.contains(document.activeElement) ? document.activeElement : null, focusedEntry = focused?.closest("[data-memory-id]")?.dataset.memoryId;
+      const focusClass = ["memory-restore", "memory-rename", "memory-expand"].find(name => focused?.classList.contains(name)), focusedGroup = focused?.matches(".memory-group-heading") ? focused.parentNode.dataset.memoryGroup : null;
       get("memoryCount").textContent = String(entries.length);
       for (const id of expandedEntries) if (!entries.some(entry => entry.id === id)) expandedEntries.delete(id);
+      const groups = groupedEntries(), keys = new Set(groups.map(group => group.key));
+      for (const key of groupExpansion.keys()) if (!keys.has(key)) groupExpansion.delete(key);
       list.replaceChildren();
-      for (const entry of entries) {
-        const description = describe(entry);
-        const row = document.createElement("li"); row.className = "memory-entry"; row.dataset.memoryId = entry.id;
-        row.setAttribute("aria-current", String(active === entry.id));
-        const heading = document.createElement("div"); heading.className = "memory-entry-heading"; heading.append(nameButton(entry));
-        const changes = document.createElement("ul"); changes.className = "memory-changes"; changes.id = "memoryChanges-" + entry.id; changes.hidden = !expandedEntries.has(entry.id);
-        for (const change of description.changes) { const item = document.createElement("li"); item.textContent = change.text; changes.append(item); }
-        const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "memory-expand"; toggle.disabled = restoring;
-        toggle.setAttribute("aria-controls", changes.id); toggle.setAttribute("aria-expanded", String(!changes.hidden)); labelChangeToggle(entry, toggle);
-        toggle.append(actionIcon("m9 5 7 7-7 7"));
-        const edit = document.createElement("button"); edit.type = "button"; edit.className = "memory-rename"; edit.disabled = restoring;
-        labelRename(entry, edit); edit.append(actionIcon("M16 3l5 5L8 21H3v-5L16 3ZM14 5l5 5"));
-        heading.append(edit, toggle); row.append(heading, changes);
-        list.append(row);
+      for (const [index, group] of groups.entries()) {
+        const section = document.createElement("li"); section.className = "memory-group";
+        const details = document.createElement("details"); details.dataset.memoryGroup = group.key;
+        let open = groupExpansion.get(group.key) ?? (index === 0 || group.entries.some(entry => entry.id === active)); details.open = open;
+        const heading = document.createElement("summary"); heading.className = "memory-group-heading";
+        const title = document.createElement("span"); title.textContent = groupLabel(group);
+        const count = document.createElement("span"); count.className = "memory-group-count"; count.textContent = String(group.entries.length); heading.append(title, count);
+        heading.setAttribute("aria-label", `${title.textContent}; ${group.entries.length} saved calculation${group.entries.length === 1 ? "" : "s"}`);
+        heading.title = `${localStamp(group.entries[0].savedAt)} → ${localStamp(group.entries.at(-1).savedAt)}`;
+        const members = document.createElement("ol"); members.className = "memory-group-list"; members.setAttribute("aria-label", title.textContent + " calculations");
+        details.append(heading, members); section.append(details); list.append(section);
+        details.addEventListener("toggle", () => { if (open === details.open) return; open = details.open; groupExpansion.set(group.key, open); fitHeight(); });
+        for (const entry of [...group.entries].reverse()) {
+          const description = describe(entry);
+          const row = document.createElement("li"); row.className = "memory-entry"; row.dataset.memoryId = entry.id;
+          row.setAttribute("aria-current", String(active === entry.id));
+          const heading = document.createElement("div"); heading.className = "memory-entry-heading"; heading.append(nameButton(entry));
+          const changes = document.createElement("ul"); changes.className = "memory-changes"; changes.id = "memoryChanges-" + entry.id; changes.hidden = !expandedEntries.has(entry.id);
+          for (const change of description.changes) { const item = document.createElement("li"); item.textContent = change.text; changes.append(item); }
+          const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "memory-expand"; toggle.disabled = restoring;
+          toggle.setAttribute("aria-controls", changes.id); toggle.setAttribute("aria-expanded", String(!changes.hidden)); labelChangeToggle(entry, toggle);
+          toggle.append(actionIcon("m9 5 7 7-7 7"));
+          const edit = document.createElement("button"); edit.type = "button"; edit.className = "memory-rename"; edit.disabled = restoring;
+          labelRename(entry, edit); edit.append(actionIcon("M16 3l5 5L8 21H3v-5L16 3ZM14 5l5 5"));
+          heading.append(edit, toggle); row.append(heading, changes);
+          members.append(row);
+        }
       }
       fitHeight(); list.scrollTop = scrollTop;
+      if (focusedEntry && focusClass) list.querySelector(`[data-memory-id="${CSS.escape(focusedEntry)}"] .${focusClass}`)?.focus({ preventScroll: true });
+      else if (focusedGroup) list.querySelector(`[data-memory-group="${CSS.escape(focusedGroup)}"] > summary`)?.focus({ preventScroll: true });
+    }
+    function refreshGroups() {
+      groupsDirty = true; clearTimeout(groupTimer);
+      if (!pointerActive) groupTimer = setTimeout(() => { if (groupsDirty && !pointerActive && !nameEdit) render(); }, 0);
     }
     function actionIcon(pathData) {
       const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg"); icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true");
@@ -155,11 +208,14 @@
         if (nameEdit !== input) return;
         if (commit && !input.value.trim() && focus) { status("Enter a memory name.", true); return; }
         if (commit && input.value.trim()) { entry.name = input.value.trim().slice(0, 100); persist(entry); }
+        const group = groupedEntries().find(group => group.entries.some(item => item.id === id)); if (group) groupExpansion.set(group.key, true);
         nameEdit = null; const replacement = nameButton(entry); input.replaceWith(replacement);
         edit.disabled = false; labelRename(entry, edit);
         labelChangeToggle(entry, replacement.parentNode.querySelector(".memory-expand"));
         if (focus) replacement.focus({ preventScroll: true });
-        status(commit ? "Memory name updated." : "Rename cancelled."); fitHeight(); schedule();
+        status(commit ? "Memory name updated." : "Rename cancelled.");
+        if (focus) render(); else refreshGroups();
+        fitHeight(); schedule();
       };
       input.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); event.stopPropagation(); finish(event.key === "Enter", true); } });
       input.addEventListener("blur", () => finish(true, false));
@@ -204,6 +260,7 @@
       try {
         const result = await adapter.restore(clone(entry.state));
         active = entry.id; status(result?.message || "Calculation restored and recalculated.");
+        const group = groupedEntries().find(group => group.entries.some(item => item.id === id)); if (group) groupExpansion.set(group.key, true);
       } catch (error) { status(`Could not restore this calculation: ${error.message}`, true); }
       finally {
         restoring = false; render();
@@ -269,7 +326,9 @@
       else if (event.key === "Escape" || event.key === "Tab") { if (event.key === "Escape") event.preventDefault(); closeMenu(true); }
     });
     document.addEventListener("pointerdown", event => { if (!menu.contains(event.target)) closeMenu(); });
-    document.addEventListener("pointerdown", () => { suppressClickUntil = 0; }, true);
+    document.addEventListener("pointerdown", () => { suppressClickUntil = 0; pointerActive = true; }, true);
+    const releasePointer = () => { pointerActive = false; if (groupsDirty) refreshGroups(); };
+    document.addEventListener("pointerup", releasePointer, true); document.addEventListener("pointercancel", releasePointer, true);
     document.addEventListener("scroll", () => closeMenu(), true);
     root.addEventListener("resize", () => { closeMenu(); fitHeight(); });
     root.addEventListener("scroll", fitHeight, { passive: true });

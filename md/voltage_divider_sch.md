@@ -232,8 +232,9 @@ horizontally to a narrow reopen rail, returning the space to the diagram without
 adding a row above it. On phones it starts collapsed above the circuit.
 Drag the pane's right edge to change its width; arrow keys adjust the focused
 separator, and Home/End select its minimum/maximum. The browser remembers the
-width. On desktop the list fills the remaining window height and scrolls when
-necessary; on smaller screens it grows with the page.
+width. On desktop the pane extends to the bottom of the screen even when there
+are few entries or all groups are collapsed. The list uses the available space
+and scrolls when necessary; on smaller screens it grows with the page.
 Right-click Memory or an entry for **Save now**, **Rename**, **Autosave**, **Delete** and
 **Clear memory**. Shift+F10, the Context Menu key and a touch long press open the
 same menu. Entry timestamps are available on hover and in the menu; routine save
@@ -243,6 +244,14 @@ Autosave groups completed, valid input changes after a one-second pause; it does
 not save each typed character, unfinished editor drafts, invalid inputs or layout
 changes. **Save now** records the current calculation immediately. Autosave can
 be turned off, and duplicate input states share an existing entry.
+
+Collapsible groups collect related memories. A shared custom circuit title keeps
+that design together across dates. Untitled calculations form local-day sessions,
+with a new group after a gap longer than five minutes; custom memory names label
+nearby revisions, and distinct names can start another group. Groups show counts
+and appear in order of their most recent member. Opening or closing a group does
+not recall a circuit. Each state remains separate, editable and accessible;
+recalling a hidden member opens its group automatically.
 
 The first saved calculation is the fixed **Original state**. Default names show
 the saved date and time in the browser's local timezone, with **Original** marking
