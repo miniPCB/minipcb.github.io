@@ -203,8 +203,11 @@ participate in leave protection and circuit reset restores the default.
 The dynamic circuit summary remains the region's accessible label.
 
 On phones and narrow screens, a native mode selector replaces the large mode
-tiles. The compact circuit overview uses smaller equivalent RTOP/RBOT symbols;
-every physical resistor keeps its own readable value, tolerance and package card
+tiles. The compact circuit overview uses smaller equivalent RTOP/RBOT symbols.
+Their 20 px leads keep each symbol's role color before meeting the blue or red
+net. Supply, ground and resistor/current loads retain the same lead length. The
+RL/IL reference sits beside its load body, clear of the connecting wire.
+Every physical resistor keeps its own readable value, tolerance and package card
 below it. The **⋯** menu on each card adds series/parallel parts without a right
 click. Primary fields have at least 44 px touch targets, and input text stays at
 16 px or larger. Voltage cards retain Target/Calculated, tolerance and Min/Max.

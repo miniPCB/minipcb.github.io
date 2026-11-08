@@ -2571,34 +2571,47 @@
       // The phone overview shows equivalent arms. Physical parts retain their
       // individual editable cards below; desktop view shows the complete network.
       const overview = schematicShape(drawing, "g", { "data-mobile-overview": "", role: "img", "aria-label": "Compact circuit overview using equivalent RTOP and RBOT; individual parts below" });
-      const main = Math.round(width * .22), loadX = width - 48, mid = 138, bottom = 254, net = vmidNetColor(roles);
-      const wire = (d, color = NET_COLOR) => schematicShape(overview, "path", { d, fill: "none", stroke: color, "stroke-width": 2.5, "stroke-linecap": "round", "stroke-linejoin": "round" });
-      schematicText(overview, main, 18, "VTOP", 15, schematicNetColor("VTOP", roles)).setAttribute("text-anchor", "middle");
-      wire(`M${main} 32v30m-8-20 8-10 8 10`, SOLVE_ROLES[roles.vin].color);
-      for (const [arm, top] of [["r1", 68], ["r2", 184]]) {
-        wire(`M${main} ${top - 6}v6`, arm === "r1" ? schematicNetColor("VTOP", roles) : net);
-        schematicShape(overview, "rect", { x: main - 7, y: top, width: 14, height: 38, rx: 1, fill: "none", stroke: SOLVE_ROLES[roles[arm]].color, "stroke-width": 2.5 });
-        wire(`M${main} ${top + 38}v32`, arm === "r1" ? net : NET_COLOR);
+      const main = Math.round(width * .22), loadX = width - 48, mid = 170, bottom = 302, net = vmidNetColor(roles), lead = SYMBOL_LEAD_LENGTH;
+      const wire = (d, name = "GND", parent = overview) => schematicShape(parent, "path", { d, fill: "none", stroke: schematicNetColor(name, roles), "stroke-width": 2.5, "stroke-linecap": "round", "stroke-linejoin": "round", "data-wire-net": name });
+      const supply = schematicShape(overview, "g", { "data-supply-net": "VTOP" });
+      schematicText(supply, main, 18, "VTOP", 15, schematicNetColor("VTOP", roles)).setAttribute("text-anchor", "middle");
+      const source = schematicRole(schematicShape(supply, "g", { fill: "none", "stroke-width": 2.5, "stroke-linecap": "round", "stroke-linejoin": "round", "data-supply-symbol": "" }), "vin", roles, "stroke");
+      schematicShape(source, "path", { d: `M${main} 32v10m-8 0 8-10 8 10` });
+      schematicShape(source, "path", { d: `M${main} 42v${lead}`, "data-symbol-lead": "supply" });
+      wire(`M${main} ${42 + lead}V${88 - lead}`, "VTOP");
+      // Keep normal colored leads on compact symbols; only the bodies are smaller.
+      for (const [arm, top] of [["r1", 88], ["r2", 212]]) {
+        const body = schematicRole(schematicShape(overview, "g", { fill: "none", "stroke-width": 2.5, "stroke-linecap": "round", "data-resistor-body": "", "data-mobile-arm": arm }), arm, roles, "stroke");
+        schematicShape(body, "path", { d: `M${main} ${top - lead}v${lead}`, "data-symbol-lead": "top" });
+        schematicShape(body, "rect", { x: main - 7, y: top, width: 14, height: 38, rx: 1, "data-resistor-core": "" });
+        schematicShape(body, "path", { d: `M${main} ${top + 38}v${lead}`, "data-symbol-lead": "bottom" });
         const parts = cards.filter(card => state?.physical[arm]?.some(part => part.id === card.dataset.schematicInfo) || card.dataset.schematicInfo === arm);
         const label = arm === "r1" ? "RTOP" : "RBOT";
         schematicText(overview, main + 20, top + 12, label + (parts.length > 1 ? ` · ${parts.length} parts` : ""), 12, SOLVE_ROLES[roles[arm]].color);
         const value = schematicText(overview, main + 20, top + 34, "—", 15, SOLVE_ROLES[roles[arm]].color); value.id = arm === "r1" ? "schematicR1Value" : "schematicR2Value";
       }
-      wire(`M${main} ${mid}v46M${main} ${mid}H${width - 14}`, net);
+      wire(`M${main} ${126 + lead}V${mid}M${main} ${mid}V${212 - lead}M${main} ${mid}H${width - 14}`, "VMID");
       const outputLabel = schematicText(overview, width - 10, mid - 12, "VMID", 14, net);
       outputLabel.setAttribute("text-anchor", "end"); outputLabel.setAttribute("data-net-label", "VMID");
-      for (const cx of [main, loadX]) schematicShape(overview, "circle", { cx, cy: mid, r: 4, fill: net });
-      schematicShape(overview, "circle", { cx: width - 10, cy: mid, r: 4, fill: "#101823", stroke: net, "stroke-width": 2.5, "data-output-terminal": "VMID" });
-      wire(`M${main - 14} ${bottom}h28m-23 7h18m-13 7h8`);
+      for (const cx of [main, loadX]) schematicShape(overview, "circle", { cx, cy: mid, r: 4, fill: net, "data-wire-junction": "", "data-wire-net": "VMID" });
+      schematicShape(overview, "circle", { cx: width - 10, cy: mid, r: 4, fill: "#101823", stroke: net, "stroke-width": 2.5, "data-output-terminal": "VMID", "data-wire-net": "VMID" });
+      const ground = (parent, x) => {
+        const symbol = schematicShape(parent, "g", { fill: "none", stroke: NET_COLOR, "stroke-width": 2.5, "stroke-linecap": "round", "data-ground-symbol": "", "data-wire-net": "GND" });
+        schematicShape(symbol, "path", { d: `M${x} ${bottom - lead}v${lead}`, "data-symbol-lead": "ground" });
+        schematicShape(symbol, "path", { d: `M${x - 14} ${bottom}h28m-23 7h18m-13 7h8` });
+      };
+      wire(`M${main} ${250 + lead}V${bottom - lead}`); ground(overview, main);
       const model = state?.circuit || readLoad(byId("solveFor").value === "pairs" ? "pair" : "", null, false, false), current = DividerCurrentLoad.enabled(model), hasLoad = current || model.rl !== null;
-      const load = schematicShape(overview, "g", { id: "schematicLoad", fill: "none", stroke: NET_COLOR, "stroke-width": 2.5, "data-schematic-load-symbol": current ? "current" : "rl" });
-      schematicShape(load, "path", { d: `M${loadX} ${mid}v46`, stroke: net, "stroke-dasharray": "5 4" });
-      schematicShape(load, "path", { d: `M${loadX} 222v32m-14 0h28m-23 7h18m-13 7h8` });
-      if (current) { schematicShape(load, "circle", { cx: loadX, cy: 203, r: 19, fill: "#142535", stroke: SOLVE_ROLES[roles.rl].color }); schematicShape(load, "path", { d: `M${loadX} 193v20m-5-5 5 5 5-5`, stroke: SOLVE_ROLES[roles.rl].color }); }
-      else { schematicShape(load, "rect", { x: loadX - 7, y: 184, width: 14, height: 38, rx: 1, stroke: SOLVE_ROLES[roles.rl].color }); if (!hasLoad) load.dataset.loadOpen = ""; }
-      schematicText(overview, loadX, 172, current ? "IL" : "RL", 12, SOLVE_ROLES[roles.rl].color).setAttribute("text-anchor", "middle");
-      if (ARMS.some(arm => state?.networks[arm])) schematicText(overview, width / 2, 282, "Equivalent circuit", 11, "#a8bece").setAttribute("text-anchor", "middle");
-      let y = 292;
+      const load = schematicShape(overview, "g", { id: "schematicLoad", "data-schematic-load-symbol": current ? "current" : "rl" });
+      wire(`M${loadX} ${mid}V${212 - lead}`, "VMID", load).setAttribute("stroke-dasharray", "5 4");
+      wire(`M${loadX} ${250 + lead}V${bottom - lead}`, "GND", load); ground(load, loadX);
+      const loadBody = schematicRole(schematicShape(load, "g", { fill: "none", "stroke-width": 2.5, "stroke-linecap": "round", "data-load-body": "" }), "rl", roles, "stroke");
+      for (const [end, top] of [["top", 212 - lead], ["bottom", 250]]) schematicShape(loadBody, "path", { d: `M${loadX} ${top}v${lead}`, "data-symbol-lead": end });
+      if (current) { schematicShape(loadBody, "circle", { cx: loadX, cy: 231, r: 19, fill: "#142535" }); schematicShape(loadBody, "path", { d: `M${loadX} 221v20m-5-5 5 5 5-5` }); }
+      else { schematicShape(loadBody, "rect", { x: loadX - 7, y: 212, width: 14, height: 38, rx: 1 }); if (!hasLoad) load.dataset.loadOpen = ""; }
+      schematicText(overview, loadX + 26, 235, current ? "IL" : "RL", 12, SOLVE_ROLES[roles.rl].color).setAttribute("data-load-reference", "");
+      if (ARMS.some(arm => state?.networks[arm])) schematicText(overview, width / 2, 330, "Equivalent circuit", 11, "#a8bece").setAttribute("text-anchor", "middle");
+      let y = 340;
       for (const key of ["vin", "vout"]) y += schematicNetPanel(drawing, state, roles, key, 0, y, width) + 12;
       for (const arm of ARMS) {
         const parts = cards.filter(card => state?.physical[arm]?.some(part => part.id === card.dataset.schematicInfo) || card.dataset.schematicInfo === arm);

@@ -17,9 +17,13 @@ not add a permission or confirmation step to an authorized task.
 - Use European (IEC rectangular) resistor symbols for miniPCB calculator drawings,
   including divider parts and the load. Keep an open load visible as a faint,
   unfilled resistor with its Open label; it remains electrically absent.
-- In the full schematic, use 20 px symbol leads before changing to net color. This is the calculator's
-  drawing convention, not a physical lead-length specification. Resistor bodies
-  are 52 px tall; keep both leads equal and the rectangular body at its normal size.
+- Use 20 px symbol leads before changing to net color in full and compact mobile
+  schematics. Compact equivalent-resistor bodies remain 14 × 38 px; grow the
+  overview vertically to keep all leads, net segments and labels separate.
+  Position the mobile RL/IL reference beside its load body, centered vertically,
+  clear of its wire and within the frame. This is the calculator's
+  drawing convention, not a physical lead-length specification. Full-view resistor
+  bodies are 52 px tall; keep both leads equal and the rectangle at its normal size.
 - Center full-view resistor symbols within their allocated rows. Grow the drawing for
   series, parallel and mixed networks; keep all resistor symbols vertical.
 - Draw connection dots at real three-way and four-way junctions. Do not add dots
