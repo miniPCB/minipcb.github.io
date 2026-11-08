@@ -214,7 +214,7 @@
     .memory-status:not([data-error]) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
     .memory-status[data-error] { color: #ffba52; font-size: .75rem; line-height: 1.5; margin: 8px 2px; }
     .memory-status:empty { display: none; }
-    .memory-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; max-height: 65vh; overflow-y: auto; }
+    .memory-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; overflow-y: auto; }
     .memory-entry { display: block; min-width: 0; background: #162a39; border-radius: 10px; border-left: 3px solid transparent; }
     .memory-entry[aria-current="true"] { background: #1b384a; border-left-color: #54d2ff; }
     .memory-entry-heading { display: flex; align-items: center; }
@@ -222,21 +222,31 @@
     .memory-restore strong { display: block; overflow-wrap: anywhere; font-size: .85rem; font-weight: 500; }
     .memory-changes { margin: 0; padding: 0 12px 10px 26px; color: #9edbff; font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
     .memory-changes li + li { margin-top: 5px; }
-    .memory-expand { display: grid; place-items: center; flex: 0 0 44px; min-height: 44px; padding: 0; border: 0; background: transparent; color: #9edbff; cursor: pointer; }
-    .memory-expand svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+    .memory-expand, .memory-rename { display: grid; place-items: center; flex: 0 0 44px; min-height: 44px; padding: 0; border: 0; background: transparent; color: #9edbff; cursor: pointer; }
+    .memory-expand svg, .memory-rename svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+    .memory-rename:disabled { opacity: .4; cursor: default; }
     .memory-expand[aria-expanded="true"] svg { transform: rotate(90deg); }
     .memory-name-input { box-sizing: border-box; flex: 1; width: 0; min-width: 0; min-height: 44px; margin: 6px; padding: 8px; border: 1px solid #54d2ff; border-radius: 6px; background: #101e2b; color: var(--text); font-size: 16px; }
-    .memory-restore:hover, .memory-expand:hover { background: #254458; border-radius: 8px; }
+    .memory-restore:hover, .memory-expand:hover, .memory-rename:hover { background: #254458; border-radius: 8px; }
+    #memoryResize { display: none; }
     .memory-menu button { position: relative; padding-left: 32px; }
     .memory-menu { max-height: calc(100vh - 24px); overflow-y: auto; }
     .memory-menu [role="menuitemcheckbox"][aria-checked="true"]::before { content: "✓"; position: absolute; left: 12px; color: #54d2ff; }
     @media (min-width: 1320px) {
       .calculator-workspace.memory-ready { grid-template-columns: 56px minmax(0, 1fr); gap: 0; }
-      .calculator-workspace.memory-ready.memory-open { grid-template-columns: 240px minmax(0, 1fr); }
+      .calculator-workspace.memory-ready.memory-open { grid-template-columns: var(--memory-width, 300px) minmax(0, 1fr); }
       .memory-ready .calculator-memory { position: sticky; top: 12px; margin-left: 12px; margin-right: 0; }
       .memory-ready .circuit-reference-body { padding-left: 12px; }
       .memory-ready .calculator-memory:not([open]) > summary { flex-direction: column; gap: 4px; padding: 10px 0; min-width: 44px; }
       .memory-ready .calculator-memory:not([open]) .memory-label { display: none; }
+      .memory-ready .calculator-memory[open] #memoryResize { display: block; position: absolute; top: 8px; bottom: 8px; right: -8px; width: 16px; cursor: col-resize; touch-action: none; }
+      #memoryResize::after { content: ""; position: absolute; left: 7px; top: 0; bottom: 0; width: 2px; border-radius: 2px; background: #365166; }
+      #memoryResize:hover::after, #memoryResize:focus-visible::after { background: var(--accent); }
+      .memory-resizing, .memory-resizing * { cursor: col-resize !important; user-select: none; }
+    }
+    @media (min-width: 1320px) and (pointer: coarse) {
+      .memory-ready .calculator-memory[open] #memoryResize { width: 44px; right: -22px; }
+      #memoryResize::after { left: 21px; }
     }
     .mobile-mode, #schematicViewToggle { display: none; }
     #schematicFeedback { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -494,6 +504,7 @@
           <p id="memoryStatus" class="memory-status" role="status" aria-live="polite"></p>
           <ol id="memoryList" class="memory-list" aria-label="Saved calculations"></ol>
         </div>
+        <div id="memoryResize" role="separator" tabindex="0" aria-label="Memory pane width" aria-orientation="vertical" aria-controls="calculatorMemory" aria-valuemin="220" aria-valuemax="520" aria-valuenow="300" title="Drag to resize memory; arrow keys adjust width"></div>
       </details>
       <figure class="circuit-reference-body">
         <div id="schematicViewport" tabindex="0" role="region" aria-label="Circuit schematic; scroll horizontally to view larger circuits">

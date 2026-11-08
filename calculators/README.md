@@ -114,14 +114,19 @@ before the main inline script; do not add `async` or change them to modules.
   preference. It groups completed edits after a one-second pause. Right-click
   Memory or an entry for Save now, rename, autosave, delete and clear; Shift+F10
   and touch long press open the same menu.
-  F2 renames a focused entry. Names and bullet changes from a fixed Original state
+  Each entry's pencil button edits its name directly; F2 and contextual Rename
+  remain available. Default names use the saved local date/time; custom names
+  persist. Names and bullet changes from a fixed Original state
   describe full independent snapshots: editing a recalled state saves a new one.
   Entries start collapsed to their names; each chevron reveals the full change
   list without recalling a circuit. Clicking the name restores the saved design.
   Existing history uses its oldest available state as the original reference;
   the version-2 storage envelope reads old entries without changing their
   version-1 circuit snapshots. Clearing history resets the reference.
-  The desktop pane collapses horizontally into a slim rail. Recalling rebuilds
+  The desktop pane collapses horizontally into a slim rail; drag its right edge
+  or focus the separator and use arrow keys to adjust its width. The width is
+  remembered in this browser. The list fills the remaining window height; on
+  smaller screens it grows with the page. Recalling rebuilds
   inputs and recalculates; a search snapshot retains only its selected design,
   not the full result pool. The desktop/mobile view preference uses
   `minipcb-divider-view`. Storage belongs to this browser profile and website

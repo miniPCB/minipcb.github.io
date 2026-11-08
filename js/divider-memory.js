@@ -4,9 +4,9 @@
   function create(adapter) {
     const key = "minipcb-divider-memory-v1", limit = 50, delay = 1000;
     const get = id => document.getElementById(id), panel = get("calculatorMemory"), list = get("memoryList");
-    const menu = get("memoryMenu"), summary = panel.querySelector("summary"), workspace = get("calculatorWorkspace");
+    const menu = get("memoryMenu"), summary = panel.querySelector("summary"), workspace = get("calculatorWorkspace"), resizer = get("memoryResize");
     let entries = [], active = null, pending = null, timer = null, restoring = false, persistent = true, ignored = null;
-    let auto = true, expanded = innerWidth >= 1320;
+    let auto = true, expanded = innerWidth >= 1320, paneWidth = 300, drag = null, layoutFrame = null;
     let menuEntry = null, menuOrigin = null, press = null, suppressClickUntil = 0;
     let original = null, originalSignature = null, originalSettings = null, descriptions = new WeakMap(), nameEdit = null;
     const expandedEntries = new Set();
@@ -22,7 +22,7 @@
       const output = get("memoryStatus");
       output.textContent = persistent ? message : "Browser storage is unavailable. Memory lasts for this visit.";
       if (error || !persistent) output.dataset.error = "true"; else delete output.dataset.error;
-      reflectSummary();
+      reflectSummary(); fitHeight();
     };
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
@@ -31,6 +31,7 @@
         original = saved.original?.version === 1 ? saved.original : entries.at(-1)?.state || null;
         originalSignature = original ? signature(original) : null;
         auto = saved.auto !== false; expanded = innerWidth >= 1320 && (typeof saved.expanded === "boolean" ? saved.expanded : true);
+        if (Number.isFinite(saved.paneWidth)) paneWidth = Math.max(220, Math.min(520, saved.paneWidth));
       }
     } catch (_) { /* Invalid or inaccessible stored history must not stop the calculator. */ }
 
@@ -48,34 +49,48 @@
         } else {
           for (const field of current.fields) {
             const before = prior.get(field.id);
-            if (!before || before.value !== field.value) changes.push({ id: field.id, text: `${field.label}: ${before ? before.value + " → " : ""}${field.value}`, name: `${field.label}: ${field.value}` });
+            if (!before || before.value !== field.value) changes.push({ text: `${field.label}: ${before ? before.value + " → " : ""}${field.value}` });
           }
           for (const part of current.parts) {
             const before = priorParts.get(part.name);
-            if (!before) changes.push({ text: `Added ${part.name}: ${part.summary}`, name: `Added ${part.name}` });
+            if (!before) changes.push({ text: `Added ${part.name}: ${part.summary}` });
             else for (const [key, field] of Object.entries(part.values)) {
               const old = before.values[key];
-              if (field.active !== false && (!old || old.active === false || old.value !== field.value)) changes.push({ text: `${part.name} ${field.label}: ${old && old.active !== false ? old.value + " → " : ""}${field.value}`, name: `${part.name} ${field.label}: ${field.value}` });
+              if (field.active !== false && (!old || old.active === false || old.value !== field.value)) changes.push({ text: `${part.name} ${field.label}: ${old && old.active !== false ? old.value + " → " : ""}${field.value}` });
             }
           }
           const names = new Set(current.parts.map(part => part.name));
-          for (const part of originalSettings.parts) if (!names.has(part.name)) changes.push({ text: `Removed ${part.name}`, name: `Removed ${part.name}` });
+          for (const part of originalSettings.parts) if (!names.has(part.name)) changes.push({ text: `Removed ${part.name}` });
         }
       } catch (_) { /* Older or damaged snapshots remain available for validated recall. */ }
-      const lead = changes.find(change => change.id !== "reference" && change.name) || changes[0];
-      const title = initial ? "Original state" : changes.length ? lead.name + (changes.length > 1 ? ` (${changes.length} changes)` : "") : "Equivalent to original";
-      const description = { initial, title, changes: changes.length ? changes : [{ text: initial ? entry.summary : "No electrical settings differ from the original state." }] };
+      const description = { initial, changes: changes.length ? changes : [{ text: initial ? entry.summary : "No electrical settings differ from the original state." }] };
       descriptions.set(entry, description); return description;
     }
     // Names and descriptions are metadata; neither changes snapshot identity.
-    const entryName = entry => typeof entry.name === "string" && entry.name.trim() ? entry.name : describe(entry).title;
+    function entryName(entry) {
+      if (typeof entry.name === "string" && entry.name.trim()) return entry.name;
+      const date = new Date(entry.savedAt), pad = value => String(value).padStart(2, "0");
+      const stamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+      return (describe(entry).initial ? "Original · " : "") + stamp;
+    }
     function trim() {
       const baseline = entries.find(entry => signature(entry.state) === originalSignature);
       entries = entries.slice(0, limit);
       if (baseline && !entries.includes(baseline)) entries[limit - 1] = baseline;
     }
     // Keep the reference even if its row is deleted or older variants are pruned.
-    const stored = () => JSON.stringify({ version: 2, auto, expanded, original, entries });
+    const stored = () => JSON.stringify({ version: 2, auto, expanded, paneWidth, original, entries });
+
+    function fitHeight() {
+      list.style.maxHeight = innerWidth >= 1320 && expanded ? `${Math.max(120, innerHeight - Math.max(12, list.getBoundingClientRect().top) - 16)}px` : "none";
+    }
+    function setPaneWidth(value, redraw = true) {
+      paneWidth = Math.max(220, Math.min(520, Math.round(value)));
+      workspace.style.setProperty("--memory-width", paneWidth + "px");
+      resizer.setAttribute("aria-valuenow", String(paneWidth)); resizer.setAttribute("aria-valuetext", paneWidth + " pixels");
+      fitHeight();
+      if (redraw && layoutFrame === null) layoutFrame = requestAnimationFrame(() => { layoutFrame = null; adapter.layout(); fitHeight(); });
+    }
 
     function persist(protectedEntry = null) {
       try {
@@ -104,13 +119,19 @@
         for (const change of description.changes) { const item = document.createElement("li"); item.textContent = change.text; changes.append(item); }
         const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "memory-expand"; toggle.disabled = restoring;
         toggle.setAttribute("aria-controls", changes.id); toggle.setAttribute("aria-expanded", String(!changes.hidden)); labelChangeToggle(entry, toggle);
-        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg"); icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true");
-        const path = document.createElementNS(icon.namespaceURI, "path"); path.setAttribute("d", "m9 5 7 7-7 7"); icon.append(path); toggle.append(icon);
-        heading.append(toggle); row.append(heading, changes);
+        toggle.append(actionIcon("m9 5 7 7-7 7"));
+        const edit = document.createElement("button"); edit.type = "button"; edit.className = "memory-rename"; edit.disabled = restoring;
+        labelRename(entry, edit); edit.append(actionIcon("M16 3l5 5L8 21H3v-5L16 3ZM14 5l5 5"));
+        heading.append(edit, toggle); row.append(heading, changes);
         list.append(row);
       }
-      list.scrollTop = scrollTop;
+      fitHeight(); list.scrollTop = scrollTop;
     }
+    function actionIcon(pathData) {
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg"); icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true");
+      const path = document.createElementNS(icon.namespaceURI, "path"); path.setAttribute("d", pathData); icon.append(path); return icon;
+    }
+    function labelRename(entry, button) { button.setAttribute("aria-label", "Rename memory: " + entryName(entry)); button.title = "Rename"; }
     function nameButton(entry) {
       const button = document.createElement("button"); button.type = "button"; button.className = "memory-restore";
       button.dataset.memoryRestore = entry.id; button.disabled = restoring;
@@ -127,7 +148,7 @@
       const entry = entries.find(entry => entry.id === id), button = list.querySelector(`[data-memory-restore="${CSS.escape(id)}"]`);
       if (!entry || !button || restoring) return;
       cancel();
-      const input = document.createElement("input");
+      const input = document.createElement("input"), edit = button.parentNode.querySelector(".memory-rename"); edit.disabled = true;
       input.className = "memory-name-input"; input.type = "text"; input.maxLength = 100; input.value = entryName(entry).slice(0, 100); input.setAttribute("aria-label", "Memory name");
       nameEdit = input; button.replaceWith(input); input.focus({ preventScroll: true }); input.select();
       const finish = (commit, focus) => {
@@ -135,9 +156,10 @@
         if (commit && !input.value.trim() && focus) { status("Enter a memory name.", true); return; }
         if (commit && input.value.trim()) { entry.name = input.value.trim().slice(0, 100); persist(entry); }
         nameEdit = null; const replacement = nameButton(entry); input.replaceWith(replacement);
+        edit.disabled = false; labelRename(entry, edit);
         labelChangeToggle(entry, replacement.parentNode.querySelector(".memory-expand"));
         if (focus) replacement.focus({ preventScroll: true });
-        status(commit ? "Memory name updated." : "Rename cancelled."); schedule();
+        status(commit ? "Memory name updated." : "Rename cancelled."); fitHeight(); schedule();
       };
       input.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); event.stopPropagation(); finish(event.key === "Enter", true); } });
       input.addEventListener("blur", () => finish(true, false));
@@ -189,11 +211,13 @@
       }
     }
     list.addEventListener("click", event => {
+      const edit = event.target.closest(".memory-rename");
+      if (edit) { rename(edit.closest("[data-memory-id]").dataset.memoryId); return; }
       const toggle = event.target.closest(".memory-expand");
       if (toggle) {
         const id = toggle.closest("[data-memory-id]").dataset.memoryId, entry = entries.find(entry => entry.id === id);
         const open = !expandedEntries.has(id); if (open) expandedEntries.add(id); else expandedEntries.delete(id);
-        get(toggle.getAttribute("aria-controls")).hidden = !open; toggle.setAttribute("aria-expanded", String(open)); labelChangeToggle(entry, toggle); return;
+        get(toggle.getAttribute("aria-controls")).hidden = !open; toggle.setAttribute("aria-expanded", String(open)); labelChangeToggle(entry, toggle); fitHeight(); return;
       }
       const button = event.target.closest("[data-memory-restore]");
       if (button) restore(button.dataset.memoryRestore);
@@ -247,11 +271,29 @@
     document.addEventListener("pointerdown", event => { if (!menu.contains(event.target)) closeMenu(); });
     document.addEventListener("pointerdown", () => { suppressClickUntil = 0; }, true);
     document.addEventListener("scroll", () => closeMenu(), true);
-    root.addEventListener("resize", () => closeMenu());
+    root.addEventListener("resize", () => { closeMenu(); fitHeight(); });
+    root.addEventListener("scroll", fitHeight, { passive: true });
+    resizer.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || innerWidth < 1320 || !expanded) return;
+      event.preventDefault(); event.stopPropagation(); closeMenu();
+      drag = { id: event.pointerId, x: event.clientX, width: paneWidth };
+      resizer.setPointerCapture(event.pointerId); workspace.classList.add("memory-resizing");
+    });
+    resizer.addEventListener("pointermove", event => { if (drag?.id === event.pointerId) setPaneWidth(drag.width + event.clientX - drag.x); });
+    const finishResize = event => {
+      if (drag?.id !== event.pointerId) return;
+      drag = null; workspace.classList.remove("memory-resizing"); persist(); fitHeight();
+    };
+    resizer.addEventListener("pointerup", finishResize); resizer.addEventListener("pointercancel", finishResize); resizer.addEventListener("lostpointercapture", finishResize);
+    resizer.addEventListener("keydown", event => {
+      const value = { ArrowLeft: paneWidth - 20, ArrowRight: paneWidth + 20, Home: 220, End: 520 }[event.key];
+      if (value === undefined) return;
+      event.preventDefault(); event.stopPropagation(); setPaneWidth(value); persist();
+    });
     // Long press exposes the same secondary actions without adding mobile buttons.
     const cancelPress = () => { if (press) clearTimeout(press.timer); press = null; };
     panel.addEventListener("pointerdown", event => {
-      if (event.pointerType !== "touch") return;
+      if (event.pointerType !== "touch" || event.target === resizer) return;
       cancelPress(); const { clientX: x, clientY: y, target } = event;
       press = { x, y, timer: setTimeout(() => { suppressClickUntil = performance.now() + 1000; openMenu(target, x, y); press = null; }, 550) };
     });
@@ -267,12 +309,12 @@
     workspace.classList.add("memory-ready"); reflectExpanded(); get("memoryAuto").setAttribute("aria-checked", String(auto));
     panel.addEventListener("toggle", () => {
       if (expanded === panel.open) return; // Ignore the queued initialization toggle.
-      closeMenu(); expanded = panel.open; reflectExpanded(); persist(); adapter.layout();
+      closeMenu(); expanded = panel.open; reflectExpanded(); persist(); adapter.layout(); fitHeight();
     });
     const flush = () => { if (auto && pending && !restoring) save(capture()); };
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
     root.addEventListener("pagehide", flush);
-    render(); if (auto) save(capture()); else schedule(); adapter.layout();
+    setPaneWidth(paneWidth, false); render(); if (auto) save(capture()); else schedule(); adapter.layout(); fitHeight();
     return { schedule, save: () => save(capture(), true), restore, flush, get entries() { return clone(entries); }, get restoring() { return restoring; } };
   }
   root.DividerMemory = Object.freeze({ create });

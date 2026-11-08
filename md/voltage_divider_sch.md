@@ -227,6 +227,10 @@ analysis, regardless of layout.
 **Memory** opens beside the circuit on wide desktop screens and can be collapsed
 horizontally to a narrow reopen rail, returning the space to the diagram without
 adding a row above it. On phones it starts collapsed above the circuit.
+Drag the pane's right edge to change its width; arrow keys adjust the focused
+separator, and Home/End select its minimum/maximum. The browser remembers the
+width. On desktop the list fills the remaining window height and scrolls when
+necessary; on smaller screens it grows with the page.
 Right-click Memory or an entry for **Save now**, **Rename**, **Autosave**, **Delete** and
 **Clear memory**. Shift+F10, the Context Menu key and a touch long press open the
 same menu. Entry timestamps are available on hover and in the menu; routine save
@@ -237,14 +241,17 @@ not save each typed character, unfinished editor drafts, invalid inputs or layou
 changes. **Save now** records the current calculation immediately. Autosave can
 be turned off, and duplicate input states share an existing entry.
 
-The first saved calculation is the **Original state**. Each later entry gets a
-name based on its changes and a bullet list comparing settings, resistor values,
+The first saved calculation is the fixed **Original state**. Default names show
+the saved date and time in the browser's local timezone, with **Original** marking
+that reference. Existing custom names are preserved. Each entry has a bullet
+list comparing settings, resistor values,
 connections and actual part numbers against that fixed original. Calculated
 outputs are not listed as input changes. Entries start collapsed to just their
 names. Use an entry's chevron to show or hide its complete change list; clicking
 the name recalls the circuit. Expanding changes leaves the current calculation
-intact. Use **Rename** in an entry's context menu, or focus it and press F2, to
-edit its name; Enter saves and Escape cancels. Names persist in this browser.
+intact. Click the pencil to edit a name directly. **Rename** in the context menu
+and F2 remain available; Enter saves, Escape cancels, and leaving the field saves
+a nonempty name. Names persist in this browser.
 
 Recalled states remain fully editable. Changing one saves a new state without
 overwriting the prior named version. Each entry stores a complete circuit,
