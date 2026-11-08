@@ -59,8 +59,11 @@ not add a permission or confirmation step to an authorized task.
   identity and clean leave protection. Keep touch construction menus accessible.
 - Calculation memory belongs outside the SVG in a horizontally collapsible sidebar
   on wide screens; keep a slim reopen rail beside the circuit when collapsed.
-  Use a collapsed disclosure above the circuit on phones. Keep only design
-  summaries in normal view; put save/autosave/delete/clear in a context menu
+  Use a collapsed disclosure above the circuit on phones. Each entry starts with
+  only its name and a separate accessible chevron to show all changes from the
+  original; clicking the name recalls the circuit. Keep disclosure state separate
+  from circuit/storage state, and preserve it during list redraws within a visit.
+  Put save/autosave/delete/clear in a context menu
   available by right-click, Shift+F10/Context Menu key and touch long press.
   Keep timestamps in tooltips/menu details and routine status screen-reader-only;
   show actual storage or recall failures. Preserve menu focus and scrolling.
@@ -69,9 +72,9 @@ not add a permission or confirmation step to an authorized task.
   browser-local history.
   Keep a fixed Original state as the comparison reference (the oldest available
   entry when migrating existing history). Show concise bullet changes to inputs,
-  topology and actual part numbers; exclude derived output changes. Expand long
-  lists rather than hiding changes permanently. Allow names to be edited through
-  Rename in the context menu or F2; names are metadata, not circuit inputs.
+  topology and actual part numbers; exclude derived output changes. Keep the
+  full list available behind each entry's disclosure. Allow names to be edited
+  through Rename in the context menu or F2; names are metadata, not circuit inputs.
   Preserve full independent snapshots: editing a recalled named state saves a
   new state and never overwrites its prior version. Keep the original within the
   50-entry limit unless explicitly deleted; deleting its row must not rebase

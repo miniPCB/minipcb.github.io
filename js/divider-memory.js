@@ -9,6 +9,7 @@
     let auto = true, expanded = innerWidth >= 1320;
     let menuEntry = null, menuOrigin = null, press = null, suppressClickUntil = 0;
     let original = null, originalSignature = null, originalSettings = null, descriptions = new WeakMap(), nameEdit = null;
+    const expandedEntries = new Set();
     const clone = value => JSON.parse(JSON.stringify(value));
     const signature = state => JSON.stringify(state);
     function reflectSummary() {
@@ -92,19 +93,20 @@
       if (nameEdit) return;
       const scrollTop = list.scrollTop;
       get("memoryCount").textContent = String(entries.length);
+      for (const id of expandedEntries) if (!entries.some(entry => entry.id === id)) expandedEntries.delete(id);
       list.replaceChildren();
       for (const entry of entries) {
         const description = describe(entry);
         const row = document.createElement("li"); row.className = "memory-entry"; row.dataset.memoryId = entry.id;
         row.setAttribute("aria-current", String(active === entry.id));
-        row.append(nameButton(entry));
-        const bullets = items => { const ul = document.createElement("ul"); ul.className = "memory-changes"; for (const change of items) { const item = document.createElement("li"); item.textContent = change.text; ul.append(item); } return ul; };
-        row.append(bullets(description.changes.slice(0, 3)));
-        if (description.changes.length > 3) {
-          const more = document.createElement("details"); more.className = "memory-more";
-          const label = document.createElement("summary"); label.textContent = `${description.changes.length - 3} more ${description.initial ? "settings" : "changes"}`;
-          more.append(label, bullets(description.changes.slice(3))); row.append(more);
-        }
+        const heading = document.createElement("div"); heading.className = "memory-entry-heading"; heading.append(nameButton(entry));
+        const changes = document.createElement("ul"); changes.className = "memory-changes"; changes.id = "memoryChanges-" + entry.id; changes.hidden = !expandedEntries.has(entry.id);
+        for (const change of description.changes) { const item = document.createElement("li"); item.textContent = change.text; changes.append(item); }
+        const toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "memory-expand"; toggle.disabled = restoring;
+        toggle.setAttribute("aria-controls", changes.id); toggle.setAttribute("aria-expanded", String(!changes.hidden)); labelChangeToggle(entry, toggle);
+        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg"); icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true");
+        const path = document.createElementNS(icon.namespaceURI, "path"); path.setAttribute("d", "m9 5 7 7-7 7"); icon.append(path); toggle.append(icon);
+        heading.append(toggle); row.append(heading, changes);
         list.append(row);
       }
       list.scrollTop = scrollTop;
@@ -116,6 +118,10 @@
       button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-controls", "memoryMenu");
       button.title = `${new Date(entry.savedAt).toLocaleString()} · Right-click for actions; F2 to rename`;
       const title = document.createElement("strong"); title.textContent = entryName(entry); button.append(title); return button;
+    }
+    function labelChangeToggle(entry, button) {
+      const label = `${button.getAttribute("aria-expanded") === "true" ? "Hide" : "Show"} ${describe(entry).initial ? "original settings" : "changes from original"}: ${entryName(entry)}`;
+      button.setAttribute("aria-label", label); button.title = label;
     }
     function rename(id) {
       const entry = entries.find(entry => entry.id === id), button = list.querySelector(`[data-memory-restore="${CSS.escape(id)}"]`);
@@ -129,6 +135,7 @@
         if (commit && !input.value.trim() && focus) { status("Enter a memory name.", true); return; }
         if (commit && input.value.trim()) { entry.name = input.value.trim().slice(0, 100); persist(entry); }
         nameEdit = null; const replacement = nameButton(entry); input.replaceWith(replacement);
+        labelChangeToggle(entry, replacement.parentNode.querySelector(".memory-expand"));
         if (focus) replacement.focus({ preventScroll: true });
         status(commit ? "Memory name updated." : "Rename cancelled."); schedule();
       };
@@ -182,9 +189,14 @@
       }
     }
     list.addEventListener("click", event => {
-      if (event.target.closest("summary,input")) return;
-      const row = event.target.closest("[data-memory-id]");
-      if (row) restore(row.dataset.memoryId);
+      const toggle = event.target.closest(".memory-expand");
+      if (toggle) {
+        const id = toggle.closest("[data-memory-id]").dataset.memoryId, entry = entries.find(entry => entry.id === id);
+        const open = !expandedEntries.has(id); if (open) expandedEntries.add(id); else expandedEntries.delete(id);
+        get(toggle.getAttribute("aria-controls")).hidden = !open; toggle.setAttribute("aria-expanded", String(open)); labelChangeToggle(entry, toggle); return;
+      }
+      const button = event.target.closest("[data-memory-restore]");
+      if (button) restore(button.dataset.memoryRestore);
     });
     function closeMenu(focus = false) {
       if (menu.hidden) return;

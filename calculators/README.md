@@ -116,6 +116,8 @@ before the main inline script; do not add `async` or change them to modules.
   and touch long press open the same menu.
   F2 renames a focused entry. Names and bullet changes from a fixed Original state
   describe full independent snapshots: editing a recalled state saves a new one.
+  Entries start collapsed to their names; each chevron reveals the full change
+  list without recalling a circuit. Clicking the name restores the saved design.
   Existing history uses its oldest available state as the original reference;
   the version-2 storage envelope reads old entries without changing their
   version-1 circuit snapshots. Clearing history resets the reference.

@@ -231,7 +231,7 @@ Right-click Memory or an entry for **Save now**, **Rename**, **Autosave**, **Del
 **Clear memory**. Shift+F10, the Context Menu key and a touch long press open the
 same menu. Entry timestamps are available on hover and in the menu; routine save
 messages are announced to screen readers without adding text to the pane.
-Storage and recall failures remain visible. Click an entry normally to recall it.
+Storage and recall failures remain visible. Click an entry's name to recall it.
 Autosave groups completed, valid input changes after a one-second pause; it does
 not save each typed character, unfinished editor drafts, invalid inputs or layout
 changes. **Save now** records the current calculation immediately. Autosave can
@@ -240,8 +240,10 @@ be turned off, and duplicate input states share an existing entry.
 The first saved calculation is the **Original state**. Each later entry gets a
 name based on its changes and a bullet list comparing settings, resistor values,
 connections and actual part numbers against that fixed original. Calculated
-outputs are not listed as input changes. Longer lists expand to show every
-change. Use **Rename** in an entry's context menu, or focus it and press F2, to
+outputs are not listed as input changes. Entries start collapsed to just their
+names. Use an entry's chevron to show or hide its complete change list; clicking
+the name recalls the circuit. Expanding changes leaves the current calculation
+intact. Use **Rename** in an entry's context menu, or focus it and press F2, to
 edit its name; Enter saves and Escape cancels. Names persist in this browser.
 
 Recalled states remain fully editable. Changing one saves a new state without
