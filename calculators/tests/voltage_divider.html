@@ -349,7 +349,7 @@
         assert(!get("r1Multiple").checked && !get("r2Multiple").checked && !ids("r1").length && !ids("r2").length && get("stressCards").children.length === 2 && text("vout") === "6 V", "Reset removes networks and restores the original calculator");
         assert(d.querySelectorAll('[data-schematic-part]').length === 2 && text("schematicLoadValue") === "Open" && get("schematicLoad").getAttribute("opacity") === "0.35", "Reset restores the two-resistor schematic and open load");
         assert(d.querySelector("img.schematic").complete && d.querySelector("img.schematic").naturalWidth === 640, "Schematic image loads");
-        assert(!!(d.querySelector(".mode-picker").compareDocumentPosition(get("circuitReference")) & w.Node.DOCUMENT_POSITION_FOLLOWING), "Calculation choices appear before the circuit reference");
+        assert(get("schematicViewport").contains(d.querySelector(".mode-picker")), "Calculation choices live beside the framed circuit in its viewport");
         for (const link of [...d.querySelectorAll("a[href]")].filter(a => a.origin === location.origin)) {
           assert((await fetch(link.href)).ok, `Local resource loads: ${link.getAttribute("href")}`);
         }
@@ -382,7 +382,7 @@
           assert(d.querySelectorAll('[data-solve-mode][aria-pressed="true"]').length === 1 && d.querySelector(`[data-solve-mode="${mode}"]`).getAttribute("aria-pressed") === "true", "Exactly one goal is marked active");
           const editable = id => !!get("liveSchematic").querySelector(`[data-schematic-edit="${({vin:"source",targetVout:"target",rl:"load"})[id] || id}"][data-edit-focus="value"]`);
           assert(known.every(editable), `Known values are editable directly on the circuit in ${mode}`);
-          assert(calculated.every(id => !editable(id)), `Calculated values are read-only on the circuit in ${mode}`);
+          assert(calculated.every(id => ["r1", "r2"].includes(id) ? editable(id) && get(id).readOnly : !editable(id)), `Calculated resistances offer recommendations while calculated voltages remain locked in ${mode}`);
           assert(text("modeMethodEquation").length > 0 && !get("calculateButton"), "The calculation equation remains available without a duplicate Calculate button");
           assert(!get("manualLimits").open && !get("calculatorDetails").open, "Additional settings and data start collapsed");
           if (["r1", "r2"].includes(mode)) assert(get("manualLimits").contains(get(`${mode}Field`)), "Calculated arm construction remains available in manual network tools");
