@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Navigation and characteristics drawer checks</title><style>body{margin:16px;background:#101823;color:#eaf6ff;font:14px system-ui}pre{white-space:pre-wrap}iframe{display:block;width:1440px;height:1100px;border:0}</style><h1>Pinned navigation and right-edge characteristics</h1><pre id="results">RUNNING</pre><iframe id="calculator" src="../voltage_divider.html?appearance-test=1" title="Calculator under test"></iframe><script>
+"use strict";
+const checks=[],failures=[],assert=(ok,label)=>{checks.push(label);if(!ok)failures.push(label)},pause=()=>new Promise(resolve=>setTimeout(resolve,250));
+document.getElementById('calculator').addEventListener('load',async event=>{try{
+ const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get('liveSchematic'),state=()=>w.eval('schematicState'),drawer=()=>get('characteristicsDrawer'),toggle=()=>get('characteristicsToggle'),table=()=>get('characteristicsTable'),field=name=>table().querySelector(`[data-field="${name}"]`),nav=()=>d.querySelector('.tool-path-nav'),urls=()=>['schematicDownload','ltspiceDownload','markdownDownload'].map(id=>get(id).href).join('|');
+ assert(await w.resistorCatalogReady,'Catalogs load');await w.circuitLogoReady;await w.calculatorBuildReady;await pause();const errors=[];w.addEventListener('error',event=>errors.push(event.message));
+ const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}))},pick=mode=>d.querySelector(`[data-solve-mode="${mode}"]`).click(),reset=async()=>{w.closeSchematicEditor(false);get('dividerForm').reset();get('pairForm').reset();await pause()},bounds=()=>JSON.stringify({frame:get('schematicFrame').getBoundingClientRect().toJSON(),drawing:get('schematicDrawing').getBoundingClientRect().toJSON()});
+ assert(['schematicDownload','ltspiceDownload','markdownDownload'].every(id=>nav().contains(get(id))&&!get('circuitReference').contains(get(id))),'All three downloads belong to the Tools / Voltage Divider bar');
+ assert(!d.querySelector('header.header,.subtitle,.live-tag')&&d.querySelector('h1').textContent==='Voltage Divider Calculator'&&d.querySelector('h1').getBoundingClientRect().height===1,'The banner is removed while the page retains an accessible heading');
+ assert(!svg().querySelector('[data-field="circuitCharacteristics"]')&&drawer().contains(table())&&toggle().getAttribute('aria-expanded')==='false'&&drawer().inert,'Characteristics starts in a separate closed right drawer');
+ const buildIdentity=()=>{const stamp=get('schematicFrame').querySelector('[data-calculator-stamp]');return JSON.stringify([stamp.dataset.builtAt,stamp.dataset.buildCommit])};
+ const originalState=JSON.stringify(w.captureMemoryState()),stamp=state().analyzedAt,build=buildIdentity(),originalBounds=bounds(),originalUrls=urls();
+ toggle().focus();toggle().click();await pause();
+ assert(toggle().getAttribute('aria-expanded')==='true'&&!drawer().inert&&drawer().getAttribute('aria-hidden')==='false'&&d.activeElement===toggle(),'Opening exposes the nonmodal panel and preserves keyboard focus');
+ assert(bounds()===originalBounds&&urls()===originalUrls&&JSON.stringify(w.captureMemoryState())===originalState&&state().analyzedAt===stamp&&!w.eval('leaveWarningActive'),'Opening the drawer changes no circuit geometry, downloads, memory inputs, timestamp or leave protection');
+ assert(w.getComputedStyle(toggle()).backgroundColor!=='rgb(19, 45, 61)'&&drawer().getBoundingClientRect().right<=w.innerWidth,'The open tab has a selected color and the panel fits on the right');
+ set('vin','14');assert(field('findResult').textContent==='7 V'&&toggle().getAttribute('aria-expanded')==='true'&&buildIdentity()===build,'Open characteristics follows a live circuit edit without changing its build identity');
+ get('characteristicsClose').click();await pause();assert(drawer().inert&&toggle().getAttribute('aria-expanded')==='false'&&d.activeElement===toggle(),'The Close button collapses the panel and restores focus to its tab');
+ toggle().click();get('characteristicsClose').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await pause();assert(drawer().inert&&d.activeElement===toggle(),'Escape closes the drawer and restores focus');
+ await reset();for(const mode of ['vout','vin','r1','r2','pairs']){pick(mode);toggle().click();await pause();assert(table().dataset.analysisMode===mode&&drawer().getBoundingClientRect().width>0,mode+': the drawer follows this mode');toggle().click()}
+ await reset();for(const connection of ['series','parallel','mixed']){
+  if(connection==='series'){get('r1Multiple').click();get('r1Split').click()}
+  if(connection==='parallel')set('r1Connection','parallel');
+  if(connection==='mixed'){const ids=state().physical.r1.map(part=>part.id);w.storeTopology('r1',{connection:'series',children:[{connection:'parallel',children:ids.slice(0,2)},...ids.slice(2)]});w.update()}
+  const before=bounds(),saved=JSON.stringify(w.captureMemoryState());toggle().click();await pause();assert(bounds()===before&&JSON.stringify(w.captureMemoryState())===saved&&field('nominalPower').textContent===w.format(state().result.total,'W'),connection+': the side panel preserves the full network and reports its live measurements');toggle().click();
+ }
+ await reset();
+ for(const width of [320,390,768,1050,1440]){
+  frame.style.width=width+'px';await pause();w.scrollTo(0,0);if(toggle().getAttribute('aria-expanded')==='true')toggle().click();await pause();
+  const bar=nav().getBoundingClientRect();assert(bar.top===0&&['schematicDownload','ltspiceDownload','markdownDownload'].every(id=>{const b=get(id).getBoundingClientRect();return b.left>=0&&b.right<=d.documentElement.clientWidth+1&&b.top>=bar.top&&b.bottom<=bar.bottom+1&&(width>780||b.height>=44)}),width+'px: pinned navigation and downloads fit with touch-sized phone links');
+  const before=bounds(),saved=JSON.stringify(w.captureMemoryState()),stamp=state().analyzedAt;toggle().click();await pause();const panel=drawer().getBoundingClientRect(),tab=toggle().getBoundingClientRect();
+  assert(panel.left>=0&&panel.right<=d.documentElement.clientWidth+1&&Math.abs(panel.top-nav().getBoundingClientRect().bottom)<1&&panel.bottom<=w.innerHeight+1&&tab.left>=0&&Math.abs(tab.right-panel.left)<1,width+'px: drawer and attached tab fit below the wrapped navigation');
+  assert(bounds()===before&&JSON.stringify(w.captureMemoryState())===saved&&state().analyzedAt===stamp,width+'px: opening does not resize the circuit or recalculate');
+  assert(d.documentElement.scrollWidth<=width&&drawer().querySelector('.characteristics-scroll').scrollWidth<=drawer().querySelector('.characteristics-scroll').clientWidth+1,width+'px: circuit page and drawer have no horizontal overflow');
+  assert([...table().querySelectorAll('.characteristic-value')].every(value=>parseFloat(w.getComputedStyle(value).fontSize)>=14),width+'px: values remain readable native text');
+  const area=drawer().querySelector('.characteristics-scroll');area.scrollTop=area.scrollHeight;assert((area.scrollHeight<=area.clientHeight||area.scrollTop>0)&&get('characteristicsClose').getBoundingClientRect().top>=panel.top,width+'px: results scroll when needed below a reachable Close button');
+  const previousMin=d.body.style.minHeight;d.body.style.minHeight='3600px';w.scrollTo(0,600);await pause();assert(nav().getBoundingClientRect().top===0&&Math.abs(drawer().getBoundingClientRect().top-nav().getBoundingClientRect().bottom)<1&&toggle().getBoundingClientRect().top>=nav().getBoundingClientRect().bottom,width+'px: breadcrumb and downloads stay pinned while scrolling');w.scrollTo(0,0);d.body.style.minHeight=previousMin;
+  get('characteristicsClose').click();await pause();
+ }
+ const xml=await(await fetch(get('schematicDownload').href)).text(),exported=new DOMParser().parseFromString(xml,'image/svg+xml'),measurements=exported.querySelector('[data-field="circuitCharacteristics"]'),last=measurements.querySelector('[data-field="calculator"]');
+ assert(!exported.querySelector('parsererror,[role="button"],foreignObject')&&measurements&&measurements.querySelector('[data-field="nominalPower"]').textContent===field('nominalPower').textContent&&measurements.querySelector('#schematicCharacteristicsBody').getAttribute('display')!=='none'&&last&&Number(exported.documentElement.getAttribute('height'))>Number(svg().getAttribute('height')),'Full SVG keeps complete static characteristics below the workspace even with the drawer closed');
+ const framed=new DOMParser().parseFromString(w.circuitFrameSnapshot().markup,'image/svg+xml');assert(!framed.querySelector('[data-field="circuitCharacteristics"]')&&framed.querySelectorAll('[data-operating-point]').length===4,'Framed images keep their circuit-only scope');
+ assert(!w.eval('leaveWarningActive')&&errors.length===0,'Presentation changes stay clean with no uncaught errors: '+errors.join('; '));
+ document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',checks:checks.length,failures},null,2);
+}catch(error){document.getElementById('results').textContent=JSON.stringify({status:'ERROR',error:error.stack,checks,failures},null,2)}});
+</script></html>

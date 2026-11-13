@@ -2,7 +2,7 @@
 "use strict";
 const checks=[],failures=[],assert=(condition,label)=>{checks.push(label);if(!condition)failures.push(label);},near=(a,b)=>Math.abs(a-b)<=1e-10*Math.max(1,Math.abs(a),Math.abs(b));
 document.getElementById("calculator").addEventListener("load",async event=>{try{
- const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get("liveSchematic"),pause=()=>new Promise(resolve=>setTimeout(resolve,20)),state=()=>w.eval("schematicState"),cards=()=>[...svg().querySelectorAll("[data-operating-point]")],info=()=>svg().querySelector('[data-field="operatingPointInformation"]'),characteristics=()=>svg().querySelector('[data-field="circuitCharacteristics"]');
+ const frame=event.target,w=frame.contentWindow,d=w.document,get=id=>d.getElementById(id),svg=()=>get("liveSchematic"),pause=()=>new Promise(resolve=>setTimeout(resolve,20)),state=()=>w.eval("schematicState"),cards=()=>[...svg().querySelectorAll("[data-operating-point]")],info=()=>svg().querySelector('[data-field="operatingPointInformation"]'),characteristics=()=>get('characteristicsTable');
  assert(await w.resistorCatalogReady,"Shared catalogs load");const errors=[];w.addEventListener("error",event=>errors.push(event.message));
  const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event("input",{bubbles:true}));},pick=mode=>d.querySelector(`[data-solve-mode="${mode}"]`).click(),reset=async()=>{get("dividerForm").reset();get("pairForm").reset();await pause();};
  const card=key=>svg().querySelector(`[data-operating-point="${key}"]`),value=key=>card(key).querySelector(`[data-field="operating${key}"]`).textContent,partField=(id,key)=>svg().querySelector(`[data-schematic-part="${id}"] [data-field="${key}"]`);
@@ -19,7 +19,7 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  const higher=w.stress(10000,6,0.0006,0.0036,0.5,150),lower=w.stress(10000,6,0.0006,0.0036,0.25,75);assert(near(higher.p,0.72)&&higher.v===s.v&&near(lower.v,8)&&lower.p===s.p,"Changing power rating only changes Pstress; changing voltage rating only changes Vstress");
  assert(w.stress(10000,6,0.0006,0.0036,0.25,null).v===null&&w.percent(null)==="—","Missing Vmax stays unassessed rather than inventing a power-derived voltage rating");
  assert(near(w.stress(10000,-6,-0.0006,0.0036,0.25,150).v,4),"Voltage stress uses magnitude for negative sources");
- assert(d.querySelector(".subtitle").textContent.includes("power and voltage stress")&&!/Istress|Ilimit|V\/I stress|current stress/.test(d.body.textContent),"Page wording and all visible/optional controls remove redundant current-stress terminology");
+ assert(!d.querySelector(".subtitle")&&!/Istress|Ilimit|V\/I stress|current stress/.test(d.body.textContent),"The banner is removed and controls have no redundant current-stress terminology");
  assert(partField("r1","p").textContent==="2.57%"&&partField("r1","v").textContent==="12.00%"&&!svg().querySelector('[data-schematic-part] [data-field="i"]'),"Default SVG lists independent power stress and voltage stress using its populated 50 V reference");
  set("vmax1","");set("vmax2","");
  assert(characteristics().querySelector('[data-field="voltageRatings"]').textContent==="0 / 2 specified"&&characteristics().querySelector('[data-field="vstress"]').textContent==="—","Circuit characteristics disclose missing voltage ratings instead of treating them as zero stress");

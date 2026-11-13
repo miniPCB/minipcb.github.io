@@ -571,10 +571,17 @@ unavailable values, reflow on small screens and remain in full SVG and framed
 SVG/PNG/JPEG/BMP downloads. The current Markdown export includes the same
 operating-point table.
 
-The common **Circuit characteristics** table starts collapsed in every Find mode,
-beside the circuit on larger screens and above it on smaller screens. Click its
-heading or press Enter/Space to expand it; this preserves the calculation and
-search selection. The expanded table identifies the
+The **Tools / Voltage Divider** bar stays pinned at the top and contains the
+Download SVG, LTspice and Markdown buttons. The calculator banner is removed;
+the editable title and miniPCB branding remain inside the circuit frame.
+
+The common **Circuit characteristics** table lives in a drawer opened by the tab
+on the right screen edge. The drawer starts closed, scrolls independently, and
+fits desktop and phone screens below the pinned navigation. Activate the tab
+with a click or Enter/Space; use the tab, Close button or Escape to collapse it.
+On phones the closed tab rests at the lower-right edge, clear of the mode selector.
+Opening it preserves the circuit layout, calculation, memory and search selection.
+Measurements continue updating as circuit inputs change. The table identifies the
 calculated quantity and lists nominal total power, input current and source
 resistance Rth. Every mode reports worst-case Pstress and Vstress over its
 configured resistance-drift intervals. Two-part circuits use analytic extrema,
@@ -613,8 +620,10 @@ search date and time in UTC. Filtering, resizing or choosing another combination
 that timestamp; recalculating the circuit or running a new search records a new
 one. Missing/invalid inputs and combination setup keep the common table while clearing
 unavailable or stale results. The **Calculator** link opens the voltage divider
-page. The downloaded SVG follows the current expanded/collapsed view; its accessible
-description and Markdown export retain all characteristics in either state.
+page. Full-workspace SVG downloads append the complete characteristics table
+below the circuit, parts list and plots, regardless of whether the drawer is open.
+The accessible SVG description and Markdown download retain the same measurements.
+Framed circuit images continue to include just the circuit and its operating-point tiles.
 
 The SVG also sets up the combination search before any results exist. Click VTOP for the
 source and its tolerance, the separate **Target** row for VMID and its allowed
@@ -763,9 +772,10 @@ the target and tolerance interval. The internal common-tolerance calculation is
 retained. Find RL/IL has been removed; resistor loads and current-source loads
 with absolute current tolerance remain editable inputs in the remaining modes.
 
-The SVG contains the operating-point blocks, optional Circuit characteristics,
-parts list and Design Solutions plots. The experimental Data & comparisons
-section and its tab navigation are excluded from the workspace and print view.
+The live SVG contains the operating-point blocks, parts list and Design Solutions
+plots; Circuit characteristics is in the separate right-side drawer. The
+experimental Data & comparisons section and its tab navigation are excluded
+from the workspace and print view.
 The underlying source fields still supply direct SVG editors and the solver.
 Load and operating conditions edit directly on the SVG; unique catalog search
 constraints are in Search limits. Validation stays in the circuit workspace.

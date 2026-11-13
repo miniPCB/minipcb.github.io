@@ -21,9 +21,12 @@
       --accent-2: #ffba52;
       --ok: #6ee7ac;
       --bad: #ff8e8e;
+      --tool-nav-height: 56px;
+      --characteristics-width: min(460px, calc(100% - 52px));
     }
 
     * { box-sizing: border-box; }
+    html { scrollbar-gutter: stable; scroll-padding-top: calc(var(--tool-nav-height) + 12px); }
     body {
       margin: 0;
       min-height: 100vh;
@@ -38,38 +41,31 @@
     button, input, select { font: inherit; }
     button, a, input, select, summary { -webkit-tap-highlight-color: transparent; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .tool-path-nav {
+      position: sticky; top: 0; z-index: 15;
       display: flex;
       align-items: center;
       flex-wrap: wrap;
       gap: 8px;
       padding: 10px 20px;
-      border-bottom: 0;
+      border-bottom: 1px solid var(--border);
       background: rgba(13, 24, 33, 0.96);
       font-size: 0.8rem;
     }
     .tool-path-nav a { text-decoration: none; }
     .tool-path-nav span { color: var(--muted); }
     .tool-path-nav [aria-current] { color: var(--text); }
+    .tool-path-nav .resource-links { margin-left: auto; padding: 0; }
+    .tool-path-nav .btn { min-height: 36px; }
     .page { width: 100%; margin: 0 auto; padding: 18px 24px 30px; }
-    .header, .panel {
+    .panel {
       border: 0;
       border-radius: 16px;
       background: var(--panel);
       box-shadow: var(--shadow);
     }
-    .header {
-      padding: 20px 22px;
-      margin-bottom: 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      background: linear-gradient(120deg, rgba(30, 54, 73, 0.95), rgba(19, 32, 44, 0.95));
-    }
-    h1 { margin: 0; font-size: 1.4rem; letter-spacing: 0.04em; text-transform: uppercase; }
-    .subtitle { margin: 8px 0 0; color: #d3e6f4; font-size: 0.92rem; line-height: 1.5; }
-    .live-tag, .badge {
+    .badge {
       display: inline-block;
       border: 0;
       border-radius: 999px;
@@ -77,7 +73,45 @@
       font-size: 0.74rem;
       white-space: nowrap;
     }
-    .live-tag { color: var(--accent); background: rgba(84, 210, 255, 0.08); }
+    .characteristics-tab {
+      position: fixed; z-index: 14; top: calc(var(--tool-nav-height) + 24px); right: 0;
+      display: flex; align-items: center; gap: 12px; min-width: 44px; padding: 16px 12px;
+      border: 1px solid #4289a6; border-right: 0; border-radius: 12px 0 0 12px;
+      background: #132d3d; color: var(--accent); box-shadow: -6px 6px 20px #0004;
+      writing-mode: vertical-rl; font-size: .85rem; cursor: pointer;
+      transition: right .2s ease, background .2s ease;
+    }
+    .characteristics-tab:hover { background: #20485d; }
+    .characteristics-tab[aria-expanded="true"] { right: var(--characteristics-width); background: #1c4b60; }
+    .characteristics-chevron { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+    .characteristics-tab[aria-expanded="true"] .characteristics-chevron { transform: rotate(180deg); }
+    .characteristics-drawer {
+      position: fixed; z-index: 13; top: var(--tool-nav-height); right: 0; bottom: 0; width: var(--characteristics-width);
+      display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0;
+      border-left: 1px solid #4289a6; background: linear-gradient(155deg, #172d3d, #101c28 55%);
+      box-shadow: -16px 0 40px #0006; transform: translateX(100%); visibility: hidden;
+      transition: transform .2s ease, visibility .2s;
+    }
+    .characteristics-drawer.is-open { transform: translateX(0); visibility: visible; }
+    .characteristics-header { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+    .characteristics-header h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.05rem; font-weight: 600; }
+    .characteristics-close { flex: 0 0 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px; background: #234153; color: var(--text); font-size: 1.5rem; cursor: pointer; }
+    .characteristics-close:hover { background: #315b70; }
+    .characteristics-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 18px 20px; }
+    .characteristics-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .characteristics-table tr { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 13px 0; border-bottom: 1px solid #2f495d80; }
+    .characteristics-table th, .characteristics-table td { min-width: 0; padding: 0; border: 0; background: transparent; white-space: normal; overflow-wrap: anywhere; }
+    .characteristics-table th { text-align: left; font-size: .82rem; line-height: 1.5; font-weight: 400; color: var(--muted); }
+    .characteristics-table td { text-align: right; font: .9rem/1.5 var(--mono); color: #c6e3ff; }
+    .characteristics-table tr[data-metadata] { border-bottom: 0; }
+    .characteristic-value[data-field="findResult"] { color: var(--bad); }
+    .characteristic-value[data-field="stackThermal"] { color: #75d5ff; }
+    .characteristic-value[data-field="stackRadiation"] { color: #d0acff; }
+    .characteristic-value[data-field="stackAging"] { color: #ffd083; }
+    .characteristic-value[data-warning] { color: var(--accent-2); }
+    @media (prefers-reduced-motion: reduce) {
+      .characteristics-tab, .characteristics-drawer { transition: none; }
+    }
     .schematic-stage { position: relative; }
     .mode-picker { position: absolute; z-index: 1; width: 168px; }
     .mode-choices { display: grid; gap: 6px; }
@@ -202,8 +236,8 @@
     .schematic-nearby button:hover, .schematic-nearby button[aria-selected="true"] { background: #24445a; }
     .schematic-nearby small { color: #a8bece; font-size: 11px; }
     .schematic-nearby-more { margin-top: 4px; padding: 2px; border: 0; background: #142535; color: #75d5ff; font: 11px system-ui, sans-serif; cursor: pointer; }
-    .circuit-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; }
-    .circuit-toolbar .resource-links { margin: 0 0 0 auto; }
+    .circuit-toolbar { display: none; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; }
+    .circuit-toolbar.is-active { display: flex; }
     .calculator-workspace { display: grid; gap: 12px; align-items: start; }
     .calculator-memory { min-width: 0; margin: 0 16px; border-radius: 12px; background: #101e2b; }
     .calculator-memory > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px; color: #c6e3ff; cursor: pointer; list-style: none; -webkit-touch-callout: none; }
@@ -245,7 +279,7 @@
     @media (min-width: 1320px) {
       .calculator-workspace.memory-ready { grid-template-columns: 56px minmax(0, 1fr); gap: 0; }
       .calculator-workspace.memory-ready.memory-open { grid-template-columns: var(--memory-width, 300px) minmax(0, 1fr); }
-      .memory-ready .calculator-memory { position: sticky; top: 12px; margin-left: 12px; margin-right: 0; }
+      .memory-ready .calculator-memory { position: sticky; top: calc(var(--tool-nav-height) + 12px); margin-left: 12px; margin-right: 0; }
       .memory-ready .circuit-reference-body { padding-left: 12px; }
       .memory-ready .calculator-memory:not([open]) > summary { flex-direction: column; gap: 4px; padding: 10px 0; min-width: 44px; }
       .memory-ready .calculator-memory:not([open]) .memory-label { display: none; }
@@ -266,14 +300,13 @@
     .workspace-disclosure:not([open]) > :not(summary), #manualLimits:not([open]) > :not(summary) { display: none !important; }
     .workspace-disclosure .automatic-design { margin: 0 0 16px; }
     #manualLimits > summary { padding: 0 0 12px; cursor: pointer; color: var(--muted); }
-    .circuit-reference { margin: 20px 0 24px; }
+    .circuit-reference { margin: 0 0 24px; padding-top: 16px; }
     .circuit-reference h2 { font-size: 1.15rem; }
     .circuit-reference-body { display: grid; gap: 16px; padding: 0 20px 20px; }
     .circuit-reference .schematic { border-radius: 10px; }
     #schematicFallback { max-height: 260px; object-fit: contain; }
     .circuit-reference figcaption { padding: 0; font-size: 0.9rem; line-height: 1.65; }
     .circuit-reference figcaption p { margin: 0 0 16px; }
-    .circuit-reference .resource-links { padding: 0; }
     figcaption { padding: 0 16px 14px; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
     .resource-links { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
     .btn {
@@ -440,29 +473,31 @@
       .page { padding: 14px 12px 24px; }
       .circuit-reference-body { grid-template-columns: 1fr; gap: 16px; padding: 0 0 12px; }
       .mode-picker { display: none; }
+      .characteristics-tab[aria-expanded="false"] { top: auto; bottom: 20px; min-height: 44px; padding: 12px 16px; writing-mode: horizontal-tb; }
       .mobile-mode { display: block; width: 100%; min-width: 0; max-width: 100%; font-size: 16px; min-height: 48px; border-color: var(--accent); color: var(--accent); background: #123d50; }
       #schematicViewToggle { display: block; min-height: 44px; }
-      .circuit-toolbar { gap: 8px; padding: 12px; }
-      .circuit-toolbar .resource-links { gap: 8px; }
+      .circuit-toolbar { display: flex; gap: 8px; padding: 12px; }
       .circuit-toolbar .btn { min-height: 44px; }
       .resistor-menu button, .schematic-nearby button { min-height: 44px; }
       .schematic-inline :is(input,select,button) { min-height: 44px; font-size: 16px; }
       .schematic-inline button { min-width: 44px; }
       .schematic-inline select.resistance-unit { flex-basis: 76px; width: 76px; }
       .schematic-nearby-more { min-height: 44px; font-size: 14px; }
-      .header { padding: 17px; align-items: flex-start; flex-wrap: wrap; }
-      h1 { font-size: 1.2rem; }
       .tool-path-nav { padding: 10px 12px; }
+      .tool-path-nav .resource-links { flex: 1 1 100%; }
+      .tool-path-nav .btn { flex: 1; min-height: 44px; padding: 7px 6px; font-size: .75rem; white-space: nowrap; }
     }
     @media (max-width: 440px) {
       .tolerance-metrics { grid-template-columns: 1fr; }
+      .characteristics-table tr { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+      .characteristics-table td { text-align: left; font-size: 1rem; }
     }
     @media print {
       body { background: #fff; color: #111; }
-      .tool-path-nav, .actions, .result-tabs, .mode-picker, .mobile-mode, .parts-table-title .btn, footer, .calculator-memory, .memory-menu { display: none; }
+      .tool-path-nav, .actions, .result-tabs, .mode-picker, .mobile-mode, .characteristics-tab, .characteristics-drawer, .parts-table-title .btn, footer, .calculator-memory, .memory-menu { display: none; }
       .calculator-workspace.memory-ready { display: block; }
       .column { margin-bottom: 16px; }
-      .panel, .header { box-shadow: none; break-inside: avoid; }
+      .panel { box-shadow: none; break-inside: avoid; }
       .result-panel, .result-panel[hidden] { display: block !important; margin-bottom: 16px; }
       .parts-values, .pair-table { max-height: none; }
       .parts-values thead th { position: static; }
@@ -473,27 +508,34 @@
   <nav class="tool-path-nav" aria-label="Tool navigation">
     <a href="../tools.html">Tools</a><span aria-hidden="true">/</span>
     <span aria-current="page">Voltage Divider</span>
+    <div class="resource-links" role="group" aria-label="Circuit downloads">
+      <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
+      <a id="ltspiceDownload" class="btn" download="voltage_divider.asc" title="Download LTspice schematic (.asc)" hidden>LTspice ↓</a>
+      <a id="markdownDownload" class="btn" download="voltage_divider.md" hidden>Markdown ↓</a>
+    </div>
   </nav>
+  <button id="characteristicsToggle" class="characteristics-tab" type="button" aria-expanded="false" aria-controls="characteristicsDrawer" aria-label="Show circuit characteristics">
+    <svg class="characteristics-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg>
+    <span>Circuit characteristics</span>
+  </button>
+  <aside id="characteristicsDrawer" class="characteristics-drawer" aria-labelledby="characteristicsHeading" aria-hidden="true" inert>
+    <div class="characteristics-header">
+      <h2 id="characteristicsHeading">Circuit characteristics</h2>
+      <button id="characteristicsClose" class="characteristics-close" type="button" aria-label="Close circuit characteristics">×</button>
+    </div>
+    <div class="characteristics-scroll" tabindex="0" role="region" aria-label="Circuit characteristics measurements">
+      <table id="characteristicsTable" class="characteristics-table" role="table" aria-labelledby="characteristicsHeading" aria-colcount="2" data-field="circuitCharacteristics"><tbody id="characteristicsBody"></tbody></table>
+    </div>
+  </aside>
   <main class="page">
-    <header class="header">
-      <div>
-        <h1>Voltage Divider Calculator</h1>
-        <p class="subtitle">Calculate voltages. Explore tolerances. Check resistor power and voltage stress.</p>
-      </div>
-      <span class="live-tag">DC analysis · Online calculator</span>
-    </header>
+    <h1 class="sr-only">Voltage Divider Calculator</h1>
     <noscript><p>Enable JavaScript to calculate circuit results and resistor stress. The schematic and reference files are available below.</p></noscript>
     <section id="circuitReference" class="panel circuit-reference" aria-labelledby="schematicHeading">
-      <div class="circuit-toolbar">
+      <div id="circuitToolbar" class="circuit-toolbar">
         <h2 id="schematicHeading" hidden>VTOP 12 V → VMID 6 V · 2 resistors · no load</h2>
         <select id="mobileSolveMode" class="mobile-mode" aria-label="Calculator mode" aria-controls="liveSchematic"></select>
         <button id="schematicViewToggle" class="btn" type="button" aria-controls="liveSchematic" aria-pressed="false">Desktop view</button>
         <button id="circuitCancelSearch" class="btn" type="button" hidden>Cancel search</button>
-        <div class="resource-links">
-          <a id="schematicDownload" class="btn" href="../images/voltage_divider.svg" download="voltage_divider.svg">Download SVG ↓</a>
-          <a id="ltspiceDownload" class="btn" download="voltage_divider.asc" hidden>LTspice .asc ↓</a>
-          <a id="markdownDownload" class="btn" download="voltage_divider.md" hidden>Markdown ↓</a>
-        </div>
       </div>
       <p id="schematicFeedback" class="hint" role="status" hidden></p>
       <div id="calculatorWorkspace" class="calculator-workspace">
@@ -1083,6 +1125,7 @@
         }
       }
       byId("circuitCancelSearch").hidden = !searching || byId("pairCancel").hidden;
+      byId("circuitToolbar").classList.toggle("is-active", !byId("circuitCancelSearch").hidden);
       const feedback = searching ? !byId("pairError").hidden ? byId("pairError") : !resistorCatalog ? byId("pairCatalogStatus") : byId("pairComparisonCopyStatus").textContent ? byId("pairComparisonCopyStatus") : pairSpec || !byId("pairCancel").hidden ? byId("pairStatus") : null : !byId("inputError").hidden ? byId("inputError") : automatic ? byId("designStatus") : null;
       const message = feedback?.textContent || "", output = byId("schematicFeedback");
       output.hidden = !message;
@@ -2703,7 +2746,49 @@
       });
     }
 
-    let schematicCharacteristicsExpanded = false;
+    let characteristicsExpanded = false;
+
+    function setCharacteristicsExpanded(expanded, restoreFocus = false) {
+      characteristicsExpanded = expanded;
+      const toggle = byId("characteristicsToggle"), drawer = byId("characteristicsDrawer");
+      toggle.setAttribute("aria-expanded", String(expanded));
+      toggle.setAttribute("aria-label", `${expanded ? "Hide" : "Show"} circuit characteristics`);
+      drawer.classList.toggle("is-open", expanded); drawer.inert = !expanded;
+      drawer.setAttribute("aria-hidden", String(!expanded));
+      if (restoreFocus) toggle.focus({ preventScroll: true });
+    }
+
+    function characteristicDescription(state, field, description) {
+      if (description) return description;
+      if (field === "calculator") return "https://www.minipcb.com/calculators/voltage_divider.html";
+      if (field === "analyzedAt") return state?.analyzedAt || "";
+      if (["nominalError", "worstError"].includes(field)) return targetErrorDescription(state?.target);
+      if (field === "environmentScope") return environmentScope(state?.environment);
+      if (field === "vmidAccuracy") return "Worst tolerance deviation from nominal VMID; voltage units are used when nominal VMID is zero.";
+      if (["pstress", "vstress"].includes(field)) return field === "vstress" && partsMissingVoltage(state) ? "Voltage stress is not fully assessed: specify a maximum continuous working voltage for every resistor." : "Highest modeled stress bound across physical divider resistors, including source, load, initial tolerance and characterized environmental drift. " + environmentScope(state?.environment);
+      return "";
+    }
+
+    function renderCharacteristicsPanel(state, characteristics, mode) {
+      const table = byId("characteristicsTable"), body = byId("characteristicsBody"), fragment = document.createDocumentFragment();
+      table.dataset.analysisMode = mode;
+      table.dataset.analysisState = characteristics.complete ? state.pair ? "preview" : "calculated" : "awaiting";
+      table.dataset.analyzedAt = state?.analyzedAt || "";
+      table.setAttribute("aria-rowcount", characteristics.rows.length);
+      for (const [label, value, field, description] of characteristics.rows) {
+        const row = document.createElement("tr"), name = document.createElement("th"), cell = document.createElement("td"), text = document.createElement(field === "calculator" ? "a" : "span");
+        row.setAttribute("role", "row"); name.setAttribute("role", "rowheader"); cell.setAttribute("role", "cell");
+        name.scope = "row"; name.className = "characteristic-name"; name.textContent = label;
+        text.className = "characteristic-value"; text.dataset.field = field; text.textContent = value;
+        if (field === "calculator") { text.href = "https://www.minipcb.com/calculators/voltage_divider.html"; text.target = "_top"; }
+        if (field.startsWith("stack") && /Not set|partial/.test(value) || field === "findResult" && !characteristics.complete) text.dataset.warning = "";
+        if (["analyzedAt", "calculator"].includes(field)) row.dataset.metadata = "";
+        cell.title = characteristicDescription(state, field, description);
+        cell.append(text); row.append(name, cell); fragment.append(row);
+      }
+      body.replaceChildren(fragment);
+      return "Circuit characteristics. " + characteristics.rows.map(([label, value]) => `${label}: ${value}`).join(". ") + ".";
+    }
 
     function circuitToleranceRows(state) {
       const environment = state.environment;
@@ -2764,7 +2849,7 @@
         ["Worst Vstress", !complete ? "—" : percent(pair ? pair.vstress : worst ? worstVoltages.length === parts.length ? Math.max(...worstVoltages) : null : maximumVoltageStress(parts)), "vstress"],
         ["Analyzed", state?.analyzedAt ? state.analyzedAt.slice(0, 16).replace("T", " ") + " UTC" : "—", "analyzedAt"],
         ["Calculator", "Voltage divider ↗", "calculator"]);
-      return { rows, height: schematicCharacteristicsExpanded ? rows.length * 28 + 48 : 44, complete };
+      return { rows, height: rows.length * 28 + 48, complete };
     }
 
     function renderCircuitCharacteristics(host, state, characteristics, mode, x, y, width) {
@@ -2772,10 +2857,7 @@
       const table = schematicShape(host, "g", { transform: `translate(${x} ${y})`, role: "table", "aria-label": "Circuit characteristics", "aria-colcount": 2, "aria-rowcount": rows.length, "data-field": "circuitCharacteristics", "data-analysis-mode": mode, "data-analysis-state": complete ? state.pair ? "preview" : "calculated" : "awaiting", "data-analyzed-at": state?.analyzedAt || "" });
       schematicInfoBox(table, 0, 0, width, height);
       schematicText(table, 12, 24, "Circuit characteristics", 14, "#eaf6ff");
-      const toggle = schematicShape(table, "g", { role: "button", tabindex: 0, "data-pair-action": "characteristics", "aria-label": "Circuit characteristics", "aria-expanded": String(schematicCharacteristicsExpanded), "aria-controls": "schematicCharacteristicsBody", "data-schematic-controls": "" });
-      schematicShape(toggle, "rect", { width, height: 38, fill: "transparent" });
-      schematicText(toggle, width - 24, 24, schematicCharacteristicsExpanded ? "−" : "+", 18, "#54d2ff");
-      const body = schematicShape(table, "g", { id: "schematicCharacteristicsBody", role: "rowgroup", display: schematicCharacteristicsExpanded ? "inline" : "none" });
+      const body = schematicShape(table, "g", { id: "schematicCharacteristicsBody", role: "rowgroup" });
       for (const [index, [label, value, field, description]] of rows.entries()) {
         const metadata = index >= rows.length - 2, row = schematicShape(body, "g", { role: "row", "aria-rowindex": index + 1 }), top = 52 + index * 28 + (metadata ? 8 : 0);
         const labelSize = width < 420 ? 11 : 12, valueSize = Math.min(metadata ? 11 : 13, (width - 36 - label.length * labelSize * 0.62) / (value.length * 0.62));
@@ -2786,13 +2868,9 @@
         const stackColor = field === "stackThermal" ? "#75d5ff" : field === "stackRadiation" ? "#d0acff" : field === "stackAging" ? "#ffd083" : null;
         const text = schematicText(parent, width - 12, top, value, valueSize, field.startsWith("stack") && /Not set|partial/.test(value) ? "#ffba52" : stackColor || (field === "calculator" ? "#54d2ff" : field === "findResult" ? complete ? "#ff8e8e" : "#f6d365" : "#c6e3ff"), field);
         text.setAttribute("text-anchor", "end");
-        if (description) schematicShape(cell, "title").textContent = description;
-        if (field === "calculator") { text.setAttribute("text-decoration", "underline"); schematicShape(parent, "title").textContent = url; }
-        if (field === "analyzedAt" && state?.analyzedAt) schematicShape(cell, "title").textContent = state.analyzedAt;
-        if (["nominalError", "worstError"].includes(field)) schematicShape(cell, "title").textContent = targetErrorDescription(state?.target);
-        if (field === "environmentScope") schematicShape(cell, "title").textContent = environmentScope(state?.environment);
-        if (field === "vmidAccuracy") schematicShape(cell, "title").textContent = "Worst tolerance deviation from nominal VMID; voltage units are used when nominal VMID is zero.";
-        if (["pstress", "vstress"].includes(field)) schematicShape(cell, "title").textContent = field === "vstress" && partsMissingVoltage(state) ? "Voltage stress is not fully assessed: specify a maximum continuous working voltage for every resistor." : "Highest modeled stress bound across physical divider resistors, including source, load, initial tolerance and characterized environmental drift. " + environmentScope(state?.environment);
+        const detail = characteristicDescription(state, field, description);
+        if (detail) schematicShape(cell, "title").textContent = detail;
+        if (field === "calculator") text.setAttribute("text-decoration", "underline");
       }
       return "Circuit characteristics. " + rows.map(([label, value]) => `${label}: ${value}`).join(". ") + `. Calculator page: ${url}.`;
     }
@@ -3133,6 +3211,14 @@
         if (node.hasAttribute("data-pair-axis")) { node.querySelector("title")?.remove(); node.removeAttribute("aria-label"); }
         for (const attribute of ["role", "tabindex", "aria-valuemin", "aria-valuemax", "aria-valuenow", "aria-valuetext", "aria-pressed", "aria-haspopup", "aria-controls", "aria-expanded", "data-pair-action", "data-pair-axis", "data-axis-plot"]) node.removeAttribute(attribute);
         if (node.hasAttribute("data-pair-chart")) node.setAttribute("aria-label", node.getAttribute("aria-label").split(". Click")[0]);
+      }
+      if (source === byId("liveSchematic")) {
+        // The drawer is outside the live SVG; full-workspace downloads retain its data.
+        const mode = byId("solveFor").value, state = mode === "pairs" ? pairSchematicState() : schematicState || pendingConstructionState();
+        const characteristics = circuitCharacteristics(state, mode), width = Number(source.getAttribute("width")), top = Number(source.getAttribute("height")) + 16;
+        renderCircuitCharacteristics(snapshot, state, characteristics, mode, 16, top, width - 32);
+        const height = top + characteristics.height + 16;
+        snapshot.setAttribute("height", height); snapshot.setAttribute("viewBox", `0 0 ${width} ${height}`);
       }
       return snapshot;
     }
@@ -3475,10 +3561,10 @@
       const drawing = compact ? renderMobileDrawing(state, roles, viewportWidth - 32) : desktopDrawing, width = compact ? viewportWidth : Math.max(viewportWidth, drawing.width + 32 + tabWidth);
       const drawingWidth = drawing.width;
       // Bound the report independently of the full-width calculator and drawing.
-      const detailsWidth = Math.min(1280, viewportWidth - 40), detailsX = Math.max(24, (viewportWidth - detailsWidth) / 2), informationWidth = viewportWidth - 32;
-      const characteristics = circuitCharacteristics(state, mode), analysisHeight = characteristics.height + 16;
+      const detailsWidth = Math.min(1280, viewportWidth - 40), detailsX = Math.max(24, (viewportWidth - detailsWidth) / 2);
+      const characteristics = circuitCharacteristics(state, mode);
       const frameHeader = compact ? 140 + (mobileTitleLines(titleText, drawingWidth + 16).length - 1) * 24 : 140;
-      const drawingY = compact ? 16 + frameHeader : 156 + analysisHeight;
+      const drawingY = 16 + frameHeader;
       const drawingBottom = drawingY + drawing.height;
       const partsGroup = byId("schematicParts"), drawingNode = byId("schematicDrawing"), drawingX = (width - drawingWidth + tabWidth) / 2;
       byId("modePicker").style.left = `${drawingX - 8 - tabWidth + 2}px`;
@@ -3497,11 +3583,10 @@
         schematicEditable(button, "search-run", "Find Design Solutions");
         controlsBottom = top + 58;
       }
-      const analysisTop = compact ? mobileDisclosure(partsGroup, "analysis", "Analysis & parts list", 16, controlsBottom + 16, viewportWidth - 32, mobileAnalysisExpanded) : 16;
-      const detailsY = compact ? analysisTop + analysisHeight : controlsBottom + 22;
-      const informationX = 16, informationY = compact ? analysisTop : 16;
+      const analysisTop = compact ? mobileDisclosure(partsGroup, "analysis", "Parts list", 16, controlsBottom + 16, viewportWidth - 32, mobileAnalysisExpanded) : 16;
+      const detailsY = compact ? analysisTop + 12 : controlsBottom + 22;
       const analysisHost = compact ? schematicShape(partsGroup, "g", { "data-mobile-analysis": "", ...(!mobileAnalysisExpanded ? { display: "none" } : {}) }) : partsGroup;
-      const characteristicsDescription = renderCircuitCharacteristics(analysisHost, state, characteristics, mode, informationX, informationY, informationWidth);
+      const characteristicsDescription = renderCharacteristicsPanel(state, characteristics, mode);
       const alternativeParts = new Map();
       byId("schematicDrawing").setAttribute("transform", `translate(${drawingX} ${drawingY})`);
       byId("schematicR1Value").textContent = Number.isFinite(state?.circuit.r1) ? format(state.circuit.r1, "Ω") : "—";
@@ -5298,12 +5383,6 @@
     }
 
     function runSchematicPairAction(action) {
-      if (action === "characteristics") {
-        schematicCharacteristicsExpanded = !schematicCharacteristicsExpanded; pairSvgLayout = null;
-        renderSchematic();
-        byId("liveSchematic").querySelector('[data-pair-action="characteristics"]')?.focus({ preventScroll: true });
-        return;
-      }
       if (action === "copy-bom") { copySchematicBom(); return; }
       activateSchematicPairResults();
       if (action.startsWith("family:")) pairFamilyToggles.find(input => input.dataset.pairFamily === action.split(":")[1])?.click();
@@ -6248,6 +6327,17 @@
     byId("ratingMode").addEventListener("change", renderRatingReference);
     byId("ratingCancel").addEventListener("click", closeRatingDialog);
     byId("ratingDialog").addEventListener("cancel", event => { event.preventDefault(); closeRatingDialog(); });
+    byId("characteristicsToggle").addEventListener("click", () => setCharacteristicsExpanded(!characteristicsExpanded));
+    byId("characteristicsClose").addEventListener("click", () => setCharacteristicsExpanded(false, true));
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && characteristicsExpanded && !event.defaultPrevented && !schematicEditContext && !document.querySelector("dialog[open]") && ["memoryMenu", "resistorMenu", "pairAxisMenu"].every(id => byId(id).hidden)) {
+        event.preventDefault(); setCharacteristicsExpanded(false, true);
+      }
+    });
+    const topbarObserver = new ResizeObserver(() => {
+      document.documentElement.style.setProperty("--tool-nav-height", `${document.querySelector(".tool-path-nav").getBoundingClientRect().height}px`);
+    });
+    topbarObserver.observe(document.querySelector(".tool-path-nav"));
     byId("mobileSolveMode").addEventListener("change", event => document.querySelector(`[data-solve-mode="${event.target.value}"]`)?.click());
     byId("schematicViewToggle").addEventListener("click", () => {
       closeSchematicEditor(false); closeResistorMenu(); schematicDesktopView = !schematicDesktopView;
