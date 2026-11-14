@@ -1012,6 +1012,14 @@ or use the performance filters to examine a useful subset.
 Every retained result must fit its **entire VMID interval** inside
 `target +/- abs(target) * allowed error / 100`. This includes nominal ratio
 mismatch, source variation, each physical tolerance and finite-load tolerance.
+VTOP and VMID allowances may both be nonzero. The VMID allowance is the total
+output-error budget, not an additional allowance on top of VTOP variation. For
+example, 12 V ±5% divided by equal 10 kΩ ±0.1% resistors produces 5.6943–6.3063 V
+with initial tolerances alone: a worst-case error of 5.105% from 6 V. It cannot
+meet a 6 V ±5% requirement; a ±6% allowance leaves room for these initial errors.
+Temperature, aging and radiation drift consume further margin. An empty search
+shows an amber result and explains when VTOP variation uses or exceeds the VMID
+allowance; both nonzero entries remain valid inputs.
 For networks, equivalent resistance intervals follow the actual connection tree.
 Per-part voltage/current intervals propagate through series and parallel
 branches; their conservative power/stress bounds include possible interior power

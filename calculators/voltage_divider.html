@@ -1123,11 +1123,11 @@
       if (byId("pairFind").textContent !== searchLabel) byId("pairFind").textContent = searchLabel;
       const search = byId("schematicDesignSearch");
       if (search) {
-        const color = busy ? "#ffba52" : current ? "#6ee7ac" : "#ff8e8e";
+        const empty = current && !pairItems.length, color = busy || empty ? "#ffba52" : current ? "#6ee7ac" : "#ff8e8e";
         search.dataset.searchState = busy ? "searching" : current ? "current" : "needed";
         search.setAttribute("aria-disabled", String(busy || current || !resistorCatalog));
-        search.setAttribute("aria-label", busy ? "Finding design solutions" : current ? `${searchLabel}; change a specification or design input to search again` : "Find Design Solutions; run search for the current specifications");
-        search.querySelector("rect").setAttribute("fill", busy ? "#493622" : current ? "#173b31" : "#462b32");
+        search.setAttribute("aria-label", busy ? "Finding design solutions" : current ? `${searchLabel}; ${empty ? emptyPairSearchMessage(pairSpec) + " " : ""}change a specification or design input to search again` : "Find Design Solutions; run search for the current specifications");
+        search.querySelector("rect").setAttribute("fill", busy || empty ? "#493622" : current ? "#173b31" : "#462b32");
         search.querySelector("rect").setAttribute("stroke", color);
         search.querySelector("text").setAttribute("fill", color);
         const text = search.querySelector("text"); text.textContent = searchLabel;
@@ -2323,7 +2323,7 @@
         { label: "Min", content: value(min), field: source ? "vtopMin" : "vmidMin" });
       const panel = schematicShape(parent, "g", { "data-field": source ? "vtopReadout" : "vmidReadout", ...(source ? { "data-schematic-info": "source" } : {}) });
       if (source && mode === "vin") schematicShape(panel, "title").textContent = sourceRange?.feasible === null ? "The resistor/load drift interval is not fully characterized, so the trip-voltage range is unassessed." : "Trip-voltage range from the VMID threshold tolerance, each resistor's initial/temperature/aging/radiation interval, and load uncertainty. Tolerance is the larger endpoint deviation; Min and Max retain the actual, possibly asymmetric range.";
-      if (targetLimits) schematicShape(panel, "title").textContent = `Target, tolerance and limits specify the required VMID band. Nominal is the selected design's actual output. Actual output interval: ${value(state?.bounds.min)} to ${value(state?.bounds.max)}.`;
+      if (targetLimits) schematicShape(panel, "title").textContent = (pairMode ? "The VMID allowance includes VTOP variation, resistor tolerances, drift and load uncertainty. " : "") + `Target, tolerance and limits specify the required VMID band. Nominal is the selected design's actual output. Actual output interval: ${value(state?.bounds.min)} to ${value(state?.bounds.max)}.`;
       if (!source && !targetLimits) schematicShape(panel, "title").textContent = environmentScope(state?.environment) + ". VTOP tolerance must include the source's full mission variation.";
       if (mobileWidth) {
         const height = hasTarget && !source ? 176 : 154, fieldX = x + mobileWidth - 156;
@@ -4834,9 +4834,17 @@
       }
     }
 
+    function emptyPairSearchMessage(spec) {
+      const budget = `No designs found within the current limits. The VMID ±${percent(spec.errorPct)} allowance includes VTOP ±${percent(spec.sourceTolerance)}, resistor tolerances and drift.`;
+      if (!DividerCurrentLoad.enabled(spec) && spec.sourceTolerance > 0 && spec.sourceTolerance >= spec.errorPct) {
+        return `${budget} VTOP variation alone ${spec.sourceTolerance > spec.errorPct ? "exceeds" : "uses the full"} VMID allowance. Increase the VMID allowance or reduce VTOP variation.`;
+      }
+      return `${budget} Review the VMID allowance, VTOP variation, resistor/load tolerances and search limits.`;
+    }
+
     function publishPairSearch(spec, matches, status) {
       spec.analyzedAt = new Date().toISOString(); pairSpec = spec; pairItems = matches; pairSelected = null; pairPage = 0;
-      sortPairItems(); byId("pairStatus").textContent = status;
+      sortPairItems(); byId("pairStatus").textContent = matches.length || spec.memoryRecall ? status : `${status} ${emptyPairSearchMessage(spec)}`;
       byId("pairResults").hidden = !pairItems.length; byId("pairCsv").disabled = !pairItems.length;
       if (pairItems.length) selectPair(0);
       updatePairSummary(); return pairItems;
@@ -5332,7 +5340,12 @@
       const title = schematicText(heading, x + 18, y + 68, "Design Solutions", 28, "#eaf6ff");
       schematicShape(title, "tspan", { ...(wrapCount ? { x: x + 18, y: y + 92 } : {}), "font-size": Math.min(16, (width - 36) / (count.length * 0.62)), fill: "#c6d7e5" }).textContent = count;
       let top = y + headingHeight + 56;
-      if (!pairItems.length) return top;
+      if (!pairItems.length) {
+        if (!pairSpec || pairSpec.memoryRecall) return top;
+        const notice = schematicTableText(host, x, top + 4, emptyPairSearchMessage(pairSpec), width, 14, "#ffba52", null, 20);
+        notice.text.setAttribute("data-search-empty", "");
+        return top + notice.lines * 20 + 24;
+      }
       let actionX = x;
       for (const input of pairFamilyToggles) {
         const key = input.dataset.pairFamily, label = `${input.checked ? "✓" : "○"} ${input.nextElementSibling.textContent}`;
