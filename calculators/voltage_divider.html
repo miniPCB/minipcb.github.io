@@ -1130,7 +1130,12 @@
         search.querySelector("rect").setAttribute("stroke", color);
         search.querySelector("text").setAttribute("fill", color);
         const text = search.querySelector("text"); text.textContent = searchLabel;
-        if (byId("liveSchematic").dataset.layout === "mobile" && current) {
+        if (search.dataset.searchLayout === "tabs") {
+          const x = text.getAttribute("x"), y = Number(search.querySelector("rect").getAttribute("y"));
+          const lines = busy ? ["Finding ", "solutions…"] : current ? [`${pairItems.length.toLocaleString()} Design `, "Solutions Found"] : ["Find Design ", "Solutions"];
+          text.textContent = ""; text.setAttribute("font-size", "14");
+          lines.forEach((line, index) => { schematicShape(text, "tspan", { x, y: y + 30 + index * 20 }).textContent = line; });
+        } else if (byId("liveSchematic").dataset.layout === "mobile" && current) {
           const x = text.getAttribute("x"), y = Number(search.querySelector("rect").getAttribute("y"));
           text.textContent = ""; text.setAttribute("font-size", "16");
           schematicShape(text, "tspan", { x, y: y + 21 }).textContent = `${pairItems.length.toLocaleString()} `;
@@ -3648,14 +3653,16 @@
       renderCircuitFrame(partsGroup, { x: drawingX - 8, y: drawingY - frameHeader, width: drawingWidth + 16, height: frameBottom - drawingY + frameHeader, compact }, drawingNode, titleText, state);
       let controlsBottom = frameBottom;
       if (designSolutionsAvailable(mode)) {
-        const left = drawingX, top = frameBottom + 12;
+        const besideFrame = tabWidth > 0, picker = byId("modePicker");
+        const top = besideFrame ? parseFloat(picker.style.top) + picker.offsetHeight + 12 : frameBottom + 12;
         const controls = schematicShape(partsGroup, "g", { "data-schematic-controls": "", "data-circuit-search-controls": "" });
-        const buttonWidth = compact ? Math.min(460, drawingWidth) : 460, buttonX = left + (drawingWidth - buttonWidth) / 2;
-        const button = schematicShape(controls, "g", { id: "schematicDesignSearch" });
-        schematicShape(button, "rect", { x: buttonX, y: top, width: buttonWidth, height: 50, rx: 12, fill: "#462b32", stroke: "#ff8e8e" });
+        const buttonWidth = besideFrame ? tabWidth : compact ? Math.min(460, drawingWidth) : 460, buttonX = besideFrame ? parseFloat(picker.style.left) : drawingX + (drawingWidth - buttonWidth) / 2;
+        const button = schematicShape(controls, "g", { id: "schematicDesignSearch", "data-search-layout": besideFrame ? "tabs" : "below" });
+        schematicShape(button, "rect", { x: buttonX, y: top, width: buttonWidth, height: besideFrame ? 72 : 50, rx: 12, fill: "#462b32", stroke: "#ff8e8e" });
         schematicText(button, buttonX + buttonWidth / 2, top + 31, "Find Design Solutions", Math.min(18, (buttonWidth - 24) / (21 * 0.62)), "#ff8e8e").setAttribute("text-anchor", "middle");
         schematicEditable(button, "search-run", "Find Design Solutions");
-        controlsBottom = top + 58;
+        if (besideFrame) partsGroup.prepend(controls);
+        else controlsBottom = top + 58;
       }
       const analysisTop = compact ? mobileDisclosure(partsGroup, "analysis", "Parts list", 16, controlsBottom + 16, viewportWidth - 32, mobileAnalysisExpanded) : 16;
       const detailsY = compact ? analysisTop + 12 : controlsBottom + 22;
@@ -4078,7 +4085,7 @@
       }
       schematicEditContext = { pairSearch: true, pairPartId: part?.id, pairPartArm: partArm, kind: ["source", "target", "load"].includes(key) ? key : "part", part: part ? { ...part, resistance: displayed?.resistance ?? part.resistance ?? 10000, tolerance: part.settings.tolerancePct ?? Number(fields[`pairTol${side}`].value) } : null, construction, mode: "pairs", key, focus, fields, fingerprint: pairFormFingerprint() };
       byId("schematicEditHeading").textContent = `Edit ${part ? part.name + " catalog limits" : name}`;
-      byId("schematicEditHelp").textContent = (part ? "These limits apply to this physical resistor." : "These settings define the design search. The shared TCR applies unless a resistor has an override.") + " Save your specifications, then use Find Design Solutions below the circuit. Changed specifications clear the previous results.";
+      byId("schematicEditHelp").textContent = (part ? "These limits apply to this physical resistor." : "These settings define the design search. The shared TCR applies unless a resistor has an override.") + " Save your specifications, then use Find Design Solutions to run the search. Changed specifications clear the previous results.";
       byId("schematicEditSave").textContent = "Save specifications"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
       schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
       if (inlineNode && inlineEditorField()) { openInlinePartEditor(inlineNode); return; }

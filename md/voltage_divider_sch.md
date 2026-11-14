@@ -152,8 +152,8 @@ They stay immediately editable and keep the circuit calculated. If no setting
 is available, the defaults are 10 kΩ, ±0.1% and 0805. Adding a resistor places
 the cursor in its value; type directly, then press Enter. Tab saves and moves
 to the next resistor's value, allowing a chain of values to be entered quickly.
-**Find Design Solutions** below the circuit searches catalog assignments for
-the same construction without opening a dialog.
+**Find Design Solutions** beneath the desktop mode tabs searches catalog
+assignments for the same construction without opening a dialog.
 
 The collapsed **Automatic values** section appears when resistor values are
 marked automatic. It lets you set target VMID, a
@@ -646,8 +646,9 @@ The red **Unknown** and green **Known** tiles inside the circuit frame explain
 its colors and remain in circuit downloads. **Search limits** contains the
 resistance range, search temperature, shared TCR, maximum stress and optional
 total-power limit. Ambient/drift settings edit directly in Operating Conditions.
-Below the frame, **Find Design Solutions** runs the combination search directly
-from the diagram. It appears in Find real resistor combinations, and in Find VMID
+**Find Design Solutions** sits directly below the mode tabs on desktop and runs
+the combination search from the diagram. Phones retain the search below the
+compact circuit. It appears in Find real resistor combinations, and in Find VMID
 when a multi-part resistor network is configured. Other modes calculate directly
 from their known inputs and do not show this search button.
 It is red when a search is needed, amber while searching and green when the results
