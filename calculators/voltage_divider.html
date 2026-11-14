@@ -93,8 +93,13 @@
       transition: transform .2s ease, visibility .2s;
     }
     .characteristics-drawer.is-open { transform: translateX(0); visibility: visible; }
-    .characteristics-header { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
-    .characteristics-header h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.05rem; font-weight: 600; }
+    .characteristics-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+    .characteristics-header h2 { flex: 1 1 160px; min-width: 0; margin: 0; font-size: 1.05rem; font-weight: 600; }
+    .characteristics-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .characteristics-actions .btn { min-width: 72px; min-height: 44px; }
+    .characteristics-actions .btn[aria-busy="true"] { opacity: .6; cursor: progress; }
+    .characteristics-copy-fallback { margin-top: 12px; }
+    .characteristics-copy-fallback textarea { width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; background: #101823; color: var(--text); font: 16px/1.5 var(--mono); resize: vertical; }
     .characteristics-close { flex: 0 0 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px; background: #234153; color: var(--text); font-size: 1.5rem; cursor: pointer; }
     .characteristics-close:hover { background: #315b70; }
     .characteristics-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 18px 20px; }
@@ -521,9 +526,17 @@
   <aside id="characteristicsDrawer" class="characteristics-drawer" aria-labelledby="characteristicsHeading" aria-hidden="true" inert>
     <div class="characteristics-header">
       <h2 id="characteristicsHeading">Circuit characteristics</h2>
-      <button id="characteristicsClose" class="characteristics-close" type="button" aria-label="Close circuit characteristics">×</button>
+      <div class="characteristics-actions">
+        <button id="characteristicsCopy" class="btn btn-accent" type="button" aria-label="Copy circuit characteristics for Excel">Copy</button>
+        <button id="characteristicsClose" class="characteristics-close" type="button" aria-label="Close circuit characteristics">×</button>
+      </div>
     </div>
     <div class="characteristics-scroll" tabindex="0" role="region" aria-label="Circuit characteristics measurements">
+      <p id="characteristicsCopyStatus" class="sr-only" role="status"></p>
+      <div id="characteristicsCopyFallback" class="characteristics-copy-fallback" hidden>
+        <label for="characteristicsCopyText">Copy the selected table (Ctrl+C or Command+C), then paste into Excel.</label>
+        <textarea id="characteristicsCopyText" rows="6" readonly spellcheck="false"></textarea>
+      </div>
       <table id="characteristicsTable" class="characteristics-table" role="table" aria-labelledby="characteristicsHeading" aria-colcount="2" data-field="circuitCharacteristics"><tbody id="characteristicsBody"></tbody></table>
     </div>
   </aside>
@@ -2746,7 +2759,61 @@
       });
     }
 
-    let characteristicsExpanded = false;
+    let characteristicsExpanded = false, characteristicsCopyText = "", characteristicsCopyGeneration = 0;
+
+    function characteristicsCopyRows() {
+      return [["Characteristic", "Value"], ...[...byId("characteristicsBody").rows].map(row => [row.cells[0].textContent, row.cells[1].querySelector("a")?.href || row.cells[1].textContent])];
+    }
+
+    function characteristicsTsv(rows = characteristicsCopyRows()) {
+      return rows.map(row => row.map(value => String(value).replace(/[\t\r\n]+/g, " ")).join("\t")).join("\r\n") + "\r\n";
+    }
+
+    function characteristicsClipboardHtml(rows) {
+      const table = document.createElement("table");
+      table.style.cssText = "border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt";
+      for (const [index, values] of rows.entries()) {
+        const row = table.insertRow();
+        for (const [column, value] of values.entries()) {
+          const cell = document.createElement(index ? "td" : "th");
+          cell.style.cssText = "border:1px solid #cbd5e1;padding:6px 10px;text-align:left;vertical-align:top";
+          if (!index) { cell.scope = "col"; cell.style.backgroundColor = "#e9f2f8"; }
+          if (index && column === 1 && values[0] === "Calculator") { const link = document.createElement("a"); link.href = value; link.textContent = value; cell.append(link); }
+          else cell.textContent = value;
+          row.append(cell);
+        }
+      }
+      return table.outerHTML;
+    }
+
+    async function copyCharacteristics() {
+      const button = byId("characteristicsCopy"), status = byId("characteristicsCopyStatus"), fallback = byId("characteristicsCopyFallback"), input = byId("characteristicsCopyText");
+      if (button.getAttribute("aria-busy") === "true") return;
+      const rows = characteristicsCopyRows(), text = characteristicsTsv(rows), generation = ++characteristicsCopyGeneration;
+      button.setAttribute("aria-busy", "true");
+      try {
+        let copied = false;
+        if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+          try {
+            await navigator.clipboard.write([new ClipboardItem({ "text/plain": new Blob([text], { type: "text/plain" }), "text/html": new Blob([characteristicsClipboardHtml(rows)], { type: "text/html" }) })]);
+            copied = true;
+          } catch (_) { if (generation !== characteristicsCopyGeneration) return; }
+        }
+        if (!copied) {
+          if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+          await navigator.clipboard.writeText(text);
+        }
+        if (generation !== characteristicsCopyGeneration) return;
+        fallback.hidden = true; input.value = ""; button.textContent = "Copied";
+        status.textContent = "Characteristics copied for Excel.";
+      } catch (_) {
+        if (generation !== characteristicsCopyGeneration) return;
+        fallback.hidden = false; input.value = text; input.focus(); input.select();
+        status.textContent = "Clipboard unavailable. Copy the selected table, then paste into Excel.";
+      } finally {
+        if (generation === characteristicsCopyGeneration) button.setAttribute("aria-busy", "false");
+      }
+    }
 
     function setCharacteristicsExpanded(expanded, restoreFocus = false) {
       characteristicsExpanded = expanded;
@@ -2787,6 +2854,13 @@
         cell.append(text); row.append(name, cell); fragment.append(row);
       }
       body.replaceChildren(fragment);
+      const text = characteristicsTsv();
+      if (text !== characteristicsCopyText) {
+        characteristicsCopyText = text; characteristicsCopyGeneration++;
+        byId("characteristicsCopy").textContent = "Copy"; byId("characteristicsCopy").setAttribute("aria-busy", "false");
+        byId("characteristicsCopyStatus").textContent = "";
+        byId("characteristicsCopyFallback").hidden = true; byId("characteristicsCopyText").value = "";
+      }
       return "Circuit characteristics. " + characteristics.rows.map(([label, value]) => `${label}: ${value}`).join(". ") + ".";
     }
 
@@ -6328,6 +6402,7 @@
     byId("ratingCancel").addEventListener("click", closeRatingDialog);
     byId("ratingDialog").addEventListener("cancel", event => { event.preventDefault(); closeRatingDialog(); });
     byId("characteristicsToggle").addEventListener("click", () => setCharacteristicsExpanded(!characteristicsExpanded));
+    byId("characteristicsCopy").addEventListener("click", copyCharacteristics);
     byId("characteristicsClose").addEventListener("click", () => setCharacteristicsExpanded(false, true));
     document.addEventListener("keydown", event => {
       if (event.key === "Escape" && characteristicsExpanded && !event.defaultPrevented && !schematicEditContext && !document.querySelector("dialog[open]") && ["memoryMenu", "resistorMenu", "pairAxisMenu"].every(id => byId(id).hidden)) {

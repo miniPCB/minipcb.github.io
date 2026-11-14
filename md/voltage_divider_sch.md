@@ -581,8 +581,17 @@ fits desktop and phone screens below the pinned navigation. Activate the tab
 with a click or Enter/Space; use the tab, Close button or Escape to collapse it.
 On phones the closed tab rests at the lower-right edge, clear of the mode selector.
 Opening it preserves the circuit layout, calculation, memory and search selection.
-Measurements continue updating as circuit inputs change. The table identifies the
-calculated quantity and lists nominal total power, input current and source
+Measurements continue updating as circuit inputs change.
+
+**Copy** places the complete table on the clipboard with
+**Characteristic** and **Value** columns for Excel, including units, tolerances,
+the analysis timestamp and the calculator URL. A formatted HTML table and plain
+tab-separated text are supplied when supported. If clipboard access is blocked,
+the drawer offers selected text to copy manually. Copying preserves the circuit,
+search selection and calculation timestamp.
+
+The table identifies the calculated quantity and lists nominal total power,
+input current and source
 resistance Rth. Every mode reports worst-case Pstress and Vstress over its
 configured resistance-drift intervals. Two-part circuits use analytic extrema,
 including interior power peaks; networks use conservative per-part bounds.
