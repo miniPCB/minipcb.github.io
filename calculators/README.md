@@ -12,39 +12,57 @@ layout below; it works at a domain root or inside a project subdirectory.
 
 ## Files to copy
 
-Paths in this table are relative to the repository root.
+Paths in these tables are relative to the repository root. To preserve the
+current assets and build attribution, publish **13 files: 12 copied files and
+one generated `build.json`**. The icon and build metadata have optional cases
+noted below. The landing page, CI configuration, documentation, schema and test
+files are listed separately with their optional or host-specific status.
 
-| File | Function and migration notes |
-| --- | --- |
-| [calculators/voltage_divider.html](voltage_divider.html) | Application entry point. Contains its own CSS and most calculation, network construction, search, chart, editor, BOM and LTspice/Markdown export code. Copy the entire file, including the hidden backing form controls. |
-| [js/resistor-parts.js](../js/resistor-parts.js) | Loads and validates the catalog manifest and family files; generates, decodes and suggests supported part numbers and preferred values; applies catalog ratings and ambient power derating. |
-| [js/resistor-environment.js](../js/resistor-environment.js) | Initial/thermal/radiation/aging resistance intervals, environmental defaults and family-specific drift models. This is executable calculation logic, separate from the ordering catalogs. |
-| [js/divider-current-load.js](../js/divider-current-load.js) | Signed current-load analysis, inverse calculations and tolerance/stress bounds, including Find VTOP trip-voltage ranges. |
-| [js/circuit-image-export.js](../js/circuit-image-export.js) | Framed SVG, PNG, JPEG and BMP encoding, raster size limits and download filenames. |
-| [js/divider-memory.js](../js/divider-memory.js) | Collapsible calculation history, automatic time/title groups, editable names, changes from the original state, grouped autosaving, local browser storage, duplicate suppression and recall controls. The HTML adapter describes and serializes full circuit inputs and recalculates recalled designs. |
-| [parts/index.json](../parts/index.json) | Catalog manifest and preferred-value series. Names both family JSON files to fetch. |
-| [parts/resistors/vishay-tnpw-e3.json](../parts/resistors/vishay-tnpw-e3.json) | Supported Vishay TNPW e3 ordering rules, packages, tolerances, TCR options, operating modes, electrical limits and dated source evidence. |
-| [parts/resistors/vishay-eh-m55342.json](../parts/resistors/vishay-eh-m55342.json) | Corresponding Vishay E/H M55342/D55342 rules and limits. This is a specific manufacturer's supported subset of the specification family. |
-| [logo.png](../logo.png) | The real miniPCB logo, displayed in the format picker and fetched into the circuit. Its original bytes are embedded in generated images. |
-| [images/voltage_divider.svg](../images/voltage_divider.svg) | Static fallback drawing and initial SVG download target. It is not the interactive calculator or a saved user design. |
-| [favicon.png](../favicon.png) | Existing miniPCB browser icon. Its current root-relative link needs adjustment on a project-subdirectory site. |
-| [calculators/build.json](build.json) | Published build identity used beneath the logo and in exports. **Generate this for the destination host**; the source file is a GitHub Pages/Jekyll template, not plain JSON. See below. |
+| File | Status | Function and migration notes |
+| --- | --- | --- |
+| [calculators/voltage_divider.html](voltage_divider.html) | Required: copy | Application entry point. Contains its own CSS and most calculation, network construction, search, chart, editor, BOM and LTspice/Markdown export code, plus both side drawers. Copy the entire file, including the hidden backing form controls. |
+| [js/resistor-parts.js](../js/resistor-parts.js) | Required: copy | Loads and validates the catalog manifest and family files; generates, decodes and suggests supported part numbers and preferred values; applies catalog ratings and ambient power derating. |
+| [js/resistor-environment.js](../js/resistor-environment.js) | Required: copy | Initial/thermal/radiation/aging resistance intervals, environmental defaults and family-specific drift models. This is executable calculation logic, separate from the ordering catalogs. |
+| [js/divider-current-load.js](../js/divider-current-load.js) | Required: copy | Signed current-load analysis, inverse calculations and tolerance/stress bounds, including Find VTOP trip-voltage ranges. |
+| [js/circuit-image-export.js](../js/circuit-image-export.js) | Required: copy | Framed SVG, PNG, JPEG and BMP encoding, raster size limits and download filenames. |
+| [js/divider-memory.js](../js/divider-memory.js) | Required: copy | Left-edge Memory drawer, Close/Escape and focus handling, width preferences, time/title groups, editable names, change descriptions, autosaving, browser storage and recall. Its version must match the HTML; an older cached copy can leave the new X button inactive. |
+| [parts/index.json](../parts/index.json) | Required: copy | Catalog manifest and preferred-value series. Names both family JSON files to fetch. Copy every family file referenced here if you expand the catalog. |
+| [parts/resistors/vishay-tnpw-e3.json](../parts/resistors/vishay-tnpw-e3.json) | Required: copy | Supported Vishay TNPW e3 ordering rules, packages, tolerances, TCR options, operating modes, electrical limits and dated source evidence. |
+| [parts/resistors/vishay-eh-m55342.json](../parts/resistors/vishay-eh-m55342.json) | Required: copy | Corresponding Vishay E/H M55342/D55342 rules and limits. This is a specific manufacturer's supported subset of the specification family. |
+| [logo.png](../logo.png) | Required: copy | The real miniPCB logo, displayed in the format picker and fetched into the circuit. Its original bytes are embedded in generated images. |
+| [images/voltage_divider.svg](../images/voltage_divider.svg) | Required: copy | Static fallback drawing and initial SVG download target. It is not the interactive calculator or a saved user design. |
+| [favicon.png](../favicon.png) | Optional if you remove or replace its link; otherwise copy | Existing miniPCB browser icon. Adjust its root-relative link on a project-subdirectory site. |
+| [calculators/build.json](build.json) | Optional for operation; generate for published traceability | Published build identity used beneath the logo and in exports. **Generate this for the destination host**; the source file is a GitHub Pages/Jekyll template, not plain JSON. Without valid metadata the calculator runs with an unpublished-source label. See below. |
 
-Recommended support files, which are not required by the running application:
+The remaining files are optional for the running calculator unless a condition
+in the Status column applies:
 
-| File or directory | Purpose |
-| --- | --- |
-| [parts/schema.json](../parts/schema.json) | JSON Schema for maintaining the catalog data. Catalog loading performs its own JavaScript validation; it does not fetch this schema. |
-| [parts/README.md](../parts/README.md) | Catalog scope, numbering conventions, sources and data-maintenance instructions. Its catalog-engine discussion is separate from the calculator's environmental interval model. |
-| [md/voltage_divider_sch.md](../md/voltage_divider_sch.md) | Detailed calculation, interaction and export documentation. A hand-authored guide, rather than a live session export. |
-| [calculators/tests/](tests/) | Browser regression pages. Keep these in a development copy; they need not be published with the production calculator. |
-| [AGENTS.md](../AGENTS.md), [calculators/AGENTS.md](AGENTS.md) and the root agent logs | Maintenance conventions, calculator physics/UI notes and change history. Not runtime dependencies. |
+| File or directory | Status | Purpose |
+| --- | --- | --- |
+| [parts/schema.json](../parts/schema.json) | Optional; recommended for maintenance | JSON Schema for maintaining the catalog data. JavaScript validation does not fetch this file. The GitLab example includes it. |
+| [parts/README.md](../parts/README.md) | Optional documentation | Catalog scope, numbering conventions, sources and data-maintenance instructions. |
+| [calculators/README.md](README.md) | Optional documentation | This migration guide. Keep it with the destination source so later updates retain the complete file inventory and deployment steps. |
+| [md/voltage_divider_sch.md](../md/voltage_divider_sch.md) | Optional documentation | Detailed calculation, interaction and export documentation, separate from generated session reports. |
+| [AGENTS.md](../AGENTS.md) | Optional maintenance guidance | Repository-wide editing and logging conventions. |
+| [calculators/AGENTS.md](AGENTS.md) | Optional maintenance guidance | Calculator physics, drawing, UI, memory and export conventions. |
+| [agents_log.jsonl](../agents_log.jsonl) | Optional change history | Machine-readable, append-only history. |
+| [agents_log.md](../agents_log.md) | Optional change history | Human-readable change summaries. |
+| [ltspice/voltage_divider.asc](../ltspice/voltage_divider.asc) | Optional static example | Live LTspice downloads are generated from the displayed circuit and do not read this file. |
+| [calculators/tests/](tests/) | Optional development files | All 40 browser test pages are listed below. They need not be published in production. |
+| [part_number_radar.html](../part_number_radar.html) | Optional; needed for the full `resistor_parts.html` integration test | The test also exercises this other tool. It uses the shared resistor script and catalogs already listed above. |
+| [tools.html](../tools.html) | Optional; needed for an assertion in the `voltage_divider.html` test page | The test reads this page as text. For the calculator itself, remove or repoint its breadcrumb link instead of copying the original site navigation. |
+| [styles.css](../styles.css) | Optional; only if you retain the original Tools page | Styles that separate page. The calculator has inline CSS, and the text-only Tools-page test does not need this stylesheet. |
+| [CNAME](../CNAME) | Optional, host-specific; recreate for the new domain | The source contains the miniPCB domain. Use the destination host's custom-domain setup rather than copying that domain assignment. |
+| Destination `index.html` | Optional for an existing site; required by the dedicated GitLab Pages example | New landing page or relative redirect. The recipe generates it; do not replace an existing site's landing page unintentionally. |
+| Destination `.gitlab-ci.yml` | Optional; GitLab CI deployments only | New destination configuration, shown below. Other static hosts do not require this file. |
 
 You do not need the rest of the board catalog, storefront, proxy, datasheets
 directory, `styles.css`, `js/minipcb.js` or other site pages to run this tool.
 `tools.html` is only a breadcrumb destination; remove or repoint that link.
-The existing `ltspice/voltage_divider.asc` is a static example: live LTspice
-downloads are generated from the displayed circuit and do not read that file.
+The published inventory includes every script and fetched local data/image asset.
+CSS, side-drawer controls, chart rendering and export templates are inline in
+the HTML or included modules; there are no extra drawer stylesheets, icon packs,
+font files, chart libraries or pre-generated user downloads to copy.
 Do not copy the repository's `CNAME` unless you intend to configure that same
 custom domain.
 
@@ -52,12 +70,12 @@ custom domain.
 
 ```text
 site-root/
-├── index.html                         # New landing page or relative redirect
+├── index.html                         # Generated; optional on an existing site
 ├── logo.png
-├── favicon.png
+├── favicon.png                        # Optional if its link is removed/replaced
 ├── calculators/
 │   ├── voltage_divider.html
-│   └── build.json                     # Generated plain JSON
+│   └── build.json                     # Generated; optional without build attribution
 ├── js/
 │   ├── resistor-parts.js
 │   ├── resistor-environment.js
@@ -66,7 +84,7 @@ site-root/
 │   └── divider-memory.js
 ├── parts/
 │   ├── index.json
-│   ├── schema.json                    # Recommended; not fetched at runtime
+│   ├── schema.json                    # Optional; recommended for catalog maintenance
 │   └── resistors/
 │       ├── vishay-tnpw-e3.json
 │       └── vishay-eh-m55342.json
@@ -84,7 +102,9 @@ page. `resistor-parts.js` locates `../parts/` **relative to its own script URL**
 then loads `index.json` and the manifest's family paths. Moving only the page
 or only that script requires corresponding path changes. Keep filename case
 exact on Linux hosts. Keep the five classic script tags in their existing order,
-before the main inline script; do not add `async` or change them to modules.
+before the main inline script; do not add `async` or `defer`, or change them to
+modules. Copy `divider-memory.js` as that filename; the `?v=...` suffix in its
+script URL is a browser cache version, not part of the filesystem name.
 
 ## Hosting and browser considerations
 
@@ -126,20 +146,28 @@ before the main inline script; do not add `async` or change them to modules.
   Existing history uses its oldest available state as the original reference;
   the version-2 storage envelope reads old entries without changing their
   version-1 circuit snapshots. Clearing history resets the reference.
-  The desktop pane collapses horizontally into a slim rail; drag its right edge
-  or focus the separator and use arrow keys to adjust its width. The width is
-  remembered in this browser. The pane extends to the screen bottom even with
-  few entries or collapsed groups; the list uses the available space. On
-  smaller screens it grows with the page. Recalling rebuilds
+  Memory is a fixed left-edge pullout matching Circuit Characteristics on the
+  right. Its tab shows the saved count; the X and Escape close it. It starts
+  collapsed unless this browser remembers it open. On phones the collapsed tab
+  sits at the bottom left. Drag the desktop pane's right edge or focus the
+  separator and use arrow keys to adjust its remembered width. Opening and
+  resizing it preserve the circuit's position, size and analysis. The drawer
+  extends below the pinned navigation to the screen bottom, and history scrolls
+  inside it on all screen sizes. Both side drawers can stay open when they fit;
+  otherwise opening one closes the other. Recalling rebuilds
   inputs and recalculates; a search snapshot retains only its selected design,
   not the full result pool. The desktop/mobile view preference uses
   `minipcb-divider-view`. Storage belongs to this browser profile and website
   origin: moving to a different domain does not transfer existing memory.
   Uncommitted editor drafts are not saved; the leave warning remains intentional.
 - Publish matching HTML, scripts, catalog data and metadata together. Avoid
-  indefinitely caching unversioned files; `build.json` requests revalidation
-  with `cache: "no-cache"`. Exported files are snapshots and need a new download
-  after circuit edits.
+  indefinitely caching unversioned files. Keep or regenerate script URL versions
+  whenever their contents change; the GitLab recipe below hashes all five
+  scripts. A stale `divider-memory.js` with newer drawer HTML can leave X
+  inactive even though the native Memory tab still opens/closes it. Ensure any
+  CDN cache keys include query strings, and revalidate HTML and catalog JSON on
+  updates. `build.json` requests revalidation with `cache: "no-cache"`. Exported
+  files are snapshots and need a new download after circuit edits.
 
 ## Paths, source links and build traceability
 
@@ -199,7 +227,7 @@ deploy-divider:
   script:
     - |
       python - <<'PY'
-      import json, os, re, shutil
+      import hashlib, json, os, re, shutil
       from datetime import datetime, timezone
       from pathlib import Path
 
@@ -239,6 +267,17 @@ deploy-divider:
       )
       source = source.replace('${calculatorRepository}/commit/', '${calculatorRepository}/-/commit/')
       source = source.replace('; GitHub commit ${build.commit}', '; GitLab commit ${build.commit}')
+
+      def version_script(match):
+          name = match.group(1)
+          digest = hashlib.sha256((output / "js" / name).read_bytes()).hexdigest()[:12]
+          return f'<script src="../js/{name}?v={digest}"></script>'
+
+      source = re.sub(
+          r'<script src="\.\./js/([^"?]+\.js)(?:\?[^"]*)?"></script>',
+          version_script,
+          source,
+      )
       page.write_text(source, encoding="utf-8")
 
       commit = os.environ["CI_COMMIT_SHA"]
@@ -270,6 +309,11 @@ For an existing website, merge the copy/metadata steps into its build and retain
 its landing page instead of overwriting `public/index.html`. The example is
 intended for a dedicated calculator repository.
 
+The example publishes **15 files**: the 13-file published set, the optional
+`parts/schema.json`, and the generated root `index.html`. It gives every script
+a version derived from its actual bytes, including replacing the source page's
+existing Memory script version. The `.js` filenames remain unchanged.
+
 ## Verify the moved copy
 
 Serve the packaged output itself: `python -m http.server 8000 --directory public`.
@@ -280,6 +324,8 @@ paths before deployment.
 1. Check the browser Network/Console panels. All five scripts, the catalog
    manifest and both family files, logo, fallback SVG, favicon and generated
    `build.json` should load without missing files or JSON parsing errors.
+   If you intentionally omit the optional icon, remove its link; if you omit
+   build metadata, expect the unpublished-source stamp instead of a build link.
 2. Change value, tolerance and package; add series/parallel parts; check Find
    VMID, Find VTOP with a signed current load, inverse resistance modes and a
    real-part search. Confirm both TNPW and M55342 are available under compatible
@@ -290,12 +336,21 @@ paths before deployment.
 4. Copy the BOM; download full SVG, framed SVG/PNG/JPEG/BMP, LTspice and Markdown.
    Check title, logo, circuit, physical part data, source URL and build identity.
    Open exported images without relying on the original miniPCB website.
+   Open Circuit Characteristics and use its Copy button; paste into Excel and
+   confirm the two-column table retains values, units and source metadata.
 5. Test a phone-width screen, desktop view, direct input editing and the parts
    list. Confirm the leave/reload warning and clipboard fallback remain usable.
    Save and recall a calculation, reload the page and confirm browser memory is
    retained, including custom names. Change a recalled design and confirm the
    previous snapshot remains intact and the bullets compare against the original.
    If storage is blocked, memory must report that it lasts for the visit.
+6. Check both edge drawers with a mouse, keyboard and phone touch input. Confirm
+   the Memory X, tab and Escape close it, resizing/scrolling do not move the
+   circuit, and narrow screens keep both tabs reachable. Check pinned breadcrumb
+   navigation and downloads while scrolling. Find Design Solutions must appear
+   only in Find real resistor combinations, including after returning to Find
+   VMID with a multi-part network. Test an ordinary reload as well as a fresh
+   browser profile so an older cached module cannot silently disable controls.
 
 For automated browser coverage, copy `calculators/tests/` into the development
 tree and open its HTML pages over the same local server. Each reports JSON with
@@ -304,16 +359,68 @@ tree and open its HTML pages over the same local server. Each reports JSON with
 `current_load_modes.html`, `package_rating_consistency.html`,
 `package_stress_refresh.html`, `mobile_workspace.html`, `parts_table_layout.html`,
 `schematic_bom.html`, `frame_export.html`, `circuit_downloads.html`,
-`calculator_stamp.html`, `calculator_memory.html`, `calculator_memory_names.html`
-and `calculator_memory_groups.html`.
+`calculator_stamp.html`, `calculator_memory.html`, `calculator_memory_names.html`,
+`calculator_memory_groups.html`, `memory_drawer.html`, `workspace_appearance.html`,
+`characteristics_copy.html` and `mode_interactions.html`.
 These filenames refer to test pages inside `calculators/tests/`, not the
 application entry point.
 
 Some tests assert the original miniPCB/GitHub URLs and branding; adapt those
 expectations when testing a fork. `resistor_parts.html` also tests
-`part_number_radar.html`, which is outside the minimal copy; include that tool
-and its assets or separate its integration checks. Run resize/animation tests in
-real browser time so the layout and transition handlers can settle.
+`part_number_radar.html`, and the `voltage_divider.html` test fetches `tools.html`
+for a navigation assertion. Both fixtures are optional for production; copy them
+for those integration checks or adapt the checks to the destination navigation.
+Run resize/animation tests in real browser time so the layout and transition
+handlers can settle.
+
+### Complete optional test-file list
+
+Every file below is **optional for the production calculator**. These are the
+40 HTML pages currently in `calculators/tests/`; preserve that directory so their
+relative application, catalog and fixture paths continue to resolve.
+
+```text
+calculators/tests/calculator_memory.html
+calculators/tests/calculator_memory_groups.html
+calculators/tests/calculator_memory_names.html
+calculators/tests/calculator_stamp.html
+calculators/tests/characteristics_copy.html
+calculators/tests/circuit_characteristics.html
+calculators/tests/circuit_downloads.html
+calculators/tests/current_load.html
+calculators/tests/current_load_modes.html
+calculators/tests/custom_voltage_stress.html
+calculators/tests/design_derating.html
+calculators/tests/frame_export.html
+calculators/tests/inline_resistance.html
+calculators/tests/leave_warning.html
+calculators/tests/memory_drawer.html
+calculators/tests/mobile_workspace.html
+calculators/tests/mode_interactions.html
+calculators/tests/package_rating_consistency.html
+calculators/tests/package_stress_refresh.html
+calculators/tests/package_tolerance_search.html
+calculators/tests/pair_svg.html
+calculators/tests/parts_reference_selection.html
+calculators/tests/parts_table_layout.html
+calculators/tests/power_voltage_stress.html
+calculators/tests/quick_part_selection.html
+calculators/tests/quick_workspace.html
+calculators/tests/resistance_units.html
+calculators/tests/resistor_combinations.html
+calculators/tests/resistor_conditions.html
+calculators/tests/resistor_construction.html
+calculators/tests/resistor_environment.html
+calculators/tests/resistor_pairs.html
+calculators/tests/resistor_parts.html
+calculators/tests/schematic_bom.html
+calculators/tests/schematic_edit.html
+calculators/tests/schematic_nets.html
+calculators/tests/svg_workspace.html
+calculators/tests/voltage_divider.html
+calculators/tests/vtop_tolerance.html
+calculators/tests/workspace_appearance.html
+```
 
 ## Preserve the engineering meaning
 
