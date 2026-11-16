@@ -18,7 +18,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  let fixture={commit:'0123456789ABCDEF0123456789ABCDEF01234567',builtAt:'2026-11-04T18:20:30-07:00'},status=200,requests=[];
  w.fetch=(url,options)=>String(url)==='build.json'?(requests.push({url,options}),Promise.resolve(new w.Response(typeof fixture==='string'?fixture:JSON.stringify(fixture),{status,headers:{'Content-Type':'application/json'}}))):originalFetch(url,options);
  const build=await w.loadCalculatorBuild(),commit='0123456789abcdef0123456789abcdef01234567',date='2026-11-05T01:20:30.000Z',url='https://github.com/miniPCB/minipcb.github.io/commit/'+commit;
- const expected='Built 2026-11-05 01:20:30 UTC · 0123456';
+ const expected='2026-11-05 01:20:30 UTC · 0123456';
  assert(build?.commit===commit&&build.builtAt===date&&Object.isFrozen(build),'Published metadata normalizes commit case and timestamp to a fixed UTC identity');
  assert(requests.length===1&&requests[0].url==='build.json'&&requests[0].options.cache==='no-cache','Build identity comes from the shared same-origin published metadata, without a latest-commit API lookup');
  assert(stamp().querySelector('text').textContent===expected&&stamp().getAttribute('href')===url&&stamp().getAttribute('target')==='_blank','The timestamp displays seconds, UTC and the short commit, linking directly to the full public commit');
@@ -45,7 +45,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  }
  const full=new DOMParser().parseFromString(await(await originalFetch(get('schematicDownload').href)).text(),'image/svg+xml'),snapshot=w.circuitFrameSnapshot(),image=new DOMParser().parseFromString(snapshot.markup,'image/svg+xml');
  for(const exported of [full,image])assert(exported.querySelector('[data-calculator-stamp]').querySelector('text').textContent===expected&&exported.querySelector('[data-calculator-stamp]').dataset.builtAt===date,'Full workspace and framed SVG snapshots preserve the visible timestamp and full build date');
- const encoded=await w.CircuitImageExport.encode(snapshot,'svg');assert((await encoded.text()).includes(commit)&&snapshot.markup.includes('Built 2026-11-05 01:20:30 UTC'),'The image encoder keeps provenance in the image source shared by all formats');
+ const encoded=await w.CircuitImageExport.encode(snapshot,'svg');assert((await encoded.text()).includes(commit)&&snapshot.markup.includes('2026-11-05 01:20:30 UTC'),'The image encoder keeps provenance in the image source shared by all formats');
  await reset();set('solveFor','pairs');set('pairMinR','10000');set('pairMaxR','10000');get('pairForm').requestSubmit();assert((await w.pairSearchReady).length>0,'Published stamp coexists with catalog solution search');const generated=w.eval('pairSpec');w.selectPair(0);w.renderSchematic();assert(stamp().querySelector('text').textContent===expected&&w.eval('pairSpec')===generated,'Selecting and redrawing a solution keeps its source build identity');
  for(const invalid of [{commit:'bad',builtAt:date},{commit,builtAt:'invalid'},null,'---\nlayout: null\n---\n{"commit":"{{ site.github.build_revision }}"}']){fixture=invalid;assert(await w.loadCalculatorBuild()===null&&stamp().dataset.buildCommit===commit,'Invalid or unrendered metadata cannot replace a verified build identity');}
  status=404;fixture={};assert(await w.loadCalculatorBuild()===null&&stamp().dataset.buildCommit===commit,'A missing metadata response does not substitute the current clock or a newer commit');
