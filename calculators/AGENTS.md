@@ -47,8 +47,8 @@ not add a permission or confirmation step to an authorized task.
   on phones and include them in framed image exports. The blue RTOP : RBOT tile
   uses the nominal equivalent arm resistances, excludes the load, and normalizes
   RBOT to 1. Keep its information color distinct from red Unknown role colors.
-- Offer Find Design Solutions only for catalog-combination searches and the
-  forward VMID mode with a multi-part network. Calculated inverse quantities
+- Offer Find Design Solutions only in Find real resistor combinations.
+  Find VMID, including multi-part networks, and calculated inverse quantities
   update directly from their known inputs without an unrelated search action.
 - Preserve the active source controls and their labels when reorganizing direct
   SVG editors; these supply input state and metadata. Remove obsolete dialog
@@ -61,20 +61,23 @@ not add a permission or confirmation step to an authorized task.
 - Offer Desktop view on phones to restore the complete schematic and information.
   Layout/disclosure changes preserve circuit state, selected solutions, build
   identity and clean leave protection. Keep touch construction menus accessible.
-- Calculation memory belongs outside the SVG in a horizontally collapsible sidebar
-  on wide screens; keep a slim reopen rail beside the circuit when collapsed.
-  Extend the expanded desktop pane itself to the screen bottom, even with few
-  entries or collapsed groups; let the list use the available space and scroll
-  only when needed. On smaller screens let it grow with the page. Provide a draggable,
-  keyboard-accessible width separator (220–520 px, default 300 px) and persist its
-  width as a browser preference; keep layout changes out of circuit snapshots.
+- Calculation memory belongs outside the SVG in a fixed left-edge pullout drawer,
+  matching Circuit Characteristics on the right. Start collapsed unless the browser
+  remembers an open drawer; keep an attached edge tab with the memory count, a Close
+  button and Escape/focus handling. Opening or resizing it must not move or redraw
+  the circuit. Extend the drawer from the pinned navigation to the screen bottom;
+  scroll the list within it, including on phones. Provide a draggable,
+  keyboard-accessible desktop width separator (220–520 px, default 300 px), clamp
+  the drawer to narrow screens and persist its width as a browser preference.
+  Keep layout changes out of circuit snapshots. Allow both side drawers when they
+  fit; otherwise opening one closes the other.
   Group memories by a shared custom circuit title, otherwise by same-day sessions
   with at most five minutes between entries. Custom memory names label nearby
   revisions and distinct names can start new sessions. Keep groups collapsible,
   ordered by most recent member, with accurate counts. Grouping never merges or
   rewrites snapshots. Reveal a recalled entry's group and preserve pointer targets
   and keyboard focus when renaming updates group membership or headings.
-  Use a collapsed disclosure above the circuit on phones. Each entry starts with
+  Put the collapsed Memory tab at the bottom-left edge on phones. Each entry starts with
   only its name and a separate accessible chevron to show all changes from the
   original; clicking the name recalls the circuit. Keep disclosure state separate
   from circuit/storage state, and preserve it during list redraws within a visit.

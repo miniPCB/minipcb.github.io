@@ -115,7 +115,7 @@
     .characteristic-value[data-field="stackAging"] { color: #ffd083; }
     .characteristic-value[data-warning] { color: var(--accent-2); }
     @media (prefers-reduced-motion: reduce) {
-      .characteristics-tab, .characteristics-drawer { transition: none; }
+      .characteristics-tab, .characteristics-drawer, .calculator-workspace .calculator-memory { transition: none; }
     }
     .schematic-stage { position: relative; }
     .mode-picker { position: absolute; z-index: 1; width: 168px; }
@@ -245,18 +245,34 @@
     .circuit-toolbar { display: none; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; }
     .circuit-toolbar.is-active { display: flex; }
     .calculator-workspace { display: grid; gap: 12px; align-items: start; }
-    .calculator-memory { min-width: 0; margin: 0 16px; border-radius: 12px; background: #101e2b; }
-    .calculator-memory > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px; color: #c6e3ff; cursor: pointer; list-style: none; -webkit-touch-callout: none; }
+    .calculator-memory {
+      position: fixed; z-index: 13; top: var(--tool-nav-height); bottom: 0; left: 0;
+      width: min(var(--memory-width, 300px), calc(100% - 52px)); min-width: 0;
+      border-right: 1px solid #4289a6; background: linear-gradient(205deg, #172d3d, #101c28 55%);
+      box-shadow: 16px 0 40px #0006; transform: translateX(-100%); transition: transform .2s ease;
+    }
+    .calculator-memory[open] { transform: translateX(0); }
+    .calculator-memory > summary {
+      position: absolute; z-index: 1; top: 24px; left: 100%; margin-left: 1px;
+      display: flex; align-items: center; gap: 12px; min-width: 44px; padding: 16px 12px;
+      border: 1px solid #4289a6; border-left: 0; border-radius: 0 12px 12px 0;
+      background: #132d3d; color: var(--accent); box-shadow: 6px 6px 20px #0004;
+      writing-mode: vertical-rl; font-size: .85rem; white-space: nowrap; cursor: pointer; list-style: none; -webkit-touch-callout: none;
+    }
+    .calculator-memory > summary:hover { background: #20485d; }
+    .calculator-memory[open] > summary { background: #1c4b60; }
     .calculator-memory > summary::-webkit-details-marker { display: none; }
-    .memory-chevron { flex: 0 0 18px; color: #9edbff; }
+    .memory-chevron { flex: 0 0 18px; color: var(--accent); }
     .calculator-memory > summary[data-error] .memory-chevron { color: #ffba52; }
     .calculator-memory[open] .memory-chevron { transform: rotate(180deg); }
     #memoryCount { color: var(--muted); font-size: .75rem; }
-    .memory-body { padding: 0 10px 12px; }
+    .memory-body { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; padding: 0 12px 12px; }
+    .memory-header { flex: 0 0 auto; flex-wrap: nowrap; padding: 16px 6px; margin-bottom: 8px; }
+    .memory-header h2 { flex: 1; }
     .memory-status:not([data-error]) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
     .memory-status[data-error] { color: #ffba52; font-size: .75rem; line-height: 1.5; margin: 8px 2px; }
     .memory-status:empty { display: none; }
-    .memory-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; overflow-y: auto; }
+    .memory-list { display: grid; align-content: start; gap: 8px; min-height: 0; list-style: none; padding: 0; margin: 0; overflow-y: auto; overscroll-behavior: contain; }
     .memory-group { min-width: 0; }
     .memory-group-heading { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 2px; color: #c6e3ff; cursor: pointer; list-style: none; font-size: .8rem; overflow-wrap: anywhere; }
     .memory-group-heading::-webkit-details-marker { display: none; }
@@ -282,20 +298,14 @@
     .memory-menu button { position: relative; padding-left: 32px; }
     .memory-menu { max-height: calc(100vh - 24px); overflow-y: auto; }
     .memory-menu [role="menuitemcheckbox"][aria-checked="true"]::before { content: "✓"; position: absolute; left: 12px; color: #54d2ff; }
-    @media (min-width: 1320px) {
-      .calculator-workspace.memory-ready { grid-template-columns: 56px minmax(0, 1fr); gap: 0; }
-      .calculator-workspace.memory-ready.memory-open { grid-template-columns: var(--memory-width, 300px) minmax(0, 1fr); }
-      .memory-ready .calculator-memory { position: sticky; top: calc(var(--tool-nav-height) + 12px); margin-left: 12px; margin-right: 0; }
-      .memory-ready .circuit-reference-body { padding-left: 12px; }
-      .memory-ready .calculator-memory:not([open]) > summary { flex-direction: column; gap: 4px; padding: 10px 0; min-width: 44px; }
-      .memory-ready .calculator-memory:not([open]) .memory-label { display: none; }
-      .memory-ready .calculator-memory[open] #memoryResize { display: block; position: absolute; top: 8px; bottom: 8px; right: -8px; width: 16px; cursor: col-resize; touch-action: none; }
+    @media (min-width: 781px) {
+      .calculator-memory[open] #memoryResize { display: block; position: absolute; top: 210px; bottom: 8px; right: -8px; width: 16px; cursor: col-resize; touch-action: none; }
       #memoryResize::after { content: ""; position: absolute; left: 7px; top: 0; bottom: 0; width: 2px; border-radius: 2px; background: #365166; }
       #memoryResize:hover::after, #memoryResize:focus-visible::after { background: var(--accent); }
       .memory-resizing, .memory-resizing * { cursor: col-resize !important; user-select: none; }
     }
-    @media (min-width: 1320px) and (pointer: coarse) {
-      .memory-ready .calculator-memory[open] #memoryResize { width: 44px; right: -22px; }
+    @media (min-width: 781px) and (pointer: coarse) {
+      .calculator-memory[open] #memoryResize { width: 44px; right: -22px; }
       #memoryResize::after { left: 21px; }
     }
     .mobile-mode, #schematicViewToggle { display: none; }
@@ -480,6 +490,9 @@
       .circuit-reference-body { grid-template-columns: 1fr; gap: 16px; padding: 0 0 12px; }
       .mode-picker { display: none; }
       .characteristics-tab[aria-expanded="false"] { top: auto; bottom: 20px; min-height: 44px; padding: 12px 16px; writing-mode: horizontal-tb; }
+      .calculator-memory:not([open]) > summary { position: fixed; top: auto; bottom: 20px; min-height: 44px; gap: 4px; padding: 12px 8px; writing-mode: horizontal-tb; }
+      .memory-body { padding-bottom: 76px; }
+      .characteristics-scroll { padding-bottom: 84px; }
       .mobile-mode { display: block; width: 100%; min-width: 0; max-width: 100%; font-size: 16px; min-height: 48px; border-color: var(--accent); color: var(--accent); background: #123d50; }
       #schematicViewToggle { display: block; min-height: 44px; }
       .circuit-toolbar { display: flex; gap: 8px; padding: 12px; }
@@ -501,7 +514,6 @@
     @media print {
       body { background: #fff; color: #111; }
       .tool-path-nav, .actions, .result-tabs, .mode-picker, .mobile-mode, .characteristics-tab, .characteristics-drawer, .parts-table-title .btn, footer, .calculator-memory, .memory-menu { display: none; }
-      .calculator-workspace.memory-ready { display: block; }
       .column { margin-bottom: 16px; }
       .panel { box-shadow: none; break-inside: avoid; }
       .result-panel, .result-panel[hidden] { display: block !important; margin-bottom: 16px; }
@@ -555,7 +567,11 @@
       <div id="calculatorWorkspace" class="calculator-workspace">
       <details id="calculatorMemory" class="calculator-memory" hidden>
         <summary aria-controls="memoryBody" aria-haspopup="menu" title="Memory actions: right-click, Shift+F10 or long press"><svg class="memory-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg><span class="memory-label">Memory</span><span id="memoryCount">0</span></summary>
-        <div id="memoryBody" class="memory-body">
+        <div id="memoryBody" class="memory-body" role="region" aria-labelledby="memoryHeading">
+          <div class="characteristics-header memory-header">
+            <h2 id="memoryHeading">Memory</h2>
+            <button id="memoryClose" class="characteristics-close" type="button" aria-label="Close calculation memory">×</button>
+          </div>
           <p id="memoryStatus" class="memory-status" role="status" aria-live="polite"></p>
           <ol id="memoryList" class="memory-list" aria-label="Saved calculations"></ol>
         </div>
@@ -2821,7 +2837,12 @@
       }
     }
 
+    function sideDrawersOverlap() {
+      return byId("calculatorMemory").getBoundingClientRect().width + byId("characteristicsDrawer").getBoundingClientRect().width + 96 > document.documentElement.clientWidth;
+    }
+
     function setCharacteristicsExpanded(expanded, restoreFocus = false) {
+      if (expanded && sideDrawersOverlap()) byId("calculatorMemory").open = false;
       characteristicsExpanded = expanded;
       const toggle = byId("characteristicsToggle"), drawer = byId("characteristicsDrawer");
       toggle.setAttribute("aria-expanded", String(expanded));
@@ -3408,7 +3429,7 @@
     }
 
     function designSolutionsAvailable(mode = byId("solveFor").value) {
-      return !!resistorCatalog && (mode === "pairs" || mode === "vout" && ARMS.some(arm => byId(`${arm}Multiple`).checked && byId(`${arm}Parts`).children.length > 1));
+      return !!resistorCatalog && mode === "pairs";
     }
 
     // Store input provenance, not DOM markup or derived stress values. Recalling
@@ -4042,13 +4063,6 @@
 
     function findPairsFromSchematic(context) {
       if (!designSolutionsAvailable()) return;
-      if (byId("solveFor").value !== "pairs") {
-        const state = schematicState || pendingConstructionState();
-        if (!state) return;
-        for (const [id, value] of Object.entries({ pairVin: state.circuit.vin, pairVmid: state.target ?? state.result.vout, pairSourceTol: state.tolerances.vin, pairLoadTol: state.tolerances.rl })) byId(id).value = value;
-        writeLoad(state.circuit, "pair"); byId("pairValuePolicy").value = "all"; importPairConstruction(false);
-        byId("solveFor").value = "pairs"; update();
-      }
       const fingerprint = pairFormFingerprint();
       window.pairSearchReady = searchResistorPairs().then(items => {
         if (byId("solveFor").value === "pairs" && fingerprint === pairFormFingerprint() && document.activeElement === document.body) focusSchematicEditorTarget(context);
@@ -6425,8 +6439,10 @@
     byId("characteristicsToggle").addEventListener("click", () => setCharacteristicsExpanded(!characteristicsExpanded));
     byId("characteristicsCopy").addEventListener("click", copyCharacteristics);
     byId("characteristicsClose").addEventListener("click", () => setCharacteristicsExpanded(false, true));
+    byId("calculatorMemory").addEventListener("toggle", () => { if (sideDrawersOverlap() && byId("calculatorMemory").open) setCharacteristicsExpanded(false); });
+    byId("calculatorMemory").addEventListener("memoryresize", () => { if (byId("calculatorMemory").open && characteristicsExpanded && sideDrawersOverlap()) setCharacteristicsExpanded(false); });
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape" && characteristicsExpanded && !event.defaultPrevented && !schematicEditContext && !document.querySelector("dialog[open]") && ["memoryMenu", "resistorMenu", "pairAxisMenu"].every(id => byId(id).hidden)) {
+      if (event.key === "Escape" && characteristicsExpanded && (!byId("calculatorMemory").open || event.target.closest("#characteristicsDrawer, #characteristicsToggle")) && !event.defaultPrevented && !schematicEditContext && !document.querySelector("dialog[open]") && ["memoryMenu", "resistorMenu", "pairAxisMenu"].every(id => byId(id).hidden)) {
         event.preventDefault(); setCharacteristicsExpanded(false, true);
       }
     });
@@ -6444,6 +6460,7 @@
     const schematicFeedbackObserver = new MutationObserver(refreshSchematicControls);
     for (const id of ["inputError", "pairError", "pairStatus", "pairCatalogStatus", "designStatus", "pairComparisonCopyStatus", "pairCancel", "pairFind", "automaticDesign", "designChoose"]) schematicFeedbackObserver.observe(byId(id), { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled"] });
     window.addEventListener("resize", () => {
+      if (characteristicsExpanded && sideDrawersOverlap()) byId("calculatorMemory").open = false;
       if (pairSvgGesture) finishSchematicPairGesture({ pointerId: pairSvgGesture.pointerId }, true);
       renderSchematic();
     });
@@ -6506,7 +6523,7 @@
       refreshLeaveWarning();
       if (window.DividerMemory) window.dividerMemory = DividerMemory.create({
         capture: captureMemoryCalculation, restore: restoreMemoryCalculation, describe: describeMemorySettings,
-        layout: () => { closeSchematicEditor(false); renderSchematic(); }
+        canCollapse: () => !schematicEditContext && !document.querySelector("dialog[open]") && ["resistorMenu", "pairAxisMenu"].every(id => byId(id).hidden) && !document.activeElement.closest("#characteristicsDrawer, #characteristicsToggle")
       });
       return ready;
     });

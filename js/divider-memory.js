@@ -4,9 +4,9 @@
   function create(adapter) {
     const key = "minipcb-divider-memory-v1", limit = 50, delay = 1000;
     const get = id => document.getElementById(id), panel = get("calculatorMemory"), list = get("memoryList");
-    const menu = get("memoryMenu"), summary = panel.querySelector("summary"), workspace = get("calculatorWorkspace"), resizer = get("memoryResize");
+    const menu = get("memoryMenu"), summary = panel.querySelector("summary"), body = get("memoryBody"), workspace = get("calculatorWorkspace"), resizer = get("memoryResize");
     let entries = [], active = null, pending = null, timer = null, restoring = false, persistent = true, ignored = null;
-    let auto = true, expanded = innerWidth >= 1320, paneWidth = 300, drag = null, layoutFrame = null;
+    let auto = true, expanded = false, paneWidth = 300, drag = null;
     let menuEntry = null, menuOrigin = null, press = null, suppressClickUntil = 0, pointerActive = false, groupsDirty = false, groupTimer = null;
     let original = null, originalSignature = null, originalSettings = null, descriptions = new WeakMap(), nameEdit = null;
     const expandedEntries = new Set(), groupExpansion = new Map();
@@ -30,7 +30,7 @@
         entries = saved.entries.filter(entry => typeof entry.id === "string" && typeof entry.title === "string" && typeof entry.summary === "string" && Number.isFinite(Date.parse(entry.savedAt)) && entry.state && typeof entry.state === "object").slice(0, limit);
         original = saved.original?.version === 1 ? saved.original : entries.at(-1)?.state || null;
         originalSignature = original ? signature(original) : null;
-        auto = saved.auto !== false; expanded = innerWidth >= 1320 && (typeof saved.expanded === "boolean" ? saved.expanded : true);
+        auto = saved.auto !== false; expanded = saved.expanded === true;
         if (Number.isFinite(saved.paneWidth)) paneWidth = Math.max(220, Math.min(520, saved.paneWidth));
       }
     } catch (_) { /* Invalid or inaccessible stored history must not stop the calculator. */ }
@@ -108,17 +108,24 @@
     const stored = () => JSON.stringify({ version: 2, auto, expanded, paneWidth, original, entries });
 
     function fitHeight() {
-      if (innerWidth >= 1320 && expanded) {
-        panel.style.height = `${Math.max(180, innerHeight - Math.max(0, panel.getBoundingClientRect().top) - 12)}px`;
-        list.style.maxHeight = `${Math.max(80, panel.getBoundingClientRect().bottom - list.getBoundingClientRect().top - 12)}px`;
-      } else { panel.style.removeProperty("height"); list.style.maxHeight = "none"; }
+      list.style.maxHeight = expanded ? `${Math.max(0, panel.getBoundingClientRect().bottom - list.getBoundingClientRect().top - 12)}px` : "none";
     }
-    function setPaneWidth(value, redraw = true) {
+    function setPaneWidth(value) {
       paneWidth = Math.max(220, Math.min(520, Math.round(value)));
       workspace.style.setProperty("--memory-width", paneWidth + "px");
       resizer.setAttribute("aria-valuenow", String(paneWidth)); resizer.setAttribute("aria-valuetext", paneWidth + " pixels");
       fitHeight();
-      if (redraw && layoutFrame === null) layoutFrame = requestAnimationFrame(() => { layoutFrame = null; adapter.layout(); fitHeight(); });
+      panel.dispatchEvent(new CustomEvent("memoryresize"));
+    }
+    function setExpanded(value, focus = false) {
+      const changed = expanded !== value, focusedInside = body.contains(document.activeElement) || document.activeElement === resizer;
+      expanded = value; panel.open = value; body.inert = !value; body.setAttribute("aria-hidden", String(!value));
+      summary.setAttribute("aria-expanded", String(value)); reflectSummary();
+      if (!value) closeMenu();
+      if (!value && drag) { const id = drag.id; drag = null; workspace.classList.remove("memory-resizing"); if (resizer.hasPointerCapture(id)) resizer.releasePointerCapture(id); }
+      if (!value && (focus || focusedInside)) summary.focus({ preventScroll: true });
+      if (changed) persist();
+      fitHeight();
     }
 
     function persist(protectedEntry = null) {
@@ -200,6 +207,7 @@
     function rename(id) {
       const entry = entries.find(entry => entry.id === id), button = list.querySelector(`[data-memory-restore="${CSS.escape(id)}"]`);
       if (!entry || !button || restoring) return;
+      setExpanded(true);
       cancel();
       const input = document.createElement("input"), edit = button.parentNode.querySelector(".memory-rename"); edit.disabled = true;
       input.className = "memory-name-input"; input.type = "text"; input.maxLength = 100; input.value = entryName(entry).slice(0, 100); input.setAttribute("aria-label", "Memory name");
@@ -255,6 +263,7 @@
     async function restore(id) {
       if (restoring) return;
       const entry = entries.find(item => item.id === id); if (!entry) return;
+      setExpanded(true);
       if (auto) save(capture()); else cancel();
       restoring = true; render();
       try {
@@ -319,7 +328,10 @@
       (menuOrigin && list.querySelector(`[data-memory-restore="${CSS.escape(menuOrigin)}"]`) || summary).focus({ preventScroll: true });
     });
     document.addEventListener("keydown", event => {
-      if (menu.hidden) return;
+      if (menu.hidden) {
+        if (event.key === "Escape" && expanded && !event.defaultPrevented && !nameEdit && adapter.canCollapse?.() !== false) { event.preventDefault(); setExpanded(false, true); }
+        return;
+      }
       const items = [...menu.querySelectorAll("button:not([hidden])")], index = items.indexOf(document.activeElement);
       const next = { ArrowDown: (index + 1) % items.length, ArrowUp: (index + items.length - 1) % items.length, Home: 0, End: items.length - 1 }[event.key];
       if (next !== undefined) { event.preventDefault(); items[next].focus(); }
@@ -331,9 +343,8 @@
     document.addEventListener("pointerup", releasePointer, true); document.addEventListener("pointercancel", releasePointer, true);
     document.addEventListener("scroll", () => closeMenu(), true);
     root.addEventListener("resize", () => { closeMenu(); fitHeight(); });
-    root.addEventListener("scroll", fitHeight, { passive: true });
     resizer.addEventListener("pointerdown", event => {
-      if (event.button !== 0 || innerWidth < 1320 || !expanded) return;
+      if (event.button !== 0 || innerWidth <= 780 || !expanded) return;
       event.preventDefault(); event.stopPropagation(); closeMenu();
       drag = { id: event.pointerId, x: event.clientX, width: paneWidth };
       resizer.setPointerCapture(event.pointerId); workspace.classList.add("memory-resizing");
@@ -363,17 +374,16 @@
       if (!menu.hidden && performance.now() < suppressClickUntil) setTimeout(() => { if (!menu.hidden) menu.querySelector("button:not([hidden])").focus({ preventScroll: true }); }, 0);
     });
     document.addEventListener("click", event => { if (event.detail && performance.now() < suppressClickUntil) { event.preventDefault(); event.stopPropagation(); } }, true);
-    panel.hidden = false; panel.open = expanded;
-    const reflectExpanded = () => { workspace.classList.toggle("memory-open", expanded); summary.setAttribute("aria-expanded", String(expanded)); reflectSummary(); };
-    workspace.classList.add("memory-ready"); reflectExpanded(); get("memoryAuto").setAttribute("aria-checked", String(auto));
+    panel.hidden = false; setExpanded(expanded); get("memoryAuto").setAttribute("aria-checked", String(auto));
+    get("memoryClose").addEventListener("click", () => setExpanded(false, true));
     panel.addEventListener("toggle", () => {
       if (expanded === panel.open) return; // Ignore the queued initialization toggle.
-      closeMenu(); expanded = panel.open; reflectExpanded(); persist(); adapter.layout(); fitHeight();
+      closeMenu(); setExpanded(panel.open);
     });
     const flush = () => { if (auto && pending && !restoring) save(capture()); };
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
     root.addEventListener("pagehide", flush);
-    setPaneWidth(paneWidth, false); render(); if (auto) save(capture()); else schedule(); adapter.layout(); fitHeight();
+    setPaneWidth(paneWidth); render(); if (auto) save(capture()); else schedule(); fitHeight();
     return { schedule, save: () => save(capture(), true), restore, flush, get entries() { return clone(entries); }, get restoring() { return restoring; } };
   }
   root.DividerMemory = Object.freeze({ create });

@@ -227,14 +227,18 @@ analysis, regardless of layout.
 
 ### Calculation memory
 
-**Memory** opens beside the circuit on wide desktop screens and can be collapsed
-horizontally to a narrow reopen rail, returning the space to the diagram without
-adding a row above it. On phones it starts collapsed above the circuit.
-Drag the pane's right edge to change its width; arrow keys adjust the focused
+**Memory** slides out from the left screen edge, matching Circuit Characteristics
+on the right. Its attached tab shows the saved calculation count. It starts
+collapsed unless this browser remembers an open drawer; on phones the collapsed
+tab sits at the bottom left. Use the tab, Close button or Escape to collapse it.
+Opening, closing and resizing the drawer preserve the circuit's position, size
+and calculation. Both drawers can stay open when they fit; otherwise opening one
+closes the other.
+On desktop, drag the pane's right edge to change its width; arrow keys adjust the focused
 separator, and Home/End select its minimum/maximum. The browser remembers the
-width. On desktop the pane extends to the bottom of the screen even when there
-are few entries or all groups are collapsed. The list uses the available space
-and scrolls when necessary; on smaller screens it grows with the page.
+width, with the drawer capped to fit narrow screens. The pane extends from below
+the pinned navigation to the bottom of the screen, even with few entries or all
+groups collapsed. The list scrolls within the drawer when needed on every screen.
 Right-click Memory or an entry for **Save now**, **Rename**, **Autosave**, **Delete** and
 **Clear memory**. Shift+F10, the Context Menu key and a touch long press open the
 same menu. Entry timestamps are available on hover and in the menu; routine save
@@ -648,11 +652,11 @@ resistance range, search temperature, shared TCR, maximum stress and optional
 total-power limit. Ambient/drift settings edit directly in Operating Conditions.
 **Find Design Solutions** sits directly below the mode tabs on desktop and runs
 the combination search from the diagram. Phones retain the search below the
-compact circuit. It appears in Find real resistor combinations, and in Find VMID
-when a multi-part resistor network is configured. Other modes calculate directly
-from their known inputs and do not show this search button.
-It is red when a search is needed, amber while searching and green when the results
-match the current specifications, including a completed search with zero matches.
+compact circuit. It appears only in **Find real resistor combinations**.
+Find VMID, including multi-part networks, and the other calculation modes update
+directly from their known inputs and do not show this search button or its limits.
+It is red when a search is needed, amber while searching or when no designs were
+found, and green when matching results are available for the current specifications.
 After completion, it reads **# Design Solutions Found** and stays disabled until a
 search specification or design input changes. The count is the total found by the
 search; filtering, previewing or changing chart axes does not enable another search.
