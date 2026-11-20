@@ -2597,7 +2597,7 @@
       const load = schematicShape(drawing, "g", { id: "schematicLoad", fill: "none", stroke: NET_COLOR, "stroke-width": 3 });
       const model = state?.circuit || readLoad(pairMode ? "pair" : "", null, false, false), currentLoad = DividerCurrentLoad.enabled(model), hasLoad = currentLoad || !!state && state.circuit.rl !== null;
       const loadLead = SYMBOL_LEAD_LENGTH;
-      schematicShape(drawing, "path", { d: `M${loadX} ${mid}V${loadY - 30 - loadLead}`, fill: "none", stroke: netColor, "stroke-width": 3, "stroke-dasharray": "7 6", "data-wire-net": "VMID" });
+      schematicShape(drawing, "path", { d: `M${loadX} ${mid}V${loadY - 30 - loadLead}`, fill: "none", stroke: netColor, "stroke-width": 3, ...(!hasLoad ? { "stroke-dasharray": "7 6" } : {}), "data-wire-net": "VMID" });
       schematicShape(load, "path", { d: `M${loadX} ${loadY + 30 + loadLead}V${bottom + 4}`, "data-wire-net": "GND" });
       schematicGround(load, loadX, bottom + 24);
       const loadSymbol = schematicRole(schematicShape(load, "g", { "data-load-body": "" }), "rl", roles, "stroke");
@@ -2705,7 +2705,8 @@
       wire(`M${main} ${250 + lead}V${bottom - lead}`); ground(overview, main);
       const model = state?.circuit || readLoad(byId("solveFor").value === "pairs" ? "pair" : "", null, false, false), current = DividerCurrentLoad.enabled(model), hasLoad = current || model.rl !== null;
       const load = schematicShape(overview, "g", { id: "schematicLoad", "data-schematic-load-symbol": current ? "current" : "rl" });
-      wire(`M${loadX} ${mid}V${212 - lead}`, "VMID", load).setAttribute("stroke-dasharray", "5 4");
+      const loadWire = wire(`M${loadX} ${mid}V${212 - lead}`, "VMID", load);
+      if (!hasLoad) loadWire.setAttribute("stroke-dasharray", "5 4");
       wire(`M${loadX} ${250 + lead}V${bottom - lead}`, "GND", load); ground(load, loadX);
       const loadBody = schematicRole(schematicShape(load, "g", { fill: "none", "stroke-width": 2.5, "stroke-linecap": "round", "data-load-body": "" }), "rl", roles, "stroke");
       for (const [end, top] of [["top", 212 - lead], ["bottom", 250]]) schematicShape(loadBody, "path", { d: `M${loadX} ${top}v${lead}`, "data-symbol-lead": end });

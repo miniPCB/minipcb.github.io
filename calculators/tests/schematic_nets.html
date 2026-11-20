@@ -44,6 +44,22 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
    const full=new DOMParser().parseFromString(await(await fetch(get('schematicDownload').href)).text(),'image/svg+xml');assert(!full.querySelector('parsererror')&&full.querySelector('[data-net-label="VMID"]')?.textContent==='VMID',width+'px/'+mode+': full workspace SVG retains the output label');
   }
  }
+ for(const [width,layout] of [[390,'mobile'],[1440,'desktop']]){
+  frame.style.width=width+'px';await pause();await reset();
+  assert(get('liveSchematic').dataset.layout===layout,layout+': load branch is tested in the intended layout');
+  const verifyLoadWire=(label,dashed)=>{
+   const lead=get('schematicLoad').querySelector('[data-symbol-lead="top"]');
+   const wire=[...drawing().querySelectorAll('path[data-wire-net="VMID"]')].find(path=>same(point(path,true),point(lead,false)));
+   const snapshot=new DOMParser().parseFromString(w.circuitFrameSnapshot().markup,'image/svg+xml');
+   const saved=wire&&snapshot.querySelector(`path[data-wire-net="VMID"][d="${wire.getAttribute('d')}"]`);
+   assert(wire&&(w.getComputedStyle(wire).strokeDasharray!=='none')===dashed,layout+'/'+label+': vertical VMID load wire has the expected stroke');
+   assert(saved&&saved.hasAttribute('stroke-dasharray')===dashed,layout+'/'+label+': framed SVG preserves the load-wire stroke');
+  };
+  verifyLoadWire('open',true);
+  set('rl','100');verifyLoadWire('resistor',false);
+  set('loadType','current');verifyLoadWire('current source',false);
+  set('rl','');set('loadType','resistor');verifyLoadWire('reopened',true);
+ }
  assert(errors.length===0,'No runtime errors: '+errors.join('; '));
 }catch(error){failures.push(error.stack)}document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',count:checks.length,failures,checks},null,2);});
 </script></html>
