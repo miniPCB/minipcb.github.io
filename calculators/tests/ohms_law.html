@@ -90,6 +90,11 @@
       query(save ? '#annotationForm [type="submit"]' : "#annotationCancel").click();
     };
     const schematicInput = key => query(`#schematic [data-schematic-input="${key}"]`);
+    const schematicUnit = key => query(`#schematic [data-schematic-unit="${key}"]`);
+    const chooseUnit = (key, prefix) => {
+      const selector = schematicUnit(key);
+      selector.value = prefix; fire(selector, "change");
+    };
     const type = (input, value) => { input.value = value; fire(input, "input"); };
     const enterValue = (key, value) => {
       const input = schematicInput(key);
@@ -116,7 +121,8 @@
       const caption = annotation("source");
       const rightEdge = element => { const box = element.getBBox(); return box.x + box.width; };
       const readout = caption.nextElementSibling;
-      const sourceEdge = Math.max(rightEdge(caption), rightEdge(readout), Number(readout.getAttribute("x")) + 80);
+      const compact = query("[data-voltage-source], [data-current-source]").getAttribute("r") === "19";
+      const sourceEdge = Math.max(rightEdge(caption), rightEdge(readout), Number(readout.getAttribute("x")) + (compact ? 106 : 116));
       const leftGap = bounds.x - sourceEdge;
       const firstBlock = Math.min(...[...doc.querySelectorAll("#schematic .part-hit")].map(block => block.getBBox().x));
       const rightGap = firstBlock - bounds.x - bounds.width;
@@ -177,12 +183,16 @@
       && hasRole(resistorValue(1), "known"), "Find Current highlights the same calculated quantity on the diagram and operating point");
     check(operatingPaletteMatches(), "the operating-point cards use the divider palette for backgrounds, labels and accent bars");
     check(solveLegendMatches(), "the schematic legend contains only the two tinted solve-role badges");
-    check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12 V" && !schematicInput("current"),
-      "the known source voltage is a native text field and calculated current stays read-only");
+    check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12"
+      && schematicUnit("voltage").selectedOptions[0].textContent === "V" && !schematicInput("current") && !schematicUnit("current"),
+      "the known voltage has a numeric field and a unit selector while calculated current is read-only");
     const sourceInput = schematicInput("voltage");
     enterValue("voltage", "-6 V");
     check(field("voltage") === "-6 V" && field("current") === "-6 mA" && doc.activeElement === sourceInput,
       "editing the source voltage updates the calculation and keeps the same field focused");
+    chooseUnit("voltage", "m");
+    check(sourceInput.value === "-6" && get("voltageUnit").value === "m" && field("current") === "-6 µA",
+      "the source voltage selector scales the displayed number and synchronizes with the side editor");
     change("voltage", "12 V");
     mode("voltage");
     check(choices[1].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
@@ -190,22 +200,32 @@
       && hasRole(operatingValue("voltage"), "calculated") && operatingPaletteMatches(),
       "Find Voltage changes value roles while retaining the circuit geometry and card colors");
     const currentInput = schematicInput("current");
-    check(currentInput.value === "12 mA" && !schematicInput("voltage"), "Find Voltage switches the directly editable quantity to current");
+    check(currentInput.value === "12" && schematicUnit("current").value === "m" && !schematicInput("voltage"),
+      "Find Voltage switches the editable value and multiplier to current");
     enterValue("current", "0");
     check(field("voltage") === "0 V" && arrowDirection() === 0 && doc.activeElement === currentInput,
       "the current field moves to the operating-point tile and preserves focus when the arrow disappears");
+    chooseUnit("current", "µ");
+    check(schematicUnit("current").value === "µ" && get("currentUnit").value === "µ" && field("voltage") === "0 V",
+      "zero current retains the chosen multiplier");
+    enterValue("current", "12000");
+    check(centeredCurrent("12 mA") && schematicUnit("current").value === "µ",
+      "a bare current entry uses the dropdown multiplier when the field moves back into the arrow");
     enterValue("current", "12 mA");
     check(centeredCurrent("12 mA") && doc.activeElement === currentInput, "the current field re-centers in the restored flow arrow");
     change("current", "");
     check(hasRole(operatingValue("current"), "missing") && hasRole(circuitQuantity("voltage"), "calculated")
       && operatingValue("resistance").textContent === "1 kΩ" && query("[data-voltage-source]").getAttribute("stroke") === "#ff8e8e",
     "a missing input stays distinct from the unsolved voltage while the known network resistance remains visible");
+    chooseUnit("current", "");
+    check(currentInput.value === "" && schematicUnit("current").selectedOptions[0].textContent === "A",
+      "an empty current field accepts selection of its unit before a number is entered");
     change("current", "12 mA");
     mode("resistance");
     check(choices[2].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
       && hasRole(circuitQuantity("voltage"), "known") && hasRole(circuitQuantity("current"), "known")
       && hasRole(resistorValue(1), "calculated") && hasRole(operatingValue("resistance"), "calculated"), "Find Resistance marks the target resistor and equivalent resistance consistently");
-    check(!schematicInput("resistance-1") && schematicInput("package-1").tagName === "SELECT",
+    check(!schematicInput("resistance-1") && !schematicUnit("resistance-1") && schematicInput("package-1").tagName === "SELECT",
       "a calculated resistor’s package remains selectable while its solved value stays read-only");
     mode("current");
     check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
@@ -223,16 +243,22 @@
 
     change("voltage", "10 V");
     const resistanceInput = schematicInput("resistance-1");
+    check([...schematicUnit("resistance-1").options].map(option => option.text).join() === "µΩ,mΩ,Ω,kΩ,MΩ,GΩ",
+      "the resistor dropdown offers the same engineering units as the side editor");
     enterValue("resistance-1", "0 Ω");
     check(!resistanceInput.validity.valid && resistorValue(1).textContent === "1 kΩ",
       "an invalid resistance leaves the previous value intact and marks the input invalid");
     keypress(resistanceInput, "Escape");
-    check(resistanceInput.value === "1 kΩ" && resistanceInput.validity.valid && doc.activeElement === resistanceInput,
+    check(resistanceInput.value === "1" && schematicUnit("resistance-1").value === "k" && resistanceInput.validity.valid && doc.activeElement === resistanceInput,
       "Escape restores the committed value and keeps the input focused");
     type(resistanceInput, "2 kΩ");
     fire(resistanceInput, "blur");
-    check(get("resistance").value === "2" && get("resistanceUnit").value === "k" && field("current") === "5 mA",
+    check(resistanceInput.value === "2" && schematicUnit("resistance-1").value === "k"
+      && get("resistance").value === "2" && get("resistanceUnit").value === "k" && field("current") === "5 mA",
       "leaving a resistance field commits its value and synchronizes the multiplier");
+    change("resistance", "2000 Ω");
+    check(resistanceInput.value === "2000" && schematicUnit("resistance-1").value === "" && field("resistance") === "2 kΩ",
+      "an equivalent entry in the side editor updates the schematic presentation without changing resistance");
     check(resistorPower(1) === "50 mW", "a schematic resistance edit updates its dissipation");
     check(rightClick(part(1).querySelector("[data-resistor-core]")) && !menu.hidden && get("constructionTarget").textContent === "Reference load (R1)", "right-clicking a resistor body opens its construction menu");
     check(visibleMenuActions().join() === resistorActions, "the resistor context menu offers only resistor actions");
@@ -330,6 +356,9 @@
     check(compactPackage.value === "1206" && compactBounds.left >= 0 && compactBounds.right <= frame.clientWidth
       && compactBounds.height > 0, "the native package dropdown fits inside the compact phone schematic");
     const compactResistance = schematicInput("resistance-1");
+    const compactUnitBounds = schematicUnit("resistance-1").getBoundingClientRect();
+    check(compactResistance.getBoundingClientRect().right < compactUnitBounds.left && compactUnitBounds.right <= frame.clientWidth,
+      "both resistance controls fit side by side in the compact drawing");
     compactResistance.focus(); type(compactResistance, "3.3 kΩ");
     frame.style.width = "320px"; await wait(100);
     check(compactResistance === schematicInput("resistance-1") && compactResistance.value === "3.3 kΩ"
@@ -414,14 +443,15 @@
       "Find Current solves the current-source value from load voltage and resistance");
     check(centeredCurrent("12 mA") && balancedCurrent() && get("voltageField").querySelector("label").textContent === "Load voltage",
       "current-source mode preserves flow placement and identifies the voltage input");
-    check(schematicInput("voltage").value === "12 V", "the load voltage remains directly editable in the schematic operating-point tile");
+    check(schematicInput("voltage").value === "12" && schematicUnit("voltage").value === "",
+      "the load voltage remains directly editable with a unit selector in the operating-point tile");
     enterValue("voltage", "-9 V");
     check(centeredCurrent("-9 mA") && arrowDirection() === -1 && circuitQuantity("current").textContent === "-9 mA",
       "signed load voltage determines the direction and current readout");
 
     edit("source", "Bench driver");
     mode("voltage");
-    check(schematicInput("current").value === "12 mA" && !schematicInput("voltage"),
+    check(schematicInput("current").value === "12" && schematicUnit("current").value === "m" && !schematicInput("voltage"),
       "Find Voltage makes the source current editable and the computed voltage read-only");
     enterValue("current", "-6 mA");
     check(field("voltage") === "-6 V" && hasRole(circuitQuantity("current"), "known") && hasRole(operatingValue("voltage"), "calculated"),
@@ -481,8 +511,9 @@
     check(mainSource("voltage") && addition("V2") && !addition("I1") && get("sourceSelect").options.length === 2
       && field("V3") === "0 V", "converting a supplementary element replaces one entry and starts its new unit value at zero");
     enterValue("V3", "1 V");
-    check(schematicInput("V3").value === "1 V" && field("V3") === "1 V" && field("voltage") === "15 V",
-      "a converted supplementary source is editable directly and recalculates its branch");
+    chooseUnit("V3", "m");
+    check(schematicInput("V3").value === "1" && get("addedSourceUnit").value === "m" && field("V3") === "1 mV" && field("voltage") === "15 V",
+      "a supplementary source can use its own multiplier without affecting the other controls");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);

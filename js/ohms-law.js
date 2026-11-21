@@ -21,6 +21,7 @@
   const compactSymbols = { width: 14, height: 38, radius: 1, stroke: 2.5, junction: 4, source: 19, ground: [14, 9, 4], groundPitch: 7 };
   const mobile = matchMedia("(max-width: 780px)");
   const draft = new Set();
+  const selectedPrefixes = new Map();
   // Keep the voltage divider's documented 0805 reference available offline.
   let packageLimits = new Map([["0805", { power: 0.14, voltage: 50 }]]);
   let selectedId = 1, nextId = 2, desktopView = false, memory, result, build, embeddedLogo, copyRows, constructionTarget, annotationEdit;
@@ -149,6 +150,16 @@
     if (!value) return "";
     return [...Object.keys(prefixes)].reverse().find(prefix => Math.abs(value) >= prefixes[prefix]) ?? "µ";
   }
+  function inputPrefix(key, value) {
+    const prefix = selectedPrefixes.get(key) ?? engineeringPrefix(value);
+    const amount = value / prefixes[prefix];
+    return Number.isFinite(amount) && (amount !== 0 || !value) ? prefix : engineeringPrefix(value);
+  }
+
+  function unitOptions(kind) {
+    return Object.keys(prefixes).map(prefix => new Option(prefix + units[kind], prefix));
+  }
+
   function format(value, unit) {
     if (!Number.isFinite(value)) return "—";
     const prefix = engineeringPrefix(value);
@@ -212,30 +223,32 @@
     if (changed) refresh(); else memory?.schedule();
   }
 
-  function setupQuantity(id, read, write, getKind = () => id) {
+  function setupQuantity(id, read, write, getKind = () => id, getKey = () => id) {
     const input = byId(id), selector = byId(`${id}Unit`);
-    const available = Object.keys(prefixes);
-    function update(commit) {
+    function update(commit, changingUnit = false) {
       const parsed = parseInputQuantity(input.value, getKind(), selector.value);
-      const value = parsed?.value ?? null, changed = value !== read();
+      const value = parsed?.value ?? null, key = getKey(), previous = read();
+      const prefix = parsed?.prefix ?? (changingUnit && !input.value.trim() ? selector.value : undefined);
+      const prefixChanged = commit && prefix !== undefined && prefix !== inputPrefix(key, previous);
       write(value);
       input.setAttribute("aria-invalid", String(!parsed));
-      if (commit && parsed) {
-        selector.value = parsed.prefix;
-        input.value = value / prefixes[parsed.prefix];
+      if (commit && prefix !== undefined) {
+        selectedPrefixes.set(key, prefix);
+        selector.value = prefix;
+        if (parsed) input.value = value / prefixes[prefix];
       }
-      finishEdit(input, commit, changed);
+      finishEdit(input, commit, value !== previous || prefixChanged);
     }
     trackDraft(input, update);
-    selector.addEventListener("change", () => update(true));
+    selector.addEventListener("change", () => update(true, true));
     return () => {
-      const unit = units[getKind()];
-      if (selector.dataset.unit !== unit) {
-        selector.replaceChildren(...available.map(prefix => new Option(prefix + unit, prefix)));
-        selector.dataset.unit = unit;
+      const kind = getKind();
+      if (selector.dataset.kind !== kind) {
+        selector.replaceChildren(...unitOptions(kind));
+        selector.dataset.kind = kind;
       }
-      const value = read(), prefix = engineeringPrefix(value);
-      selector.value = available.includes(prefix) ? prefix : available.at(-1);
+      const value = read();
+      selector.value = inputPrefix(getKey(), value);
       input.value = value === null ? "" : value / prefixes[selector.value];
       input.setAttribute("aria-invalid", String(value === null));
     };
@@ -243,11 +256,13 @@
 
   const showVoltage = setupQuantity("voltage", () => state.voltage, value => { state.voltage = value; });
   const showCurrent = setupQuantity("current", () => state.current, value => { state.current = value; });
-  const showResistance = setupQuantity("resistance", () => selectedPart().resistance, value => { selectedPart().resistance = value; });
+  const resistanceKey = id => `resistance-${id}`;
+  const showResistance = setupQuantity("resistance", () => selectedPart().resistance, value => { selectedPart().resistance = value; },
+    () => "resistance", () => resistanceKey(selectedId));
   const showAddedSource = setupQuantity("addedSource", () => selectedSource()?.value ?? null, value => {
     const source = selectedSource();
     if (source) source.value = value;
-  }, () => selectedSource()?.kind || "voltage");
+  }, () => selectedSource()?.kind || "voltage", () => selectedSourceKey);
 
   function syncAddedSources() {
     const entries = sources(), select = byId("sourceSelect");
@@ -313,23 +328,25 @@
   function control(key, label) { return { "data-schematic-control": key, role: "button", tabindex: 0, "aria-label": label }; }
 
   function resetSchematicInput(entry) {
-    const { input, text, value } = entry;
+    const { input, selector, text, prefix, value } = entry;
     draft.delete(input);
     if (input.value !== text) input.value = text;
+    if (selector && selector.value !== prefix) selector.value = prefix;
     if (value === null) input.setAttribute("aria-invalid", "true");
     else input.removeAttribute("aria-invalid");
     input.setCustomValidity("");
   }
 
   function commitSchematicInput(entry, report = false) {
-    const { input, text, kind, value, write } = entry;
-    if (input.value === text) {
+    const { key, input, selector, text, prefix, kind, value, write } = entry;
+    if (input.value === text && (!selector || selector.value === prefix)) {
       resetSchematicInput(entry);
       memory?.schedule();
       return;
     }
-    const next = kind === "package" ? input.value : parseInputQuantity(input.value, kind, engineeringPrefix(value))?.value;
-    if (next === undefined) {
+    const parsed = selector ? parseInputQuantity(input.value, kind, selector.value)
+      ?? (value === null && !input.value.trim() ? { value: null, prefix: selector.value } : null) : { value: input.value };
+    if (!parsed) {
       if (report) {
         input.setAttribute("aria-invalid", "true");
         input.setCustomValidity(kind === "resistance" ? "Enter a resistance greater than zero." : `Enter a valid value in ${units[kind]}.`);
@@ -340,8 +357,9 @@
       }
       return;
     }
+    if (selector) selectedPrefixes.set(key, parsed.prefix);
     resetSchematicInput(entry);
-    write(next);
+    write(parsed.value);
     refresh();
   }
 
@@ -354,13 +372,21 @@
       const input = document.createElement(kind === "package" ? "select" : "input");
       input.className = "schematic-input";
       input.dataset.schematicInput = key;
-      object.append(input);
-      entry = { object, input };
+      entry = { key, object, input };
       schematicInputs.set(key, entry);
       if (kind === "package") {
+        object.append(input);
         input.append(...packages.map(pkg => new Option(pkg)));
         input.addEventListener("change", () => commitSchematicInput(entry));
       } else {
+        const group = document.createElement("div"), selector = document.createElement("select");
+        group.className = "schematic-quantity";
+        selector.className = "schematic-input";
+        selector.dataset.schematicUnit = key;
+        selector.append(...unitOptions(kind));
+        group.append(input, selector);
+        object.append(group);
+        entry.selector = selector;
         input.type = "text";
         input.inputMode = "decimal";
         input.autocomplete = "off";
@@ -370,7 +396,13 @@
           input.removeAttribute("aria-invalid");
           input.setCustomValidity("");
         });
-        input.addEventListener("blur", () => commitSchematicInput(entry));
+        input.addEventListener("blur", event => {
+          if (event.relatedTarget !== selector) commitSchematicInput(entry);
+        });
+        selector.addEventListener("change", () => commitSchematicInput(entry));
+        selector.addEventListener("blur", event => {
+          if (event.relatedTarget !== input && draft.has(input)) commitSchematicInput(entry);
+        });
         input.addEventListener("keydown", event => {
           if (event.isComposing || !["Enter", "Escape"].includes(event.key)) return;
           event.preventDefault();
@@ -380,13 +412,14 @@
         });
       }
     }
-    const { object, input } = entry;
-    const prefix = engineeringPrefix(value);
+    const { object, input, selector } = entry;
+    const prefix = selector ? inputPrefix(key, value) : "";
     const fieldText = kind === "package" ? value : Number.isFinite(value)
-      ? `${Number((value / prefixes[prefix]).toPrecision(15))} ${prefix}${units[kind]}` : "";
-    Object.assign(entry, { kind, value, write, text: fieldText, seen: true });
+      ? String(Number((value / prefixes[prefix]).toPrecision(15))) : "";
+    Object.assign(entry, { kind, value, write, text: fieldText, prefix, seen: true });
     for (const [attr, dimension] of Object.entries(box)) object.setAttribute(attr, dimension);
     input.setAttribute("aria-label", label);
+    selector?.setAttribute("aria-label", `${label} unit`);
     input.toggleAttribute("data-centered", !!centered);
     if (!draft.has(input)) resetSchematicInput(entry);
   }
@@ -472,7 +505,7 @@
         { "data-resistor-value": node.id, "data-value-role": role, "data-network-context": node.id });
       fitText(resistance, fieldWidth);
       if (!calculated) drawField(resistance, { x: valueX, y: middle - 26, width: fieldWidth, height: 25 },
-        { key: `resistance-${node.id}`, label: `${caption} resistance`, kind: "resistance", value,
+        { key: resistanceKey(node.id), label: `${caption} resistance`, kind: "resistance", value,
           write(next) { node.resistance = next; selectedId = node.id; syncPart(); } });
       const readingSize = compact ? 12 : 13;
       const footprint = text(host, valueX, middle + 20, node.package, readingSize, color.known,
@@ -592,7 +625,7 @@
     const columnWidth = compact ? 176 : 190, box = layout(state.network, columnWidth, compact ? 198 : 208);
     const series = sources().filter(source => source.kind === "voltage");
     const parallel = sources().filter(source => source.kind === "current");
-    const radius = compact ? 44 : 52, railLeft = compact ? 63 : 81, sourceTextWidth = compact ? 92 : 102;
+    const radius = compact ? 57 : 62, railLeft = compact ? 63 : 81, sourceTextWidth = compact ? 106 : 116;
     const branchWidth = symbols.source + 8 + sourceTextWidth + 32;
     const sourceLeft = railLeft + branchWidth * parallel.length;
     const sourceTextLeft = sourceLeft + symbols.source + 8;
@@ -652,9 +685,8 @@
     const readout = text(drawing, labelX, mainY + 17, format(sourceValue, units[kind]), 14, sourceColor,
       { "data-circuit-quantity": kind, "data-value-role": sourceRole, "data-network-context": "source" });
     fitText(readout, sourceTextWidth);
-    const inputWidth = 80;
-    drawQuantityField(readout, kind, { x: labelX, y: mainY, width: inputWidth, height: 26 });
-    const sourceRight = Math.max(labelX + (series.length ? sourceTextWidth : inputWidth), ...[caption, readout, ...sourceText].map(rightEdge));
+    drawQuantityField(readout, kind, { x: labelX, y: mainY, width: sourceTextWidth, height: 26 });
+    const sourceRight = Math.max(labelX + sourceTextWidth, ...[caption, readout, ...sourceText].map(rightEdge));
     drawCurrent(drawing, (sourceRight + firstBlockLeft + offset) / 2, sourceY, radius, result.current);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
@@ -871,6 +903,7 @@
       const source = sources().find(source => sourceKey(source) === key);
       if (!source || source.kind === kind) return;
       // The existing value uses a different unit. Start the replacement at zero.
+      selectedPrefixes.delete(key);
       Object.assign(source, { id: nextSourceId[kind]++, kind, value: 0 });
       selectedSourceKey = sourceKey(source);
       controlKey = `source-${selectedSourceKey}`;
@@ -892,6 +925,7 @@
   byId("sourceSelect").addEventListener("change", event => selectAddedSource(event.target.value));
   byId("removeSource").addEventListener("click", () => {
     if (!selectedSource()) return;
+    selectedPrefixes.delete(selectedSourceKey);
     state.sources = sources().filter(source => sourceKey(source) !== selectedSourceKey);
     if (!state.sources.length) delete state.sources;
     selectAddedSource(undefined);
@@ -917,6 +951,7 @@
   byId("removePart").addEventListener("click", () => {
     const allParts = parts(state.network), index = allParts.findIndex(part => part.id === selectedId);
     if (allParts.length < 2) return;
+    selectedPrefixes.delete(resistanceKey(selectedId));
     state.network = remove(state.network, selectedId);
     const next = allParts[index + 1] || allParts[index - 1];
     if (state.target === selectedId) state.target = next.id;
@@ -1094,7 +1129,7 @@
     capture: () => result.error || draft.size ? null : { title: state.title || titleDefault, summary: `${format(result.voltage, "V")} · ${format(result.current, "A")} · ${format(result.resistance, "Ω")}`, state },
     restore(snapshot) {
       if (!validSnapshot(snapshot)) throw new Error("The saved circuit is invalid.");
-      state = snapshot; draft.clear();
+      state = snapshot; draft.clear(); selectedPrefixes.clear();
       const allParts = parts(state.network);
       selectedId = state.target ?? allParts[0].id;
       nextId = Math.max(nextId, ...allParts.map(part => part.id + 1));
