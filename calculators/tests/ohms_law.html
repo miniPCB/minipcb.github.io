@@ -216,15 +216,26 @@
     check(reportedStress(1, "Pstress") === "102.86%" && reportedStress(1, "Vstress") === "24.00%", "characteristics reports the same nominal stresses as the schematic");
     check(schematicInput("package-1").tagName === "SELECT" && schematicInput("package-1").value === "0805",
       "the resistor block renders a populated native package dropdown");
+    check([...schematicInput("package-1").options].map(option => option.value).join() === "0201,0402,0603,0805,1206,1210,2010,2512",
+      "the package dropdown offers only the existing SMT footprints");
     check(schematicInput("package-1").getAttribute("aria-label") === "R1 package"
       && ![...get("schematic").querySelectorAll("text")].some(label => label.textContent === "Package"),
       "the package dropdown has an accessible name without a separate label in the drawing");
     pickPackage(1, "0402");
     check(stress(1, "Pstress") === "288.00%" && stress(1, "Vstress") === "40.00%", "footprint changes update both package denominators");
-    change("partPackage", "Through-hole");
-    check(stress(1, "Pstress") === "—" && stress(1, "Vstress") === "—" && resistorPower(1) === "144 mW",
-      "dissipation remains available for an unrated footprint");
-    change("partPackage", "0805");
+    const rating = schematicInput("power-rating-1");
+    check(rating.value === "" && rating.placeholder === "50 mW", "the rating editor shows the footprint reference before an override");
+    enterValue("power-rating-1", "0.2 W");
+    check(rating.value === "200 mW" && stress(1, "Pstress") === "72.00%" && stress(1, "Vstress") === "40.00%"
+      && resistorPower(1) === "144 mW", "a custom rating affects power stress while dissipation and the voltage limit remain independent");
+    pickPackage(1, "0805");
+    check(rating.value === "200 mW" && stress(1, "Pstress") === "72.00%" && stress(1, "Vstress") === "24.00%",
+      "changing the footprint preserves the explicit power rating");
+    enterValue("power-rating-1", "0 W");
+    check(!rating.validity.valid && stress(1, "Pstress") === "72.00%", "an invalid rating does not replace the last valid value");
+    enterValue("power-rating-1", "125");
+    check(rating.value === "125 mW" && stress(1, "Pstress") === "115.20%", "a bare number is entered in milliwatts");
+    enterValue("power-rating-1", "");
     check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "restoring the initial footprint restores its stress values");
     check(field("resistanceRange") === "990 Ω to 1.01 kΩ", "default tolerance produces a resistance interval");
     const tolerance = schematicInput("tolerance-1");
@@ -232,6 +243,12 @@
       && [...tolerance.options].some(option => option.textContent === "±0.1%"), "the schematic uses a native tolerance dropdown");
     check(operatingRange("current") === "11.881 mA to 12.121 mA" && operatingRange("current") === field("currentRange")
       && !operatingRange("voltage"), "the current card and characteristics show the same fixed-voltage range");
+    const voltageTolerance = schematicInput("tolerance-voltage");
+    pickTolerance("voltage", "5");
+    check(voltageTolerance.value === "5" && field("sourceTolerance") === "±5%" && field("current") === "12 mA"
+      && operatingRange("current") === "11.287 mA to 12.727 mA" && operatingRange("current") === field("currentRange"),
+      "the voltage and resistor tolerances jointly bound the current without changing its nominal value");
+    pickTolerance("voltage", "0");
     pickTolerance(1, "custom");
     const customTolerance = get("customTolerance"), toleranceForm = get("toleranceForm");
     check(get("toleranceDialog").open && customTolerance.value === "1" && tolerance.value === "1",
@@ -452,9 +469,13 @@
       "an invalid operating point clears dissipation and stress readings");
     check(arrowDirection() === 0, "a failed solve clears the current arrow");
     change("current", "6mA");
+    pickTolerance("voltage", "2");
+    enterValue("power-rating-3", "0.2 W");
     await wait(1100);
     const saved = entries().find(entry => entry.state.mode === "resistance" && entry.state.network.children?.length === 2);
-    check(saved?.state.network.children[0].children[1].package === "1206" && saved.state.network.children[0].children[0].label === "Reference load" && saved.state.sourceLabel === "Bench supply", "memory autosaves the custom labels with the complete valid inverse circuit");
+    check(saved?.state.network.children[0].children[1].package === "1206" && saved.state.network.children[0].children[1].powerRating === .2
+      && saved.state.voltageTolerance === 2 && saved.state.network.children[0].children[0].label === "Reference load"
+      && saved.state.sourceLabel === "Bench supply", "memory autosaves the power rating and voltage tolerance with the circuit and its labels");
     get("current").value = "7mA"; fire(get("current"), "input");
     await wait(1100);
     check(entries()[0].id === saved.id, "live input drafts are excluded from autosave");
@@ -471,6 +492,8 @@
     query(`[data-memory-restore="${saved.id}"]`).click(); await wait(50);
     check(physicalValues() === "2 kΩ,1 kΩ,1 kΩ" && field("current") === "6 mA",
       "memory restores the topology and inputs, then recalculates every part");
+    check(schematicInput("power-rating-3").value === "200 mW" && schematicInput("tolerance-voltage").value === "2"
+      && stress(3, "Pstress") === "8.00%", "recall restores the explicit rating and source tolerance and recalculates stress");
     check(annotationText("part-1") === "Reference load" && annotationText("title").startsWith("Bench circuit"), "recall restores the title and labels");
     get("memoryClose").click();
     check(!memory.open && doc.activeElement === memory.querySelector("summary"), "Memory close returns focus to the edge tab");
@@ -564,7 +587,10 @@
       && exported.querySelector('[data-resistor-stress="3"] [data-stress-metric="Vstress"] [data-stress-value]').textContent === "4.00%", "SVG downloads include nominal stress in every resistor block");
     check([1, 2, 3].map(id => exported.querySelector(`[data-resistor-power="${id}"]`).textContent).join() === "8 mW,36 mW,16 mW"
       && exported.querySelector('[data-operating-value="power"]').textContent === "60 mW", "SVG downloads retain each resistor's dissipation and total power");
-    check(exported.querySelector('[data-operating-range="current"]').textContent === field("currentRange"), "SVG downloads retain the displayed tolerance range");
+    check(exported.querySelector('[data-operating-range="current"]').textContent === field("currentRange")
+      && exported.querySelector('[data-source-tolerance="voltage"]').textContent === "±2%"
+      && exported.querySelector('[data-resistor-power-rating="3"]').textContent === "200 mW",
+      "SVG downloads retain the source tolerance, explicit power rating and combined range");
     check(["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains annotation text");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
@@ -585,7 +611,8 @@
     const report = await downloaded.text();
     check(downloadedName.endsWith(".md") && report.startsWith("# Bench circuit") && report.includes("Find Resistance")
       && report.includes("| Total power | 60 mW |") && Math.abs(Number(report.match(/^R3 LOAD N1 (\S+)$/m)?.[1]) - 1000) < 1e-8
-      && report.includes("| Vstress (nominal) | 4.00% |"), "Markdown reports the saved topology, measurements and nominal netlist");
+      && report.includes("| Vstress (nominal) | 4.00% |") && report.includes("| Power rating | 200 mW |")
+      && report.includes("| Voltage source tolerance | ±2% |"), "Markdown reports the source tolerance, rating, measurements and nominal netlist");
 
     mode("current");
     get("voltage").value = "9"; fire(get("voltage"), "input");
@@ -609,6 +636,7 @@
     check(visibleMenuActions().join() === resistorActions, "returning to a resistor hides both source actions");
     keypress(doc.activeElement, "Escape");
     mode("resistance"); enterValue("current", "8 mA");
+    pickTolerance("voltage", "1");
     const originalSymbol = mainSource("voltage");
     const originalPosition = ["cx", "cy", "r"].map(attribute => originalSymbol.getAttribute(attribute)).join();
     fire(originalSymbol, "click");
@@ -642,10 +670,18 @@
       "the edited current sets the signed load voltage and preserves focus and geometry on phones");
     check(operatingRange("voltage") === "-9.09 V to -8.91 V" && field("voltageRange") === operatingRange("voltage"),
       "the load voltage range holds source current fixed");
+    const currentTolerance = schematicInput("tolerance-current");
+    check(currentTolerance.value === "0" && !schematicInput("tolerance-voltage"), "current tolerance starts independently of the voltage setting");
+    pickTolerance("current", "custom");
+    customTolerance.value = "2.4"; toleranceForm.requestSubmit(); await wait(30);
+    check(doc.activeElement === currentTolerance && currentTolerance.value === "2.4" && field("sourceTolerance") === "±2.4%"
+      && field("voltage") === "-9 V" && operatingRange("voltage") === "-9.3082 V to -8.6962 V",
+      "a custom current tolerance combines with the resistance tolerance to bound the signed voltage");
     check(doc.documentElement.scrollWidth <= frame.clientWidth && groundLabelMatches(20, 12), "the replacement symbol keeps the schematic fitted on phones");
     await wait(1100);
     const sourceSnapshot = entries()[0];
     check(sourceSnapshot.state.sourceType === "current" && sourceSnapshot.state.mode === "voltage" && sourceSnapshot.state.current === -.006
+      && sourceSnapshot.state.currentTolerance === 2.4 && sourceSnapshot.state.voltageTolerance === 1
       && !sourceSnapshot.state.sources, "memory saves the source type and signed input in the existing circuit");
     downloaded = undefined;
     requestImage("svg");
@@ -653,6 +689,7 @@
     const currentExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(currentExport.querySelector("[data-current-source]") && currentExport.querySelector("[data-source-direction]")
       && voltmeterMatches("-9 V", currentExport)
+      && currentExport.querySelector('[data-source-tolerance="current"]').textContent === "±2.4%"
       && !currentExport.querySelector("[data-voltage-source], [data-schematic-control], [data-network-context], foreignObject, [data-field-readout]"),
       "static image exports retain the current symbol and voltmeter with its reading");
     get("ltspiceDownload").click();
@@ -664,11 +701,12 @@
     check(mainSource("voltage") && !mainSource("current") && !query("[data-voltmeter], [data-added-source]") && annotationText("source") === "Bench driver",
       "reversing the conversion removes the meter and preserves the custom source label");
     check(field("resistance") === "1.5 kΩ" && field("voltage") === "-9 V" && centeredCurrent("-6 mA")
-      && choices[0].getAttribute("aria-pressed") === "true" && choices[1].disabled && !choices[2].disabled,
+      && choices[0].getAttribute("aria-pressed") === "true" && choices[1].disabled && !choices[2].disabled && field("sourceTolerance") === "±1%",
       "converting to voltage enables current and resistance and preserves a valid operating point");
     memory.querySelector("summary").click(); await wait(250);
     query(`[data-memory-restore="${sourceSnapshot.id}"]`).click(); await wait(50);
-    check(mainSource("current") && field("resistance") === "1.5 kΩ" && annotationText("source") === "Bench driver" && voltmeterMatches("-9 V"),
+    check(mainSource("current") && field("resistance") === "1.5 kΩ" && annotationText("source") === "Bench driver"
+      && voltmeterMatches("-9 V") && field("sourceTolerance") === "±2.4%",
       "recalling a switched source restores its symbol, label and results");
 
     const history = JSON.parse(localStorage.getItem(key));
@@ -679,6 +717,8 @@
         sources: [{ id: 2, kind: "voltage", value: 3 }, parallelSource] } });
     history.entries.unshift({ ...original, id: "legacy-current-solve", savedAt: new Date().toISOString(),
       state: { ...original.state, sourceType: "current", mode: "current", voltage: -9, sources: [parallelSource] } });
+    history.entries.unshift({ ...original, id: "legacy-package", savedAt: new Date().toISOString(),
+      state: { ...original.state, network: { ...original.state.network, package: "Through-hole" } } });
     history.entries.unshift({ ...original, id: "legacy-resistance-target", savedAt: new Date().toISOString(),
       state: { ...original.state, mode: "resistance", current: .004, target: 2, network: { kind: "series",
         children: [{ ...original.state.network, tolerance: 3.7 }, { ...original.state.network, id: 2 }] } } });
@@ -730,11 +770,23 @@
     query('[data-memory-restore="legacy-current-solve"]').click(); await wait(50);
     check(schematicInput("current").value === "-13" && field("current") === "-9 mA" && voltmeterMatches("-9 V")
       && query('[data-mode="current"]').disabled, "an old current solve restores the signed source branch value and recalculates voltage");
+    pickTolerance("current", "10");
+    check(operatingRange("voltage") === "-10.403 V to -7.623 V", "only the main current source varies when a saved parallel source supplies a fixed offset");
+    enterValue("current", "-4 mA");
+    check(field("voltage") === "0 V" && operatingRange("voltage") === "-404 mV to 404 mV",
+      "the output range can cross zero when nominal source currents cancel");
     query('[data-memory-restore="legacy-current-inverse"]').click(); await wait(50);
     check(schematicInput("current").value === "3" && field("current") === "4 mA" && voltmeterMatches("12 V")
       && resistorValue(1).textContent === "1 kΩ" && resistorValue(2).textContent === "2 kΩ" && hasRole(resistorValue(2), "known")
       && query('[data-mode="resistance"]').disabled && entries().find(entry => entry.id === "legacy-current-inverse").state.mode === "resistance",
       "an old current-source resistance solve retains its solved parts and original memory after recall");
+    query('[data-memory-restore="legacy-package"]').click(); await wait(50);
+    const restoredPackage = schematicInput("package-1");
+    check(restoredPackage.selectedOptions[0].disabled && ![...restoredPackage.options].some(option => option.text === "Through-hole")
+      && stress(1, "Pstress") === "—" && stress(1, "Vstress") === "—" && field("sourceTolerance") === "±0%",
+      "old packages can be recalled without assigning an unrelated footprint or tolerance");
+    enterValue("power-rating-1", "125 mW");
+    check(stress(1, "Pstress") === "115.20%" && stress(1, "Vstress") === "—", "an explicit rating can assess power on a legacy part without a voltage reference");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);

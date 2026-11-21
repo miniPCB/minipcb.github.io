@@ -17,7 +17,8 @@
   const sourceModes = { voltage: ["current", "resistance"], current: ["voltage"] };
   const prefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
   const units = { voltage: "V", current: "A", resistance: "Ω" };
-  const packages = ["0201", "0402", "0603", "0805", "1206", "1210", "2010", "2512", "Through-hole", "Other"];
+  const packages = ["0201", "0402", "0603", "0805", "1206", "1210", "2010", "2512"];
+  const legacyPackages = ["Through-hole", "Other"];
   const toleranceChoices = [0, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20];
   const color = { net: "#54d2ff", known: "#6ee7ac", calculated: "#ff8e8e", missing: "#ffcf73", text: "#eaf6ff", muted: "#a8bece" };
   // Match the voltage divider's full and compact schematic dimensions.
@@ -45,6 +46,7 @@
   function partCaption(part) { return part.label ? `${part.label} (${partName(part.id)})` : partName(part.id); }
   function sources(snapshot = state) { return snapshot.sources || []; }
   function primarySourceKind(snapshot = state) { return snapshot.sourceType || "voltage"; }
+  function sourceTolerance(snapshot = state) { return snapshot[`${primarySourceKind(snapshot)}Tolerance`] ?? 0; }
   function defaultSourceLabel(snapshot = state) { return primarySourceKind(snapshot) === "voltage" ? "VDC" : "IDC"; }
   function sourceKey(source) { return `${source.kind === "voltage" ? "V" : "I"}${source.id}`; }
   function sourceKind(source) { return source.kind === "voltage" ? "Series voltage" : "Parallel current"; }
@@ -202,10 +204,10 @@
     return Object.keys(prefixes).map(prefix => new Option(prefix + units[kind], prefix));
   }
 
-  function format(value, unit) {
+  function format(value, unit, precision = 5) {
     if (!Number.isFinite(value)) return "—";
     const prefix = engineeringPrefix(value);
-    return `${Number((value / prefixes[prefix]).toPrecision(5))} ${prefix}${unit}`;
+    return `${Number((value / prefixes[prefix]).toPrecision(precision))} ${prefix}${unit}`;
   }
 
   function displayValues() {
@@ -233,15 +235,17 @@
   function stressRows(part) {
     const reading = result.readings?.get(part.id), limits = packageLimits.get(part.package);
     return [["Pstress", "power", "W", "power"], ["Vstress", "voltage", "V", "continuous working voltage"]].map(([label, key, unit, rating]) => {
-      const actual = reading?.[key], limit = limits?.[key];
+      const manual = key === "power" && part.powerRating !== undefined;
+      const actual = reading?.[key], limit = manual ? part.powerRating : limits?.[key];
       const value = Number.isFinite(actual) && Number.isFinite(limit) ? Math.abs(actual) / limit * 100 : null;
-      const description = Number.isFinite(limit) ? `Package ${rating} reference ${format(limit, unit)}.` : `A package ${rating} reference is required.`;
-      return { label, value, description, limit: format(limit, unit), rating };
+      const limitLabel = manual ? "Power rating" : `Package ${rating} reference`;
+      const description = Number.isFinite(limit) ? `${limitLabel} ${format(limit, unit)}.` : `${limitLabel} unavailable.`;
+      return { label, value, description, limit: format(limit, unit), limitLabel };
     });
   }
   function parseQuantity(text, unit, defaultPrefix) {
     const normalized = text.trim().replaceAll("μ", "µ").replaceAll("u", "µ").replace(/ohms?$/i, "Ω");
-    const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*([µmkKMG]?)([VAΩ])?$/i);
+    const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*([µmkKMG]?)([VAΩW])?$/i);
     if (!match || match[3] && match[3].toUpperCase() !== unit) return null;
     const typedUnit = !!(match[2] || match[3]);
     const prefix = typedUnit ? match[2].replace("K", "k") : defaultPrefix;
@@ -252,6 +256,12 @@
   function parseInputQuantity(text, kind, prefix) {
     const parsed = parseQuantity(text, units[kind], prefix);
     return parsed && (kind !== "resistance" || parsed.value > 0) ? parsed : null;
+  }
+
+  function parsePowerRating(text) {
+    if (!text.trim()) return { value: undefined };
+    const parsed = parseQuantity(text, "W", "m");
+    return parsed?.value > 0 ? parsed : null;
   }
 
   function parseTolerance(text) {
@@ -412,13 +422,15 @@
       return;
     }
     const parsed = kind === "tolerance" ? parseTolerance(input.value)
+      : kind === "powerRating" ? parsePowerRating(input.value)
       : selector ? parseInputQuantity(input.value, kind, selector.value)
       ?? (value === null && !input.value.trim() ? { value: null, prefix: selector.value } : null) : { value: input.value };
     if (!parsed) {
       if (report) {
         input.setAttribute("aria-invalid", "true");
         const message = kind === "resistance" ? "Enter a resistance greater than zero."
-          : kind === "tolerance" ? "Enter a tolerance from 0% up to, but below, 100%." : `Enter a valid value in ${units[kind]}.`;
+          : kind === "tolerance" ? "Enter a tolerance from 0% up to, but below, 100%."
+          : kind === "powerRating" ? "Enter a positive power rating in W or mW." : `Enter a valid value in ${units[kind]}.`;
         input.setCustomValidity(message);
         input.reportValidity();
       } else {
@@ -438,7 +450,7 @@
     refresh();
   }
 
-  function drawField(readout, box, { key, label, kind, value, write, centered, choose }) {
+  function drawField(readout, box, { key, label, kind, value, write, centered, choose, placeholder }) {
     readout.setAttribute("data-field-readout", "");
     readout.setAttribute("aria-hidden", "true");
     let entry = schematicInputs.get(key);
@@ -452,7 +464,6 @@
       schematicInputs.set(key, entry);
       if (dropdown) {
         object.append(input);
-        if (kind === "package") input.append(...packages.map(pkg => new Option(pkg)));
         input.addEventListener("change", () => commitSchematicInput(entry));
       } else {
         if (units[kind]) {
@@ -492,11 +503,25 @@
     }
     const { object, input, selector } = entry;
     if (kind === "tolerance" && entry.value !== value) input.replaceChildren(...toleranceOptions(value));
+    if (kind === "package" && entry.value !== value) {
+      const options = packages.map(pkg => new Option(pkg));
+      if (!packages.includes(value)) {
+        const unset = new Option("Select SMT…", value);
+        unset.disabled = true;
+        options.unshift(unset);
+      }
+      input.replaceChildren(...options);
+    }
     const prefix = selector ? inputPrefix(key, value) : "";
-    const fieldText = selector && Number.isFinite(value) ? String(Number((value / prefixes[prefix]).toPrecision(15))) : String(value ?? "");
+    const fieldText = selector && Number.isFinite(value) ? String(Number((value / prefixes[prefix]).toPrecision(15)))
+      : kind === "powerRating" && value !== undefined ? format(value, "W", 15) : String(value ?? "");
     Object.assign(entry, { kind, value, write, choose, text: fieldText, prefix, seen: true });
     for (const [attr, dimension] of Object.entries(box)) object.setAttribute(attr, dimension);
     input.setAttribute("aria-label", label);
+    if (kind === "powerRating") {
+      input.placeholder = placeholder;
+      input.title = "Enter W or mW. A bare number is in mW. Clear to use the footprint reference.";
+    }
     selector?.setAttribute("aria-label", `${label} unit`);
     const role = readout.dataset.valueRole || "known";
     input.dataset.valueRole = role;
@@ -571,7 +596,7 @@
       const action = "Resistor options";
       const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. Power ${power === undefined ? "unavailable" : dissipation}. ${action}`),
         "data-part": node.id, "aria-pressed": String(node.id === selectedId), "aria-haspopup": "menu" });
-      const cardY = middle - 80, cardHeight = 186;
+      const cardHeight = 224, cardY = middle - cardHeight / 2;
       svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: cardY, width: width - 10, height: cardHeight, fill: "transparent" });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, fill).dataset.symbolLead = "top";
@@ -606,15 +631,33 @@
       ]) {
         drawField(field.readout, field.box, { key, kind, label: `${caption} ${label}`, value: field.value,
           choose: calculated && kind === "resistance" ? (next, prefix) => requestResistanceEdit(node.id, next, prefix) : null,
-          write(next) { node[kind] = next; selectedId = node.id; syncPart(); } });
+          write(next) {
+            if (kind === "package" && !packages.includes(next)) return;
+            node[kind] = next; selectedId = node.id; syncPart();
+          } });
       }
-      line(info, valueX, cardY + 129, valueX + fieldWidth, cardY + 129, "#39586f").setAttribute("stroke-width", "1");
-      const readingSize = compact ? 12 : 13, powerY = cardY + 151;
-      const powerRow = svg(info, "g"), powerLabel = text(powerRow, valueX, powerY, "Power", readingSize, color.muted);
+      const readingSize = compact ? 12 : 13, ratingWidth = compact ? 74 : fieldWidth / 2;
+      const reference = format(packageLimits.get(node.package)?.power, "W");
+      const ratingLabel = node.powerRating === undefined ? "Power ref." : "Power rating";
+      text(info, valueX, cardY + 148, ratingLabel, readingSize, color.muted);
+      const rating = setting("power-rating", valueX + fieldWidth - ratingWidth, cardY + 126, ratingWidth,
+        node.powerRating === undefined ? reference : format(node.powerRating, "W"), node.powerRating, color.known);
+      drawField(rating.readout, rating.box, {
+        key: `power-rating-${node.id}`, label: `${caption} power rating`, kind: "powerRating", value: node.powerRating, placeholder: reference,
+        write(next) {
+          if (next === undefined) delete node.powerRating;
+          else node.powerRating = next;
+          selectedId = node.id;
+          syncPart();
+        }
+      });
+      line(info, valueX, cardY + 169, valueX + fieldWidth, cardY + 169, "#39586f").setAttribute("stroke-width", "1");
+      const powerY = cardY + 190;
+      const powerRow = svg(info, "g"), powerLabel = text(powerRow, valueX, powerY, "Dissipation", readingSize, color.muted);
       fitText(text(powerRow, valueX + fieldWidth, powerY, dissipation, readingSize,
         power === undefined ? color.muted : color.text, { "text-anchor": "end", "data-resistor-power": node.id }),
         fieldWidth - powerLabel.getComputedTextLength() - 6);
-      drawStress(info, node, valueX, cardY + 173, fieldWidth, compact);
+      drawStress(info, node, valueX, cardY + 211, fieldWidth, compact);
       return;
     }
     if (node.kind === "series") {
@@ -770,7 +813,7 @@
     const names = compact ? wrapLabel(title, Math.max(12, Math.floor((viewport.clientWidth - 32) / 12.4))) : [title];
     const titleSize = compact ? 20 : Math.min(34, (width - 64) / (title.length * .62));
     const rowHeight = 2 * (symbols.source + leadLength + 8), seriesHeight = series.length * rowHeight;
-    const y = 134 + 24 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15), rowHeight + seriesHeight);
+    const y = 134 + 24 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15), rowHeight + seriesHeight + 24);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
     const rangeRowHeight = 28, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 165 + rangeRowHeight;
     const x = naturalWidth - rightPadding - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
@@ -821,6 +864,16 @@
       { "data-circuit-quantity": kind, "data-value-role": sourceRole, "data-network-context": "source" });
     fitText(readout, sourceTextWidth);
     drawQuantityField(readout, kind, { x: labelX, y: mainY, width: sourceTextWidth, height: 26 });
+    const tolerance = sourceTolerance(), toleranceKey = `${kind}Tolerance`;
+    const toleranceReadout = text(drawing, labelX, mainY + 49, `±${tolerance}%`, 14, color.muted, { "data-source-tolerance": kind });
+    fitText(toleranceReadout, sourceTextWidth);
+    drawField(toleranceReadout, { x: labelX, y: mainY + 31, width: sourceTextWidth, height: 26 }, {
+      key: `tolerance-${kind}`, label: `${modes[kind]} source tolerance (%)`, kind: "tolerance", value: tolerance,
+      write(next) {
+        if (next === 0) delete state[toleranceKey];
+        else state[toleranceKey] = next;
+      }
+    });
     const sourceRight = Math.max(labelX + sourceTextWidth, ...[caption, readout, ...sourceText].map(rightEdge));
     const instrumentX = (sourceRight + firstBlockLeft + offset) / 2;
     if (kind === "current") drawVoltmeter(drawing, instrumentX, y, bottom, radius, symbols, topColor, values.voltage);
@@ -854,7 +907,7 @@
       text(tile, labelX, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
         { "data-operating-value": field, "data-value-role": role });
       if (field === interval.field) {
-        text(tile, labelX, tileY + 58, `Range at fixed ${interval.fixed}`, 12, accent);
+        text(tile, labelX, tileY + 58, `Range ${interval.basis}`, 12, accent);
         fitText(text(tile, labelX, tileY + 73, interval.text, 14, color.text, { "data-operating-range": field }), tileWidth - 28);
       }
     });
@@ -886,16 +939,20 @@
 
   function rangeText(values, unit) {
     if (!values?.every(Number.isFinite)) return "—";
-    const [lower, upper] = [...values].sort((a, b) => a - b);
-    return `${format(lower, unit)} to ${format(upper, unit)}`;
+    return `${format(Math.min(...values), unit)} to ${format(Math.max(...values), unit)}`;
   }
 
   function loadRange() {
-    const { range, current, voltage } = result;
+    const { range, current, voltage, mainCurrent, mainVoltage } = result;
     const voltageVaries = primarySourceKind() === "current";
-    const field = voltageVaries ? "voltage" : "current", fixed = voltageVaries ? "current" : "voltage";
-    const endpoints = range?.map(resistance => voltageVaries ? current * resistance : voltage / resistance);
-    return { field, fixed, text: rangeText(endpoints, units[field]) };
+    const field = voltageVaries ? "voltage" : "current";
+    const tolerance = sourceTolerance();
+    const nominal = voltageVaries ? current : voltage, source = voltageVaries ? mainCurrent : mainVoltage;
+    const delta = Math.abs(source) * (tolerance / 100);
+    const sourceEndpoints = [nominal - delta, nominal + delta];
+    const endpoints = range?.flatMap(resistance => sourceEndpoints.map(value => voltageVaries ? value * resistance : value / resistance));
+    const basis = tolerance ? "with tolerances" : `at fixed ${primarySourceKind()}`;
+    return { field, basis, text: rangeText(endpoints, units[field]) };
   }
 
   function renderCharacteristics() {
@@ -918,7 +975,8 @@
     }
     for (const source of extras) rows.push([`${sourceKey(source)} · ${sourceKind(source).toLowerCase()}`, format(source.value, units[source.kind]), sourceKey(source)]);
     const interval = loadRange();
-    rows.push([`${modes[interval.field]} range at fixed ${interval.fixed}`, interval.text, `${interval.field}Range`]);
+    rows.push([`${modes[primarySourceKind()]} source tolerance`, `±${sourceTolerance()}%`, "sourceTolerance"],
+      [`${modes[interval.field]} range ${interval.basis}`, interval.text, `${interval.field}Range`]);
     addRows(byId("characteristicsTable"), rows);
     copyRows = [["Characteristic", "Value"], ...rows.map(([label, value]) => [label, value])];
 
@@ -937,7 +995,7 @@
       const data = [["Resistance", format(partResistance(part), "Ω")],
         ["Voltage drop", format(reading?.voltage, "V")], ["Current", format(reading?.current, "A")],
         ["Power", format(reading?.power, "W")],
-        ...stressRows(part).flatMap(({ label, value, limit, rating }) => [[`${label} (nominal)`, formatStress(value)], [`Package ${rating} reference`, limit]]),
+        ...stressRows(part).flatMap(({ label, value, limit, limitLabel }) => [[`${label} (nominal)`, formatStress(value)], [limitLabel, limit]]),
         ["Tolerance", part.tolerance === null ? "—" : `±${part.tolerance}%`], ["Package", part.package]];
       addRows(details.lastElementChild, data);
       copyRows.push([], [name, "Value"], ...data);
@@ -964,14 +1022,16 @@
     fields.push(field("title", "Circuit title", snapshot.title || titleDefault),
       field("sourceType", "Source type", modes[primarySourceKind(snapshot)]),
       field("sourceLabel", "Source label", snapshot.sourceLabel || defaultSourceLabel(snapshot)),
-      field("groundLabel", "Ground label", snapshot.groundLabel || groundDefault));
+      field("groundLabel", "Ground label", snapshot.groundLabel || groundDefault),
+      field("sourceTolerance", "Source tolerance", `±${sourceTolerance(snapshot)}%`));
     if (snapshot.mode !== "voltage") fields.push(field("voltage", sourceInputLabel("voltage", snapshot), format(snapshot.voltage, "V")));
     if (snapshot.mode !== "current") fields.push(field("current", sourceInputLabel("current", snapshot), format(snapshot.current, "A")));
     const describedParts = parts(snapshot.network).map(part => {
       const resistance = format(part.resistance, "Ω"), tolerance = `±${part.tolerance}%`;
       return { name: partName(part.id), summary: `${part.label ? part.label + ", " : ""}${resistance}, ${tolerance}, ${part.package}`, values: {
         label: { label: "label", value: partLabel(part) }, resistance: { label: snapshot.mode === "resistance" ? "reference resistance" : "resistance", value: resistance },
-        tolerance: { label: "tolerance", value: tolerance }, package: { label: "package", value: part.package }
+        tolerance: { label: "tolerance", value: tolerance }, package: { label: "package", value: part.package },
+        powerRating: { label: "power rating", value: part.powerRating === undefined ? "Package reference" : format(part.powerRating, "W") }
       } };
     });
     for (const source of sources(snapshot)) {
@@ -993,11 +1053,14 @@
       return true;
     };
     const validLabel = value => value === undefined || typeof value === "string" && value.length <= labelLimit;
+    const validTolerance = value => Number.isFinite(value) && value >= 0 && value < 100;
     function validNode(node) {
       if (!node || typeof node !== "object") return false;
       if (node.children) return ["series", "parallel"].includes(node.kind) && Array.isArray(node.children) && node.children.length >= 2 && node.children.every(validNode);
-      if (!Number.isSafeInteger(node.id) || node.id < 1 || ids.has(node.id) || !packages.includes(node.package) || !validLabel(node.label)) return false;
-      if (!(node.resistance === null || (Number.isFinite(node.resistance) && node.resistance > 0)) || !Number.isFinite(node.tolerance) || node.tolerance < 0 || node.tolerance >= 100) return false;
+      if (!Number.isSafeInteger(node.id) || node.id < 1 || ids.has(node.id) || !validLabel(node.label)
+        || !(packages.includes(node.package) || legacyPackages.includes(node.package))) return false;
+      if (!(node.resistance === null || (Number.isFinite(node.resistance) && node.resistance > 0)) || !validTolerance(node.tolerance)) return false;
+      if (node.powerRating !== undefined && !(Number.isFinite(node.powerRating) && node.powerRating > 0)) return false;
       ids.add(node.id);
       return true;
     }
@@ -1005,6 +1068,7 @@
       && validLabel(snapshot.sourceLabel) && validLabel(snapshot.groundLabel)
       && (snapshot.sourceType === undefined || Object.hasOwn(nextSourceId, snapshot.sourceType))
       && (snapshot.sources === undefined || Array.isArray(snapshot.sources) && snapshot.sources.every(validSource))
+      && [snapshot.voltageTolerance, snapshot.currentTolerance].every(value => value === undefined || validTolerance(value))
       && [snapshot.voltage, snapshot.current].every(value => value === null || Number.isFinite(value)) && validNode(snapshot.network)
       && (snapshot.target == null || (snapshot.mode === "resistance" && ids.has(snapshot.target)));
   }
@@ -1032,7 +1096,11 @@
     syncControls(); refresh();
   });
   byId("partSelect").addEventListener("change", event => selectPart(Number(event.target.value)));
-  byId("partPackage").addEventListener("change", event => { selectedPart().package = event.target.value; refresh(); });
+  byId("partPackage").addEventListener("change", event => {
+    if (!packages.includes(event.target.value)) return;
+    selectedPart().package = event.target.value;
+    refresh();
+  });
   function selectAddedSource(key) {
     draft.delete(byId("addedSource"));
     selectedSourceKey = key;
