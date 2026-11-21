@@ -81,6 +81,7 @@
     const menu = get("constructionMenu");
     const rightClick = element => !element.dispatchEvent(new win.MouseEvent("contextmenu", { button: 2, clientX: 1240, clientY: 865, bubbles: true, cancelable: true }));
     const useMenu = kind => query(`#constructionMenu [data-connect="${kind}"]`).click();
+    const componentAction = (id, action) => { fire(part(id), "click"); get(action).click(); };
     const visibleMenuActions = () => [...menu.querySelectorAll("button:not([hidden])")].map(button => button.textContent);
     const resistorActions = "Add resistor in series,Add resistor in parallel";
     const keypress = (element, key, options = {}) => element.dispatchEvent(new win.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options }));
@@ -144,6 +145,41 @@
         && [...leads].every(lead => Number(lead.getAttribute("y2")) - Number(lead.getAttribute("y1")) === 20);
     };
     const memory = get("calculatorMemory"), tab = get("characteristicsToggle");
+    const frameDialog = get("frameExportDialog");
+    const requestImage = format => {
+      fire(get("downloadCircuit"), "click");
+      frameDialog.querySelector(`[data-frame-format="${format}"]`).click();
+    };
+    const schematicConnections = text => {
+      const neighbors = new Map(), flags = new Map();
+      const point = (x, y) => `${x},${y}`;
+      const connect = (a, b) => {
+        if (!neighbors.has(a)) neighbors.set(a, []);
+        neighbors.get(a).push(b);
+      };
+      for (const [, x1, y1, x2, y2] of text.matchAll(/^WIRE (-?\d+) (-?\d+) (-?\d+) (-?\d+)$/gm)) {
+        const a = point(x1, y1), b = point(x2, y2);
+        connect(a, b); connect(b, a);
+      }
+      for (const [, x, y, name] of text.matchAll(/^FLAG (-?\d+) (-?\d+) (\w+)$/gm)) flags.set(point(x, y), name);
+      const netAt = (x, y) => {
+        const seen = new Set(), nets = new Set(), queue = [point(x, y)];
+        while (queue.length) {
+          const pin = queue.pop();
+          if (seen.has(pin)) continue;
+          seen.add(pin);
+          if (flags.has(pin)) nets.add(flags.get(pin));
+          queue.push(...(neighbors.get(pin) || []));
+        }
+        return [...nets].join(",");
+      };
+      return [...text.matchAll(/^SYMBOL (res|voltage|current) (-?\d+) (-?\d+) (R0|R180)\r?\nSYMATTR InstName (\w+)\r?\nSYMATTR Value (\S+)$/gm)]
+        .map(([, kind, x, y, orientation, name, value]) => {
+          const pinX = Number(x) + (kind === "res" ? 16 : 0);
+          const pinY = Number(y) + (kind === "current" ? 0 : 16);
+          return `${name} ${netAt(pinX, pinY)} ${netAt(pinX, pinY + (orientation === "R180" ? -80 : 80))} ${Number(Number(value).toPrecision(15))}`;
+        });
+    };
 
     check(field("current") === "12 mA" && field("power") === "144 mW", "default circuit calculates current and power");
     check(resistorPower(1) === "144 mW" && operatingValue("power").textContent === "144 mW"
@@ -170,9 +206,12 @@
     check(entries().length === 1 && localStorage.getItem("minipcb-divider-memory-v1") === divider, "history has an independent Original state");
     const originalId = entries()[0].id;
     const choices = [...doc.querySelectorAll(".mode-choice")];
-    const solveTabs = query(".mode-picker"), diagram = query(".diagram"), sourcePanel = query('[aria-labelledby="sourceHeading"]');
+    const solveTabs = query(".mode-picker"), diagram = query(".diagram"), circuitFields = get("circuitFields");
     check(solveTabs.children.length === 3 && choices.every(button => button.parentElement === solveTabs)
-      && sourcePanel.contains(get("voltage")) && sourcePanel.contains(get("addedSource")), "the solve rail contains only modes and the source panel owns their inputs");
+      && circuitFields.hidden && circuitFields.inert && query(".workbench").children.length === 2,
+      "the schematic occupies the workspace beside the mode rail and backing inputs are inert");
+    check(get("toolNav").contains(get("ltspiceDownload")) && get("toolNav").contains(get("markdownDownload"))
+      && diagram.contains(get("downloadCircuit")), "data downloads are in the toolbar and image download is inside the circuit frame");
     check(Math.abs(solveTabs.getBoundingClientRect().right - diagram.getBoundingClientRect().left) <= 1.1,
       "desktop mode tabs are docked to the schematic edge");
     check(choices.map(button => button.querySelector("strong").textContent).join() === "Find Current,Find Voltage,Find Resistance"
@@ -192,7 +231,7 @@
       "editing the source voltage updates the calculation and keeps the same field focused");
     chooseUnit("voltage", "m");
     check(sourceInput.value === "-6" && get("voltageUnit").value === "m" && field("current") === "-6 µA",
-      "the source voltage selector scales the displayed number and synchronizes with the side editor");
+      "the source voltage selector scales the displayed number and synchronizes with the backing input");
     change("voltage", "12 V");
     mode("voltage");
     check(choices[1].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
@@ -230,7 +269,8 @@
     mode("current");
     check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
     check(centeredCurrent("12 mA") && balancedCurrent(), "the round arrow has equal clear space on both sides");
-    check(centeredTitle(), "the default circuit title is centered in the frame");
+    check(centeredTitle() && annotation("title").querySelector("text").getAttribute("font-size") === "34"
+      && annotation("title").querySelector("text").getAttribute("font-weight") === "600", "the desktop editable title matches the divider's centered typography");
     keypress(annotation("title"), "Enter");
     check(get("annotationEditor").open && doc.activeElement === get("annotationInput"), "the schematic title is keyboard-accessible and focuses its editor");
     get("annotationInput").value = "Draft title"; get("annotationCancel").click();
@@ -244,7 +284,7 @@
     change("voltage", "10 V");
     const resistanceInput = schematicInput("resistance-1");
     check([...schematicUnit("resistance-1").options].map(option => option.text).join() === "µΩ,mΩ,Ω,kΩ,MΩ,GΩ",
-      "the resistor dropdown offers the same engineering units as the side editor");
+      "the resistor dropdown offers the supported engineering units");
     enterValue("resistance-1", "0 Ω");
     check(!resistanceInput.validity.valid && resistorValue(1).textContent === "1 kΩ",
       "an invalid resistance leaves the previous value intact and marks the input invalid");
@@ -258,7 +298,7 @@
       "leaving a resistance field commits its value and synchronizes the multiplier");
     change("resistance", "2000 Ω");
     check(resistanceInput.value === "2000" && schematicUnit("resistance-1").value === "" && field("resistance") === "2 kΩ",
-      "an equivalent entry in the side editor updates the schematic presentation without changing resistance");
+      "an equivalent value in the backing input updates the schematic presentation without changing resistance");
     check(resistorPower(1) === "50 mW", "a schematic resistance edit updates its dissipation");
     check(rightClick(part(1).querySelector("[data-resistor-core]")) && !menu.hidden && get("constructionTarget").textContent === "Reference load (R1)", "right-clicking a resistor body opens its construction menu");
     check(visibleMenuActions().join() === resistorActions, "the resistor context menu offers only resistor actions");
@@ -274,7 +314,9 @@
     check(part(1) && part(2) && field("resistance") === "3 kΩ" && doc.activeElement === part(2), "adding in series through the menu grows the circuit and focuses the new part");
     check(resistorPower(1) === "22.222 mW" && resistorPower(2) === "11.111 mW", "series dissipation reflects each resistance at the shared current");
     part(1).dispatchEvent(new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    check(get("partSelect").value === "1" && doc.activeElement === get("resistance"), "SVG resistor is keyboard-operable and opens its editor");
+    check(get("partSelect").value === "1" && !menu.hidden && !get("removePart").hidden && doc.activeElement.dataset.connect === "series",
+      "the resistor opens its component actions from the keyboard");
+    keypress(doc.activeElement, "Escape");
     rightClick(annotation("part-1").querySelector("text")); useMenu("parallel");
     check(part(3) && field("resistance") === "1.6667 kΩ" && field("current") === "6 mA", "adding a parallel resistor to one part produces a mixed circuit");
     check(readings(1).slice(1, 4).join() === "4 V,2 mA,8 mW" && readings(2).slice(1, 4).join() === "6 V,6 mA,36 mW" && readings(3).slice(1, 4).join() === "4 V,4 mA,16 mW", "mixed-circuit readings obey voltage, current and power conservation");
@@ -283,7 +325,7 @@
     check([1, 2, 3].map(id => stress(id, "Pstress")).join() === "5.71%,25.71%,11.43%"
       && [1, 2, 3].map(id => stress(id, "Vstress")).join() === "8.00%,12.00%,8.00%", "each series or parallel resistor uses its own dissipation and absolute drop");
     check(get("schematic").querySelectorAll('circle[r="5"][data-wire-junction][fill="#54d2ff"]').length === 3, "parallel rails and ground have exactly three full-size junctions");
-    change("tolerance", 5); select(2); pickPackage(3, "1206");
+    enterValue("tolerance-3", "5%"); select(2); pickPackage(3, "1206");
     check(field("resistanceRange") === "1.632 kΩ to 1.7009 kΩ" && readings(3).slice(-2).join() === "±5%,1206"
       && readings(2).at(-1) === "0805", "tolerance changes the interval and a package field updates its own resistor");
     check(stress(3, "Pstress") === "6.40%" && stress(3, "Vstress") === "4.00%" && stress(1, "Pstress") === "5.71%", "editing a package updates that resistor’s two stress readings only");
@@ -307,10 +349,11 @@
     check(readings(1)[0] === "1 kΩ" && !get("resistanceField").hidden, "the other physical resistors remain editable while solving for the target");
     mode("resistance");
     check(hasRole(resistorValue(1), "calculated") && hasRole(resistorValue(3), "known"), "reselecting the active mode keeps the current resistor target");
-    get("solveSelected").click();
+    componentAction(3, "solveSelected");
     check(get("solvedResistance").textContent === "1 kΩ", "the inverse calculation can target another resistor");
     change("current", "10mA");
     check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("cannot reach") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
+    check(get("ltspiceDownload").disabled && get("markdownDownload").disabled, "an incomplete circuit cannot produce a simulation or measurement report");
     check(field("voltage") === "10 V" && field("current") === "10 mA" && hasRole(resistorValue(3), "calculated"), "an unsolved resistance leaves available inputs visible and the target marked");
     check(stress(3, "Pstress") === "—" && stress(3, "Vstress") === "—" && [1, 2, 3].every(id => resistorPower(id) === "—"),
       "an invalid operating point clears dissipation and stress readings");
@@ -366,8 +409,8 @@
     keypress(compactResistance, "Escape");
     frame.style.width = "390px"; await wait(100);
     check(centeredTitle() && annotation("title").querySelectorAll("text").length > 1, "long circuit titles wrap and remain centered on phones");
-    get("editResistorLabel").click();
-    check(get("annotationEditor").open, "phones can edit the selected label from the native resistor controls");
+    componentAction(3, "editResistorLabel");
+    check(get("annotationEditor").open, "phones can edit a resistor label from its component menu");
     get("annotationCancel").click();
     get("viewToggle").click();
     check(get("schematicViewport").scrollWidth > get("schematicViewport").clientWidth && field("current") === "6 mA", "desktop view exposes the full schematic and preserves results");
@@ -378,16 +421,25 @@
     tab.click(); await wait(250);
     check(!memory.open && tab.getAttribute("aria-expanded") === "true", "opening characteristics closes an overlapping phone drawer");
 
-    let downloaded;
-    const createObjectURL = win.URL.createObjectURL.bind(win.URL);
-    win.URL.createObjectURL = blob => { downloaded = blob; return createObjectURL(blob); };
-    win.HTMLAnchorElement.prototype.click = function () {};
-    get("downloadCircuit").click();
+    let downloaded, downloadedName;
+    const captureDownloads = () => {
+      const createObjectURL = win.URL.createObjectURL.bind(win.URL);
+      win.URL.createObjectURL = blob => { downloaded = blob; return createObjectURL(blob); };
+      win.HTMLAnchorElement.prototype.click = function () { downloadedName = this.download; };
+    };
+    captureDownloads();
+    keypress(get("downloadCircuit"), "Enter");
+    check(frameDialog.open && get("frameExportTitle").textContent.startsWith("Bench circuit")
+      && doc.activeElement.dataset.frameFormat === "svg" && frameDialog.querySelectorAll("[data-frame-format]").length === 4,
+      "the frame action opens a focused chooser with the four divider image formats");
+    get("frameExportClose").click(); await wait(30);
+    check(!frameDialog.open && doc.activeElement === get("downloadCircuit"), "closing the image chooser restores focus to the frame action");
+    requestImage("svg");
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
     const exported = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(downloaded.type === "image/svg+xml" && !exported.querySelector("parsererror"), "SVG download is valid vector markup");
     check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,")
-      && !exported.querySelector("[data-schematic-control], [data-field-readout], [data-part], foreignObject, input, select, .part-hit, .control-hit")
+      && !exported.querySelector("[data-schematic-control], [data-field-readout], [data-part], [data-frame-download], foreignObject, input, select, .part-hit, .control-hit")
       && exported.querySelector('[data-resistor-package="3"]').textContent === "1206", "exports embed the logo and restore static text in place of native controls");
     check(hasRole(exported.querySelector('[data-operating-value="resistance"]'), "calculated")
       && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known")
@@ -402,11 +454,30 @@
     check(["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains annotation text");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
+    for (const [format, type, suffix] of [["png", "image/png", ".png"], ["jpeg", "image/jpeg", ".jpg"], ["bmp", "image/bmp", ".bmp"]]) {
+      downloaded = undefined;
+      requestImage(format);
+      for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
+      if (downloaded?.type !== type || !downloadedName.endsWith(suffix) || downloaded.size < 1000) throw new Error(`Invalid ${format} export`);
+    }
+    check(!frameDialog.open, "PNG, JPEG and BMP downloads complete through the chooser");
+    get("ltspiceDownload").click();
+    const mixedSchematic = await downloaded.text();
+    const mixedConnections = schematicConnections(mixedSchematic).join();
+    check(downloadedName.endsWith(".asc") && mixedSchematic.startsWith("Version 4") && mixedSchematic.includes("!.op")
+      && mixedConnections === "V1 LOAD 0 10,R1 LOAD N1 2000,R3 LOAD N1 1000,R2 N1 0 1000",
+      "LTspice export wires the nominal mixed network and uses the solved physical resistor value");
+    get("markdownDownload").click();
+    const report = await downloaded.text();
+    check(downloadedName.endsWith(".md") && report.startsWith("# Bench circuit") && report.includes("Find Resistance")
+      && report.includes("| Total power | 60 mW |") && report.includes("R3 LOAD N1 1000")
+      && report.includes("| Vstress (nominal) | 4.00% |"), "Markdown reports the saved topology, measurements and nominal netlist");
+
     mode("current");
     get("voltage").value = "9"; fire(get("voltage"), "input");
     get("voltage").value = "10"; fire(get("voltage"), "input");
     fire(get("voltage"), "blur");
-    get("removePart").click();
+    componentAction(3, "removePart");
     check(!part(3) && part(1) && part(2) && field("resistance") === "3 kΩ", "removing a branch reconnects the remaining circuit correctly");
     await wait(1100);
     check(entries()[0].state.network.children.length === 2 && entries()[0].state.network.kind === "series", "a reverted input draft does not prevent later topology edits from saving");
@@ -465,12 +536,15 @@
     check(sourceSnapshot.state.sourceType === "current" && sourceSnapshot.state.current === -.006
       && !sourceSnapshot.state.sources, "memory saves the source type and signed input in the existing circuit");
     downloaded = undefined;
-    get("downloadCircuit").click();
+    requestImage("svg");
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
     const currentExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(currentExport.querySelector("[data-current-source]") && currentExport.querySelector("[data-source-direction]")
       && !currentExport.querySelector("[data-voltage-source], [data-schematic-control], [data-network-context], foreignObject, [data-field-readout]"),
       "static exports retain the new symbol and strip interaction controls");
+    get("ltspiceDownload").click();
+    check(schematicConnections(await downloaded.text()).join() === "IMAIN 0 LOAD -0.006,R1 LOAD 0 1500",
+      "signed current-source downloads preserve source polarity and the inverse result");
     check(rightClick(annotation("source")) && get("constructionTarget").textContent === "Bench driver"
       && visibleMenuActions().join() === "Change to Voltage Source" && doc.activeElement === sourceAction("voltage"), "the source label opens the reverse conversion choice");
     sourceAction("voltage").click();
@@ -491,6 +565,7 @@
     const reloaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
     win.location.reload(); await reloaded;
     doc = win.document;
+    captureDownloads();
     query('[data-memory-restore="legacy-sources"]').click(); await wait(50);
     get("memoryClose").click();
     const addition = ref => query(`[data-added-source="${ref}"]`);
@@ -514,6 +589,14 @@
     chooseUnit("V3", "m");
     check(schematicInput("V3").value === "1" && get("addedSourceUnit").value === "m" && field("V3") === "1 mV" && field("voltage") === "15 V",
       "a supplementary source can use its own multiplier without affecting the other controls");
+    get("ltspiceDownload").click();
+    const legacySchematic = await downloaded.text();
+    const connections = schematicConnections(legacySchematic);
+    check(connections.length === 4 && connections[0].startsWith("V3 LOAD VS2 ")
+      && connections[1] === "V2 VS2 VS1 3" && connections[2].startsWith("V1 VS1 0 "),
+      "LTspice retains the connections for every voltage source in a saved stack");
+    fire(addition("V3"), "click"); get("removeSource").click();
+    check(!addition("V3") && addition("V2"), "a saved supplementary source can be removed through its component menu");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);

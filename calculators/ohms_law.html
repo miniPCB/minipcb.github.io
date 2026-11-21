@@ -16,9 +16,8 @@
   <nav id="toolNav" class="tool-nav" aria-label="Tool navigation">
     <a href="../tools.html">Tools</a><span aria-hidden="true">/</span><span aria-current="page">Ohm’s Law</span>
     <div class="exports">
-      <label class="sr-only" for="imageFormat">Circuit image format</label>
-      <select id="imageFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="bmp">BMP</option></select>
-      <button id="downloadCircuit" type="button">Download circuit</button>
+      <button id="ltspiceDownload" type="button" aria-label="Download LTspice schematic">LTspice ↓</button>
+      <button id="markdownDownload" type="button" aria-label="Download Markdown report">Markdown ↓</button>
     </div>
   </nav>
 
@@ -40,49 +39,27 @@
         <p id="calculationStatus" class="notice" role="status" hidden></p>
         <p id="exportStatus" class="notice" role="status" hidden></p>
       </section>
+    </div>
 
-      <div class="workbench-editors">
-        <section class="controls" aria-labelledby="sourceHeading">
-          <h2 id="sourceHeading">Sources</h2>
-          <div id="voltageField" class="field">
-            <label for="voltage">Supply voltage</label>
-            <div class="quantity"><input id="voltage" type="text" inputmode="decimal" autocomplete="off"><select id="voltageUnit" aria-label="Voltage unit"></select></div>
-          </div>
-          <div id="currentField" class="field" hidden>
-            <label for="current">Circuit current</label>
-            <div class="quantity"><input id="current" type="text" inputmode="decimal" autocomplete="off"><select id="currentUnit" aria-label="Current unit"></select></div>
-          </div>
-          <div id="sourceEditor" class="source-editor" role="group" aria-label="Added source settings" hidden>
-            <div class="field"><label for="sourceSelect">Selected source</label><select id="sourceSelect"></select></div>
-            <div class="field">
-              <label id="addedSourceLabel" for="addedSource">Source value</label>
-              <div class="quantity"><input id="addedSource" type="text" inputmode="decimal" autocomplete="off"><select id="addedSourceUnit" aria-label="Source unit"></select></div>
-            </div>
-            <button id="removeSource" type="button">Remove source</button>
-          </div>
-        </section>
-
-        <section id="partEditor" class="controls" aria-labelledby="networkHeading">
-          <h2 id="networkHeading">Resistor network</h2>
-          <div class="field"><label for="partSelect">Selected resistor</label><select id="partSelect"></select></div>
-          <button id="editResistorLabel" type="button">Edit resistor label</button>
-          <div class="field">
-            <label for="resistance">Resistance</label>
-            <div id="resistanceField" class="quantity"><input id="resistance" type="text" inputmode="decimal" autocomplete="off"><select id="resistanceUnit" aria-label="Resistance unit"></select></div>
-            <div id="solvedResistance" class="solved-resistance" hidden></div>
-            <button id="solveSelected" type="button" hidden>Solve for this resistor</button>
-          </div>
-          <div class="part-specs">
-            <div class="field"><label for="tolerance">Tolerance (%)</label><input id="tolerance" type="number" min="0" max="100" step="any" inputmode="decimal"></div>
-            <div class="field"><label for="partPackage">Package</label><select id="partPackage"></select></div>
-          </div>
-          <div class="construction" role="group" aria-label="Modify the selected resistor connection">
-            <button type="button" data-add="series">Add in series</button>
-            <button type="button" data-add="parallel">Add in parallel</button>
-            <button id="removePart" type="button">Remove selected</button>
-          </div>
-        </section>
+    <div id="circuitFields" hidden inert>
+      <div id="voltageField">
+        <label for="voltage">Supply voltage</label>
+        <input id="voltage" type="text"><select id="voltageUnit" aria-label="Voltage unit"></select>
       </div>
+      <div id="currentField" hidden>
+        <label for="current">Circuit current</label>
+        <input id="current" type="text"><select id="currentUnit" aria-label="Current unit"></select>
+      </div>
+      <div id="sourceEditor" hidden>
+        <label for="sourceSelect">Selected source</label><select id="sourceSelect"></select>
+        <label id="addedSourceLabel" for="addedSource">Source value</label>
+        <input id="addedSource" type="text"><select id="addedSourceUnit" aria-label="Source unit"></select>
+      </div>
+      <label for="partSelect">Selected resistor</label><select id="partSelect"></select>
+      <div id="resistanceField"><label for="resistance">Resistance</label><input id="resistance" type="text"><select id="resistanceUnit" aria-label="Resistance unit"></select></div>
+      <output id="solvedResistance" hidden></output>
+      <label for="tolerance">Tolerance (%)</label><input id="tolerance" type="number" min="0" max="100" step="any">
+      <label for="partPackage">Package</label><select id="partPackage"></select>
     </div>
 
     <details id="calculatorMemory" class="calculator-memory" hidden>
@@ -123,7 +100,35 @@
     <button type="button" role="menuitem" data-connect="parallel">Add resistor in parallel</button>
     <button type="button" role="menuitem" data-change-source="voltage" hidden>Change to Voltage Source</button>
     <button type="button" role="menuitem" data-change-source="current" hidden>Change to Current Source</button>
+    <button id="solveSelected" type="button" role="menuitem" data-component-action="solve" hidden>Solve for this resistor</button>
+    <button id="editResistorLabel" type="button" role="menuitem" data-component-action="label" hidden>Edit resistor label</button>
+    <button id="removePart" type="button" role="menuitem" data-component-action="resistor" hidden>Remove resistor</button>
+    <button id="removeSource" type="button" role="menuitem" data-component-action="source" hidden>Remove source</button>
   </div>
+  <dialog id="frameExportDialog" class="frame-export-dialog" aria-labelledby="frameExportHeading" aria-describedby="frameExportTitle">
+    <div class="frame-export-header"><img class="frame-export-brand" src="../logo.png" width="132" height="42" alt="miniPCB" /><button id="frameExportClose" class="frame-export-close" type="button" aria-label="Close download formats">×</button></div>
+    <h2 id="frameExportHeading">Download circuit</h2>
+    <p id="frameExportTitle" class="frame-export-title"></p>
+    <div class="frame-export-formats" aria-label="Image formats">
+      <button type="button" class="frame-export-format" data-frame-format="svg" style="--format-color:#54d2ff" aria-label="Download framed circuit as SVG">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 35C7 9 41 39 41 13M7 35 7 13M41 13v22"/><path d="M4 10h6v6H4zm34 22h6v6h-6z" fill="currentColor"/><circle cx="7" cy="35" r="4" fill="#172a39"/><circle cx="41" cy="13" r="4" fill="#172a39"/></svg>
+        <strong>SVG</strong><small>Vector</small>
+      </button>
+      <button type="button" class="frame-export-format" data-frame-format="png" style="--format-color:#6ee7ac" aria-label="Download framed circuit as PNG">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="36" height="36" rx="5"/><path d="m7 34 12-13 9 10 6-6 8 9"/><circle cx="32" cy="15" r="3"/></svg>
+        <strong>PNG</strong><small>Lossless image</small>
+      </button>
+      <button type="button" class="frame-export-format" data-frame-format="jpeg" style="--format-color:#ffba52" aria-label="Download framed circuit as JPEG">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="36" height="36" rx="5"/><path d="m7 35 9-9 8 7 10-14 8 12M14 13h8m-8 5h5"/></svg>
+        <strong>JPEG</strong><small>Compact image</small>
+      </button>
+      <button type="button" class="frame-export-format" data-frame-format="bmp" style="--format-color:#d0acff" aria-label="Download framed circuit as BMP">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="36" height="36" rx="5"/><path d="M18 6v36M30 6v36M6 18h36M6 30h36"/><path d="M18 18h12v12H18zM30 30h11v11H30z" fill="currentColor" opacity=".5"/></svg>
+        <strong>BMP</strong><small>Bitmap</small>
+      </button>
+    </div>
+    <p id="frameExportStatus" class="hint" role="status" hidden></p>
+  </dialog>
   <dialog id="annotationEditor" aria-labelledby="annotationHeading">
     <form id="annotationForm">
       <h2 id="annotationHeading"></h2>
