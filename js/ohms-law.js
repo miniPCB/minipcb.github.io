@@ -858,7 +858,6 @@
       schematicInputs.delete(key);
     }
     if (focusedControl) focusControl(focusedControl);
-    updateView();
   }
 
   function addRows(table, rows) {
@@ -1265,14 +1264,20 @@
 
   const toggleView = byId("viewToggle");
   function updateView() {
-    toggleView.hidden = !mobile.matches && !desktopView && Number(schematic.getAttribute("width")) <= viewport.clientWidth;
+    toggleView.hidden = !mobile.matches;
+    if (toggleView.hidden) desktopView = false;
     viewport.classList.toggle("desktop-view", desktopView);
     if (desktopView) viewport.tabIndex = 0; else viewport.removeAttribute("tabindex");
     toggleView.textContent = desktopView ? "Fit to screen" : "Desktop view";
     toggleView.setAttribute("aria-pressed", String(desktopView));
   }
-  toggleView.addEventListener("click", () => { desktopView = !desktopView; drawCircuit(); });
-  mobile.addEventListener("change", drawCircuit);
+  function redrawView() {
+    updateView();
+    drawCircuit();
+  }
+  toggleView.addEventListener("click", () => { desktopView = !desktopView; redrawView(); });
+  mobile.addEventListener("change", redrawView);
+  updateView();
   let viewportWidth;
   new ResizeObserver(() => {
     if (viewportWidth === viewport.clientWidth) return;
