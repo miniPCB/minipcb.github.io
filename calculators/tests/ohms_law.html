@@ -344,8 +344,11 @@
 
     change("voltage", "10 V");
     const resistanceInput = schematicInput("resistance-1");
-    check([...schematicUnit("resistance-1").options].map(option => option.text).join() === "µΩ,mΩ,Ω,kΩ,MΩ,GΩ",
+    const resistanceUnit = schematicUnit("resistance-1");
+    check([...resistanceUnit.options].map(option => option.text).join() === "µΩ,mΩ,Ω,kΩ,MΩ,GΩ",
       "the resistor dropdown offers the supported engineering units");
+    check(resistanceUnit.offsetWidth >= 72 && resistanceInput.offsetWidth > resistanceUnit.offsetWidth
+      && resistanceUnit.offsetWidth > schematicUnit("voltage").offsetWidth, "the desktop resistor field reserves space for the multiplier and its arrow");
     enterValue("resistance-1", "0 Ω");
     check(!resistanceInput.validity.valid && resistorValue(1).textContent === "1 kΩ",
       "an invalid resistance leaves the previous value intact and marks the input invalid");
@@ -495,9 +498,10 @@
     check(compactPackage.value === "1206" && compactBounds.left >= 0 && compactBounds.right <= frame.clientWidth
       && compactBounds.height > 0, "the native package dropdown fits inside the compact phone schematic");
     const compactResistance = schematicInput("resistance-1");
-    const compactUnitBounds = schematicUnit("resistance-1").getBoundingClientRect();
-    check(compactResistance.getBoundingClientRect().right < compactUnitBounds.left && compactUnitBounds.right <= frame.clientWidth,
-      "both resistance controls fit side by side in the compact drawing");
+    const compactValueBounds = compactResistance.getBoundingClientRect(), compactUnitBounds = schematicUnit("resistance-1").getBoundingClientRect();
+    check(compactValueBounds.right < compactUnitBounds.left && compactUnitBounds.right <= frame.clientWidth
+      && compactUnitBounds.width >= .8 * compactValueBounds.width,
+      "the compact resistor multiplier has room for its label and fits beside the numeric field");
     compactResistance.focus(); type(compactResistance, "3.3 kΩ");
     frame.style.width = "320px"; await wait(100);
     check(compactResistance === schematicInput("resistance-1") && compactResistance.value === "3.3 kΩ"
