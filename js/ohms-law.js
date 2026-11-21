@@ -633,17 +633,23 @@
   }
 
   function drawCurrent(host, x, y, radius, current) {
-    if (!Number.isFinite(current) || current === 0) return;
-    const clockwise = current > 0, gap = clockwise ? 13 : -13;
-    const top = y - Math.sqrt(radius ** 2 - gap ** 2), role = valueRole(current, state.mode === "current");
-    const arrow = svg(host, "g", { "data-current-direction": clockwise ? "forward" : "reverse", role: role === "calculated" ? "img" : "group",
-      "aria-label": `Conventional current ${clockwise ? "clockwise" : "counterclockwise"}, ${format(Math.abs(current), "A")}` });
-    const head = svg(svg(arrow, "defs"), "marker", { id: "currentArrowHead", orient: "auto", markerUnits: "userSpaceOnUse",
-      markerWidth: 14, markerHeight: 14, refX: 12, refY: 7, viewBox: "0 0 14 14" });
-    svg(head, "path", { d: "M2 2L12 7L2 12", fill: "none", stroke: color.text, "stroke-width": 2.5, "stroke-linejoin": "round" });
-    svg(arrow, "path", { d: `M${x + gap} ${top}A${radius} ${radius} 0 1 ${clockwise ? 1 : 0} ${x - gap} ${top}`,
-      fill: "none", stroke: color.text, "stroke-width": 2.5, "marker-end": "url(#currentArrowHead)" });
-    const value = text(arrow, x, y, format(current, "A"), 18, color[role], { "data-circuit-quantity": "current",
+    const reading = format(current, "A"), role = valueRole(current, state.mode === "current");
+    const meter = svg(host, "g", { "data-current-indicator": "", role: role === "calculated" ? "img" : "group",
+      "aria-label": `Circuit current ${Number.isFinite(current) ? reading : "unavailable"}` });
+    if (!result.error && current !== 0) {
+      const clockwise = current > 0, gap = clockwise ? 13 : -13;
+      const top = y - Math.sqrt(radius ** 2 - gap ** 2);
+      meter.dataset.currentDirection = clockwise ? "forward" : "reverse";
+      meter.setAttribute("aria-label", `Conventional current ${clockwise ? "clockwise" : "counterclockwise"}, ${reading}`);
+      const head = svg(svg(meter, "defs"), "marker", { id: "currentArrowHead", orient: "auto", markerUnits: "userSpaceOnUse",
+        markerWidth: 14, markerHeight: 14, refX: 12, refY: 7, viewBox: "0 0 14 14" });
+      svg(head, "path", { d: "M2 2L12 7L2 12", fill: "none", stroke: color.text, "stroke-width": 2.5, "stroke-linejoin": "round" });
+      svg(meter, "path", { d: `M${x + gap} ${top}A${radius} ${radius} 0 1 ${clockwise ? 1 : 0} ${x - gap} ${top}`,
+        fill: "none", stroke: color.text, "stroke-width": 2.5, "marker-end": "url(#currentArrowHead)" });
+    } else {
+      svg(meter, "circle", { cx: x, cy: y, r: radius, fill: "none", stroke: "#39586f", "stroke-width": 2.5 });
+    }
+    const value = text(meter, x, y, reading, 18, color[role], { "data-circuit-quantity": "current",
       "data-value-role": role, "data-current-value": "", "text-anchor": "middle",
       "dominant-baseline": "central", "font-weight": 700 });
     fitText(value, 2 * radius - 16);
@@ -805,7 +811,7 @@
     const sourceRight = Math.max(labelX + sourceTextWidth, ...[caption, readout, ...sourceText].map(rightEdge));
     const instrumentX = (sourceRight + firstBlockLeft + offset) / 2;
     if (kind === "current") drawVoltmeter(drawing, instrumentX, y, bottom, radius, symbols, topColor, values.voltage);
-    else drawCurrent(drawing, instrumentX, sourceY, radius, result.current);
+    else drawCurrent(drawing, instrumentX, sourceY, radius, values.current);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
     line(ground, groundX, bottom, groundX, bottom + leadLength).dataset.symbolLead = "ground";
@@ -832,10 +838,8 @@
       text(tile, labelX, tileY + 16, label, compact ? 14 : 13, accent);
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
       const fill = role === "derived" ? color.text : color[role];
-      const quantityInput = kind === "voltage" && field === "current" && (!Number.isFinite(result.current) || result.current === 0);
-      const value = text(tile, labelX, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
-        { "data-operating-value": field, "data-value-role": role, ...(quantityInput ? { "data-circuit-quantity": field } : {}) });
-      if (quantityInput) drawQuantityField(value, field, { x: labelX, y: tileY + 22, width: Math.min(118, tileWidth - 28), height: 26 });
+      text(tile, labelX, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
+        { "data-operating-value": field, "data-value-role": role });
       if (field === interval.field) {
         text(tile, labelX, tileY + 58, `Range at fixed ${interval.fixed}`, 12, accent);
         fitText(text(tile, labelX, tileY + 73, interval.text, 14, color.text, { "data-operating-range": field }), tileWidth - 28);
@@ -1008,9 +1012,18 @@
 
   byId("partPackage").replaceChildren(...packages.map(value => new Option(value)));
   for (const button of document.querySelectorAll("[data-mode]")) button.addEventListener("click", () => {
-    if (button.dataset.mode === state.mode) return;
+    const previous = state.mode, next = button.dataset.mode;
+    if (previous === next) return;
+    if (!result.error) {
+      // The previous output becomes an input in the new solve mode.
+      if (previous === "resistance") {
+        for (const part of parts(state.network)) part.resistance = partResistance(part);
+      } else if (previous === primarySourceKind()) {
+        state[previous] = previous === "voltage" ? result.mainVoltage : result.mainCurrent;
+      } else state[previous] = result[previous];
+    }
     draft.clear();
-    state.mode = button.dataset.mode;
+    state.mode = next;
     syncControls(); refresh();
   });
   byId("partSelect").addEventListener("change", event => selectPart(Number(event.target.value)));
