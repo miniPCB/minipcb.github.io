@@ -18,6 +18,8 @@
   const compactSymbols = { width: 14, height: 38, radius: 1, stroke: 2.5, junction: 4, source: 19, ground: [14, 9, 4], groundPitch: 7 };
   const mobile = matchMedia("(max-width: 780px)");
   const draft = new Set();
+  // Keep the voltage divider's documented 0805 reference available offline.
+  let packageLimits = new Map([["0805", { power: 0.14, voltage: 50 }]]);
   let selectedId = 1, nextId = 2, desktopView = false, memory, result, build, embeddedLogo, copyRows, constructionTarget, annotationEdit;
   let state = { version: 1, title: "", mode: "current", voltage: 12, current: 0.012, target: null, network: newPart(1) };
 
@@ -117,6 +119,22 @@
     if (!Number.isFinite(value)) return "—";
     const prefix = engineeringPrefix(value);
     return `${Number((value / prefixes[prefix]).toPrecision(5))} ${prefix}${unit}`;
+  }
+
+  function formatStress(value) {
+    if (value === Infinity) return "∞%";
+    if (!Number.isFinite(value)) return "—";
+    return `${value >= 1e6 ? value.toExponential(2) : value.toFixed(2)}%`;
+  }
+
+  function stressRows(part) {
+    const reading = result.readings?.get(part.id), limits = packageLimits.get(part.package);
+    return [["Pstress", "power", "W", "power"], ["Vstress", "voltage", "V", "continuous working voltage"]].map(([label, key, unit, rating]) => {
+      const actual = reading?.[key], limit = limits?.[key];
+      const value = Number.isFinite(actual) && Number.isFinite(limit) ? Math.abs(actual) / limit * 100 : null;
+      const description = Number.isFinite(limit) ? `Package ${rating} reference ${format(limit, unit)}.` : `A package ${rating} reference is required.`;
+      return { label, value, description, limit: format(limit, unit), rating };
+    });
   }
   function parseQuantity(text, unit, defaultPrefix) {
     const normalized = text.trim().replaceAll("μ", "µ").replaceAll("u", "µ").replace(/ohms?$/i, "Ω");
@@ -255,6 +273,19 @@
     return { node, children, width: widths.reduce((sum, w) => sum + w, 0), height: Math.max(...heights) + 44 };
   }
 
+  function drawStress(host, part, x, y, width, compact) {
+    const group = svg(host, "g", { "data-resistor-stress": part.id, "data-stress-basis": "nominal" });
+    const size = compact ? 12 : 13;
+    stressRows(part).forEach(({ label, value, description }, index) => {
+      const row = svg(group, "g", { "data-stress-metric": label });
+      const baseline = y + index * 16;
+      const fill = value === null ? color.muted : value > 100 ? color.calculated : value === 100 ? color.missing : color.known;
+      const caption = text(row, x, baseline, label, size, color.muted), formatted = formatStress(value);
+      fitText(text(row, x + width, baseline, formatted, size, fill, { "text-anchor": "end", "data-stress-value": "" }), width - caption.getComputedTextLength() - 6);
+      svg(row, "title", {}, `Nominal ${label} ${formatted}. ${description}`);
+    });
+  }
+
   function drawNetwork(host, box, x, y, symbols, topColor) {
     const { node, width, height, children } = box, bottom = y + height;
     if (!children) {
@@ -264,7 +295,7 @@
       const top = y + (height - bodyHeight) / 2, end = top + bodyHeight, middle = (top + end) / 2;
       const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. Edit resistor`),
         "data-part": node.id, "aria-pressed": String(node.id === selectedId) });
-      svg(part, "rect", { class: "part-hit", x: x - 24, y: middle - 39, width: width - 10, height: 78, rx: 8, "stroke-width": 1 });
+      svg(part, "rect", { class: "part-hit", x: x - 24, y: middle - 39, width: width - 10, height: 98, rx: 8, "stroke-width": 1 });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, role).dataset.symbolLead = "top";
       line(part, x, end, x, end + leadLength, role).dataset.symbolLead = "bottom";
@@ -274,6 +305,7 @@
       drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, lines, x + 24, middle - 3 - (lines.length - 1) * (size + 3),
         { size, fill: role, target: node.id });
       text(part, x + 24, middle + 17, format(value, "Ω"), symbols === compactSymbols ? 12 : 14);
+      drawStress(part, node, x + 24, middle + 34, width - 62, symbols === compactSymbols);
       return;
     }
     if (node.kind === "series") {
@@ -326,7 +358,7 @@
   function drawCircuit() {
     const focusedControl = document.activeElement?.dataset.schematicControl;
     const compact = mobile.matches && !desktopView, symbols = compact ? compactSymbols : fullSymbols;
-    const columnWidth = compact ? 143 : 174, box = layout(state.network, columnWidth, compact ? 110 : 124);
+    const columnWidth = compact ? 160 : 182, box = layout(state.network, columnWidth, compact ? 132 : 142);
     const radius = compact ? 44 : 52, sourceLeft = compact ? 63 : 81, sourceTextWidth = compact ? 92 : 102;
     const currentX = sourceLeft + symbols.source + 8 + sourceTextWidth + 14 + radius;
     // Leave a clear channel between the source text and the leftmost branch.
@@ -336,7 +368,7 @@
     const names = wrapLabel(state.title || titleDefault, Math.floor((width - 38) / 13));
     const y = 116 + 23 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15));
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
-    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 134;
+    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 151;
     const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const sourceVoltage = state.mode === "voltage" ? result.voltage : state.voltage;
     const topColor = state.mode === "voltage" && sourceVoltage != null ? color.calculated : color.net;
@@ -393,9 +425,10 @@
       text(schematic, tileX + 9, tileY + 35, format(result[field], unit), compact ? 19 : 16, field === state.mode ? color.calculated : color.text);
     });
     [["Known", "known", 16], ["Calculated", "calculated", 104], ["Missing", "missing", 230]].forEach(([label, role, keyX]) => {
-      dot(schematic, keyX + 4, height - 15, color[role]);
-      text(schematic, keyX + 15, height - 11, label, 12, color.muted);
+      dot(schematic, keyX + 4, tileTop + 119, color[role]);
+      text(schematic, keyX + 15, tileTop + 123, label, 12, color.muted);
     });
+    text(schematic, 16, height - 11, "Nominal stress · package reference limits", 12, color.muted);
     if (focusedControl) focusControl(focusedControl);
     updateView();
   }
@@ -443,7 +476,9 @@
       details.lastElementChild.setAttribute("aria-label", `${name} measurements`);
       const data = [["Resistance", format(part.id === state.target ? result.solved : part.resistance, "Ω")],
         ["Voltage drop", format(reading?.voltage, "V")], ["Current", format(reading?.current, "A")],
-        ["Power", format(reading?.power, "W")], ["Tolerance", part.tolerance === null ? "—" : `±${part.tolerance}%`], ["Package", part.package]];
+        ["Power", format(reading?.power, "W")],
+        ...stressRows(part).flatMap(({ label, value, limit, rating }) => [[`${label} (nominal)`, formatStress(value)], [`Package ${rating} reference`, limit]]),
+        ["Tolerance", part.tolerance === null ? "—" : `±${part.tolerance}%`], ["Package", part.package]];
       addRows(details.lastElementChild, data);
       copyRows.push([], [name, "Value"], ...data);
     }
@@ -717,12 +752,26 @@
       drawCircuit();
     }
   }).catch(() => {});
+  const ratingsReady = window.ResistorParts?.load().then(catalog => {
+    const references = new Map();
+    for (const family of catalog.families) {
+      for (const pkg of family.packages) {
+        const limits = references.get(pkg.case) || { power: Infinity, voltage: Infinity };
+        const power = pkg.powerW[family.defaults.mode];
+        if (Number.isFinite(power)) limits.power = Math.min(limits.power, power);
+        limits.voltage = Math.min(limits.voltage, pkg.workingVoltageV);
+        references.set(pkg.case, limits);
+      }
+    }
+    packageLimits = references;
+    drawCircuit(); renderCharacteristics();
+  }).catch(() => { /* Keep the documented 0805 reference when catalogs are unavailable. */ });
 
   byId("downloadCircuit").addEventListener("click", async event => {
     const button = event.currentTarget, status = byId("exportStatus");
     button.disabled = true; status.hidden = true;
     try {
-      await Promise.all([logoReady, buildReady]);
+      await Promise.all([logoReady, buildReady, ratingsReady]);
       if (!embeddedLogo) throw new Error("The miniPCB logo could not be embedded. Reload the calculator and try again.");
       const snapshot = schematic.cloneNode(true);
       snapshot.removeAttribute("id"); snapshot.setAttribute("role", "img"); snapshot.setAttribute("aria-label", state.title || titleDefault);

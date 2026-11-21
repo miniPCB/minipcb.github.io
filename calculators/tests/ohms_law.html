@@ -27,6 +27,7 @@
     const loaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
     document.body.append(frame); await loaded;
     const win = frame.contentWindow, doc = win.document, get = id => doc.getElementById(id);
+    await win.ResistorParts.load();
     const query = selector => doc.querySelector(selector);
     const fire = (element, event) => element.dispatchEvent(new win.Event(event, { bubbles: true }));
     const field = name => query(`#characteristicsTable [data-field="${name}"]`).textContent;
@@ -36,6 +37,17 @@
     const mode = value => query(`[data-mode="${value}"]`).click();
     const select = id => { get("partSelect").value = id; fire(get("partSelect"), "change"); };
     const part = id => query(`#schematic [data-part="${id}"]`);
+    const stress = (id, metric) => part(id).querySelector(`[data-stress-metric="${metric}"] [data-stress-value]`).textContent;
+    const reportedStress = (id, metric) => [...query(`[data-report-id="${id}"] table`).rows]
+      .find(row => row.cells[0].textContent === `${metric} (nominal)`).cells[1].textContent;
+    const stressBlocksFit = () => [...doc.querySelectorAll("[data-resistor-stress]")].every(group => {
+      const bounds = group.getBBox(), block = group.parentElement.querySelector(".part-hit").getBBox();
+      return bounds.x + bounds.width < block.x + block.width && bounds.y + bounds.height < block.y + block.height
+        && [...group.children].every(row => {
+          const label = row.firstElementChild.getBBox();
+          return label.x + label.width < row.querySelector("[data-stress-value]").getBBox().x;
+        });
+    });
     const annotation = name => query(`[data-annotation="${name}"]`);
     const annotationText = name => [...annotation(name).querySelectorAll("text")].map(node => node.textContent).join(" ");
     const menu = get("constructionMenu");
@@ -77,6 +89,14 @@
     const memory = get("calculatorMemory"), tab = get("characteristicsToggle");
 
     check(field("current") === "12 mA" && field("power") === "144 mW", "default circuit calculates current and power");
+    check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "default resistor uses independent 140 mW and 50 V references");
+    check(reportedStress(1, "Pstress") === "102.86%" && reportedStress(1, "Vstress") === "24.00%", "characteristics reports the same nominal stresses as the schematic");
+    change("partPackage", "0402");
+    check(stress(1, "Pstress") === "288.00%" && stress(1, "Vstress") === "40.00%", "footprint changes update both package denominators");
+    change("partPackage", "Through-hole");
+    check(stress(1, "Pstress") === "—" && stress(1, "Vstress") === "—" && field("power") === "144 mW", "unrated footprints leave stress unassessed while keeping the operating point");
+    change("partPackage", "0805");
+    check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "restoring the initial footprint restores its stress values");
     check(field("resistanceRange") === "990 Ω to 1.01 kΩ", "default tolerance produces a resistance interval");
     check(symbolMatches(20, 52, 3), "full resistor body, stroke and leads match the voltage divider proportions");
     check(query('[data-ground-symbol] [data-symbol-lead="ground"]').getAttribute("x1") === query('[data-voltage-source]').getAttribute("cx"), "ground is centered directly below the source");
@@ -113,18 +133,23 @@
     rightClick(annotation("part-1").querySelector("text")); useMenu("parallel");
     check(part(3) && field("resistance") === "1.6667 kΩ" && field("current") === "6 mA", "adding a parallel resistor to one part produces a mixed circuit");
     check(readings(1).slice(1, 4).join() === "4 V,2 mA,8 mW" && readings(2).slice(1, 4).join() === "6 V,6 mA,36 mW" && readings(3).slice(1, 4).join() === "4 V,4 mA,16 mW", "mixed-circuit readings obey voltage, current and power conservation");
+    check([1, 2, 3].map(id => stress(id, "Pstress")).join() === "5.71%,25.71%,11.43%"
+      && [1, 2, 3].map(id => stress(id, "Vstress")).join() === "8.00%,12.00%,8.00%", "each series or parallel resistor uses its own dissipation and absolute drop");
     check(get("schematic").querySelectorAll('circle[r="5"][data-wire-junction][fill="#54d2ff"]').length === 3, "parallel rails and ground have exactly three full-size junctions");
     change("tolerance", 5); change("partPackage", "1206");
     check(field("resistanceRange") === "1.632 kΩ to 1.7009 kΩ" && readings(3).slice(-2).join() === "±5%,1206", "tolerance changes the interval and package follows the physical resistor");
+    check(stress(3, "Pstress") === "6.40%" && stress(3, "Vstress") === "4.00%" && stress(1, "Pstress") === "5.71%", "editing a package updates that resistor’s two stress readings only");
 
     mode("voltage"); change("current", "6 mA");
     check(field("voltage") === "10 V" && field("voltageRange") === "9.7919 V to 10.205 V", "current-driven mode solves voltage and its tolerance range");
     check(get("schematic").querySelector('line[stroke="#ff8e8e"]'), "the calculated source net is red");
     change("current", "-6 mA");
     check(field("voltage") === "-10 V" && field("power") === "60 mW" && field("voltageRange") === "-10.205 V to -9.7919 V", "signed current produces correctly ordered ranges and positive dissipation");
+    check(stress(1, "Pstress") === "5.71%" && stress(1, "Vstress") === "8.00%", "reversed polarity leaves both stress percentages nonnegative");
     check(arrowDirection() === -1 && centeredCurrent("-6 mA"), "negative conventional current reverses the sweep and shows the signed value");
     change("current", "0");
     check(field("voltage") === "0 V" && field("power") === "0 W", "zero current gives a valid zero-voltage operating point");
+    check(stress(1, "Pstress") === "0.00%" && stress(1, "Vstress") === "0.00%", "a valid zero operating point displays zero stress for a rated resistor");
     check(arrowDirection() === 0, "zero current has no directional arrow");
     change("current", "6 mA"); select(1); mode("resistance");
     check(get("solvedResistance").textContent === "2 kΩ" && get("resistanceField").hidden, "inverse mode calculates a physical resistor in a mixed circuit");
@@ -134,6 +159,7 @@
     check(get("solvedResistance").textContent === "1 kΩ", "the inverse calculation can target another resistor");
     change("current", "10mA");
     check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("cannot reach") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
+    check(stress(3, "Pstress") === "—" && stress(3, "Vstress") === "—", "an invalid operating point clears each stress result");
     check(arrowDirection() === 0, "a failed solve clears the current arrow");
     change("current", "6mA");
     await wait(1100);
@@ -162,6 +188,7 @@
     check(doc.documentElement.scrollWidth <= frame.clientWidth && !get("viewToggle").hidden, `phone layout fits without page-level horizontal scrolling (${doc.documentElement.scrollWidth}/${frame.clientWidth}px; desktop toggle ${get("viewToggle").hidden ? "hidden" : "visible"})`);
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
     check(centeredCurrent("6 mA") && clearanceForCurrent(), "the compact mixed network preserves the flow arrow and centered current value");
+    check(stressBlocksFit(), "compact resistor stress rows fit their information blocks");
     check(centeredTitle() && annotation("title").querySelectorAll("text").length > 1, "long circuit titles wrap and remain centered on phones");
     get("editResistorLabel").click();
     check(get("annotationEditor").open, "phones can edit the selected label from the native resistor controls");
@@ -186,6 +213,8 @@
     check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,") && !exported.querySelector("[data-schematic-control], [data-part], foreignObject, .part-hit, .control-hit"), "exports embed the logo and exclude editing controls");
     check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
       && exported.querySelector("#currentArrowHead") && exported.querySelector("[data-current-value]")?.textContent === "6 mA", "the export retains the round path, embedded arrowhead, and centered value");
+    check(exported.querySelectorAll('[data-resistor-stress][data-stress-basis="nominal"]').length === 3
+      && exported.querySelector('[data-resistor-stress="3"] [data-stress-metric="Vstress"] [data-stress-value]').textContent === "4.00%", "SVG downloads include nominal stress in every resistor block");
     check(["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains annotation text");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
