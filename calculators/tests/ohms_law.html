@@ -82,6 +82,10 @@
     const menu = get("constructionMenu");
     const rightClick = element => !element.dispatchEvent(new win.MouseEvent("contextmenu", { button: 2, clientX: 1240, clientY: 865, bubbles: true, cancelable: true }));
     const useMenu = kind => query(`#constructionMenu [data-connect="${kind}"]`).click();
+    const mainSource = kind => query(`[data-${kind}-source]`);
+    const sourceGroup = () => query('[data-schematic-control="source"]');
+    const sourceAction = kind => query(`[data-change-source="${kind}"]`);
+    const switchSource = (from, to) => { rightClick(mainSource(from)); sourceAction(to).click(); };
     const componentAction = (id, action) => { fire(part(id), "click"); get(action).click(); };
     const visibleMenuActions = () => [...menu.querySelectorAll("button:not([hidden])")].map(button => button.textContent);
     const resistorActions = "Add resistor in series,Add resistor in parallel";
@@ -136,7 +140,7 @@
       return bounds.y > Number(topRail.getAttribute("y1")) && bounds.y + bounds.height < Number(bottomRail.getAttribute("y1"))
         && Math.min(leftGap, rightGap) >= minClearance - .05 && Math.abs(leftGap - rightGap) < .05;
     };
-    const voltmeterMatches = (reading, topColor = "#54d2ff", root = doc) => {
+    const voltmeterMatches = (reading, root = doc) => {
       const meter = root.querySelector("[data-voltmeter]"), panel = meter?.querySelector("[data-voltmeter-panel]");
       if (!panel || panel.localName !== "rect" || meter.querySelectorAll("circle").length !== 2
         || root.querySelector("[data-current-direction]")) return false;
@@ -148,10 +152,10 @@
         && lead.hasAttribute("stroke-dasharray") && lead.getAttribute("stroke") === fill
         && node.getAttribute("cx") === x && node.getAttribute("cy") === rail.getAttribute("y1") && node.getAttribute("fill") === fill;
       const value = meter.querySelector("[data-voltmeter-value]");
-      return joined(topLead, topNode, topRail, topColor) && joined(bottomLead, bottomNode, bottomRail, "#54d2ff")
+      return joined(topLead, topNode, topRail, "#ff8e8e") && joined(bottomLead, bottomNode, bottomRail, "#54d2ff")
         && topLead.getAttribute("y1") === topRail.getAttribute("y1") && Number(topLead.getAttribute("y2")) === top
         && Number(bottomLead.getAttribute("y1")) === top + height && bottomLead.getAttribute("y2") === bottomRail.getAttribute("y1")
-        && value.textContent === reading && value.getAttribute("text-anchor") === "middle"
+        && value.textContent === reading && hasRole(value, "calculated") && value.getAttribute("text-anchor") === "middle"
         && value.getAttribute("x") === x && meter.querySelector("text").textContent === "Load voltage";
     };
     const groundLabelMatches = (inset, size) => {
@@ -275,32 +279,34 @@
     chooseUnit("voltage", "m");
     check(sourceInput.value === "-6" && get("voltageUnit").value === "m" && field("current") === "-6 µA",
       "the source voltage selector scales the displayed number and synchronizes with the backing input");
-    mode("voltage");
+    mode("voltage"); fire(choices[1], "click");
+    check(!choices[0].disabled && choices[1].disabled && !choices[2].disabled && choices[0].getAttribute("aria-pressed") === "true"
+      && circuitGeometry() === initialGeometry, "a voltage source permits current and resistance and blocks a voltage solve");
+    switchSource("voltage", "current");
     check(schematicInput("current").value === "-6" && schematicUnit("current").value === "µ"
-      && field("voltage") === "-6 mV" && circuitGeometry() === initialGeometry,
-      "switching the solved quantity makes the displayed current editable at the same operating point");
-    mode("current");
+      && field("voltage") === "-6 mV" && !schematicInput("voltage"),
+      "switching to a current source makes the displayed current editable at the same operating point");
+    switchSource("current", "voltage");
     check(schematicInput("voltage").value === "-6" && schematicUnit("voltage").value === "m"
       && field("current") === "-6 µA" && circuitGeometry() === initialGeometry,
       "switching back preserves the operating point and the voltage multiplier");
     change("voltage", "12 V");
-    mode("voltage");
-    check(choices[1].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
-      && hasRole(circuitQuantity("voltage"), "calculated") && hasRole(circuitQuantity("current"), "known")
-      && hasRole(operatingValue("voltage"), "calculated") && operatingPaletteMatches(),
-      "Find Voltage changes value roles while retaining the circuit geometry and card colors");
+    mode("resistance");
+    check(choices[2].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
+      && hasRole(circuitQuantity("voltage"), "known") && hasRole(circuitQuantity("current"), "known")
+      && operatingPaletteMatches(), "Find Resistance preserves the circuit layout and both input readings");
     const currentInput = schematicInput("current");
     const currentPosition = () => ["x", "y", "width", "height"].map(attr => currentInput.closest("foreignObject").getAttribute(attr)).join();
     const flowingCurrentPosition = currentPosition();
-    check(currentInput.value === "12" && schematicUnit("current").value === "m" && !schematicInput("voltage"),
-      "Find Voltage switches the editable value and multiplier to current");
+    check(currentInput.value === "12" && schematicUnit("current").value === "m" && schematicInput("voltage")
+      && currentInput.getAttribute("aria-label") === "Target current", "Find Resistance exposes the target current and source voltage");
     enterValue("current", "0");
-    check(field("voltage") === "0 V" && arrowDirection() === 0 && doc.activeElement === currentInput
+    check(field("voltage") === "12 V" && arrowDirection() === 0 && doc.activeElement === currentInput
       && currentPosition() === flowingCurrentPosition && query("[data-current-indicator] > circle")
       && circuitQuantity("current").textContent === "0 A" && !operatingValue("current").hasAttribute("data-field-readout"),
       "zero current leaves the focused input in its usual position inside a ring without a flow direction");
     chooseUnit("current", "µ");
-    check(schematicUnit("current").value === "µ" && get("currentUnit").value === "µ" && field("voltage") === "0 V",
+    check(schematicUnit("current").value === "µ" && get("currentUnit").value === "µ" && field("current") === "0 A",
       "zero current retains the chosen multiplier");
     enterValue("current", "12000");
     check(centeredCurrent("12 mA") && schematicUnit("current").value === "µ" && currentPosition() === flowingCurrentPosition,
@@ -309,14 +315,13 @@
     check(centeredCurrent("12 mA") && doc.activeElement === currentInput, "the current field re-centers in the restored flow arrow");
     change("current", "");
     check(hasRole(operatingValue("current"), "missing") && hasRole(circuitQuantity("current"), "missing")
-      && arrowDirection() === 0 && currentPosition() === flowingCurrentPosition && hasRole(circuitQuantity("voltage"), "calculated")
-      && operatingValue("resistance").textContent === "1 kΩ" && query("[data-voltage-source]").getAttribute("stroke") === "#ff8e8e",
-    "a missing input stays distinct from the unsolved voltage while the known network resistance remains visible");
+      && arrowDirection() === 0 && currentPosition() === flowingCurrentPosition && hasRole(circuitQuantity("voltage"), "known")
+      && operatingValue("resistance").textContent === "—" && query("[data-voltage-source]").getAttribute("stroke") === "#6ee7ac",
+      "a missing target current clears the resistance result and leaves the fixed source voltage visible");
     chooseUnit("current", "");
     check(currentInput.value === "" && schematicUnit("current").selectedOptions[0].textContent === "A",
       "an empty current field accepts selection of its unit before a number is entered");
     change("current", "12 mA");
-    mode("resistance");
     check(choices[2].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
       && hasRole(circuitQuantity("voltage"), "known") && hasRole(circuitQuantity("current"), "known")
       && hasRole(resistorValue(1), "calculated") && hasRole(operatingValue("resistance"), "calculated"), "Find Resistance marks the resistor and equivalent resistance consistently");
@@ -386,23 +391,24 @@
       && readings(2).at(-1) === "0805", "tolerance changes the interval and a package field updates its own resistor");
     check(stress(3, "Pstress") === "6.40%" && stress(3, "Vstress") === "4.00%" && stress(1, "Pstress") === "5.71%", "editing a package updates that resistor’s two stress readings only");
 
-    mode("voltage"); change("current", "6 mA");
+    switchSource("voltage", "current");
     check(field("voltage") === "10 V" && field("voltageRange") === "9.7919 V to 10.205 V"
       && operatingRange("voltage") === field("voltageRange") && !operatingRange("current"),
       "Find Voltage shows the fixed-current range for the mixed network");
-    check(get("schematic").querySelector('line[stroke="#ff8e8e"]'), "the calculated source net is red");
+    check(voltmeterMatches("10 V"), "the calculated load voltage uses the calculated net color");
     change("current", "-6 mA");
     check(field("voltage") === "-10 V" && field("power") === "60 mW" && operatingRange("voltage") === "-10.205 V to -9.7919 V",
       "signed current produces correctly ordered ranges and positive dissipation");
     check([1, 2, 3].map(resistorPower).join() === "8 mW,36 mW,16 mW", "reverse polarity retains positive resistor dissipation");
     check(stress(1, "Pstress") === "5.71%" && stress(1, "Vstress") === "8.00%", "reversed polarity leaves both stress percentages nonnegative");
+    switchSource("current", "voltage");
     check(arrowDirection() === -1 && centeredCurrent("-6 mA"), "negative conventional current reverses the sweep and shows the signed value");
-    change("current", "0");
+    change("voltage", "0");
     check(field("voltage") === "0 V" && field("power") === "0 W" && [1, 2, 3].every(id => resistorPower(id) === "0 W"),
       "zero current gives zero dissipation for every resistor");
     check(stress(1, "Pstress") === "0.00%" && stress(1, "Vstress") === "0.00%", "a valid zero operating point displays zero stress for a rated resistor");
     check(arrowDirection() === 0, "zero current has no directional arrow");
-    change("current", "6 mA"); select(1); mode("resistance");
+    change("voltage", "10 V"); select(1); mode("resistance");
     const resistorIds = [1, 2, 3];
     const physicalValues = () => resistorIds.map(id => resistorValue(id).textContent).join();
     check(physicalValues() === "2 kΩ,1 kΩ,1 kΩ" && resistorIds.every(id =>
@@ -416,27 +422,23 @@
     check(physicalValues() === "3 kΩ,1.5 kΩ,1.5 kΩ" && resistorIds.every(id => hasRole(resistorValue(id), "known"))
       && field("current") === "6 mA" && circuitGeometry() === solvedGeometry,
       "leaving Find Resistance uses every displayed resistor value as a known input at the same operating point");
-    mode("voltage"); mode("resistance");
+    mode("resistance");
     check(physicalValues() === "3 kΩ,1.5 kΩ,1.5 kΩ" && field("voltage") === "15 V" && field("current") === "6 mA"
-      && circuitGeometry() === solvedGeometry, "cycling the mixed network through all solve modes preserves its layout and nominal values");
+      && circuitGeometry() === solvedGeometry, "cycling the mixed network through voltage-driven modes preserves its layout and nominal values");
     const resistanceDialog = get("calculatedResistanceDialog");
     enterValue("resistance-3", "2 kΩ");
-    check(resistanceDialog.open && choices[2].getAttribute("aria-pressed") === "true" && physicalValues() === "3 kΩ,1.5 kΩ,1.5 kΩ",
-      "editing a calculated resistance offers the two source solve modes before applying");
+    check(resistanceDialog.open && choices[2].getAttribute("aria-pressed") === "true" && physicalValues() === "3 kΩ,1.5 kΩ,1.5 kΩ"
+      && resistanceDialog.querySelectorAll("button").length === 2 && get("applyCalculatedResistance").textContent === "Recalculate current",
+      "editing a calculated resistance offers to recalculate current at the existing source voltage");
     get("calculatedResistanceCancel").click(); await wait(30);
     check(!resistanceDialog.open && doc.activeElement === schematicInput("resistance-3") && physicalValues() === "3 kΩ,1.5 kΩ,1.5 kΩ",
       "canceling a calculated edit restores the exact solution and editor focus");
     enterValue("resistance-3", "2 kΩ");
-    query('[data-resistance-mode="current"]').click(); await wait(30);
+    get("applyCalculatedResistance").click(); await wait(30);
     check(choices[0].getAttribute("aria-pressed") === "true" && physicalValues() === "3 kΩ,1.5 kΩ,2 kΩ"
       && field("current") === "5.5556 mA", "applying a resistor value preserves the other solved values and calculates current");
     enterValue("resistance-1", "2 kΩ"); enterValue("resistance-2", "1 kΩ"); enterValue("resistance-3", "1 kΩ");
     change("voltage", "10 V"); mode("resistance");
-    enterValue("resistance-3", "2 kΩ");
-    query('[data-resistance-mode="voltage"]').click(); await wait(30);
-    check(choices[1].getAttribute("aria-pressed") === "true" && physicalValues() === "2 kΩ,1 kΩ,2 kΩ"
-      && field("voltage") === "12 V", "an edited resistor can instead be used to calculate voltage");
-    enterValue("resistance-3", "1 kΩ"); mode("resistance");
     change("current", "0");
     check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("nonzero") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
     check(operatingRange("current") === "—", "the range card clears with an unsolved circuit");
@@ -599,13 +601,10 @@
     check(annotationText("part-1") === "R1" && annotationText("title") === "Ohm’s Law" && annotationText("source") === "VDC" && field("current") === "12 mA", "a snapshot without labels recalls with the original defaults");
     get("memoryClose").click();
 
-    const mainSource = kind => query(`[data-${kind}-source]`);
-    const sourceGroup = () => query('[data-schematic-control="source"]');
-    const sourceAction = kind => query(`[data-change-source="${kind}"]`);
-    const switchSource = (from, to) => { rightClick(mainSource(from)); sourceAction(to).click(); };
     rightClick(part(1).querySelector("[data-resistor-core]"));
     check(visibleMenuActions().join() === resistorActions, "returning to a resistor hides both source actions");
     keypress(doc.activeElement, "Escape");
+    mode("resistance"); enterValue("current", "8 mA");
     const originalSymbol = mainSource("voltage");
     const originalPosition = ["cx", "cy", "r"].map(attribute => originalSymbol.getAttribute(attribute)).join();
     fire(originalSymbol, "click");
@@ -618,64 +617,51 @@
       && get("sourceEditor").hidden, "switching to current replaces the main source in place");
     check(["cx", "cy", "r"].map(attribute => mainSource("current").getAttribute(attribute)).join() === originalPosition
       && annotationText("source") === "IDC" && sourceGroup().querySelector("[data-source-direction]"), "the current symbol fits the same position and gets a matching default reference");
-    check(field("voltage") === "12 V" && field("current") === "12 mA" && hasRole(circuitQuantity("current"), "calculated"),
-      "Find Current solves the current-source value from load voltage and resistance");
+    check(field("voltage") === "12 V" && field("current") === "8 mA" && hasRole(circuitQuantity("current"), "known")
+      && resistorValue(1).textContent === "1.5 kΩ" && hasRole(resistorValue(1), "known"),
+      "changing sources preserves the voltage, current, and previously calculated resistor value");
     check(voltmeterMatches("12 V") && balancedInstrument(query("[data-voltmeter-panel]")),
       "the voltmeter replaces the arrow and connects to both rails with dashed leads and junction dots");
-    const voltageEditor = schematicInput("voltage");
-    check(voltageEditor.value === "12" && schematicUnit("voltage").value === ""
-      && voltageEditor.getAttribute("aria-label") === "Load voltage"
-      && query("[data-voltmeter-value]").hasAttribute("data-field-readout")
-      && !operatingValue("voltage").hasAttribute("data-field-readout"),
-      "the voltmeter hosts the load voltage and unit editors while the bottom card summarizes the reading");
-    enterValue("voltage", "-9 V");
-    check(voltmeterMatches("-9 V") && circuitQuantity("current").textContent === "-9 mA" && doc.activeElement === voltageEditor,
-      "editing a signed meter value updates the solved current and keeps focus");
+    mode("current"); mode("resistance"); fire(choices[2], "click");
+    check(choices[0].disabled && !choices[1].disabled && choices[2].disabled && choices[1].getAttribute("aria-pressed") === "true"
+      && schematicInput("current").value === "8" && schematicUnit("current").value === "m" && !schematicInput("voltage")
+      && hasRole(circuitQuantity("voltage"), "calculated"), "a current source permits only Find Voltage and exposes the current editor");
 
     edit("source", "Bench driver");
     const meterGeometry = circuitGeometry();
-    mode("voltage");
-    check(schematicInput("current").value === "-9" && schematicUnit("current").value === "m" && !schematicInput("voltage")
-      && voltmeterMatches("-9 V", "#ff8e8e") && circuitGeometry() === meterGeometry,
-      "Find Voltage keeps the operating point and meter geometry when the source current becomes editable");
+    const currentEditor = schematicInput("current");
     enterValue("current", "0");
-    check(voltmeterMatches("0 V", "#ff8e8e"), "the voltmeter stays present at zero and its top branch uses the calculated net color");
+    check(voltmeterMatches("0 V"), "the voltmeter stays present at zero and its top branch uses the calculated net color");
     enterValue("current", "-6 mA");
-    check(field("voltage") === "-6 V" && voltmeterMatches("-6 V", "#ff8e8e")
-      && hasRole(circuitQuantity("current"), "known") && hasRole(circuitQuantity("voltage"), "calculated"),
-      "the edited current determines the signed load voltage and its calculation role");
-    mode("resistance");
-    check(operatingValue("voltage").textContent === "-6 V" && schematicInput("voltage").value === "-6"
-      && field("resistance") === "1 kΩ" && circuitGeometry() === meterGeometry,
-      "Find Resistance uses the displayed meter voltage and keeps the phone schematic in place");
-    enterValue("voltage", "-9 V");
-    check(field("resistance") === "1.5 kΩ" && resistorValue(1).textContent === "1.5 kΩ" && hasRole(resistorValue(1), "calculated"),
-      "Find Resistance uses entered source current and load voltage to solve the selected part");
+    check(field("voltage") === "-9 V" && voltmeterMatches("-9 V") && doc.activeElement === currentEditor
+      && hasRole(circuitQuantity("current"), "known") && hasRole(circuitQuantity("voltage"), "calculated") && circuitGeometry() === meterGeometry,
+      "the edited current sets the signed load voltage and preserves focus and geometry on phones");
     check(operatingRange("voltage") === "-9.09 V to -8.91 V" && field("voltageRange") === operatingRange("voltage"),
-      "for a current source in Find Resistance, the voltage range holds current fixed");
+      "the load voltage range holds source current fixed");
     check(doc.documentElement.scrollWidth <= frame.clientWidth && groundLabelMatches(20, 12), "the replacement symbol keeps the schematic fitted on phones");
     await wait(1100);
     const sourceSnapshot = entries()[0];
-    check(sourceSnapshot.state.sourceType === "current" && sourceSnapshot.state.current === -.006
+    check(sourceSnapshot.state.sourceType === "current" && sourceSnapshot.state.mode === "voltage" && sourceSnapshot.state.current === -.006
       && !sourceSnapshot.state.sources, "memory saves the source type and signed input in the existing circuit");
     downloaded = undefined;
     requestImage("svg");
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
     const currentExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(currentExport.querySelector("[data-current-source]") && currentExport.querySelector("[data-source-direction]")
-      && voltmeterMatches("-9 V", "#54d2ff", currentExport)
+      && voltmeterMatches("-9 V", currentExport)
       && !currentExport.querySelector("[data-voltage-source], [data-schematic-control], [data-network-context], foreignObject, [data-field-readout]"),
       "static image exports retain the current symbol and voltmeter with its reading");
     get("ltspiceDownload").click();
     check(schematicConnections(await downloaded.text()).join() === "IMAIN 0 LOAD -0.006,R1 LOAD 0 1500",
-      "signed current-source downloads preserve source polarity and the inverse result");
+      "signed current-source downloads preserve source polarity and the resistor value");
     check(rightClick(annotation("source")) && get("constructionTarget").textContent === "Bench driver"
       && visibleMenuActions().join() === "Change to Voltage Source" && doc.activeElement === sourceAction("voltage"), "the source label opens the reverse conversion choice");
     sourceAction("voltage").click();
     check(mainSource("voltage") && !mainSource("current") && !query("[data-voltmeter], [data-added-source]") && annotationText("source") === "Bench driver",
       "reversing the conversion removes the meter and preserves the custom source label");
-    check(field("resistance") === "1.5 kΩ" && field("voltage") === "-9 V" && centeredCurrent("-6 mA"),
-      "source conversion preserves a valid operating point in the inverse solve");
+    check(field("resistance") === "1.5 kΩ" && field("voltage") === "-9 V" && centeredCurrent("-6 mA")
+      && choices[0].getAttribute("aria-pressed") === "true" && choices[1].disabled && !choices[2].disabled,
+      "converting to voltage enables current and resistance and preserves a valid operating point");
     memory.querySelector("summary").click(); await wait(250);
     query(`[data-memory-restore="${sourceSnapshot.id}"]`).click(); await wait(50);
     check(mainSource("current") && field("resistance") === "1.5 kΩ" && annotationText("source") === "Bench driver" && voltmeterMatches("-9 V"),
@@ -683,11 +669,18 @@
 
     const history = JSON.parse(localStorage.getItem(key));
     const original = history.entries.find(entry => entry.id === originalId);
+    const parallelSource = { id: 1, kind: "current", value: .004 };
     history.entries.unshift({ ...original, id: "legacy-sources", savedAt: new Date().toISOString(),
-      state: { ...original.state, sources: [{ id: 2, kind: "voltage", value: 3 }, { id: 1, kind: "current", value: .004 }] } });
+      state: { ...original.state, mode: "voltage", voltage: 99, current: .015,
+        sources: [{ id: 2, kind: "voltage", value: 3 }, parallelSource] } });
+    history.entries.unshift({ ...original, id: "legacy-current-solve", savedAt: new Date().toISOString(),
+      state: { ...original.state, sourceType: "current", mode: "current", voltage: -9, sources: [parallelSource] } });
     history.entries.unshift({ ...original, id: "legacy-resistance-target", savedAt: new Date().toISOString(),
       state: { ...original.state, mode: "resistance", current: .004, target: 2, network: { kind: "series",
         children: [{ ...original.state.network, tolerance: 3.7 }, { ...original.state.network, id: 2 }] } } });
+    const oldInverse = history.entries[0];
+    history.entries.unshift({ ...oldInverse, id: "legacy-current-inverse",
+      state: { ...oldInverse.state, sourceType: "current", current: .003, sources: [{ ...parallelSource, value: .001 }] } });
     localStorage.setItem(key, JSON.stringify(history));
     const reloaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
     win.location.reload(); await reloaded;
@@ -696,21 +689,16 @@
     query('[data-memory-restore="legacy-sources"]').click(); await wait(50);
     get("memoryClose").click();
     const addition = ref => query(`[data-added-source="${ref}"]`);
-    check(addition("V2") && addition("I1") && field("voltage") === "15 V" && field("voltageBranchCurrent") === "11 mA",
-      "legacy snapshots still restore both supplementary source types and their branch values");
+    check(addition("V2") && addition("I1") && field("voltage") === "15 V" && field("voltageBranchCurrent") === "11 mA"
+      && schematicInput("voltage").value === "12" && query('[data-mode="voltage"]').disabled,
+      "an old voltage solve restores the calculated main source value and both supplementary offsets");
     switchSource("voltage", "current");
-    check(mainSource("current") && circuitQuantity("current").textContent === "11 mA" && field("voltage") === "15 V"
-      && voltmeterMatches("15 V") && field("mainVoltage") === "12 V",
-      "the main conversion accounts for legacy series and parallel offsets");
-    mode("voltage");
-    check(field("voltage") === "15 V" && field("mainCurrent") === "11 mA", "the current-driven calculation combines signed parallel inputs");
+    check(mainSource("current") && schematicInput("current").value === "11" && field("mainCurrent") === "11 mA"
+      && field("current") === "15 mA" && voltmeterMatches("15 V") && field("mainVoltage") === "12 V",
+      "the main conversion uses the current branch value with the saved series and parallel offsets");
     switchSource("current", "voltage");
-    check(circuitQuantity("voltage").textContent === "12 V" && field("voltage") === "15 V",
-      "the reverse conversion applies the series offset and maintains the load voltage");
-    mode("current");
     check(schematicInput("voltage").value === "12" && field("voltage") === "15 V" && field("current") === "15 mA",
-      "switching away from solved voltage uses the main source value when a saved source is in series");
-    mode("voltage");
+      "the reverse conversion applies the series offset and maintains the load voltage");
     check(rightClick(addition("I1").querySelector("[data-added-source-core]")) && get("constructionTarget").textContent === "I1"
       && !sourceAction("voltage").hidden && sourceAction("current").hidden, "the menu targets the clicked legacy source");
     sourceAction("voltage").click();
@@ -718,8 +706,9 @@
       && field("V3") === "0 V", "converting a supplementary element replaces one entry and starts its new unit value at zero");
     enterValue("V3", "1 V");
     chooseUnit("V3", "m");
-    check(schematicInput("V3").value === "1" && get("addedSourceUnit").value === "m" && field("V3") === "1 mV" && field("voltage") === "15 V",
-      "a supplementary source can use its own multiplier without affecting the other controls");
+    check(schematicInput("V3").value === "1" && get("addedSourceUnit").value === "m" && field("V3") === "1 mV"
+      && field("voltage") === "15.001 V" && schematicInput("voltage").value === "12",
+      "an edited supplementary source updates the load voltage and leaves the main source input intact");
     get("ltspiceDownload").click();
     const legacySchematic = await downloaded.text();
     const connections = schematicConnections(legacySchematic);
@@ -734,6 +723,14 @@
       "recalling an old single-target calculation preserves its solved values in the all-resistor mode");
     check(schematicInput("tolerance-1").value === "3.7" && field("resistanceRange") === "2.943 kΩ to 3.057 kΩ",
       "saved custom tolerances are retained and included in the range");
+    query('[data-memory-restore="legacy-current-solve"]').click(); await wait(50);
+    check(schematicInput("current").value === "-13" && field("current") === "-9 mA" && voltmeterMatches("-9 V")
+      && query('[data-mode="current"]').disabled, "an old current solve restores the signed source branch value and recalculates voltage");
+    query('[data-memory-restore="legacy-current-inverse"]').click(); await wait(50);
+    check(schematicInput("current").value === "3" && field("current") === "4 mA" && voltmeterMatches("12 V")
+      && resistorValue(1).textContent === "1 kΩ" && resistorValue(2).textContent === "2 kΩ" && hasRole(resistorValue(2), "known")
+      && query('[data-mode="resistance"]').disabled && entries().find(entry => entry.id === "legacy-current-inverse").state.mode === "resistance",
+      "an old current-source resistance solve retains its solved parts and original memory after recall");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);

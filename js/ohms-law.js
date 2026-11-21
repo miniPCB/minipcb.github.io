@@ -14,6 +14,7 @@
   const toleranceDialog = byId("toleranceDialog"), customTolerance = byId("customTolerance");
   let frameExportSnapshot, resistanceEdit, toleranceEdit;
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
+  const sourceModes = { voltage: ["current", "resistance"], current: ["voltage"] };
   const prefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
   const units = { voltage: "V", current: "A", resistance: "Ω" };
   const packages = ["0201", "0402", "0603", "0805", "1206", "1210", "2010", "2512", "Through-hole", "Other"];
@@ -51,6 +52,7 @@
     const currentDriven = primarySourceKind(snapshot) === "current";
     if (currentDriven) return field === "voltage" ? "Load voltage" : "Source current";
     if (field === "voltage") return sources(snapshot).some(source => source.kind === field) ? "Main source voltage" : "Supply voltage";
+    if (snapshot.mode === "resistance") return "Target current";
     return sources(snapshot).some(source => source.kind === field) ? "Load current" : "Circuit current";
   }
   function selectedSource() { return sources().find(source => sourceKey(source) === selectedSourceKey); }
@@ -154,6 +156,16 @@
 
   function partResistance(part) {
     return state.mode === "resistance" ? result.resistances?.get(part.id) : part.resistance;
+  }
+
+  function keepSolvedInput(solution) {
+    if (solution.error) return;
+    const { mode } = state;
+    if (mode === "resistance") {
+      for (const part of parts(state.network)) part.resistance = solution.resistances.get(part.id);
+    } else if (mode === primarySourceKind()) {
+      state[mode] = mode === "voltage" ? solution.mainVoltage : solution.mainCurrent;
+    } else state[mode] = solution[mode];
   }
 
   function insert(node, id, kind, added) {
@@ -323,7 +335,11 @@
   }
 
   function syncControls() {
-    for (const button of document.querySelectorAll("[data-mode]")) button.setAttribute("aria-pressed", String(button.dataset.mode === state.mode));
+    const available = sourceModes[primarySourceKind()];
+    for (const button of document.querySelectorAll("[data-mode]")) {
+      button.disabled = !available.includes(button.dataset.mode);
+      button.setAttribute("aria-pressed", String(button.dataset.mode === state.mode));
+    }
     byId("voltageField").hidden = state.mode === "voltage";
     byId("currentField").hidden = state.mode === "current";
     showVoltage(); showCurrent(); syncPart(); syncAddedSources();
@@ -658,7 +674,7 @@
 
   function drawVoltmeter(host, x, top, bottom, radius, symbols, topColor, voltage) {
     const y = (top + bottom) / 2;
-    const role = valueRole(voltage, state.mode === "voltage"), fill = color[role], reading = format(voltage, "V");
+    const reading = format(voltage, "V");
     const meter = svg(host, "g", { "data-voltmeter": "", role: "group",
       "aria-label": `Voltmeter, load voltage ${Number.isFinite(voltage) ? reading : "unavailable"}` });
     const panelHalfWidth = radius - 2, panelHalfHeight = 30;
@@ -671,10 +687,9 @@
     svg(meter, "rect", { x: x - panelHalfWidth, y: y - panelHalfHeight, width: 2 * panelHalfWidth, height: 2 * panelHalfHeight,
       rx: 8, fill: "#12354b", stroke: "#39586f", "stroke-width": 1, "data-voltmeter-panel": "" });
     text(meter, x, y - 11, "Load voltage", 12, "#75d5ff", { "text-anchor": "middle" });
-    const value = text(meter, x, y + 11, reading, 18, fill, { "data-circuit-quantity": "voltage",
-      "data-value-role": role, "data-voltmeter-value": "", "text-anchor": "middle", "dominant-baseline": "central", "font-weight": 700 });
+    const value = text(meter, x, y + 11, reading, 18, color.calculated, { "data-circuit-quantity": "voltage",
+      "data-value-role": "calculated", "data-voltmeter-value": "", "text-anchor": "middle", "dominant-baseline": "central", "font-weight": 700 });
     fitText(value, 2 * panelHalfWidth - 16);
-    drawQuantityField(value, "voltage", { x: x - panelHalfWidth + 7, y: y - 2, width: 2 * panelHalfWidth - 14, height: 26 }, true);
   }
 
   function drawSourceSymbol(host, source, x, y, top, bottom, symbols, topColor) {
@@ -760,9 +775,7 @@
     const rangeRowHeight = 28, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 165 + rangeRowHeight;
     const x = naturalWidth - rightPadding - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const values = displayValues(), kind = primarySourceKind();
-    const sourceCalculated = state.mode === kind;
-    const sourceValue = sourceCalculated ? (kind === "voltage" ? result.mainVoltage : result.mainCurrent) : state[kind];
-    const sourceRole = valueRole(sourceValue, sourceCalculated);
+    const sourceValue = state[kind], sourceRole = valueRole(sourceValue, false);
     const topColor = state.mode === "voltage" ? color.calculated : color.net, sourceColor = color[sourceRole];
     artwork.replaceChildren();
     schematic.setAttribute("width", width); schematic.setAttribute("height", height);
@@ -878,8 +891,8 @@
   }
 
   function loadRange() {
-    const { mode } = state, { range, current, voltage } = result;
-    const voltageVaries = mode === "voltage" || (mode === "resistance" && primarySourceKind() === "current");
+    const { range, current, voltage } = result;
+    const voltageVaries = primarySourceKind() === "current";
     const field = voltageVaries ? "voltage" : "current", fixed = voltageVaries ? "current" : "voltage";
     const endpoints = range?.map(resistance => voltageVaries ? current * resistance : voltage / resistance);
     return { field, fixed, text: rangeText(endpoints, units[field]) };
@@ -896,11 +909,11 @@
       ["Equivalent resistance range", rangeText(range, "Ω"), "resistanceRange"]
     ];
     if (hasSeries) {
-      const mainVoltage = currentDriven || state.mode === "voltage" ? result.mainVoltage : state.voltage;
+      const mainVoltage = currentDriven ? result.mainVoltage : state.voltage;
       rows.push(["Main source voltage", format(mainVoltage, "V"), "mainVoltage"]);
     }
     if (hasParallel) {
-      const mainCurrent = currentDriven && state.mode !== "current" ? state.current : result.mainCurrent;
+      const mainCurrent = currentDriven ? state.current : result.mainCurrent;
       rows.push([currentDriven ? "Main source current" : "Voltage-source branch current", format(mainCurrent, "A"), currentDriven ? "mainCurrent" : "voltageBranchCurrent"]);
     }
     for (const source of extras) rows.push([`${sourceKey(source)} · ${sourceKind(source).toLowerCase()}`, format(source.value, units[source.kind]), sourceKey(source)]);
@@ -1011,16 +1024,9 @@
 
   byId("partPackage").replaceChildren(...packages.map(value => new Option(value)));
   for (const button of document.querySelectorAll("[data-mode]")) button.addEventListener("click", () => {
-    const previous = state.mode, next = button.dataset.mode;
-    if (previous === next) return;
-    if (!result.error) {
-      // The previous output becomes an input in the new solve mode.
-      if (previous === "resistance") {
-        for (const part of parts(state.network)) part.resistance = partResistance(part);
-      } else if (previous === primarySourceKind()) {
-        state[previous] = previous === "voltage" ? result.mainVoltage : result.mainCurrent;
-      } else state[previous] = result[previous];
-    }
+    const next = button.dataset.mode;
+    if (button.disabled || next === state.mode) return;
+    keepSolvedInput(result);
     draft.clear();
     state.mode = next;
     syncControls(); refresh();
@@ -1047,11 +1053,14 @@
       if (primarySourceKind() === kind) return;
       // Keep the load operating point when the source has a valid solution.
       if (!result.error) {
+        if (state.mode === "resistance") keepSolvedInput(result);
         state.voltage = kind === "current" ? result.voltage : result.mainVoltage;
         state.current = kind === "current" ? result.mainCurrent : result.current;
       }
       if (kind === "current") state.sourceType = kind;
       else delete state.sourceType;
+      state.mode = sourceModes[kind][0];
+      draft.clear();
     }
     syncControls();
     refresh();
@@ -1172,18 +1181,17 @@
 
   function requestResistanceEdit(id, value, prefix) {
     resistanceEdit = { id, value, prefix };
-    byId("calculatedResistanceHelp").textContent = `Use ${format(value, "Ω")} for ${partCaption(findPart(id))}. Choose the quantity to recalculate.`;
+    byId("calculatedResistanceHelp").textContent = `Use ${format(value, "Ω")} for ${partCaption(findPart(id))} and recalculate the current at the source voltage.`;
     resistanceDialog.showModal();
   }
 
-  resistanceDialog.addEventListener("click", event => {
-    const mode = event.target.closest("[data-resistance-mode]")?.dataset.resistanceMode;
-    if (!mode || !resistanceEdit) return;
+  byId("applyCalculatedResistance").addEventListener("click", () => {
+    if (!resistanceEdit || state.mode !== "resistance") return;
     const { id, value, prefix } = resistanceEdit;
     for (const part of parts(state.network)) {
       part.resistance = part.id === id ? value : partResistance(part) ?? part.resistance ?? defaultResistance;
     }
-    state.mode = mode; selectedId = id;
+    state.mode = "current"; selectedId = id;
     selectedPrefixes.set(resistanceKey(id), prefix);
     syncControls(); refresh();
     resistanceDialog.close();
@@ -1318,8 +1326,12 @@
       state = snapshot; draft.clear(); selectedPrefixes.clear();
       const allParts = parts(state.network);
       selectedId = state.target ?? allParts[0].id;
-      // Preserve the effective component values from older single-target saves.
-      if (state.target != null) {
+      const available = sourceModes[primarySourceKind()];
+      if (!available.includes(state.mode)) {
+        // Recover the old operating point before changing how the circuit is solved.
+        keepSolvedInput(analyze(state.target));
+        state.mode = available[0];
+      } else if (state.target != null) {
         const previous = analyze(state.target);
         if (!previous.error) findPart(state.target).resistance = previous.resistances.get(state.target);
       }
