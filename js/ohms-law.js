@@ -5,6 +5,8 @@
   const schematic = byId("schematic"), viewport = byId("schematicViewport");
   const memoryPanel = byId("calculatorMemory"), characteristics = byId("characteristicsDrawer"), characteristicsTab = byId("characteristicsToggle");
   const titleDefault = "Ohm’s Law";
+  const labelDefaults = { source: "VDC", ground: "GND" }, labelLimit = 24, titleLimit = 72;
+  const constructionMenu = byId("constructionMenu"), annotationEditor = byId("annotationEditor"), annotationInput = byId("annotationInput");
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
   const prefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
   const units = { voltage: "V", current: "A", resistance: "Ω" };
@@ -16,13 +18,16 @@
   const compactSymbols = { width: 14, height: 38, radius: 1, stroke: 2.5, junction: 4, source: 19, ground: [14, 9, 4], groundPitch: 7 };
   const mobile = matchMedia("(max-width: 780px)");
   const draft = new Set();
-  let selectedId = 1, nextId = 2, desktopView = false, memory, result, build, embeddedLogo, copyRows;
+  let selectedId = 1, nextId = 2, desktopView = false, memory, result, build, embeddedLogo, copyRows, constructionTarget, annotationEdit;
   let state = { version: 1, title: "", mode: "current", voltage: 12, current: 0.012, target: null, network: newPart(1) };
 
   function newPart(id) { return { id, resistance: 1000, tolerance: 1, package: "0805" }; }
   function parts(node) { return node.children ? node.children.flatMap(parts) : [node]; }
   function partName(id) { return `R${id}`; }
-  function selectedPart() { return parts(state.network).find(part => part.id === selectedId); }
+  function findPart(id) { return parts(state.network).find(part => part.id === id); }
+  function selectedPart() { return findPart(selectedId); }
+  function partLabel(part) { return part.label || partName(part.id); }
+  function partCaption(part) { return part.label ? `${part.label} (${partName(part.id)})` : partName(part.id); }
   function parallel(values) {
     const minimum = Math.min(...values);
     return minimum / values.reduce((sum, value) => sum + minimum / value, 0);
@@ -168,13 +173,12 @@
     for (const button of document.querySelectorAll("[data-mode]")) button.setAttribute("aria-pressed", String(button.dataset.mode === state.mode));
     byId("voltageField").hidden = state.mode === "voltage";
     byId("currentField").hidden = state.mode === "current";
-    byId("circuitTitle").value = state.title;
     showVoltage(); showCurrent(); syncPart();
   }
 
   function syncPart() {
     const allParts = parts(state.network), part = selectedPart();
-    byId("partSelect").replaceChildren(...allParts.map(item => new Option(partName(item.id) + (item.id === state.target ? " (calculated)" : ""), item.id)));
+    byId("partSelect").replaceChildren(...allParts.map(item => new Option(partCaption(item) + (item.id === state.target ? " (calculated)" : ""), item.id)));
     byId("partSelect").value = String(part.id);
     byId("partPackage").value = part.package;
     byId("tolerance").value = part.tolerance ?? "";
@@ -208,6 +212,37 @@
     return svg(host, "text", { x, y, fill, "font-size": size, "font-family": "Consolas, monospace", ...extra }, content);
   }
 
+  function control(key, label) { return { "data-schematic-control": key, role: "button", tabindex: 0, "aria-label": label }; }
+  function focusControl(key) {
+    schematic.querySelector(`[data-schematic-control="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+  }
+
+  function wrapLabel(value, max) {
+    const lines = [];
+    while ([...value].length > max) {
+      const prefix = [...value].slice(0, max + 1).join(""), space = prefix.lastIndexOf(" ");
+      const end = space > 0 ? space : [...prefix].slice(0, max).join("").length;
+      lines.push(value.slice(0, end));
+      value = value.slice(end).trimStart();
+    }
+    return [...lines, value];
+  }
+
+  function drawLabel(host, key, description, lines, x, y, { size, fill, centered = false, target } = {}) {
+    const label = svg(host, "g", { ...control(`label-${key}`, `Edit ${description}: ${lines.join(" ")}`),
+      "data-annotation": key, "aria-haspopup": "dialog", ...(target == null ? {} : { "data-network-context": target }) });
+    const pitch = size + 3, width = Math.max(38, ...lines.map(value => [...value].length * size * .65 + 12));
+    svg(label, "rect", { class: "control-hit", x: centered ? x - width / 2 : x - 5, y: y - size,
+      width, height: pitch * (lines.length - 1) + size + 6, rx: 4 });
+    lines.forEach((value, index) => {
+      const line = text(label, x, y + index * pitch, value, size, fill, { "text-anchor": centered ? "middle" : "start", "font-weight": 700 });
+      if (line.getComputedTextLength() > width - 12) {
+        line.setAttribute("textLength", width - 12);
+        line.setAttribute("lengthAdjust", "spacingAndGlyphs");
+      }
+    });
+  }
+
   function layout(node, compact) {
     if (!node.children) return { node, width: compact ? 143 : 174, height: compact ? 110 : 124 };
     const children = node.children.map(child => layout(child, compact));
@@ -223,15 +258,17 @@
       const role = value == null ? color.missing : known ? color.known : color.calculated;
       const bodyWidth = symbols.width, bodyHeight = symbols.height;
       const top = y + (height - bodyHeight) / 2, end = top + bodyHeight, middle = (top + end) / 2;
-      const part = svg(host, "g", { "data-part": node.id, role: "button", tabindex: 0,
-        "aria-label": `${partName(node.id)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. Edit resistor`, "aria-pressed": String(node.id === selectedId) });
+      const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. Edit resistor`),
+        "data-part": node.id, "aria-pressed": String(node.id === selectedId) });
       svg(part, "rect", { class: "part-hit", x: x - 24, y: middle - 39, width: width - 10, height: 78, rx: 8, "stroke-width": 1 });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, role).dataset.symbolLead = "top";
       line(part, x, end, x, end + leadLength, role).dataset.symbolLead = "bottom";
       line(part, x, end + leadLength, x, bottom);
       svg(part, "rect", { x: x - bodyWidth / 2, y: top, width: bodyWidth, height: bodyHeight, rx: symbols.radius, fill: "#13202c", stroke: role, "data-resistor-core": "" });
-      text(part, x + 24, middle - 3, partName(node.id), 16, role, { "font-weight": 700 });
+      const size = symbols === compactSymbols ? 12 : 15, lines = wrapLabel(partLabel(node), symbols === compactSymbols ? 10 : 12);
+      drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, lines, x + 24, middle - 3 - (lines.length - 1) * (size + 3),
+        { size, fill: role, target: node.id });
       text(part, x + 24, middle + 17, format(value, "Ω"), symbols === compactSymbols ? 12 : 14);
       return;
     }
@@ -266,23 +303,25 @@
     });
   }
 
-  function titleLines(title, width) {
-    const max = Math.floor((width - 32) / 12), lines = [];
-    while (title.length > max) {
-      const space = title.lastIndexOf(" ", max), end = space > 0 ? space : max;
-      lines.push(title.slice(0, end));
-      title = title.slice(end).trimStart();
-    }
-    return [...lines, title];
+  function drawCurrent(host, from, to, wireY, current) {
+    if (!Number.isFinite(current) || current === 0) return;
+    const sign = Math.sign(current), center = (from + to) / 2, y = wireY - 10, tip = center + sign * 22;
+    const direction = sign > 0 ? "forward" : "reverse";
+    const arrow = svg(host, "g", { "data-current-direction": direction, role: "img",
+      "aria-label": `Conventional current ${direction}, ${format(Math.abs(current), "A")}` });
+    const heel = tip - sign * 8;
+    svg(arrow, "path", { d: `M${center - sign * 22} ${y}H${tip}M${heel} ${y - 5}L${tip} ${y}L${heel} ${y + 5}`,
+      fill: "none", stroke: color.text, "stroke-width": 2, "stroke-linejoin": "round" });
+    text(arrow, center, y - 8, "I", 12, color.text, { "text-anchor": "middle" });
   }
 
   function drawCircuit() {
-    const focusId = document.activeElement?.closest("#schematic [data-part]")?.dataset.part;
+    const focusedControl = document.activeElement?.dataset.schematicControl;
     const compact = mobile.matches && !desktopView, box = layout(state.network, compact), symbols = compact ? compactSymbols : fullSymbols;
     const naturalWidth = Math.max(compact ? 348 : 432, box.width + (compact ? 200 : 224));
     const width = Math.max(naturalWidth, viewport.clientWidth), offset = (width - naturalWidth) / 2;
-    const names = titleLines(state.title || titleDefault, width);
-    const y = 102 + 23 * names.length, bottom = y + box.height, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 134;
+    const names = wrapLabel(state.title || titleDefault, Math.floor((width - 38) / 13));
+    const y = 116 + 23 * names.length, bottom = y + box.height, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 134;
     const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = (compact ? 63 : 81) + offset, sourceY = (y + bottom) / 2;
     const sourceVoltage = state.mode === "voltage" ? result.voltage : state.voltage;
     const topColor = state.mode === "voltage" && sourceVoltage != null ? color.calculated : color.net;
@@ -296,24 +335,34 @@
     const stamp = build ? svg(schematic, "a", { href: `https://github.com/miniPCB/minipcb.github.io/commit/${build.commit}`, target: "_blank", rel: "noopener noreferrer", "data-built-at": build.builtAt, "data-build-commit": build.commit }) : schematic;
     const buildLabel = build ? `${build.builtAt.slice(0, 19).replace("T", " ")} UTC · ${build.commit.slice(0, 7)}` : "Unpublished source";
     text(stamp, 16, 65, buildLabel, 11, color.muted);
-    names.forEach((name, index) => text(schematic, 16, 94 + index * 23, name, 20, color.text, { "font-weight": 700 }));
+    drawLabel(schematic, "title", "circuit title", names, width / 2, 94, { size: 20, fill: color.text, centered: true });
 
     const drawing = svg(schematic, "g", { "stroke-width": symbols.stroke, "stroke-linecap": "round" });
     line(drawing, sourceX, y, x, y, topColor); line(drawing, sourceX, bottom, x, bottom);
+    drawCurrent(drawing, sourceX, x, y, result.current);
     const sourceTop = sourceY - symbols.source, sourceBottom = sourceY + symbols.source;
     line(drawing, sourceX, y, sourceX, sourceTop - leadLength, topColor);
-    line(drawing, sourceX, sourceTop - leadLength, sourceX, sourceTop, sourceColor);
-    line(drawing, sourceX, sourceBottom, sourceX, sourceBottom + leadLength, sourceColor);
     line(drawing, sourceX, sourceBottom + leadLength, sourceX, bottom);
-    svg(drawing, "circle", { cx: sourceX, cy: sourceY, r: symbols.source, fill: "#13202c", stroke: sourceColor, "data-voltage-source": "" });
-    text(drawing, sourceX, sourceY - 2, "+", compact ? 14 : 18, sourceColor, { "text-anchor": "middle" });
-    text(drawing, sourceX, sourceY + (compact ? 11 : 15), "−", compact ? 14 : 18, sourceColor, { "text-anchor": "middle" });
-    text(drawing, sourceX + symbols.source + 8, sourceY - 6, "VDC", 13, sourceColor);
-    text(drawing, sourceX + symbols.source + 8, sourceY + 14, format(sourceVoltage, "V"), 14);
+    const source = svg(drawing, "g", { ...control("source", "Source connections"), "data-network-context": "source", "aria-haspopup": "menu" });
+    const sourceHitRadius = symbols.source + 4;
+    svg(source, "rect", { class: "control-hit", x: sourceX - sourceHitRadius, y: sourceY - sourceHitRadius,
+      width: 2 * sourceHitRadius, height: 2 * sourceHitRadius, rx: 8 });
+    line(source, sourceX, sourceTop - leadLength, sourceX, sourceTop, sourceColor);
+    line(source, sourceX, sourceBottom, sourceX, sourceBottom + leadLength, sourceColor);
+    svg(source, "circle", { cx: sourceX, cy: sourceY, r: symbols.source, fill: "#13202c", stroke: sourceColor, "data-voltage-source": "" });
+    text(source, sourceX, sourceY - 2, "+", compact ? 14 : 18, sourceColor, { "text-anchor": "middle" });
+    text(source, sourceX, sourceY + (compact ? 11 : 15), "−", compact ? 14 : 18, sourceColor, { "text-anchor": "middle" });
+    const sourceLabel = wrapLabel(state.sourceLabel || labelDefaults.source, compact ? 10 : 11);
+    const labelX = sourceX + symbols.source + 8;
+    drawLabel(drawing, "source", "source label", sourceLabel, labelX, sourceY - 6 - (sourceLabel.length - 1) * 16,
+      { size: 13, fill: sourceColor, target: "source" });
+    text(drawing, labelX, sourceY + 14, format(sourceVoltage, "V"), 14);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
     line(ground, groundX, bottom, groundX, bottom + leadLength).dataset.symbolLead = "ground";
     symbols.ground.forEach((half, index) => line(ground, groundX - half, bottom + leadLength + symbols.groundPitch * index, groundX + half, bottom + leadLength + symbols.groundPitch * index));
+    drawLabel(drawing, "ground", "ground label", [state.groundLabel || labelDefaults.ground],
+      groundX + symbols.ground[0] + 10, bottom + leadLength + 7, { size: 12, fill: color.net });
     drawNetwork(drawing, box, x, y, symbols, topColor);
 
     const values = [["Voltage", "voltage", "V"], ["Current", "current", "A"], ["Resistance", "resistance", "Ω"], ["Power", "power", "W"]];
@@ -328,7 +377,7 @@
       dot(schematic, keyX + 4, height - 15, color[role]);
       text(schematic, keyX + 15, height - 11, label, 12, color.muted);
     });
-    if (focusId) schematic.querySelector(`[data-part="${focusId}"]`)?.focus({ preventScroll: true });
+    if (focusedControl) focusControl(focusedControl);
     updateView();
   }
 
@@ -363,15 +412,16 @@
 
     const reports = byId("partCharacteristics"), existing = new Map([...reports.children].map(item => [Number(item.dataset.reportId), item]));
     for (const part of parts(state.network)) {
-      const name = partName(part.id), reading = readings?.get(part.id);
+      const name = partCaption(part), reading = readings?.get(part.id);
       const details = existing.get(part.id) || document.createElement("details");
       existing.delete(part.id);
       if (!details.hasChildNodes()) {
         details.dataset.reportId = part.id;
         const summary = document.createElement("summary"), table = document.createElement("table");
-        summary.textContent = name; table.setAttribute("aria-label", `${name} measurements`);
         details.append(summary, table); reports.append(details);
       }
+      details.firstElementChild.textContent = name;
+      details.lastElementChild.setAttribute("aria-label", `${name} measurements`);
       const data = [["Resistance", format(part.id === state.target ? result.solved : part.resistance, "Ω")],
         ["Voltage drop", format(reading?.voltage, "V")], ["Current", format(reading?.current, "A")],
         ["Power", format(reading?.power, "W")], ["Tolerance", part.tolerance === null ? "—" : `±${part.tolerance}%`], ["Package", part.package]];
@@ -397,29 +447,34 @@
   function describe(snapshot) {
     const field = (id, label, value) => ({ id, label, value });
     const fields = [field("mode", "Solve for", modes[snapshot.mode]), field("topology", "Network", networkText(snapshot.network))];
-    if (snapshot.title) fields.push(field("title", "Circuit title", snapshot.title));
+    fields.push(field("title", "Circuit title", snapshot.title || titleDefault),
+      field("sourceLabel", "Source label", snapshot.sourceLabel || labelDefaults.source),
+      field("groundLabel", "Ground label", snapshot.groundLabel || labelDefaults.ground));
     if (snapshot.mode !== "voltage") fields.push(field("voltage", "Supply voltage", format(snapshot.voltage, "V")));
     if (snapshot.mode !== "current") fields.push(field("current", "Circuit current", format(snapshot.current, "A")));
     if (snapshot.target) fields.push(field("target", "Calculated resistor", partName(snapshot.target)));
     return { fields, parts: parts(snapshot.network).map(part => {
       const resistance = part.id === snapshot.target ? "Calculated" : format(part.resistance, "Ω"), tolerance = `±${part.tolerance}%`;
-      return { name: partName(part.id), summary: `${resistance}, ${tolerance}, ${part.package}`, values: {
-        resistance: { label: "resistance", value: resistance }, tolerance: { label: "tolerance", value: tolerance }, package: { label: "package", value: part.package }
+      return { name: partName(part.id), summary: `${part.label ? part.label + ", " : ""}${resistance}, ${tolerance}, ${part.package}`, values: {
+        label: { label: "label", value: partLabel(part) }, resistance: { label: "resistance", value: resistance },
+        tolerance: { label: "tolerance", value: tolerance }, package: { label: "package", value: part.package }
       } };
     }) };
   }
 
   function validSnapshot(snapshot) {
     const ids = new Set();
+    const validLabel = value => value === undefined || typeof value === "string" && value.length <= labelLimit;
     function validNode(node) {
       if (!node || typeof node !== "object") return false;
       if (node.children) return ["series", "parallel"].includes(node.kind) && Array.isArray(node.children) && node.children.length >= 2 && node.children.every(validNode);
-      if (!Number.isSafeInteger(node.id) || node.id < 1 || ids.has(node.id) || !packages.includes(node.package)) return false;
+      if (!Number.isSafeInteger(node.id) || node.id < 1 || ids.has(node.id) || !packages.includes(node.package) || !validLabel(node.label)) return false;
       if (!(node.resistance === null || (Number.isFinite(node.resistance) && node.resistance > 0)) || !Number.isFinite(node.tolerance) || node.tolerance < 0 || node.tolerance >= 100) return false;
       ids.add(node.id);
       return true;
     }
-    return snapshot?.version === 1 && Object.hasOwn(modes, snapshot.mode) && typeof snapshot.title === "string" && snapshot.title.length <= 72
+    return snapshot?.version === 1 && Object.hasOwn(modes, snapshot.mode) && typeof snapshot.title === "string" && snapshot.title.length <= titleLimit
+      && validLabel(snapshot.sourceLabel) && validLabel(snapshot.groundLabel)
       && [snapshot.voltage, snapshot.current].every(value => value === null || Number.isFinite(value)) && validNode(snapshot.network)
       && (snapshot.mode === "resistance" ? ids.has(snapshot.target) : snapshot.target === null);
   }
@@ -449,7 +504,7 @@
     state.target = selectedId; syncPart(); refresh(); byId("partSelect").focus();
   });
   byId("partPackage").addEventListener("change", event => { selectedPart().package = event.target.value; refresh(); });
-  const toleranceInput = byId("tolerance"), titleInput = byId("circuitTitle");
+  const toleranceInput = byId("tolerance");
   trackDraft(toleranceInput, commit => {
     const part = selectedPart(), value = toleranceInput.valueAsNumber;
     const tolerance = value >= 0 && value < 100 ? value : null, changed = tolerance !== part.tolerance;
@@ -457,16 +512,15 @@
     toleranceInput.setAttribute("aria-invalid", String(tolerance === null));
     finishEdit(toleranceInput, commit, changed);
   });
-  trackDraft(titleInput, commit => {
-    const title = titleInput.value.trim(), changed = title !== state.title;
-    state.title = title;
-    finishEdit(titleInput, commit, changed);
-  });
-  for (const button of document.querySelectorAll("[data-add]")) button.addEventListener("click", () => {
+  function addResistor(kind, target) {
     const part = newPart(nextId++);
-    state.network = insert(state.network, selectedId, button.dataset.add, part);
+    const network = state.network;
+    if (target === "source") state.network = { kind, children: [...(network.kind === kind ? network.children : [network]), part] };
+    else state.network = insert(network, Number(target), kind, part);
     selectPart(part.id);
-  });
+    return part.id;
+  }
+  for (const button of document.querySelectorAll("[data-add]")) button.addEventListener("click", () => addResistor(button.dataset.add, selectedId));
   byId("removePart").addEventListener("click", () => {
     const allParts = parts(state.network), index = allParts.findIndex(part => part.id === selectedId);
     if (allParts.length < 2) return;
@@ -476,15 +530,105 @@
     selectPart(next.id);
     if (byId("removePart").disabled) byId("partSelect").focus();
   });
-  function editSchematicPart(event) {
-    const part = event.target.closest("[data-part]");
-    if (!part) return;
-    event.preventDefault();
-    selectPart(Number(part.dataset.part));
-    byId(selectedId === state.target ? "partSelect" : "resistance").focus();
+  function openConstruction(anchor, clientX, clientY) {
+    const target = anchor.dataset.part ?? anchor.dataset.networkContext;
+    constructionTarget = { target, control: anchor.dataset.schematicControl };
+    byId("constructionTarget").textContent = target === "source" ? "Entire circuit" : partCaption(findPart(Number(target)));
+    constructionMenu.hidden = false;
+    const bounds = anchor.getBoundingClientRect();
+    const { clientWidth, clientHeight } = document.documentElement;
+    constructionMenu.style.left = `${Math.max(12, Math.min(clientX ?? bounds.left, clientWidth - constructionMenu.offsetWidth - 12))}px`;
+    constructionMenu.style.top = `${Math.max(12, Math.min(clientY ?? bounds.bottom, clientHeight - constructionMenu.offsetHeight - 12))}px`;
+    constructionMenu.querySelector("button").focus({ preventScroll: true });
   }
-  schematic.addEventListener("click", editSchematicPart);
-  schematic.addEventListener("keydown", event => { if (["Enter", " "].includes(event.key)) editSchematicPart(event); });
+
+  function closeConstruction(restoreFocus = false) {
+    if (constructionMenu.hidden) return;
+    constructionMenu.hidden = true;
+    if (restoreFocus) focusControl(constructionTarget.control);
+    constructionTarget = null;
+  }
+
+  function openAnnotation(key, focus) {
+    const part = key.startsWith("part-") ? findPart(Number(key.slice(5))) : null;
+    const field = part ? "label" : key === "title" ? "title" : `${key}Label`;
+    const fallback = part ? partName(part.id) : key === "title" ? titleDefault : labelDefaults[key];
+    const owner = part || state;
+    annotationEdit = { owner, field, fallback, focus };
+    byId("annotationHeading").textContent = key === "title" ? "Edit circuit title" : `Edit ${part ? partName(part.id) : key} label`;
+    annotationInput.maxLength = key === "title" ? titleLimit : labelLimit;
+    annotationInput.placeholder = fallback;
+    annotationInput.value = owner[field] || fallback;
+    annotationEditor.showModal(); annotationInput.select();
+  }
+
+  function closeAnnotation(commit) {
+    const { owner, field, fallback, focus } = annotationEdit;
+    if (commit) {
+      const value = annotationInput.value.trim().slice(0, annotationInput.maxLength);
+      if (value && value !== fallback) owner[field] = value;
+      else if (field === "title") owner.title = "";
+      else delete owner[field];
+      if (field === "label") syncPart();
+      refresh();
+    }
+    annotationEditor.close(); annotationEdit = null;
+    focus();
+  }
+
+  byId("annotationForm").addEventListener("submit", event => { event.preventDefault(); closeAnnotation(true); });
+  byId("annotationCancel").addEventListener("click", () => closeAnnotation(false));
+  annotationEditor.addEventListener("cancel", event => { event.preventDefault(); closeAnnotation(false); });
+  byId("editResistorLabel").addEventListener("click", event => {
+    const button = event.currentTarget;
+    openAnnotation(`part-${selectedId}`, () => button.focus({ preventScroll: true }));
+  });
+
+  function activateSchematicControl(event) {
+    const control = event.target.closest("[data-schematic-control]");
+    if (!control) return;
+    event.preventDefault();
+    if (control.dataset.annotation) openAnnotation(control.dataset.annotation, () => focusControl(control.dataset.schematicControl));
+    else if (control.dataset.networkContext === "source") openConstruction(control);
+    else {
+      selectPart(Number(control.dataset.part));
+      byId(selectedId === state.target ? "partSelect" : "resistance").focus();
+    }
+  }
+  schematic.addEventListener("click", activateSchematicControl);
+  function constructionFromEvent(event, pointer = false) {
+    const anchor = event.target.closest("[data-part], [data-network-context]");
+    if (!anchor) return;
+    event.preventDefault();
+    if (pointer) openConstruction(anchor, event.clientX, event.clientY);
+    else openConstruction(anchor);
+  }
+  schematic.addEventListener("contextmenu", event => constructionFromEvent(event, event.button === 2 || !!(event.clientX || event.clientY)));
+  schematic.addEventListener("keydown", event => {
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) constructionFromEvent(event);
+    else if (["Enter", " "].includes(event.key)) activateSchematicControl(event);
+  });
+  constructionMenu.addEventListener("click", event => {
+    const kind = event.target.closest("[data-connect]")?.dataset.connect;
+    if (!kind) return;
+    const { target } = constructionTarget;
+    closeConstruction();
+    focusControl(`part-${addResistor(kind, target)}`);
+  });
+  constructionMenu.addEventListener("keydown", event => {
+    if (["Escape", "Tab"].includes(event.key)) {
+      if (event.key === "Escape") event.preventDefault();
+      closeConstruction(true);
+    } else if (["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      const buttons = [...constructionMenu.querySelectorAll("button")];
+      const index = buttons.indexOf(document.activeElement);
+      buttons[event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length].focus();
+    }
+  });
+  document.addEventListener("pointerdown", event => { if (!constructionMenu.contains(event.target)) closeConstruction(); });
+  document.addEventListener("scroll", event => { if (!constructionMenu.contains(event.target)) closeConstruction(true); }, true);
+  window.addEventListener("resize", () => closeConstruction(true));
 
   const toggleView = byId("viewToggle");
   function updateView() {
@@ -511,7 +655,8 @@
   byId("characteristicsClose").addEventListener("click", () => openCharacteristics(false, true));
   document.addEventListener("keydown", event => {
     const inCharacteristics = event.target.closest?.("#characteristicsDrawer, #characteristicsToggle");
-    if (event.key === "Escape" && !characteristics.inert && (!memoryPanel.open || inCharacteristics) && !event.defaultPrevented && byId("memoryMenu").hidden) {
+    if (event.key === "Escape" && !annotationEditor.open && constructionMenu.hidden && !characteristics.inert
+      && (!memoryPanel.open || inCharacteristics) && !event.defaultPrevented && byId("memoryMenu").hidden) {
       event.preventDefault(); openCharacteristics(false, true);
     }
   });
@@ -538,7 +683,7 @@
       nextId = Math.max(nextId, ...allParts.map(part => part.id + 1));
       syncControls(); refresh();
     },
-    canCollapse: () => !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
+    canCollapse: () => !annotationEditor.open && constructionMenu.hidden && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
   });
 
   const logoReady = fetch("../logo.png").then(response => {
@@ -562,9 +707,9 @@
       if (!embeddedLogo) throw new Error("The miniPCB logo could not be embedded. Reload the calculator and try again.");
       const snapshot = schematic.cloneNode(true);
       snapshot.removeAttribute("id"); snapshot.setAttribute("role", "img"); snapshot.setAttribute("aria-label", state.title || titleDefault);
-      for (const part of snapshot.querySelectorAll("[data-part]")) {
-        part.querySelector(".part-hit").remove();
-        for (const attr of ["data-part", "role", "tabindex", "aria-pressed", "aria-label"]) part.removeAttribute(attr);
+      for (const hit of snapshot.querySelectorAll(".part-hit, .control-hit")) hit.remove();
+      for (const control of snapshot.querySelectorAll("[data-schematic-control]")) {
+        for (const attr of ["data-schematic-control", "data-part", "data-annotation", "data-network-context", "role", "tabindex", "aria-pressed", "aria-label", "aria-haspopup"]) control.removeAttribute(attr);
       }
       const width = Number(snapshot.getAttribute("width")), height = Number(snapshot.getAttribute("height"));
       const imageFormat = byId("imageFormat").value;

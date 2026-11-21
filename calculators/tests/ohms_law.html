@@ -34,9 +34,27 @@
     const entries = () => JSON.parse(localStorage.getItem(key)).entries;
     const change = (id, value) => { const input = get(id); input.value = value; fire(input, "input"); fire(input, "change"); };
     const mode = value => query(`[data-mode="${value}"]`).click();
-    const add = kind => query(`[data-add="${kind}"]`).click();
     const select = id => { get("partSelect").value = id; fire(get("partSelect"), "change"); };
     const part = id => query(`#schematic [data-part="${id}"]`);
+    const annotation = name => query(`[data-annotation="${name}"]`);
+    const annotationText = name => [...annotation(name).querySelectorAll("text")].map(node => node.textContent).join(" ");
+    const menu = get("constructionMenu");
+    const rightClick = element => !element.dispatchEvent(new win.MouseEvent("contextmenu", { button: 2, clientX: 1240, clientY: 865, bubbles: true, cancelable: true }));
+    const useMenu = kind => query(`#constructionMenu [data-connect="${kind}"]`).click();
+    const keypress = (element, key, options = {}) => element.dispatchEvent(new win.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options }));
+    const edit = (name, value, save = true) => {
+      fire(annotation(name).querySelector("text"), "click");
+      get("annotationInput").value = value;
+      query(save ? '#annotationForm [type="submit"]' : "#annotationCancel").click();
+    };
+    const arrowDirection = () => {
+      const path = query("[data-current-direction] path");
+      if (!path) return 0;
+      const [, from, to] = path.getAttribute("d").match(/^M([\d.]+) [\d.]+H([\d.]+)/);
+      return Math.sign(Number(to) - Number(from));
+    };
+    const centeredTitle = () => [...annotation("title").querySelectorAll("text")].every(node =>
+      node.getAttribute("text-anchor") === "middle" && Number(node.getAttribute("x")) === Number(get("schematic").getAttribute("width")) / 2);
     const symbolMatches = (width, height, stroke) => {
       const core = part(1).querySelector("[data-resistor-core]"), leads = part(1).querySelectorAll("[data-symbol-lead]");
       return Number(core.getAttribute("width")) === width && Number(core.getAttribute("height")) === height
@@ -51,14 +69,34 @@
     check(query('[data-ground-symbol] [data-symbol-lead="ground"]').getAttribute("x1") === query('[data-voltage-source]').getAttribute("cx"), "ground is centered directly below the source");
     check(!memory.open && tab.getAttribute("aria-expanded") === "false", "the side drawers start collapsed");
     check(entries().length === 1 && localStorage.getItem("minipcb-divider-memory-v1") === divider, "history has an independent Original state");
+    const originalId = entries()[0].id;
+    check(arrowDirection() === 1, "positive conventional current points from the source toward the network");
+    check(centeredTitle(), "the default circuit title is centered in the frame");
+    keypress(annotation("title"), "Enter");
+    check(get("annotationEditor").open && doc.activeElement === get("annotationInput"), "the schematic title is keyboard-accessible and focuses its editor");
+    get("annotationInput").value = "Draft title"; get("annotationCancel").click();
+    check(annotationText("title") === "Ohm’s Law" && doc.activeElement === annotation("title"), "canceling a title edit restores its focus and prior value");
+    edit("title", "Bench circuit with a centered editable title that wraps on phones");
+    edit("source", "Bench supply"); edit("ground", "Signal ground"); edit("part-1", "Reference load");
+    check(annotationText("source") === "Bench supply" && annotationText("ground") === "Signal ground" && annotationText("part-1") === "Reference load", "source, ground and individual resistor labels can all be edited on the drawing");
+    check(field("current") === "12 mA" && get("partSelect").selectedOptions[0].text === "Reference load (R1)", "custom labeling preserves electrical identity and updates the selector");
 
     change("voltage", "10 V"); change("resistance", "2 kΩ");
     check(get("resistance").value === "2" && get("resistanceUnit").value === "k" && field("current") === "5 mA", "unit suffix synchronizes the multiplier and live result");
-    add("series");
-    check(part(1) && part(2) && field("resistance") === "3 kΩ", "adding a series resistor grows the schematic and adds resistance");
+    check(rightClick(part(1).querySelector("[data-resistor-core]")) && !menu.hidden && get("constructionTarget").textContent === "Reference load (R1)", "right-clicking a resistor body opens its construction menu");
+    const menuBox = menu.getBoundingClientRect();
+    check(menuBox.right <= frame.clientWidth && menuBox.bottom <= frame.clientHeight, "the menu stays inside the viewport near screen edges");
+    keypress(doc.activeElement, "ArrowDown");
+    check(doc.activeElement.dataset.connect === "parallel", "the construction menu supports keyboard navigation");
+    keypress(doc.activeElement, "Escape");
+    check(menu.hidden && doc.activeElement === part(1), "Escape closes the construction menu and restores schematic focus");
+    keypress(part(1), "F10", { shiftKey: true });
+    check(!menu.hidden && doc.activeElement.dataset.connect === "series", "Shift+F10 opens the same menu from the keyboard");
+    useMenu("series");
+    check(part(1) && part(2) && field("resistance") === "3 kΩ" && doc.activeElement === part(2), "adding in series through the menu grows the circuit and focuses the new part");
     part(1).dispatchEvent(new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     check(get("partSelect").value === "1" && doc.activeElement === get("resistance"), "SVG resistor is keyboard-operable and opens its editor");
-    add("parallel");
+    rightClick(annotation("part-1").querySelector("text")); useMenu("parallel");
     check(part(3) && field("resistance") === "1.6667 kΩ" && field("current") === "6 mA", "adding a parallel resistor to one part produces a mixed circuit");
     check(readings(1).slice(1, 4).join() === "4 V,2 mA,8 mW" && readings(2).slice(1, 4).join() === "6 V,6 mA,36 mW" && readings(3).slice(1, 4).join() === "4 V,4 mA,16 mW", "mixed-circuit readings obey voltage, current and power conservation");
     check(get("schematic").querySelectorAll('circle[r="5"][data-wire-junction][fill="#54d2ff"]').length === 3, "parallel rails and ground have exactly three full-size junctions");
@@ -70,8 +108,10 @@
     check(get("schematic").querySelector('line[stroke="#ff8e8e"]'), "the calculated source net is red");
     change("current", "-6 mA");
     check(field("voltage") === "-10 V" && field("power") === "60 mW" && field("voltageRange") === "-10.205 V to -9.7919 V", "signed current produces correctly ordered ranges and positive dissipation");
+    check(arrowDirection() === -1, "negative conventional current reverses the arrow");
     change("current", "0");
     check(field("voltage") === "0 V" && field("power") === "0 W", "zero current gives a valid zero-voltage operating point");
+    check(arrowDirection() === 0, "zero current has no directional arrow");
     change("current", "6 mA"); select(1); mode("resistance");
     check(get("solvedResistance").textContent === "2 kΩ" && get("resistanceField").hidden, "inverse mode calculates a physical resistor in a mixed circuit");
     select(3); change("resistance", "2k");
@@ -80,10 +120,11 @@
     check(get("solvedResistance").textContent === "1 kΩ", "the inverse calculation can target another resistor");
     change("current", "10mA");
     check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("cannot reach") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
+    check(arrowDirection() === 0, "a failed solve clears the current arrow");
     change("current", "6mA");
     await wait(1100);
     const saved = entries().find(entry => entry.state.mode === "resistance" && entry.state.target === 3);
-    check(saved?.state.network.children[0].children[1].package === "1206", "memory autosaves a complete valid inverse circuit");
+    check(saved?.state.network.children[0].children[1].package === "1206" && saved.state.network.children[0].children[0].label === "Reference load" && saved.state.sourceLabel === "Bench supply", "memory autosaves the custom labels with the complete valid inverse circuit");
     get("current").value = "7mA"; fire(get("current"), "input");
     await wait(1100);
     check(entries()[0].id === saved.id, "live input drafts are excluded from autosave");
@@ -99,12 +140,17 @@
     check(memory.open && doc.activeElement === tab && tab.getAttribute("aria-expanded") === "false", "Escape closes the focused right drawer and returns focus");
     query(`[data-memory-restore="${saved.id}"]`).click(); await wait(50);
     check(get("partSelect").value === "3" && get("solvedResistance").textContent === "1 kΩ" && field("current") === "6 mA", "memory restores the topology, inputs and target, then recalculates");
+    check(annotationText("part-1") === "Reference load" && annotationText("title").startsWith("Bench circuit"), "recall restores the title and labels");
     get("memoryClose").click();
     check(!memory.open && doc.activeElement === memory.querySelector("summary"), "Memory close returns focus to the edge tab");
 
     frame.style.width = "390px"; await wait(250);
     check(doc.documentElement.scrollWidth <= frame.clientWidth && !get("viewToggle").hidden, `phone layout fits without page-level horizontal scrolling (${doc.documentElement.scrollWidth}/${frame.clientWidth}px; desktop toggle ${get("viewToggle").hidden ? "hidden" : "visible"})`);
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
+    check(centeredTitle() && annotation("title").querySelectorAll("text").length > 1, "long circuit titles wrap and remain centered on phones");
+    get("editResistorLabel").click();
+    check(get("annotationEditor").open, "phones can edit the selected label from the native resistor controls");
+    get("annotationCancel").click();
     get("viewToggle").click();
     check(get("schematicViewport").scrollWidth > get("schematicViewport").clientWidth && field("current") === "6 mA", "desktop view exposes the full schematic and preserves results");
     check(symbolMatches(20, 52, 3), "desktop view on phones restores full-size symbol proportions");
@@ -122,7 +168,8 @@
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
     const exported = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(downloaded.type === "image/svg+xml" && !exported.querySelector("parsererror"), "SVG download is valid vector markup");
-    check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,") && !exported.querySelector("[data-part], foreignObject, .part-hit"), "exports embed the logo and exclude editing controls");
+    check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,") && !exported.querySelector("[data-schematic-control], [data-part], foreignObject, .part-hit, .control-hit"), "exports embed the logo and exclude editing controls");
+    check(exported.querySelector('[data-current-direction="forward"]') && ["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains flow direction and annotation text");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
     mode("current");
@@ -133,6 +180,14 @@
     check(!part(3) && part(1) && part(2) && field("resistance") === "3 kΩ", "removing a branch reconnects the remaining circuit correctly");
     await wait(1100);
     check(entries()[0].state.network.children.length === 2 && entries()[0].state.network.kind === "series", "a reverted input draft does not prevent later topology edits from saving");
+    check(rightClick(query("[data-voltage-source]")) && get("constructionTarget").textContent === "Entire circuit", "right-clicking the source targets the complete network");
+    useMenu("parallel");
+    check(field("resistance") === "750 Ω", "parallel at the source adds a branch across the entire circuit");
+    fire(query("[data-voltage-source]"), "click"); useMenu("series");
+    check(field("resistance") === "1.75 kΩ", "activating the source and adding in series places a resistor in the total loop");
+    memory.querySelector("summary").click(); await wait(250);
+    query(`[data-memory-restore="${originalId}"]`).click(); await wait(50);
+    check(annotationText("part-1") === "R1" && annotationText("title") === "Ohm’s Law" && annotationText("source") === "VDC" && field("current") === "12 mA", "a snapshot without labels recalls with the original defaults");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);
