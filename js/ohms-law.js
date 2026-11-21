@@ -527,7 +527,7 @@
   });
 
   syncControls(); refresh();
-  memory = DividerMemory.create({
+  memory = CalculatorMemory.create({
     storageKey: "minipcb-ohms-law-memory-v1", defaultTitle: titleDefault, circuitTitle: snapshot => snapshot.title, describe,
     capture: () => result.error || draft.size ? null : { title: state.title || titleDefault, summary: `${format(result.voltage, "V")} · ${format(result.current, "A")} · ${format(result.resistance, "Ω")}`, state },
     restore(snapshot) {

@@ -387,5 +387,5 @@
     setPaneWidth(paneWidth); render(); if (auto) save(capture()); else schedule(); fitHeight();
     return { schedule, save: () => save(capture(), true), restore, flush, get entries() { return clone(entries); }, get restoring() { return restoring; } };
   }
-  root.DividerMemory = Object.freeze({ create });
+  root.CalculatorMemory = Object.freeze({ create });
 })(globalThis);

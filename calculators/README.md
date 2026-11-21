@@ -25,7 +25,7 @@ files are listed separately with their optional or host-specific status.
 | [js/resistor-environment.js](../js/resistor-environment.js) | Required: copy | Initial/thermal/radiation/aging resistance intervals, environmental defaults and family-specific drift models. This is executable calculation logic, separate from the ordering catalogs. |
 | [js/divider-current-load.js](../js/divider-current-load.js) | Required: copy | Signed current-load analysis, inverse calculations and tolerance/stress bounds, including Find VTOP trip-voltage ranges. |
 | [js/circuit-image-export.js](../js/circuit-image-export.js) | Required: copy | Framed SVG, PNG, JPEG and BMP encoding, raster size limits and download filenames. |
-| [js/divider-memory.js](../js/divider-memory.js) | Required: copy | Left-edge Memory drawer, Close/Escape and focus handling, width preferences, time/title groups, editable names, change descriptions, autosaving, browser storage and recall. Its version must match the HTML; an older cached copy can leave the new X button inactive. |
+| [js/calculator-memory.js](../js/calculator-memory.js) | Required: copy | Shared calculator Memory drawer, Close/Escape and focus handling, width preferences, time/title groups, editable names, change descriptions, autosaving, browser storage and recall. Its version must match the HTML; an older cached copy can leave the new X button inactive. |
 | [parts/index.json](../parts/index.json) | Required: copy | Catalog manifest and preferred-value series. Names both family JSON files to fetch. Copy every family file referenced here if you expand the catalog. |
 | [parts/resistors/vishay-tnpw-e3.json](../parts/resistors/vishay-tnpw-e3.json) | Required: copy | Supported Vishay TNPW e3 ordering rules, packages, tolerances, TCR options, operating modes, electrical limits and dated source evidence. |
 | [parts/resistors/vishay-eh-m55342.json](../parts/resistors/vishay-eh-m55342.json) | Required: copy | Corresponding Vishay E/H M55342/D55342 rules and limits. This is a specific manufacturer's supported subset of the specification family. |
@@ -81,7 +81,7 @@ site-root/
 │   ├── resistor-environment.js
 │   ├── divider-current-load.js
 │   ├── circuit-image-export.js
-│   └── divider-memory.js
+│   └── calculator-memory.js
 ├── parts/
 │   ├── index.json
 │   ├── schema.json                    # Optional; recommended for catalog maintenance
@@ -103,7 +103,7 @@ then loads `index.json` and the manifest's family paths. Moving only the page
 or only that script requires corresponding path changes. Keep filename case
 exact on Linux hosts. Keep the five classic script tags in their existing order,
 before the main inline script; do not add `async` or `defer`, or change them to
-modules. Copy `divider-memory.js` as that filename; the `?v=...` suffix in its
+modules. Copy `calculator-memory.js` as that filename; the `?v=...` suffix in its
 script URL is a browser cache version, not part of the filesystem name.
 
 ## Hosting and browser considerations
@@ -163,7 +163,7 @@ script URL is a browser cache version, not part of the filesystem name.
 - Publish matching HTML, scripts, catalog data and metadata together. Avoid
   indefinitely caching unversioned files. Keep or regenerate script URL versions
   whenever their contents change; the GitLab recipe below hashes all five
-  scripts. A stale `divider-memory.js` with newer drawer HTML can leave X
+  scripts. A stale `calculator-memory.js` with newer drawer HTML can leave X
   inactive even though the native Memory tab still opens/closes it. Ensure any
   CDN cache keys include query strings, and revalidate HTML and catalog JSON on
   updates. `build.json` requests revalidation with `cache: "no-cache"`. Exported
@@ -236,7 +236,7 @@ deploy-divider:
           "calculators/voltage_divider.html",
           "js/resistor-parts.js", "js/resistor-environment.js",
           "js/divider-current-load.js", "js/circuit-image-export.js",
-          "js/divider-memory.js",
+          "js/calculator-memory.js",
           "parts/index.json", "parts/schema.json",
           "parts/resistors/vishay-tnpw-e3.json",
           "parts/resistors/vishay-eh-m55342.json",
