@@ -117,8 +117,8 @@
         && value.getAttribute("text-anchor") === "middle" && value.getAttribute("dominant-baseline") === "central"
         && Math.abs(Number(value.getAttribute("x")) - centerX) < .01 && Math.abs(Number(value.getAttribute("y")) - centerY) < .01;
     };
-    const balancedCurrent = () => {
-      const arc = currentArc(), bounds = arc.getBBox(), [topRail, bottomRail] = arc.parentElement.parentElement.children;
+    const balancedInstrument = (shape = currentArc()) => {
+      const bounds = shape.getBBox(), [topRail, bottomRail] = shape.parentElement.parentElement.children;
       const caption = annotation("source");
       const rightEdge = element => { const box = element.getBBox(); return box.x + box.width; };
       const readout = caption.nextElementSibling;
@@ -129,6 +129,22 @@
       const rightGap = firstBlock - bounds.x - bounds.width;
       return bounds.y > Number(topRail.getAttribute("y1")) && bounds.y + bounds.height < Number(bottomRail.getAttribute("y1"))
         && leftGap > 0 && rightGap > 0 && Math.abs(leftGap - rightGap) < .05;
+    };
+    const voltmeterMatches = (reading, topColor = "#54d2ff", root = doc) => {
+      const meter = root.querySelector("[data-voltmeter]"), body = meter?.querySelector("[data-voltmeter-body]");
+      if (!body || root.querySelector("[data-current-direction]")) return false;
+      const [topLead, bottomLead] = meter.querySelectorAll("line"), [topNode, bottomNode] = meter.querySelectorAll("[data-wire-junction]");
+      const [topRail, bottomRail] = meter.parentElement.children;
+      const x = body.getAttribute("cx"), y = Number(body.getAttribute("cy")), radius = Number(body.getAttribute("r"));
+      const joined = (lead, node, rail, fill) => lead.getAttribute("x1") === x && lead.getAttribute("x2") === x
+        && lead.hasAttribute("stroke-dasharray") && lead.getAttribute("stroke") === fill
+        && node.getAttribute("cx") === x && node.getAttribute("cy") === rail.getAttribute("y1") && node.getAttribute("fill") === fill;
+      const value = meter.querySelector("[data-voltmeter-value]");
+      return joined(topLead, topNode, topRail, topColor) && joined(bottomLead, bottomNode, bottomRail, "#54d2ff")
+        && topLead.getAttribute("y1") === topRail.getAttribute("y1") && Number(topLead.getAttribute("y2")) === y - radius
+        && Number(bottomLead.getAttribute("y1")) === y + radius && bottomLead.getAttribute("y2") === bottomRail.getAttribute("y1")
+        && value.textContent === reading && value.getAttribute("text-anchor") === "middle"
+        && value.getAttribute("x") === x && Number(value.getAttribute("y")) === y;
     };
     const groundLabelMatches = (inset, size) => {
       const symbol = query("[data-ground-symbol]"), label = annotation("ground").querySelector("text");
@@ -222,6 +238,7 @@
       && hasRole(resistorValue(1), "known"), "Find Current highlights the same calculated quantity on the diagram and operating point");
     check(operatingPaletteMatches(), "the operating-point cards use the divider palette for backgrounds, labels and accent bars");
     check(solveLegendMatches(), "the schematic legend contains only the two tinted solve-role badges");
+    check(!get("schematic").textContent.includes("Nominal stress · package reference limits"), "the schematic footer ends with the solve legend");
     check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12"
       && schematicUnit("voltage").selectedOptions[0].textContent === "V" && !schematicInput("current") && !schematicUnit("current"),
       "the known voltage has a numeric field and a unit selector while calculated current is read-only");
@@ -268,7 +285,7 @@
       "a calculated resistor’s package remains selectable while its solved value stays read-only");
     mode("current");
     check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
-    check(centeredCurrent("12 mA") && balancedCurrent(), "the round arrow has equal clear space on both sides");
+    check(centeredCurrent("12 mA") && balancedInstrument(), "the round arrow has equal clear space on both sides");
     check(centeredTitle() && annotation("title").querySelector("text").getAttribute("font-size") === "34"
       && annotation("title").querySelector("text").getAttribute("font-weight") === "600", "the desktop editable title matches the divider's centered typography");
     keypress(annotation("title"), "Enter");
@@ -278,7 +295,7 @@
     edit("title", "Bench circuit with a centered editable title that wraps on phones");
     edit("source", "Bench supply"); edit("ground", "Signal ground"); edit("part-1", "Reference load");
     check(annotationText("source") === "Bench supply" && annotationText("ground") === "Signal ground" && annotationText("part-1") === "Reference load", "source, ground and individual resistor labels can all be edited on the drawing");
-    check(balancedCurrent(), "the arrow remains balanced after relabeling the source and resistor");
+    check(balancedInstrument(), "the arrow remains balanced after relabeling the source and resistor");
     check(field("current") === "12 mA" && get("partSelect").selectedOptions[0].text === "Reference load (R1)", "custom labeling preserves electrical identity and updates the selector");
 
     change("voltage", "10 V");
@@ -388,7 +405,7 @@
     check(Math.abs(solveTabs.getBoundingClientRect().bottom - diagram.getBoundingClientRect().top) <= 1.1,
       "phone mode tabs dock above the schematic");
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
-    check(centeredCurrent("6 mA") && balancedCurrent(), "the compact mixed network preserves equal horizontal clearance for the arrow");
+    check(centeredCurrent("6 mA") && balancedInstrument(), "the compact mixed network preserves equal horizontal clearance for the arrow");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
     check(resistorReadingsFit(), "compact resistor power and stress rows fit their information blocks");
     check(operatingPaletteMatches(), "the compact schematic uses the same card palette as the full schematic");
@@ -507,25 +524,32 @@
     check(doc.activeElement === sourceAction("current"), "menu keyboard navigation skips the existing type");
     sourceAction("current").click();
     check(menu.hidden && doc.activeElement === sourceGroup() && !mainSource("voltage") && !query("[data-added-source]")
-      && get("sourceEditor").hidden, "switching to current replaces the main symbol without adding a branch");
+      && get("sourceEditor").hidden, "switching to current replaces the main source in place");
     check(["cx", "cy", "r"].map(attribute => mainSource("current").getAttribute(attribute)).join() === originalPosition
       && annotationText("source") === "IDC" && sourceGroup().querySelector("[data-source-direction]"), "the current symbol fits the same position and gets a matching default reference");
     check(field("voltage") === "12 V" && field("current") === "12 mA" && hasRole(circuitQuantity("current"), "calculated"),
       "Find Current solves the current-source value from load voltage and resistance");
-    check(centeredCurrent("12 mA") && balancedCurrent() && get("voltageField").querySelector("label").textContent === "Load voltage",
-      "current-source mode preserves flow placement and identifies the voltage input");
-    check(schematicInput("voltage").value === "12" && schematicUnit("voltage").value === "",
-      "the load voltage remains directly editable with a unit selector in the operating-point tile");
+    check(voltmeterMatches("12 V") && balancedInstrument(query("[data-voltmeter-body]")),
+      "the voltmeter replaces the arrow and connects to both rails with dashed leads and junction dots");
+    const voltageEditor = schematicInput("voltage");
+    check(voltageEditor.value === "12" && schematicUnit("voltage").value === ""
+      && voltageEditor.getAttribute("aria-label") === "Load voltage"
+      && query("[data-voltmeter-value]").hasAttribute("data-field-readout")
+      && !operatingValue("voltage").hasAttribute("data-field-readout"),
+      "the voltmeter hosts the load voltage and unit editors while the bottom card summarizes the reading");
     enterValue("voltage", "-9 V");
-    check(centeredCurrent("-9 mA") && arrowDirection() === -1 && circuitQuantity("current").textContent === "-9 mA",
-      "signed load voltage determines the direction and current readout");
+    check(voltmeterMatches("-9 V") && circuitQuantity("current").textContent === "-9 mA" && doc.activeElement === voltageEditor,
+      "editing a signed meter value updates the solved current and keeps focus");
 
     edit("source", "Bench driver");
     mode("voltage");
     check(schematicInput("current").value === "12" && schematicUnit("current").value === "m" && !schematicInput("voltage"),
       "Find Voltage makes the source current editable and the computed voltage read-only");
+    enterValue("current", "0");
+    check(voltmeterMatches("0 V", "#ff8e8e"), "the voltmeter stays present at zero and its top branch uses the calculated net color");
     enterValue("current", "-6 mA");
-    check(field("voltage") === "-6 V" && hasRole(circuitQuantity("current"), "known") && hasRole(operatingValue("voltage"), "calculated"),
+    check(field("voltage") === "-6 V" && voltmeterMatches("-6 V", "#ff8e8e")
+      && hasRole(circuitQuantity("current"), "known") && hasRole(circuitQuantity("voltage"), "calculated"),
       "the edited current determines the signed load voltage and its calculation role");
     mode("resistance");
     check(field("resistance") === "1.5 kΩ" && resistorValue(1).textContent === "1.5 kΩ" && hasRole(resistorValue(1), "calculated"),
@@ -540,21 +564,22 @@
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
     const currentExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(currentExport.querySelector("[data-current-source]") && currentExport.querySelector("[data-source-direction]")
+      && voltmeterMatches("-9 V", "#54d2ff", currentExport)
       && !currentExport.querySelector("[data-voltage-source], [data-schematic-control], [data-network-context], foreignObject, [data-field-readout]"),
-      "static exports retain the new symbol and strip interaction controls");
+      "static image exports retain the current symbol and voltmeter with its reading");
     get("ltspiceDownload").click();
     check(schematicConnections(await downloaded.text()).join() === "IMAIN 0 LOAD -0.006,R1 LOAD 0 1500",
       "signed current-source downloads preserve source polarity and the inverse result");
     check(rightClick(annotation("source")) && get("constructionTarget").textContent === "Bench driver"
       && visibleMenuActions().join() === "Change to Voltage Source" && doc.activeElement === sourceAction("voltage"), "the source label opens the reverse conversion choice");
     sourceAction("voltage").click();
-    check(mainSource("voltage") && !mainSource("current") && !query("[data-added-source]") && annotationText("source") === "Bench driver",
-      "reversing the conversion preserves a custom source label and the single source branch");
+    check(mainSource("voltage") && !mainSource("current") && !query("[data-voltmeter], [data-added-source]") && annotationText("source") === "Bench driver",
+      "reversing the conversion removes the meter and preserves the custom source label");
     check(field("resistance") === "1.5 kΩ" && field("voltage") === "-9 V" && centeredCurrent("-6 mA"),
       "source conversion preserves a valid operating point in the inverse solve");
     memory.querySelector("summary").click(); await wait(250);
     query(`[data-memory-restore="${sourceSnapshot.id}"]`).click(); await wait(50);
-    check(mainSource("current") && field("resistance") === "1.5 kΩ" && annotationText("source") === "Bench driver",
+    check(mainSource("current") && field("resistance") === "1.5 kΩ" && annotationText("source") === "Bench driver" && voltmeterMatches("-9 V"),
       "recalling a switched source restores its symbol, label and results");
 
     const history = JSON.parse(localStorage.getItem(key));
@@ -573,7 +598,7 @@
       "legacy snapshots still restore both supplementary source types and their branch values");
     switchSource("voltage", "current");
     check(mainSource("current") && circuitQuantity("current").textContent === "11 mA" && field("voltage") === "15 V"
-      && centeredCurrent("15 mA") && field("mainVoltage") === "12 V",
+      && voltmeterMatches("15 V") && field("mainVoltage") === "12 V",
       "the main conversion accounts for legacy series and parallel offsets");
     mode("voltage");
     check(field("voltage") === "15 V" && field("mainCurrent") === "11 mA", "the current-driven calculation combines signed parallel inputs");

@@ -572,19 +572,35 @@
     if (!Number.isFinite(current) || current === 0) return;
     const clockwise = current > 0, gap = clockwise ? 13 : -13;
     const top = y - Math.sqrt(radius ** 2 - gap ** 2), role = valueRole(current, state.mode === "current");
-    const editable = primarySourceKind() === "voltage";
-    const arrow = svg(host, "g", { "data-current-direction": clockwise ? "forward" : "reverse", role: editable && role !== "calculated" ? "group" : "img",
+    const arrow = svg(host, "g", { "data-current-direction": clockwise ? "forward" : "reverse", role: role === "calculated" ? "img" : "group",
       "aria-label": `Conventional current ${clockwise ? "clockwise" : "counterclockwise"}, ${format(Math.abs(current), "A")}` });
     const head = svg(svg(arrow, "defs"), "marker", { id: "currentArrowHead", orient: "auto", markerUnits: "userSpaceOnUse",
       markerWidth: 14, markerHeight: 14, refX: 12, refY: 7, viewBox: "0 0 14 14" });
     svg(head, "path", { d: "M2 2L12 7L2 12", fill: "none", stroke: color.text, "stroke-width": 2.5, "stroke-linejoin": "round" });
     svg(arrow, "path", { d: `M${x + gap} ${top}A${radius} ${radius} 0 1 ${clockwise ? 1 : 0} ${x - gap} ${top}`,
       fill: "none", stroke: color.text, "stroke-width": 2.5, "marker-end": "url(#currentArrowHead)" });
-    const value = text(arrow, x, y, format(current, "A"), 18, color[role], { ...(editable ? { "data-circuit-quantity": "current" } : {}),
+    const value = text(arrow, x, y, format(current, "A"), 18, color[role], { "data-circuit-quantity": "current",
       "data-value-role": role, "data-current-value": "", "text-anchor": "middle",
       "dominant-baseline": "central", "font-weight": 700 });
     fitText(value, 2 * radius - 16);
-    if (editable) drawQuantityField(value, "current", { x: x - radius + 8, y: y - 13, width: 2 * radius - 16, height: 26 }, true);
+    drawQuantityField(value, "current", { x: x - radius + 8, y: y - 13, width: 2 * radius - 16, height: 26 }, true);
+  }
+
+  function drawVoltmeter(host, x, top, bottom, radius, symbols, topColor, voltage) {
+    const y = (top + bottom) / 2;
+    const role = valueRole(voltage, state.mode === "voltage"), fill = color[role], reading = format(voltage, "V");
+    const meter = svg(host, "g", { "data-voltmeter": "", role: "group",
+      "aria-label": `Voltmeter, load voltage ${Number.isFinite(voltage) ? reading : "unavailable"}` });
+    line(meter, x, top, x, y - radius, topColor).setAttribute("stroke-dasharray", "6 6");
+    line(meter, x, y + radius, x, bottom).setAttribute("stroke-dasharray", "6 6");
+    junction(meter, x, top, symbols.junction, topColor);
+    junction(meter, x, bottom, symbols.junction);
+    svg(meter, "circle", { cx: x, cy: y, r: radius, fill: "#13202c", stroke: fill, "data-voltmeter-body": "" });
+    text(meter, x, y - 23, "V", 18, fill, { "text-anchor": "middle", "font-weight": 700 });
+    const value = text(meter, x, y, reading, 18, fill, { "data-circuit-quantity": "voltage",
+      "data-value-role": role, "data-voltmeter-value": "", "text-anchor": "middle", "dominant-baseline": "central", "font-weight": 700 });
+    fitText(value, 2 * radius - 16);
+    drawQuantityField(value, "voltage", { x: x - radius + 8, y: y - 13, width: 2 * radius - 16, height: 26 }, true);
   }
 
   function drawSourceSymbol(host, source, x, y, top, bottom, symbols, topColor) {
@@ -665,7 +681,7 @@
     const rowHeight = 2 * (symbols.source + leadLength + 8), seriesHeight = series.length * rowHeight;
     const y = 134 + 24 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15), rowHeight + seriesHeight);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
-    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 184;
+    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 165;
     const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const values = displayValues(), kind = primarySourceKind();
     const sourceCalculated = state.mode === kind;
@@ -717,7 +733,9 @@
     fitText(readout, sourceTextWidth);
     drawQuantityField(readout, kind, { x: labelX, y: mainY, width: sourceTextWidth, height: 26 });
     const sourceRight = Math.max(labelX + sourceTextWidth, ...[caption, readout, ...sourceText].map(rightEdge));
-    drawCurrent(drawing, (sourceRight + firstBlockLeft + offset) / 2, sourceY, radius, result.current);
+    const instrumentX = (sourceRight + firstBlockLeft + offset) / 2;
+    if (kind === "current") drawVoltmeter(drawing, instrumentX, y, bottom, radius, symbols, topColor, values.voltage);
+    else drawCurrent(drawing, instrumentX, sourceY, radius, result.current);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
     line(ground, groundX, bottom, groundX, bottom + leadLength).dataset.symbolLead = "ground";
@@ -743,8 +761,7 @@
       text(tile, labelX, tileY + 16, label, compact ? 14 : 13, accent);
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
       const fill = role === "derived" ? color.text : color[role];
-      const quantityInput = kind === "current" ? field === "voltage"
-        : field === "current" && (!Number.isFinite(result.current) || result.current === 0);
+      const quantityInput = kind === "voltage" && field === "current" && (!Number.isFinite(result.current) || result.current === 0);
       const value = text(tile, labelX, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
         { "data-operating-value": field, "data-value-role": role, ...(quantityInput ? { "data-circuit-quantity": field } : {}) });
       if (quantityInput) drawQuantityField(value, field, { x: labelX, y: tileY + 22, width: Math.min(118, tileWidth - 28), height: 26 });
@@ -755,7 +772,6 @@
       svg(legend, "rect", { x, y: 0, width: badgeWidth, height: 28, rx: 8, fill: background });
       text(legend, x + 12, 19, label, 14, color[role]);
     }
-    text(artwork, 16, height - 11, "Nominal stress · package reference limits", 12, color.muted);
     for (const [key, entry] of schematicInputs) {
       if (entry.seen) continue;
       resetSchematicInput(entry);
