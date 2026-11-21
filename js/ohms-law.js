@@ -3,11 +3,12 @@
 
   const byId = id => document.getElementById(id);
   const schematic = byId("schematic"), viewport = byId("schematicViewport");
+  const artwork = svg(schematic, "g"), inputs = svg(schematic, "g", { "data-schematic-inputs": "" });
+  const schematicInputs = new Map();
   const memoryPanel = byId("calculatorMemory"), characteristics = byId("characteristicsDrawer"), characteristicsTab = byId("characteristicsToggle");
   const titleDefault = "Ohm’s Law";
   const groundDefault = "GND", labelLimit = 24, titleLimit = 72;
   const constructionMenu = byId("constructionMenu"), annotationEditor = byId("annotationEditor"), annotationInput = byId("annotationInput");
-  const fieldEditor = byId("schematicFieldEditor"), fieldValue = byId("schematicFieldValue"), fieldUnit = byId("schematicFieldUnit"), fieldPackage = byId("schematicFieldPackage");
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
   const prefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
   const units = { voltage: "V", current: "A", resistance: "Ω" };
@@ -23,7 +24,7 @@
   // Keep the voltage divider's documented 0805 reference available offline.
   let packageLimits = new Map([["0805", { power: 0.14, voltage: 50 }]]);
   let selectedId = 1, nextId = 2, desktopView = false, memory, result, build, embeddedLogo, copyRows, constructionTarget, annotationEdit;
-  let selectedSourceKey, fieldEdit;
+  let selectedSourceKey, drawingPointer, pendingDrawing;
   const nextSourceId = { voltage: 2, current: 1 };
   let state = { version: 1, title: "", mode: "current", voltage: 12, current: 0.012, target: null, network: newPart(1) };
 
@@ -312,15 +313,89 @@
 
   function control(key, label) { return { "data-schematic-control": key, role: "button", tabindex: 0, "aria-label": label }; }
 
-  function editableField(field, key, label, value) {
-    return { ...control(key, `Edit ${label}, ${value}`), "data-edit-quantity": field, "data-edit-label": label };
+  function resetSchematicInput(entry) {
+    const { input, text, value } = entry;
+    draft.delete(input);
+    if (input.value !== text) input.value = text;
+    if (value === null) input.setAttribute("aria-invalid", "true");
+    else input.removeAttribute("aria-invalid");
+    input.setCustomValidity("");
   }
 
-  function quantityTextAttributes(field, value, role) {
-    const attributes = { "data-circuit-quantity": field, "data-value-role": role };
-    if (role === "calculated") return attributes;
-    const label = sourceInputLabel(field).toLowerCase();
-    return { ...attributes, ...editableField(field, `quantity-${field}`, label, format(value, units[field])) };
+  function commitSchematicInput(entry, report = false) {
+    const { input, text, kind, value, write } = entry;
+    if (input.value === text) {
+      resetSchematicInput(entry);
+      memory?.schedule();
+      return;
+    }
+    const next = kind === "package" ? input.value : parseInputQuantity(input.value, kind, engineeringPrefix(value))?.value;
+    if (next === undefined) {
+      if (report) {
+        input.setAttribute("aria-invalid", "true");
+        input.setCustomValidity(kind === "resistance" ? "Enter a resistance greater than zero." : `Enter a valid value in ${units[kind]}.`);
+        input.reportValidity();
+      } else {
+        resetSchematicInput(entry);
+        memory?.schedule();
+      }
+      return;
+    }
+    resetSchematicInput(entry);
+    write(next);
+    refresh();
+  }
+
+  function drawField(readout, box, { key, label, kind, value, write, centered }) {
+    readout.setAttribute("data-field-readout", "");
+    readout.setAttribute("aria-hidden", "true");
+    let entry = schematicInputs.get(key);
+    if (!entry) {
+      const object = svg(inputs, "foreignObject");
+      const input = document.createElement(kind === "package" ? "select" : "input");
+      input.className = "schematic-input";
+      input.dataset.schematicInput = key;
+      object.append(input);
+      entry = { object, input };
+      schematicInputs.set(key, entry);
+      if (kind === "package") {
+        input.append(...packages.map(pkg => new Option(pkg)));
+        input.addEventListener("change", () => commitSchematicInput(entry));
+      } else {
+        input.type = "text";
+        input.inputMode = "decimal";
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        input.addEventListener("input", () => {
+          draft.add(input);
+          input.removeAttribute("aria-invalid");
+          input.setCustomValidity("");
+        });
+        input.addEventListener("blur", () => commitSchematicInput(entry));
+        input.addEventListener("keydown", event => {
+          if (event.isComposing || !["Enter", "Escape"].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.key === "Enter") commitSchematicInput(entry, true);
+          else { resetSchematicInput(entry); memory?.schedule(); }
+        });
+      }
+    }
+    const { object, input } = entry;
+    const prefix = engineeringPrefix(value);
+    const fieldText = kind === "package" ? value : Number.isFinite(value)
+      ? `${Number((value / prefixes[prefix]).toPrecision(15))} ${prefix}${units[kind]}` : "";
+    Object.assign(entry, { kind, value, write, text: fieldText, seen: true });
+    for (const [attr, dimension] of Object.entries(box)) object.setAttribute(attr, dimension);
+    input.setAttribute("aria-label", label);
+    input.toggleAttribute("data-centered", !!centered);
+    if (!draft.has(input)) resetSchematicInput(entry);
+  }
+
+  function drawQuantityField(readout, kind, box, centered = false) {
+    if (state.mode === kind) return;
+    drawField(readout, box, { key: kind, label: sourceInputLabel(kind), kind, value: state[kind], centered,
+      write(value) { state[kind] = value; (kind === "voltage" ? showVoltage : showCurrent)(); } });
   }
 
   function schematicControl(key) { return schematic.querySelector(`[data-schematic-control="${CSS.escape(key)}"]`); }
@@ -383,26 +458,29 @@
       const action = calculated ? "Select calculated resistor" : "Edit resistor";
       const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. ${action}`),
         "data-part": node.id, "aria-pressed": String(node.id === selectedId) });
-      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: middle - 39, width: width - 10, height: 114, rx: 8, "stroke-width": 1 });
+      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: middle - 53, width: width - 10, height: 130, rx: 8, "stroke-width": 1 });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, fill).dataset.symbolLead = "top";
       line(part, x, end, x, end + leadLength, fill).dataset.symbolLead = "bottom";
       line(part, x, end + leadLength, x, bottom);
       svg(part, "rect", { x: x - bodyWidth / 2, y: top, width: bodyWidth, height: bodyHeight, rx: symbols.radius, fill: "#13202c", stroke: fill, "data-resistor-core": "" });
       const compact = symbols === compactSymbols, size = compact ? 12 : 15, lines = wrapLabel(partLabel(node), compact ? 10 : 12);
-      drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, lines, x + 24, middle - 3 - (lines.length - 1) * (size + 3),
+      drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, lines, x + 24, middle - 33 - (lines.length - 1) * (size + 3),
         { size, fill, target: node.id });
       const caption = partCaption(node), formatted = format(value, "Ω"), valueX = x + 24, fieldWidth = width - 62;
-      fitText(text(host, valueX, middle + 17, formatted, compact ? 12 : 14, fill,
-        { "data-resistor-value": node.id, "data-value-role": role, "data-network-context": node.id,
-          ...(calculated ? {} : editableField("resistance", `resistance-${node.id}`, `${caption} resistance`, formatted)) }), fieldWidth);
-      const footprint = svg(host, "g", { ...editableField("partPackage", `package-${node.id}`, `${caption} package`, node.package),
-        "data-network-context": node.id });
-      const packageSize = compact ? 12 : 13;
-      const packageLabel = text(footprint, valueX, middle + 33, "Package", packageSize, color.muted);
-      fitText(text(footprint, valueX + fieldWidth, middle + 33, node.package, packageSize, color.known,
-        { "text-anchor": "end", "data-resistor-package": node.id }), fieldWidth - packageLabel.getComputedTextLength() - 6);
-      drawStress(part, node, valueX, middle + 50, fieldWidth, compact);
+      const resistance = text(host, valueX, middle - 10, formatted, compact ? 12 : 14, fill,
+        { "data-resistor-value": node.id, "data-value-role": role, "data-network-context": node.id });
+      fitText(resistance, fieldWidth);
+      if (!calculated) drawField(resistance, { x: valueX, y: middle - 26, width: fieldWidth, height: 25 },
+        { key: `resistance-${node.id}`, label: `${caption} resistance`, kind: "resistance", value,
+          write(next) { node.resistance = next; selectedId = node.id; syncPart(); } });
+      const footprint = text(host, valueX, middle + 20, node.package, compact ? 12 : 13, color.known,
+        { "data-resistor-package": node.id, "data-network-context": node.id });
+      fitText(footprint, fieldWidth);
+      drawField(footprint, { x: valueX, y: middle + 5, width: fieldWidth, height: 25 },
+        { key: `package-${node.id}`, label: `${caption} package`, kind: "package", value: node.package,
+          write(next) { node.package = next; selectedId = node.id; syncPart(); } });
+      drawStress(part, node, valueX, middle + 48, fieldWidth, compact);
       return;
     }
     if (node.kind === "series") {
@@ -448,10 +526,11 @@
     svg(head, "path", { d: "M2 2L12 7L2 12", fill: "none", stroke: color.text, "stroke-width": 2.5, "stroke-linejoin": "round" });
     svg(arrow, "path", { d: `M${x + gap} ${top}A${radius} ${radius} 0 1 ${clockwise ? 1 : 0} ${x - gap} ${top}`,
       fill: "none", stroke: color.text, "stroke-width": 2.5, "marker-end": "url(#currentArrowHead)" });
-    const value = text(arrow, x, y, format(current, "A"), 18, color[role], { ...(editable ? quantityTextAttributes("current", current, role) : { "data-value-role": role }),
-      "data-current-value": "", "text-anchor": "middle",
+    const value = text(arrow, x, y, format(current, "A"), 18, color[role], { ...(editable ? { "data-circuit-quantity": "current" } : {}),
+      "data-value-role": role, "data-current-value": "", "text-anchor": "middle",
       "dominant-baseline": "central", "font-weight": 700 });
     fitText(value, 2 * radius - 16);
+    if (editable) drawQuantityField(value, "current", { x: x - radius + 8, y: y - 13, width: 2 * radius - 16, height: 26 }, true);
   }
 
   function drawSourceSymbol(host, source, x, y, top, bottom, symbols, topColor) {
@@ -485,10 +564,12 @@
     const group = drawSourceSymbol(branch, { key, kind: source.kind, fill }, x, y, top, bottom, symbols, topColor);
     const labelX = x + symbols.source + 8;
     text(group, labelX, y - 6, key, 13, fill, { "font-weight": 700 });
-    const value = format(source.value, units[source.kind]);
-    fitText(text(branch, labelX, y + 14, value, 14, fill,
-      { ...editableField("addedSource", `value-${key}`, `${key} ${sourceKind(source).toLowerCase()}`, value), "data-added-source-value": key,
-        "data-network-context": "source", "data-source-key": key }), textWidth);
+    const readout = text(branch, labelX, y + 17, format(source.value, units[source.kind]), 14, fill,
+      { "data-added-source-value": key, "data-network-context": "source", "data-source-key": key });
+    fitText(readout, textWidth);
+    drawField(readout, { x: labelX, y: y, width: textWidth, height: 26 },
+      { key, label: `${key} ${sourceKind(source).toLowerCase()}`, kind: source.kind, value: source.value,
+        write(next) { source.value = next; selectAddedSource(key); } });
     return branch;
   }
 
@@ -498,9 +579,12 @@
   }
 
   function drawCircuit() {
+    if (drawingPointer !== undefined) { pendingDrawing = true; return; }
+    pendingDrawing = false;
     const focusedControl = document.activeElement?.dataset.schematicControl;
+    for (const entry of schematicInputs.values()) entry.seen = false;
     const compact = mobile.matches && !desktopView, symbols = compact ? compactSymbols : fullSymbols;
-    const columnWidth = compact ? 160 : 182, box = layout(state.network, columnWidth, compact ? 154 : 164);
+    const columnWidth = compact ? 176 : 190, box = layout(state.network, columnWidth, compact ? 174 : 184);
     const series = sources().filter(source => source.kind === "voltage");
     const parallel = sources().filter(source => source.kind === "current");
     const radius = compact ? 44 : 52, railLeft = compact ? 63 : 81, sourceTextWidth = compact ? 92 : 102;
@@ -514,25 +598,25 @@
     const rowHeight = 2 * (symbols.source + leadLength + 8), seriesHeight = series.length * rowHeight;
     const y = 116 + 23 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15), rowHeight + seriesHeight);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
-    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 151;
+    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 171;
     const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const values = displayValues(), kind = primarySourceKind();
     const sourceCalculated = state.mode === kind;
     const sourceValue = sourceCalculated ? (kind === "voltage" ? result.mainVoltage : result.mainCurrent) : state[kind];
     const sourceRole = valueRole(sourceValue, sourceCalculated);
     const topColor = state.mode === "voltage" ? color.calculated : color.net, sourceColor = color[sourceRole];
-    schematic.replaceChildren();
+    artwork.replaceChildren();
     schematic.setAttribute("width", width); schematic.setAttribute("height", height);
     schematic.setAttribute("viewBox", `0 0 ${width} ${height}`);
     viewport.style.setProperty("--drawing-width", `${width}px`);
-    svg(schematic, "rect", { x: 1, y: 1, width: width - 2, height: height - 2, rx: 13, fill: "#101823", stroke: "#39586f", "stroke-width": 1.5 });
-    svg(schematic, "image", { x: 16, y: 13, width: 112, height: 36, href: embeddedLogo || "../logo.png", "data-circuit-logo": "" });
-    const stamp = build ? svg(schematic, "a", { href: `https://github.com/miniPCB/minipcb.github.io/commit/${build.commit}`, target: "_blank", rel: "noopener noreferrer", "data-built-at": build.builtAt, "data-build-commit": build.commit }) : schematic;
+    svg(artwork, "rect", { x: 1, y: 1, width: width - 2, height: height - 2, rx: 13, fill: "#101823", stroke: "#39586f", "stroke-width": 1.5 });
+    svg(artwork, "image", { x: 16, y: 13, width: 112, height: 36, href: embeddedLogo || "../logo.png", "data-circuit-logo": "" });
+    const stamp = build ? svg(artwork, "a", { href: `https://github.com/miniPCB/minipcb.github.io/commit/${build.commit}`, target: "_blank", rel: "noopener noreferrer", "data-built-at": build.builtAt, "data-build-commit": build.commit }) : artwork;
     const buildLabel = build ? `${build.builtAt.slice(0, 19).replace("T", " ")} UTC · ${build.commit.slice(0, 7)}` : "Unpublished source";
     text(stamp, 16, 65, buildLabel, 11, color.muted);
-    drawLabel(schematic, "title", "circuit title", names, width / 2, 94, { size: 20, fill: color.text, centered: true });
+    drawLabel(artwork, "title", "circuit title", names, width / 2, 94, { size: 20, fill: color.text, centered: true });
 
-    const drawing = svg(schematic, "g", { "stroke-width": symbols.stroke, "stroke-linecap": "round" });
+    const drawing = svg(artwork, "g", { "stroke-width": symbols.stroke, "stroke-linecap": "round" });
     line(drawing, railLeft + offset, y, x, y, topColor); line(drawing, railLeft + offset, bottom, x, bottom);
     if (networkY > y) {
       line(drawing, x, y, x, networkY, topColor);
@@ -560,10 +644,12 @@
     const labelX = sourceTextLeft + offset;
     const caption = drawLabel(drawing, "source", "source label", sourceLabel, labelX, mainY - 6 - (sourceLabel.length - 1) * 16,
       { size: 13, fill: sourceColor, target: "source" });
-    const readout = text(drawing, labelX, mainY + 14, format(sourceValue, units[kind]), 14, sourceColor,
-      { ...quantityTextAttributes(kind, sourceValue, sourceRole), "data-network-context": "source" });
+    const readout = text(drawing, labelX, mainY + 17, format(sourceValue, units[kind]), 14, sourceColor,
+      { "data-circuit-quantity": kind, "data-value-role": sourceRole, "data-network-context": "source" });
     fitText(readout, sourceTextWidth);
-    const sourceRight = Math.max(...[caption, readout, ...sourceText].map(rightEdge));
+    const inputWidth = 80;
+    drawQuantityField(readout, kind, { x: labelX, y: mainY, width: inputWidth, height: 26 });
+    const sourceRight = Math.max(labelX + (series.length ? sourceTextWidth : inputWidth), ...[caption, readout, ...sourceText].map(rightEdge));
     drawCurrent(drawing, (sourceRight + firstBlockLeft + offset) / 2, sourceY, radius, result.current);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
@@ -578,24 +664,30 @@
       [parallel.length ? "Load current" : "Current", "current", "A"], ["Resistance", "resistance", "Ω"], ["Power", "power", "W"]];
     const tileWidth = (width - 42) / 2;
     tiles.forEach(([label, field, unit], index) => {
-      const tileX = 16 + index % 2 * (tileWidth + 10), tileY = tileTop + Math.floor(index / 2) * 51;
-      svg(schematic, "rect", { x: tileX, y: tileY, width: tileWidth, height: 44, rx: 6, fill: "#152635", stroke: "#304c61" });
-      text(schematic, tileX + 9, tileY + 16, label, compact ? 14 : 12, color.muted);
+      const tileX = 16 + index % 2 * (tileWidth + 10), tileY = tileTop + Math.floor(index / 2) * 61;
+      svg(artwork, "rect", { x: tileX, y: tileY, width: tileWidth, height: 54, rx: 6, fill: "#152635", stroke: "#304c61" });
+      text(artwork, tileX + 9, tileY + 16, label, compact ? 14 : 12, color.muted);
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
       const fill = role === "derived" ? color.text : color[role];
       const quantityInput = kind === "current" ? field === "voltage"
         : field === "current" && (!Number.isFinite(result.current) || result.current === 0);
-      text(schematic, tileX + 9, tileY + 35, format(values[field], unit), compact ? 19 : 16, fill,
-        { "data-operating-value": field, "data-value-role": role, ...(quantityInput ? quantityTextAttributes(field, values[field], role) : {}) });
+      const value = text(artwork, tileX + 9, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
+        { "data-operating-value": field, "data-value-role": role, ...(quantityInput ? { "data-circuit-quantity": field } : {}) });
+      if (quantityInput) drawQuantityField(value, field, { x: tileX + 9, y: tileY + 22, width: Math.min(118, tileWidth - 18), height: 26 });
     });
     [["Known", "known", 16], ["Calculated", "calculated", 104], ["Missing", "missing", 230]].forEach(([label, role, keyX]) => {
-      dot(schematic, keyX + 4, tileTop + 119, color[role]);
-      text(schematic, keyX + 15, tileTop + 123, label, 12, color.muted);
+      dot(artwork, keyX + 4, tileTop + 139, color[role]);
+      text(artwork, keyX + 15, tileTop + 143, label, 12, color.muted);
     });
-    text(schematic, 16, height - 11, "Nominal stress · package reference limits", 12, color.muted);
+    text(artwork, 16, height - 11, "Nominal stress · package reference limits", 12, color.muted);
+    for (const [key, entry] of schematicInputs) {
+      if (entry.seen) continue;
+      resetSchematicInput(entry);
+      entry.object.remove();
+      schematicInputs.delete(key);
+    }
     if (focusedControl) focusControl(focusedControl);
     updateView();
-    positionFieldEditor();
   }
 
   function addRows(table, rows) {
@@ -879,99 +971,11 @@
     openAnnotation(`part-${selectedId}`, () => button.focus({ preventScroll: true }));
   });
 
-  function positionFieldEditor() {
-    if (!fieldEdit) return;
-    const anchor = schematicControl(fieldEdit.key);
-    if (!anchor) { closeFieldEditor(); return; }
-    const bounds = anchor.getBoundingClientRect(), view = window.visualViewport;
-    const left = view?.offsetLeft ?? 0, top = view?.offsetTop ?? 0;
-    const right = left + (view?.width ?? document.documentElement.clientWidth);
-    const bottom = top + (view?.height ?? document.documentElement.clientHeight);
-    const below = bounds.bottom + 5;
-    const editorTop = below + fieldEditor.offsetHeight <= bottom - 8 ? below : bounds.top - fieldEditor.offsetHeight - 5;
-    fieldEditor.style.left = `${Math.max(left + 8, Math.min(bounds.left, right - fieldEditor.offsetWidth - 8))}px`;
-    fieldEditor.style.top = `${Math.max(top + 8, Math.min(editorTop, bottom - fieldEditor.offsetHeight - 8))}px`;
-  }
-
-  function openFieldEditor(control) {
-    closeFieldEditor();
-    const { editQuantity: field, editLabel: label, schematicControl: key } = control.dataset;
-    const isPackage = field === "partPackage", input = byId(field);
-    if (field === "resistance" || isPackage) {
-      const id = Number(control.dataset.networkContext);
-      if (id !== selectedId) selectPart(id);
-    } else if (field === "addedSource") selectAddedSource(control.dataset.sourceKey);
-
-    const heading = byId("schematicFieldName"), active = isPackage ? fieldPackage : fieldValue;
-    heading.textContent = label;
-    heading.htmlFor = active.id;
-    fieldPackage.hidden = !isPackage;
-    fieldValue.hidden = fieldUnit.hidden = isPackage;
-    if (isPackage) {
-      fieldPackage.replaceChildren(...[...input.options].map(option => option.cloneNode(true)));
-      fieldPackage.value = input.value;
-    } else {
-      const unit = byId(`${field}Unit`);
-      fieldUnit.replaceChildren(...[...unit.options].map(option => option.cloneNode(true)));
-      fieldUnit.value = unit.value;
-      fieldValue.value = input.value;
-      fieldValue.removeAttribute("aria-invalid");
-    }
-    byId("schematicFieldError").hidden = true;
-    fieldEdit = { field, key };
-    fieldEditor.hidden = false;
-    positionFieldEditor();
-    active.focus({ preventScroll: true });
-    if (!isPackage) fieldValue.select();
-  }
-
-  function closeFieldEditor(restoreFocus = false) {
-    if (!fieldEdit) return;
-    const { key } = fieldEdit;
-    fieldEdit = null;
-    fieldEditor.hidden = true;
-    if (restoreFocus) focusControl(key);
-  }
-
-  function applyFieldEdit() {
-    if (!fieldEdit) return;
-    const { field, key } = fieldEdit, input = byId(field);
-    if (field === "partPackage") input.value = fieldPackage.value;
-    else {
-      const kind = field === "addedSource" ? selectedSource()?.kind : field;
-      if (!parseInputQuantity(fieldValue.value, kind, fieldUnit.value)) {
-        const error = byId("schematicFieldError");
-        error.textContent = kind === "resistance" ? "Enter a resistance greater than zero." : `Enter a valid value in ${units[kind]}.`;
-        error.hidden = false;
-        fieldValue.setAttribute("aria-invalid", "true");
-        positionFieldEditor();
-        fieldValue.focus({ preventScroll: true });
-        return;
-      }
-      input.value = fieldValue.value;
-      byId(`${field}Unit`).value = fieldUnit.value;
-    }
-    closeFieldEditor();
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    focusControl(key);
-  }
-
-  fieldEditor.addEventListener("submit", event => { event.preventDefault(); applyFieldEdit(); });
-  fieldPackage.addEventListener("change", applyFieldEdit);
-  fieldEditor.addEventListener("keydown", event => {
-    if (event.key === "Escape") { event.preventDefault(); closeFieldEditor(true); }
-  });
-  fieldEditor.addEventListener("focusout", event => {
-    if (event.relatedTarget && !fieldEditor.contains(event.relatedTarget)) closeFieldEditor();
-  });
-  for (const event of ["resize", "scroll"]) window.visualViewport?.addEventListener(event, positionFieldEditor);
-
   function activateSchematicControl(event) {
     const control = event.target.closest("[data-schematic-control]");
     if (!control) return;
     event.preventDefault();
-    if (control.dataset.editQuantity) openFieldEditor(control);
-    else if (control.dataset.addedSource) {
+    if (control.dataset.addedSource) {
       selectAddedSource(control.dataset.addedSource);
       byId("addedSource").focus();
     } else if (control.dataset.annotation) openAnnotation(control.dataset.annotation, () => focusControl(control.dataset.schematicControl));
@@ -1015,13 +1019,19 @@
   });
   document.addEventListener("pointerdown", event => {
     if (!constructionMenu.contains(event.target)) closeConstruction();
-    if (!fieldEditor.contains(event.target)) closeFieldEditor();
+    // Keep the artwork under the pointer until a click completes. Blurring a
+    // field can otherwise replace the SVG target before it receives the click.
+    if (artwork.contains(event.target)) drawingPointer = event.pointerId;
+  });
+  for (const name of ["pointerup", "pointercancel", "blur"]) window.addEventListener(name, event => {
+    if (drawingPointer === undefined || (name !== "blur" && event.pointerId !== drawingPointer)) return;
+    drawingPointer = undefined;
+    if (pendingDrawing) requestAnimationFrame(() => { if (pendingDrawing) drawCircuit(); });
   });
   document.addEventListener("scroll", event => {
     if (!constructionMenu.contains(event.target)) closeConstruction(true);
-    positionFieldEditor();
   }, true);
-  window.addEventListener("resize", () => { closeConstruction(true); positionFieldEditor(); });
+  window.addEventListener("resize", () => closeConstruction(true));
 
   const toggleView = byId("viewToggle");
   function updateView() {
@@ -1070,7 +1080,6 @@
     capture: () => result.error || draft.size ? null : { title: state.title || titleDefault, summary: `${format(result.voltage, "V")} · ${format(result.current, "A")} · ${format(result.resistance, "Ω")}`, state },
     restore(snapshot) {
       if (!validSnapshot(snapshot)) throw new Error("The saved circuit is invalid.");
-      closeFieldEditor();
       state = snapshot; draft.clear();
       const allParts = parts(state.network);
       selectedId = state.target ?? allParts[0].id;
@@ -1079,7 +1088,8 @@
       for (const source of sources()) nextSourceId[source.kind] = Math.max(nextSourceId[source.kind], source.id + 1);
       syncControls(); refresh();
     },
-    canCollapse: () => !annotationEditor.open && !fieldEdit && constructionMenu.hidden && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
+    canCollapse: () => !annotationEditor.open && !inputs.contains(document.activeElement) && constructionMenu.hidden
+      && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
   });
 
   const logoReady = fetch("../logo.png").then(response => {
@@ -1117,9 +1127,12 @@
       if (!embeddedLogo) throw new Error("The miniPCB logo could not be embedded. Reload the calculator and try again.");
       const snapshot = schematic.cloneNode(true);
       snapshot.removeAttribute("id"); snapshot.setAttribute("role", "img"); snapshot.setAttribute("aria-label", state.title || titleDefault);
-      for (const hit of snapshot.querySelectorAll(".part-hit, .control-hit")) hit.remove();
+      for (const hit of snapshot.querySelectorAll(".part-hit, .control-hit, [data-schematic-inputs]")) hit.remove();
+      for (const readout of snapshot.querySelectorAll("[data-field-readout]")) {
+        readout.removeAttribute("data-field-readout"); readout.removeAttribute("aria-hidden");
+      }
       for (const control of snapshot.querySelectorAll("[data-schematic-control], [data-network-context]")) {
-        for (const attr of ["data-schematic-control", "data-edit-quantity", "data-edit-label", "data-source-key", "data-part", "data-annotation", "data-network-context", "role", "tabindex", "aria-pressed", "aria-label", "aria-haspopup"]) control.removeAttribute(attr);
+        for (const attr of ["data-schematic-control", "data-source-key", "data-part", "data-annotation", "data-network-context", "role", "tabindex", "aria-pressed", "aria-label", "aria-haspopup"]) control.removeAttribute(attr);
       }
       const width = Number(snapshot.getAttribute("width")), height = Number(snapshot.getAttribute("height"));
       const imageFormat = byId("imageFormat").value;

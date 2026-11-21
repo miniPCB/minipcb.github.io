@@ -41,7 +41,6 @@
     const circuitQuantity = field => query(`[data-circuit-quantity="${field}"]`);
     const operatingValue = field => query(`[data-operating-value="${field}"]`);
     const resistorValue = id => query(`[data-resistor-value="${id}"]`);
-    const resistorPackage = id => query(`[data-resistor-package="${id}"]`);
     const hasRole = (element, role) => element.getAttribute("data-value-role") === role && element.getAttribute("fill") === {
       known: "#6ee7ac", calculated: "#ff8e8e", missing: "#ffcf73"
     }[role];
@@ -72,10 +71,16 @@
       get("annotationInput").value = value;
       query(save ? '#annotationForm [type="submit"]' : "#annotationCancel").click();
     };
-    const inline = get("schematicFieldEditor"), inlineValue = get("schematicFieldValue"), inlineUnit = get("schematicFieldUnit");
-    const inlinePackage = get("schematicFieldPackage");
-    const submitInline = value => { inlineValue.value = value; query('#schematicFieldEditor button[type="submit"]').click(); };
-    const pickPackage = value => { inlinePackage.value = value; fire(inlinePackage, "change"); };
+    const schematicInput = key => query(`#schematic [data-schematic-input="${key}"]`);
+    const type = (input, value) => { input.value = value; fire(input, "input"); };
+    const enterValue = (key, value) => {
+      const input = schematicInput(key);
+      input.focus(); type(input, value); keypress(input, "Enter");
+    };
+    const pickPackage = (id, value) => {
+      const input = schematicInput(`package-${id}`);
+      input.value = value; fire(input, "change");
+    };
     const currentArc = () => query("[data-current-direction] > path");
     const arcParameters = path => path.getAttribute("d").match(/[\d.]+/g).map(Number);
     const arrowDirection = () => currentArc() ? (arcParameters(currentArc())[6] ? 1 : -1) : 0;
@@ -92,7 +97,9 @@
       const arc = currentArc(), bounds = arc.getBBox(), [topRail, bottomRail] = arc.parentElement.parentElement.children;
       const caption = annotation("source");
       const rightEdge = element => { const box = element.getBBox(); return box.x + box.width; };
-      const leftGap = bounds.x - Math.max(rightEdge(caption), rightEdge(caption.nextElementSibling));
+      const readout = caption.nextElementSibling;
+      const sourceEdge = Math.max(rightEdge(caption), rightEdge(readout), Number(readout.getAttribute("x")) + 80);
+      const leftGap = bounds.x - sourceEdge;
       const firstBlock = Math.min(...[...doc.querySelectorAll("#schematic .part-hit")].map(block => block.getBBox().x));
       const rightGap = firstBlock - bounds.x - bounds.width;
       return bounds.y > Number(topRail.getAttribute("y1")) && bounds.y + bounds.height < Number(bottomRail.getAttribute("y1"))
@@ -117,9 +124,12 @@
     check(field("current") === "12 mA" && field("power") === "144 mW", "default circuit calculates current and power");
     check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "default resistor uses independent 140 mW and 50 V references");
     check(reportedStress(1, "Pstress") === "102.86%" && reportedStress(1, "Vstress") === "24.00%", "characteristics reports the same nominal stresses as the schematic");
-    fire(resistorPackage(1), "click");
-    check(!inline.hidden && doc.activeElement === inlinePackage && inlinePackage.value === "0805", "the resistor package readout opens its own populated schematic dropdown");
-    pickPackage("0402");
+    check(schematicInput("package-1").tagName === "SELECT" && schematicInput("package-1").value === "0805",
+      "the resistor block renders a populated native package dropdown");
+    check(schematicInput("package-1").getAttribute("aria-label") === "R1 package"
+      && ![...get("schematic").querySelectorAll("text")].some(label => label.textContent === "Package"),
+      "the package dropdown has an accessible name without a separate label in the drawing");
+    pickPackage(1, "0402");
     check(stress(1, "Pstress") === "288.00%" && stress(1, "Vstress") === "40.00%", "footprint changes update both package denominators");
     change("partPackage", "Through-hole");
     check(stress(1, "Pstress") === "—" && stress(1, "Vstress") === "—" && field("power") === "144 mW", "unrated footprints leave stress unassessed while keeping the operating point");
@@ -144,21 +154,24 @@
     check(choices[0].getAttribute("aria-pressed") === "true" && hasRole(circuitQuantity("voltage"), "known")
       && hasRole(circuitQuantity("current"), "calculated") && hasRole(operatingValue("current"), "calculated")
       && hasRole(resistorValue(1), "known"), "Find Current highlights the same calculated quantity on the diagram and operating point");
-    fire(circuitQuantity("voltage"), "click");
-    check(!inline.hidden && doc.activeElement === inlineValue && !circuitQuantity("current").hasAttribute("data-edit-quantity"), "the known source voltage opens a schematic editor and calculated current stays read-only");
-    submitInline("-6 V");
-    check(inline.hidden && field("voltage") === "-6 V" && field("current") === "-6 mA" && doc.activeElement === circuitQuantity("voltage"), "editing the source voltage updates the calculation and restores focus to the diagram");
+    check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12 V" && !schematicInput("current"),
+      "the known source voltage is a native text field and calculated current stays read-only");
+    const sourceInput = schematicInput("voltage");
+    enterValue("voltage", "-6 V");
+    check(field("voltage") === "-6 V" && field("current") === "-6 mA" && doc.activeElement === sourceInput,
+      "editing the source voltage updates the calculation and keeps the same field focused");
     change("voltage", "12 V");
     mode("voltage");
     check(choices[1].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
       && hasRole(circuitQuantity("voltage"), "calculated") && hasRole(circuitQuantity("current"), "known")
       && hasRole(operatingValue("voltage"), "calculated"), "Find Voltage changes value roles while retaining the same circuit geometry");
-    keypress(circuitQuantity("current"), "Enter");
-    check(doc.activeElement === inlineValue && inlineUnit.value === "m" && !circuitQuantity("voltage").hasAttribute("data-edit-quantity"), "the current readout opens its schematic editor from the keyboard and calculated voltage stays read-only");
-    submitInline("0");
-    check(field("voltage") === "0 V" && arrowDirection() === 0 && doc.activeElement === operatingValue("current"), "the current tile keeps the editor available when the flow arrow disappears at zero");
-    fire(operatingValue("current"), "click"); submitInline("12 mA");
-    check(centeredCurrent("12 mA") && doc.activeElement === circuitQuantity("current"), "editing zero current on the schematic restores the flow arrow and moves focus with the value");
+    const currentInput = schematicInput("current");
+    check(currentInput.value === "12 mA" && !schematicInput("voltage"), "Find Voltage switches the directly editable quantity to current");
+    enterValue("current", "0");
+    check(field("voltage") === "0 V" && arrowDirection() === 0 && doc.activeElement === currentInput,
+      "the current field moves to the operating-point tile and preserves focus when the arrow disappears");
+    enterValue("current", "12 mA");
+    check(centeredCurrent("12 mA") && doc.activeElement === currentInput, "the current field re-centers in the restored flow arrow");
     change("current", "");
     check(hasRole(operatingValue("current"), "missing") && hasRole(circuitQuantity("voltage"), "calculated")
       && operatingValue("resistance").textContent === "1 kΩ" && query("[data-voltage-source]").getAttribute("stroke") === "#ff8e8e",
@@ -168,12 +181,11 @@
     check(choices[2].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
       && hasRole(circuitQuantity("voltage"), "known") && hasRole(circuitQuantity("current"), "known")
       && hasRole(resistorValue(1), "calculated") && hasRole(operatingValue("resistance"), "calculated"), "Find Resistance marks the target resistor and equivalent resistance consistently");
-    check(!resistorValue(1).hasAttribute("data-edit-quantity") && resistorPackage(1).parentElement.dataset.editQuantity === "partPackage",
+    check(!schematicInput("resistance-1") && schematicInput("package-1").tagName === "SELECT",
       "a calculated resistor’s package remains selectable while its solved value stays read-only");
     mode("current");
     check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
     check(centeredCurrent("12 mA") && balancedCurrent(), "the round arrow has equal clear space on both sides");
-    const originalArrowX = query("[data-current-value]").getAttribute("x");
     check(centeredTitle(), "the default circuit title is centered in the frame");
     keypress(annotation("title"), "Enter");
     check(get("annotationEditor").open && doc.activeElement === get("annotationInput"), "the schematic title is keyboard-accessible and focuses its editor");
@@ -182,16 +194,21 @@
     edit("title", "Bench circuit with a centered editable title that wraps on phones");
     edit("source", "Bench supply"); edit("ground", "Signal ground"); edit("part-1", "Reference load");
     check(annotationText("source") === "Bench supply" && annotationText("ground") === "Signal ground" && annotationText("part-1") === "Reference load", "source, ground and individual resistor labels can all be edited on the drawing");
-    check(query("[data-current-value]").getAttribute("x") !== originalArrowX && balancedCurrent(), "the arrow recenters when the source caption becomes wider");
+    check(balancedCurrent(), "the arrow remains balanced after relabeling the source and resistor");
     check(field("current") === "12 mA" && get("partSelect").selectedOptions[0].text === "Reference load (R1)", "custom labeling preserves electrical identity and updates the selector");
 
     change("voltage", "10 V");
-    fire(resistorValue(1), "click"); submitInline("0 Ω");
-    check(!inline.hidden && !get("schematicFieldError").hidden && resistorValue(1).textContent === "1 kΩ", "an invalid resistance leaves the previous value intact and shows a local error");
-    keypress(inlineValue, "Escape");
-    check(inline.hidden && doc.activeElement === resistorValue(1), "Escape cancels the field edit and returns to the resistance readout");
-    fire(resistorValue(1), "click"); submitInline("2 kΩ");
-    check(get("resistance").value === "2" && get("resistanceUnit").value === "k" && field("current") === "5 mA", "unit suffix synchronizes the multiplier and live result");
+    const resistanceInput = schematicInput("resistance-1");
+    enterValue("resistance-1", "0 Ω");
+    check(!resistanceInput.validity.valid && resistorValue(1).textContent === "1 kΩ",
+      "an invalid resistance leaves the previous value intact and marks the input invalid");
+    keypress(resistanceInput, "Escape");
+    check(resistanceInput.value === "1 kΩ" && resistanceInput.validity.valid && doc.activeElement === resistanceInput,
+      "Escape restores the committed value and keeps the input focused");
+    type(resistanceInput, "2 kΩ");
+    fire(resistanceInput, "blur");
+    check(get("resistance").value === "2" && get("resistanceUnit").value === "k" && field("current") === "5 mA",
+      "leaving a resistance field commits its value and synchronizes the multiplier");
     check(rightClick(part(1).querySelector("[data-resistor-core]")) && !menu.hidden && get("constructionTarget").textContent === "Reference load (R1)", "right-clicking a resistor body opens its construction menu");
     check(visibleMenuActions().join() === resistorActions, "the resistor context menu offers only resistor actions");
     const menuBox = menu.getBoundingClientRect();
@@ -212,8 +229,9 @@
     check([1, 2, 3].map(id => stress(id, "Pstress")).join() === "5.71%,25.71%,11.43%"
       && [1, 2, 3].map(id => stress(id, "Vstress")).join() === "8.00%,12.00%,8.00%", "each series or parallel resistor uses its own dissipation and absolute drop");
     check(get("schematic").querySelectorAll('circle[r="5"][data-wire-junction][fill="#54d2ff"]').length === 3, "parallel rails and ground have exactly three full-size junctions");
-    change("tolerance", 5); fire(resistorPackage(3), "click"); pickPackage("1206");
-    check(field("resistanceRange") === "1.632 kΩ to 1.7009 kΩ" && readings(3).slice(-2).join() === "±5%,1206", "tolerance changes the interval and package follows the physical resistor");
+    change("tolerance", 5); select(2); pickPackage(3, "1206");
+    check(field("resistanceRange") === "1.632 kΩ to 1.7009 kΩ" && readings(3).slice(-2).join() === "±5%,1206"
+      && readings(2).at(-1) === "0805", "tolerance changes the interval and a package field updates its own resistor");
     check(stress(3, "Pstress") === "6.40%" && stress(3, "Vstress") === "4.00%" && stress(1, "Pstress") === "5.71%", "editing a package updates that resistor’s two stress readings only");
 
     mode("voltage"); change("current", "6 mA");
@@ -273,11 +291,16 @@
     check(centeredCurrent("6 mA") && balancedCurrent(), "the compact mixed network preserves equal horizontal clearance for the arrow");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
     check(stressBlocksFit(), "compact resistor stress rows fit their information blocks");
-    fire(resistorPackage(3), "click");
-    const inlineBounds = inline.getBoundingClientRect();
-    check(!inline.hidden && inlineBounds.left >= 0 && inlineBounds.right <= frame.clientWidth
-      && inlinePackage.getBoundingClientRect().height >= 44, "the schematic package editor stays within the phone viewport with a touch-sized input");
-    keypress(inlinePackage, "Escape");
+    const compactPackage = schematicInput("package-3"), compactBounds = compactPackage.getBoundingClientRect();
+    check(compactPackage.value === "1206" && compactBounds.left >= 0 && compactBounds.right <= frame.clientWidth
+      && compactBounds.height > 0, "the native package dropdown fits inside the compact phone schematic");
+    const compactResistance = schematicInput("resistance-1");
+    compactResistance.focus(); type(compactResistance, "3.3 kΩ");
+    frame.style.width = "320px"; await wait(100);
+    check(compactResistance === schematicInput("resistance-1") && compactResistance.value === "3.3 kΩ"
+      && field("current") === "6 mA", "a schematic redraw preserves the active field and its uncommitted text");
+    keypress(compactResistance, "Escape");
+    frame.style.width = "390px"; await wait(100);
     check(centeredTitle() && annotation("title").querySelectorAll("text").length > 1, "long circuit titles wrap and remain centered on phones");
     get("editResistorLabel").click();
     check(get("annotationEditor").open, "phones can edit the selected label from the native resistor controls");
@@ -299,7 +322,9 @@
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
     const exported = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(downloaded.type === "image/svg+xml" && !exported.querySelector("parsererror"), "SVG download is valid vector markup");
-    check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,") && !exported.querySelector("[data-schematic-control], [data-edit-quantity], [data-part], foreignObject, .part-hit, .control-hit"), "exports embed the logo and exclude editing controls");
+    check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,")
+      && !exported.querySelector("[data-schematic-control], [data-field-readout], [data-part], foreignObject, input, select, .part-hit, .control-hit")
+      && exported.querySelector('[data-resistor-package="3"]').textContent === "1206", "exports embed the logo and restore static text in place of native controls");
     check(hasRole(exported.querySelector('[data-operating-value="resistance"]'), "calculated")
       && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known"), "SVG downloads preserve the live mode’s value roles");
     check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
@@ -350,18 +375,16 @@
       "Find Current solves the current-source value from load voltage and resistance");
     check(centeredCurrent("12 mA") && balancedCurrent() && get("voltageField").querySelector("label").textContent === "Load voltage",
       "current-source mode preserves flow placement and identifies the voltage input");
-    fire(operatingValue("voltage"), "click");
-    check(!inline.hidden && doc.activeElement === inlineValue && inlineUnit.value === "", "the load voltage remains editable on the drawing");
-    submitInline("-9 V");
+    check(schematicInput("voltage").value === "12 V", "the load voltage remains directly editable in the schematic operating-point tile");
+    enterValue("voltage", "-9 V");
     check(centeredCurrent("-9 mA") && arrowDirection() === -1 && circuitQuantity("current").textContent === "-9 mA",
       "signed load voltage determines the direction and current readout");
 
     edit("source", "Bench driver");
     mode("voltage");
-    fire(circuitQuantity("current"), "click");
-    check(!inline.hidden && inlineUnit.value === "m" && !operatingValue("voltage").hasAttribute("data-edit-quantity"),
+    check(schematicInput("current").value === "12 mA" && !schematicInput("voltage"),
       "Find Voltage makes the source current editable and the computed voltage read-only");
-    submitInline("-6 mA");
+    enterValue("current", "-6 mA");
     check(field("voltage") === "-6 V" && hasRole(circuitQuantity("current"), "known") && hasRole(operatingValue("voltage"), "calculated"),
       "the edited current determines the signed load voltage and its calculation role");
     mode("resistance");
@@ -377,7 +400,7 @@
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
     const currentExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(currentExport.querySelector("[data-current-source]") && currentExport.querySelector("[data-source-direction]")
-      && !currentExport.querySelector("[data-voltage-source], [data-schematic-control], [data-network-context], [data-edit-quantity]"),
+      && !currentExport.querySelector("[data-voltage-source], [data-schematic-control], [data-network-context], foreignObject, [data-field-readout]"),
       "static exports retain the new symbol and strip interaction controls");
     check(rightClick(annotation("source")) && get("constructionTarget").textContent === "Bench driver"
       && visibleMenuActions().join() === "Change to Voltage Source" && doc.activeElement === sourceAction("voltage"), "the source label opens the reverse conversion choice");
@@ -418,8 +441,9 @@
     sourceAction("voltage").click();
     check(mainSource("voltage") && addition("V2") && !addition("I1") && get("sourceSelect").options.length === 2
       && field("V3") === "0 V", "converting a supplementary element replaces one entry and starts its new unit value at zero");
-    fire(query('[data-added-source-value="V3"]'), "click");
-    check(!get("schematicFieldEditor").hidden, "a converted supplementary source still has an inline editor");
+    enterValue("V3", "1 V");
+    check(schematicInput("V3").value === "1 V" && field("V3") === "1 V" && field("voltage") === "15 V",
+      "a converted supplementary source is editable directly and recalculates its branch");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);
