@@ -5,7 +5,7 @@
   const schematic = byId("schematic"), viewport = byId("schematicViewport");
   const memoryPanel = byId("calculatorMemory"), characteristics = byId("characteristicsDrawer"), characteristicsTab = byId("characteristicsToggle");
   const titleDefault = "Ohm’s Law";
-  const labelDefaults = { source: "VDC", ground: "GND" }, labelLimit = 24, titleLimit = 72;
+  const groundDefault = "GND", labelLimit = 24, titleLimit = 72;
   const constructionMenu = byId("constructionMenu"), annotationEditor = byId("annotationEditor"), annotationInput = byId("annotationInput");
   const fieldEditor = byId("schematicFieldEditor"), fieldValue = byId("schematicFieldValue"), fieldUnit = byId("schematicFieldUnit"), fieldPackage = byId("schematicFieldPackage");
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
@@ -35,8 +35,16 @@
   function partLabel(part) { return part.label || partName(part.id); }
   function partCaption(part) { return part.label ? `${part.label} (${partName(part.id)})` : partName(part.id); }
   function sources(snapshot = state) { return snapshot.sources || []; }
+  function primarySourceKind(snapshot = state) { return snapshot.sourceType || "voltage"; }
+  function defaultSourceLabel(snapshot = state) { return primarySourceKind(snapshot) === "voltage" ? "VDC" : "IDC"; }
   function sourceKey(source) { return `${source.kind === "voltage" ? "V" : "I"}${source.id}`; }
   function sourceKind(source) { return source.kind === "voltage" ? "Series voltage" : "Parallel current"; }
+  function sourceInputLabel(field, snapshot = state) {
+    const currentDriven = primarySourceKind(snapshot) === "current";
+    if (currentDriven) return field === "voltage" ? "Load voltage" : "Source current";
+    if (field === "voltage") return sources(snapshot).some(source => source.kind === field) ? "Main source voltage" : "Supply voltage";
+    return sources(snapshot).some(source => source.kind === field) ? "Load current" : "Circuit current";
+  }
   function selectedSource() { return sources().find(source => sourceKey(source) === selectedSourceKey); }
   function sourceTotal(kind) {
     return sources().filter(source => source.kind === kind).reduce((sum, source) => sum + (source.value ?? NaN), 0);
@@ -75,16 +83,20 @@
 
   function analyze() {
     const { mode, network, target } = state;
+    const currentDriven = primarySourceKind() === "current";
     const allParts = parts(network);
-    let { voltage: mainVoltage, current } = state;
-    if (mode !== "voltage" && !Number.isFinite(mainVoltage)) return { error: "Enter a valid supply voltage." };
-    if (mode !== "current" && !Number.isFinite(current)) return { error: "Enter a valid circuit current." };
+    for (const field of ["voltage", "current"]) {
+      if (mode !== field && !Number.isFinite(state[field])) return { error: `Enter a valid ${sourceInputLabel(field).toLowerCase()}.` };
+    }
     const missingSource = sources().find(source => !Number.isFinite(source.value));
     if (missingSource) return { error: `Enter a valid value for ${sourceKey(missingSource)}.` };
     const seriesVoltage = sourceTotal("voltage");
     const parallelCurrent = sourceTotal("current");
-    let voltage = mainVoltage + seriesVoltage;
-    if (![seriesVoltage, parallelCurrent].every(Number.isFinite) || (mode !== "voltage" && !Number.isFinite(voltage))) {
+    // Only the ideal source on the main branch sets a load quantity. Series
+    // voltages and parallel currents shift the branch-to-load relationship.
+    let voltage = mode === "voltage" ? 0 : state.voltage + (currentDriven ? 0 : seriesVoltage);
+    let current = mode === "current" ? 0 : state.current + (currentDriven ? parallelCurrent : 0);
+    if (![seriesVoltage, parallelCurrent, voltage, current].every(Number.isFinite)) {
       return { error: "The combined sources exceed the calculator’s numeric range." };
     }
     const invalid = allParts.find(part => part.id !== target && !(part.resistance > 0));
@@ -100,21 +112,17 @@
     }
     const resistanceFor = part => part.id === target ? solved : part.resistance;
     const resistance = equivalent(network, resistanceFor);
-    if (mode === "voltage") {
-      voltage = current * resistance;
-      mainVoltage = voltage - seriesVoltage;
-    }
+    if (mode === "voltage") voltage = current * resistance;
     if (mode === "current") current = voltage / resistance;
-    // Positive parallel current injects into the load rail. The ideal voltage
-    // branch provides the rest, and can absorb current if injection exceeds load.
-    const voltageBranchCurrent = current - parallelCurrent;
+    const mainVoltage = !currentDriven && mode !== "voltage" ? state.voltage : voltage - seriesVoltage;
+    const mainCurrent = currentDriven && mode !== "current" ? state.current : current - parallelCurrent;
     const power = voltage * current;
     const range = [-1, 1].map(sign => equivalent(network, part => resistanceFor(part) * (1 + sign * part.tolerance / 100)));
-    if (!(range[0] > 0) || ![voltage, mainVoltage, current, voltageBranchCurrent, power, resistance, ...range].every(Number.isFinite)) return { error: "These inputs exceed the calculator’s numeric range." };
+    if (!(range[0] > 0) || ![voltage, mainVoltage, current, mainCurrent, power, resistance, ...range].every(Number.isFinite)) return { error: "These inputs exceed the calculator’s numeric range." };
     const readings = new Map();
     distribute(network, voltage, current, resistanceFor, readings);
     if ([...readings.values()].some(reading => !Object.values(reading).every(Number.isFinite))) return { error: "A resistor’s operating point exceeds the calculator’s numeric range." };
-    return { voltage, mainVoltage, current, voltageBranchCurrent, resistance, power, solved, range, readings };
+    return { voltage, mainVoltage, current, mainCurrent, resistance, power, solved, range, readings };
   }
 
   function insert(node, id, kind, added) {
@@ -148,10 +156,11 @@
 
   function displayValues() {
     const { mode, network } = state;
+    const currentDriven = primarySourceKind() === "current";
     const resistance = mode === "resistance" ? result.resistance : result.resistance ?? equivalent(network, part => part.resistance ?? NaN);
     return {
-      voltage: mode === "voltage" ? result.voltage : (state.voltage ?? NaN) + sourceTotal("voltage"),
-      current: mode === "current" ? result.current : state.current,
+      voltage: mode === "voltage" ? result.voltage : (state.voltage ?? NaN) + (currentDriven ? 0 : sourceTotal("voltage")),
+      current: mode === "current" ? result.current : (state.current ?? NaN) + (currentDriven ? sourceTotal("current") : 0),
       resistance: Number.isFinite(resistance) && resistance > 0 ? resistance : undefined,
       power: result.power
     };
@@ -242,8 +251,7 @@
   function syncAddedSources() {
     const entries = sources(), select = byId("sourceSelect");
     byId("sourceEditor").hidden = !entries.length;
-    byId("voltageField").querySelector("label").textContent = entries.some(source => source.kind === "voltage") ? "Main source voltage" : "Supply voltage";
-    byId("currentField").querySelector("label").textContent = entries.some(source => source.kind === "current") ? "Load current" : "Circuit current";
+    for (const field of ["voltage", "current"]) byId(`${field}Field`).querySelector("label").textContent = sourceInputLabel(field);
     if (!selectedSource()) selectedSourceKey = entries.length ? sourceKey(entries[0]) : undefined;
     select.replaceChildren(...entries.map(source => new Option(`${sourceKey(source)} · ${sourceKind(source)}`, sourceKey(source))));
     if (!entries.length) return;
@@ -311,7 +319,7 @@
   function quantityTextAttributes(field, value, role) {
     const attributes = { "data-circuit-quantity": field, "data-value-role": role };
     if (role === "calculated") return attributes;
-    const label = field === "voltage" ? "supply voltage" : "circuit current";
+    const label = sourceInputLabel(field).toLowerCase();
     return { ...attributes, ...editableField(field, `quantity-${field}`, label, format(value, units[field])) };
   }
 
@@ -432,14 +440,16 @@
     if (!Number.isFinite(current) || current === 0) return;
     const clockwise = current > 0, gap = clockwise ? 13 : -13;
     const top = y - Math.sqrt(radius ** 2 - gap ** 2), role = valueRole(current, state.mode === "current");
-    const arrow = svg(host, "g", { "data-current-direction": clockwise ? "forward" : "reverse", role: role === "calculated" ? "img" : "group",
+    const editable = primarySourceKind() === "voltage";
+    const arrow = svg(host, "g", { "data-current-direction": clockwise ? "forward" : "reverse", role: editable && role !== "calculated" ? "group" : "img",
       "aria-label": `Conventional current ${clockwise ? "clockwise" : "counterclockwise"}, ${format(Math.abs(current), "A")}` });
     const head = svg(svg(arrow, "defs"), "marker", { id: "currentArrowHead", orient: "auto", markerUnits: "userSpaceOnUse",
       markerWidth: 14, markerHeight: 14, refX: 12, refY: 7, viewBox: "0 0 14 14" });
     svg(head, "path", { d: "M2 2L12 7L2 12", fill: "none", stroke: color.text, "stroke-width": 2.5, "stroke-linejoin": "round" });
     svg(arrow, "path", { d: `M${x + gap} ${top}A${radius} ${radius} 0 1 ${clockwise ? 1 : 0} ${x - gap} ${top}`,
       fill: "none", stroke: color.text, "stroke-width": 2.5, "marker-end": "url(#currentArrowHead)" });
-    const value = text(arrow, x, y, format(current, "A"), 18, color[role], { ...quantityTextAttributes("current", current, role), "data-current-value": "", "text-anchor": "middle",
+    const value = text(arrow, x, y, format(current, "A"), 18, color[role], { ...(editable ? quantityTextAttributes("current", current, role) : { "data-value-role": role }),
+      "data-current-value": "", "text-anchor": "middle",
       "dominant-baseline": "central", "font-weight": 700 });
     fitText(value, 2 * radius - 16);
   }
@@ -449,14 +459,14 @@
     line(host, x, top, x, upper - leadLength, topColor);
     line(host, x, lower + leadLength, x, bottom);
     const attributes = source.key ? { "data-added-source": source.key, "data-source-kind": source.kind } : { "aria-haspopup": "menu" };
-    const group = svg(host, "g", { ...control(source.key ? `source-${source.key}` : "source", source.key ? `Edit ${source.key}` : "Source connections"),
+    const group = svg(host, "g", { ...control(source.key ? `source-${source.key}` : "source", source.key ? `Edit ${source.key}` : `${modes[source.kind]} source options`),
       "data-network-context": "source", ...attributes });
     const hitRadius = radius + 4;
     svg(group, "rect", { class: "control-hit", x: x - hitRadius, y: y - hitRadius, width: 2 * hitRadius, height: 2 * hitRadius, rx: 8 });
     line(group, x, upper - leadLength, x, upper, source.fill).dataset.symbolLead = "top";
     line(group, x, lower, x, lower + leadLength, source.fill).dataset.symbolLead = "bottom";
     svg(group, "circle", { cx: x, cy: y, r: radius, fill: "#13202c", stroke: source.fill,
-      ...(source.key ? { "data-added-source-core": "" } : { "data-voltage-source": "" }) });
+      [source.key ? "data-added-source-core" : `data-${source.kind}-source`]: "" });
     if (source.kind === "current") {
       const half = radius * .48, head = Math.min(6, radius * .25);
       svg(group, "path", { d: `M${x} ${y + half}V${y - half}m${-head} ${head}l${head} ${-head} ${head} ${head}`,
@@ -506,9 +516,11 @@
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
     const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 151;
     const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
-    const values = displayValues(), sourceVoltage = state.mode === "voltage" ? result.mainVoltage : state.voltage;
-    const voltageRole = valueRole(sourceVoltage, state.mode === "voltage");
-    const topColor = voltageRole === "calculated" ? color.calculated : color.net, sourceColor = color[voltageRole];
+    const values = displayValues(), kind = primarySourceKind();
+    const sourceCalculated = state.mode === kind;
+    const sourceValue = sourceCalculated ? (kind === "voltage" ? result.mainVoltage : result.mainCurrent) : state[kind];
+    const sourceRole = valueRole(sourceValue, sourceCalculated);
+    const topColor = state.mode === "voltage" ? color.calculated : color.net, sourceColor = color[sourceRole];
     schematic.replaceChildren();
     schematic.setAttribute("width", width); schematic.setAttribute("height", height);
     schematic.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -542,27 +554,27 @@
       sourceText.push(drawAddedSource(drawing, source, sourceX, center, index ? center - rowHeight / 2 : y,
         center + rowHeight / 2, symbols, index ? color.net : topColor, sourceTextWidth));
     });
-    drawSourceSymbol(drawing, { kind: "voltage", fill: sourceColor }, sourceX, mainY,
+    drawSourceSymbol(drawing, { kind, fill: sourceColor }, sourceX, mainY,
       series.length ? mainY - rowHeight / 2 : y, bottom, symbols, series.length ? color.net : topColor);
-    const sourceLabel = wrapLabel(state.sourceLabel || labelDefaults.source, compact ? 10 : 11);
+    const sourceLabel = wrapLabel(state.sourceLabel || defaultSourceLabel(), compact ? 10 : 11);
     const labelX = sourceTextLeft + offset;
     const caption = drawLabel(drawing, "source", "source label", sourceLabel, labelX, mainY - 6 - (sourceLabel.length - 1) * 16,
       { size: 13, fill: sourceColor, target: "source" });
-    const voltage = text(drawing, labelX, mainY + 14, format(sourceVoltage, "V"), 14, sourceColor,
-      { ...quantityTextAttributes("voltage", sourceVoltage, voltageRole), "data-network-context": "source" });
-    fitText(voltage, sourceTextWidth);
-    const sourceRight = Math.max(...[caption, voltage, ...sourceText].map(rightEdge));
+    const readout = text(drawing, labelX, mainY + 14, format(sourceValue, units[kind]), 14, sourceColor,
+      { ...quantityTextAttributes(kind, sourceValue, sourceRole), "data-network-context": "source" });
+    fitText(readout, sourceTextWidth);
+    const sourceRight = Math.max(...[caption, readout, ...sourceText].map(rightEdge));
     drawCurrent(drawing, (sourceRight + firstBlockLeft + offset) / 2, sourceY, radius, result.current);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
     line(ground, groundX, bottom, groundX, bottom + leadLength).dataset.symbolLead = "ground";
     symbols.ground.forEach((half, index) => line(ground, groundX - half, bottom + leadLength + symbols.groundPitch * index, groundX + half, bottom + leadLength + symbols.groundPitch * index));
-    drawLabel(drawing, "ground", "ground label", [state.groundLabel || labelDefaults.ground],
+    drawLabel(drawing, "ground", "ground label", [state.groundLabel || groundDefault],
       groundX + (compact ? 20 : 28), bottom + leadLength + (compact ? 16 : 22),
       { size: compact ? 12 : 16, fill: color.net, weight: 400 });
     drawNetwork(drawing, box, x, networkY, symbols, topColor);
 
-    const tiles = [[series.length ? "Load voltage" : "Voltage", "voltage", "V"],
+    const tiles = [[series.length || kind === "current" ? "Load voltage" : "Voltage", "voltage", "V"],
       [parallel.length ? "Load current" : "Current", "current", "A"], ["Resistance", "resistance", "Ω"], ["Power", "power", "W"]];
     const tileWidth = (width - 42) / 2;
     tiles.forEach(([label, field, unit], index) => {
@@ -571,9 +583,10 @@
       text(schematic, tileX + 9, tileY + 16, label, compact ? 14 : 12, color.muted);
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
       const fill = role === "derived" ? color.text : color[role];
-      const currentInput = field === "current" && (!Number.isFinite(result.current) || result.current === 0);
+      const quantityInput = kind === "current" ? field === "voltage"
+        : field === "current" && (!Number.isFinite(result.current) || result.current === 0);
       text(schematic, tileX + 9, tileY + 35, format(values[field], unit), compact ? 19 : 16, fill,
-        { "data-operating-value": field, "data-value-role": role, ...(currentInput ? quantityTextAttributes("current", values.current, role) : {}) });
+        { "data-operating-value": field, "data-value-role": role, ...(quantityInput ? quantityTextAttributes(field, values[field], role) : {}) });
     });
     [["Known", "known", 16], ["Calculated", "calculated", 104], ["Missing", "missing", 230]].forEach(([label, role, keyX]) => {
       dot(schematic, keyX + 4, tileTop + 119, color[role]);
@@ -605,14 +618,21 @@
   function renderCharacteristics() {
     const { voltage, current, resistance, power } = displayValues(), { range, readings } = result;
     const extras = sources(), hasSeries = extras.some(source => source.kind === "voltage"), hasParallel = extras.some(source => source.kind === "current");
+    const currentDriven = primarySourceKind() === "current";
     const rows = [
-      [hasSeries ? "Voltage across load" : "Supply voltage", format(voltage, "V"), "voltage"],
+      [hasSeries || currentDriven ? "Voltage across load" : "Supply voltage", format(voltage, "V"), "voltage"],
       [hasParallel ? "Load current" : "Circuit current", format(current, "A"), "current"],
       ["Equivalent resistance", format(resistance, "Ω"), "resistance"], ["Total power", format(power, "W"), "power"],
       ["Equivalent resistance range", rangeText(range, "Ω"), "resistanceRange"]
     ];
-    if (hasSeries) rows.push(["Main source voltage", format(state.mode === "voltage" ? result.mainVoltage : state.voltage, "V"), "mainVoltage"]);
-    if (hasParallel) rows.push(["Voltage-source branch current", format(result.voltageBranchCurrent, "A"), "voltageBranchCurrent"]);
+    if (hasSeries) {
+      const mainVoltage = currentDriven || state.mode === "voltage" ? result.mainVoltage : state.voltage;
+      rows.push(["Main source voltage", format(mainVoltage, "V"), "mainVoltage"]);
+    }
+    if (hasParallel) {
+      const mainCurrent = currentDriven && state.mode !== "current" ? state.current : result.mainCurrent;
+      rows.push([currentDriven ? "Main source current" : "Voltage-source branch current", format(mainCurrent, "A"), currentDriven ? "mainCurrent" : "voltageBranchCurrent"]);
+    }
     for (const source of extras) rows.push([`${sourceKey(source)} · ${sourceKind(source).toLowerCase()}`, format(source.value, units[source.kind]), sourceKey(source)]);
     if (state.mode === "voltage") rows.push(["Voltage range at fixed current", rangeText(range?.map(value => current * value), "V"), "voltageRange"]);
     else rows.push(["Current range at fixed voltage", rangeText(range?.map(value => voltage / value), "A"), "currentRange"]);
@@ -659,10 +679,11 @@
     const field = (id, label, value) => ({ id, label, value });
     const fields = [field("mode", "Solve for", modes[snapshot.mode]), field("topology", "Network", networkText(snapshot.network))];
     fields.push(field("title", "Circuit title", snapshot.title || titleDefault),
-      field("sourceLabel", "Source label", snapshot.sourceLabel || labelDefaults.source),
-      field("groundLabel", "Ground label", snapshot.groundLabel || labelDefaults.ground));
-    if (snapshot.mode !== "voltage") fields.push(field("voltage", "Supply voltage", format(snapshot.voltage, "V")));
-    if (snapshot.mode !== "current") fields.push(field("current", "Circuit current", format(snapshot.current, "A")));
+      field("sourceType", "Source type", modes[primarySourceKind(snapshot)]),
+      field("sourceLabel", "Source label", snapshot.sourceLabel || defaultSourceLabel(snapshot)),
+      field("groundLabel", "Ground label", snapshot.groundLabel || groundDefault));
+    if (snapshot.mode !== "voltage") fields.push(field("voltage", sourceInputLabel("voltage", snapshot), format(snapshot.voltage, "V")));
+    if (snapshot.mode !== "current") fields.push(field("current", sourceInputLabel("current", snapshot), format(snapshot.current, "A")));
     if (snapshot.target) fields.push(field("target", "Calculated resistor", partName(snapshot.target)));
     const describedParts = parts(snapshot.network).map(part => {
       const resistance = part.id === snapshot.target ? "Calculated" : format(part.resistance, "Ω"), tolerance = `±${part.tolerance}%`;
@@ -700,6 +721,7 @@
     }
     return snapshot?.version === 1 && Object.hasOwn(modes, snapshot.mode) && typeof snapshot.title === "string" && snapshot.title.length <= titleLimit
       && validLabel(snapshot.sourceLabel) && validLabel(snapshot.groundLabel)
+      && (snapshot.sourceType === undefined || Object.hasOwn(nextSourceId, snapshot.sourceType))
       && (snapshot.sources === undefined || Array.isArray(snapshot.sources) && snapshot.sources.every(validSource))
       && [snapshot.voltage, snapshot.current].every(value => value === null || Number.isFinite(value)) && validNode(snapshot.network)
       && (snapshot.mode === "resistance" ? ids.has(snapshot.target) : snapshot.target === null);
@@ -737,12 +759,28 @@
     syncAddedSources();
   }
 
-  function addSource(kind) {
-    const source = { id: nextSourceId[kind]++, kind, value: 0 };
-    (state.sources ||= []).push(source);
-    selectAddedSource(sourceKey(source));
+  function changeSourceType(kind, key) {
+    let controlKey = "source";
+    if (key) {
+      const source = sources().find(source => sourceKey(source) === key);
+      if (!source || source.kind === kind) return;
+      // The existing value uses a different unit. Start the replacement at zero.
+      Object.assign(source, { id: nextSourceId[kind]++, kind, value: 0 });
+      selectedSourceKey = sourceKey(source);
+      controlKey = `source-${selectedSourceKey}`;
+    } else {
+      if (primarySourceKind() === kind) return;
+      // Keep the load operating point when the source has a valid solution.
+      if (!result.error) {
+        state.voltage = kind === "current" ? result.voltage : result.mainVoltage;
+        state.current = kind === "current" ? result.mainCurrent : result.current;
+      }
+      if (kind === "current") state.sourceType = kind;
+      else delete state.sourceType;
+    }
+    syncControls();
     refresh();
-    byId("addedSource").focus();
+    focusControl(controlKey);
   }
 
   byId("sourceSelect").addEventListener("change", event => selectAddedSource(event.target.value));
@@ -781,11 +819,16 @@
   });
   function openConstruction(anchor, clientX, clientY) {
     const target = anchor.dataset.part ?? anchor.dataset.networkContext;
-    constructionTarget = { target, control: anchor.dataset.schematicControl || "source" };
+    const addedKey = anchor.dataset.sourceKey || anchor.closest("[data-added-source]")?.dataset.addedSource;
+    constructionTarget = { target, addedKey, control: anchor.closest("[data-schematic-control]")?.dataset.schematicControl || "source" };
     const sourceMenu = target === "source";
-    const sourceLabel = anchor.dataset.sourceKey || anchor.closest("[data-added-source]")?.dataset.addedSource || state.sourceLabel || labelDefaults.source;
+    const kind = addedKey ? sources().find(source => sourceKey(source) === addedKey)?.kind : primarySourceKind();
+    const sourceLabel = addedKey || state.sourceLabel || defaultSourceLabel();
     byId("constructionTarget").textContent = sourceMenu ? sourceLabel : partCaption(findPart(Number(target)));
-    for (const button of constructionMenu.querySelectorAll("button")) button.hidden = button.hasAttribute("data-add-source") !== sourceMenu;
+    for (const button of constructionMenu.querySelectorAll("button")) {
+      const choice = button.dataset.changeSource;
+      button.hidden = sourceMenu ? !choice || choice === kind : Boolean(choice);
+    }
     constructionMenu.hidden = false;
     const bounds = anchor.getBoundingClientRect();
     const { clientWidth, clientHeight } = document.documentElement;
@@ -804,7 +847,7 @@
   function openAnnotation(key, focus) {
     const part = key.startsWith("part-") ? findPart(Number(key.slice(5))) : null;
     const field = part ? "label" : key === "title" ? "title" : `${key}Label`;
-    const fallback = part ? partName(part.id) : key === "title" ? titleDefault : labelDefaults[key];
+    const fallback = part ? partName(part.id) : key === "title" ? titleDefault : key === "source" ? defaultSourceLabel() : groundDefault;
     const owner = part || state;
     annotationEdit = { owner, field, fallback, focus };
     byId("annotationHeading").textContent = key === "title" ? "Edit circuit title" : `Edit ${part ? partName(part.id) : key} label`;
@@ -954,9 +997,9 @@
   constructionMenu.addEventListener("click", event => {
     const action = event.target.closest("button:not([hidden])");
     if (!action || !constructionTarget) return;
-    const { target } = constructionTarget;
+    const { target, addedKey } = constructionTarget;
     closeConstruction();
-    if (target === "source") addSource(action.dataset.addSource);
+    if (target === "source") changeSourceType(action.dataset.changeSource, addedKey);
     else focusControl(`part-${addResistor(action.dataset.connect, target)}`);
   });
   constructionMenu.addEventListener("keydown", event => {

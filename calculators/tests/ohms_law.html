@@ -26,7 +26,8 @@
     frame.src = "../ohms_law.html";
     const loaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
     document.body.append(frame); await loaded;
-    const win = frame.contentWindow, doc = win.document, get = id => doc.getElementById(id);
+    const win = frame.contentWindow, get = id => doc.getElementById(id);
+    let doc = win.document;
     await win.ResistorParts.load();
     const query = selector => doc.querySelector(selector);
     const fire = (element, event) => element.dispatchEvent(new win.Event(event, { bubbles: true }));
@@ -64,7 +65,7 @@
     const rightClick = element => !element.dispatchEvent(new win.MouseEvent("contextmenu", { button: 2, clientX: 1240, clientY: 865, bubbles: true, cancelable: true }));
     const useMenu = kind => query(`#constructionMenu [data-connect="${kind}"]`).click();
     const visibleMenuActions = () => [...menu.querySelectorAll("button:not([hidden])")].map(button => button.textContent);
-    const resistorActions = "Add resistor in series,Add resistor in parallel", sourceActions = "Add V source in series,Add I source in parallel";
+    const resistorActions = "Add resistor in series,Add resistor in parallel";
     const keypress = (element, key, options = {}) => element.dispatchEvent(new win.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options }));
     const edit = (name, value, save = true) => {
       fire(annotation(name).querySelector("text"), "click");
@@ -317,7 +318,7 @@
     await wait(1100);
     check(entries()[0].state.network.children.length === 2 && entries()[0].state.network.kind === "series", "a reverted input draft does not prevent later topology edits from saving");
     check(rightClick(query("[data-voltage-source]")) && get("constructionTarget").textContent === "Bench supply"
-      && visibleMenuActions().join() === sourceActions, "the main source context menu identifies the source and offers only source actions");
+      && visibleMenuActions().join() === "Change to Current Source", "the voltage source menu identifies the source and offers only conversion to current");
     useMenu("parallel");
     check(field("resistance") === "3 kΩ" && !menu.hidden, "an inapplicable hidden action cannot add a resistor from the source menu");
     keypress(doc.activeElement, "Escape");
@@ -326,68 +327,99 @@
     check(annotationText("part-1") === "R1" && annotationText("title") === "Ohm’s Law" && annotationText("source") === "VDC" && field("current") === "12 mA", "a snapshot without labels recalls with the original defaults");
     get("memoryClose").click();
 
-    const mainSource = () => query("[data-voltage-source]");
-    const sourceAction = kind => query(`[data-add-source="${kind}"]`);
-    const addition = key => query(`[data-added-source="${key}"]`);
-    const addedCore = key => addition(key).querySelector("[data-added-source-core]");
-    const addSource = kind => { rightClick(mainSource()); sourceAction(kind).click(); };
+    const mainSource = kind => query(`[data-${kind}-source]`);
+    const sourceGroup = () => query('[data-schematic-control="source"]');
+    const sourceAction = kind => query(`[data-change-source="${kind}"]`);
+    const switchSource = (from, to) => { rightClick(mainSource(from)); sourceAction(to).click(); };
     rightClick(part(1).querySelector("[data-resistor-core]"));
     check(visibleMenuActions().join() === resistorActions, "returning to a resistor hides both source actions");
     keypress(doc.activeElement, "Escape");
-    fire(mainSource(), "click");
-    check(!menu.hidden && visibleMenuActions().join() === sourceActions && doc.activeElement === sourceAction("voltage"),
-      "tapping the source exposes only source actions and focuses the first available choice");
-    keypress(doc.activeElement, "End");
-    check(doc.activeElement === sourceAction("current"), "source construction choices are reachable through menu keyboard navigation");
-    sourceAction("voltage").click();
-    check(!get("sourceEditor").hidden && get("sourceSelect").value === "V2" && doc.activeElement === get("addedSource")
-      && field("voltage") === "12 V", "adding a series source starts at zero and focuses its editor");
-    fire(query('[data-added-source-value="V2"]'), "click");
-    check(doc.activeElement === inlineValue && !inline.hidden && inlineUnit.selectedOptions[0].textContent === "V", "a series source voltage is editable at its schematic value");
-    submitInline("3 V");
-    check(field("voltage") === "15 V" && field("current") === "15 mA" && field("mainVoltage") === "12 V"
-      && addedCore("V2").getAttribute("cx") === mainSource().getAttribute("cx")
-      && Number(addedCore("V2").getAttribute("cy")) < Number(mainSource().getAttribute("cy")), "a series voltage source stacks on the branch and adds to the load voltage");
-    addSource("voltage"); change("addedSource", "-1 V");
-    check(field("voltage") === "14 V" && field("V3") === "-1 V", "multiple series voltages combine algebraically");
-    addSource("current"); fire(query('[data-added-source-value="I1"]'), "click"); submitInline("4 mA");
-    check(field("voltage") === "14 V" && field("current") === "14 mA" && field("voltageBranchCurrent") === "10 mA"
-      && Number(addedCore("I1").getAttribute("cx")) < Number(mainSource().getAttribute("cx"))
-      && addition("I1").querySelector('[data-source-direction="into-supply"]'), "the parallel current source injects into the rail and changes voltage-branch current");
-    check(rightClick(addedCore("I1")) && get("constructionTarget").textContent === "I1" && visibleMenuActions().join() === sourceActions,
-      "an added current source also uses the source-only menu");
-    keypress(doc.activeElement, "Escape");
-    addSource("current"); change("addedSource", "-2 mA");
-    check(field("voltageBranchCurrent") === "12 mA" && field("I2") === "-2 mA", "signed parallel injections sum independently of the load current");
-    fire(addition("I1"), "click");
-    check(get("sourceSelect").value === "I1" && doc.activeElement === get("addedSource"), "clicking a source symbol focuses that source’s signed value");
-    change("addedSource", "17 mA");
-    check(field("voltageBranchCurrent") === "-1 mA" && centeredCurrent("14 mA"), "a large injection can reverse the voltage-branch current while the load arrow remains correct");
-    change("addedSource", "4 mA");
+    const originalSymbol = mainSource("voltage");
+    const originalPosition = ["cx", "cy", "r"].map(attribute => originalSymbol.getAttribute(attribute)).join();
+    fire(originalSymbol, "click");
+    check(!menu.hidden && visibleMenuActions().join() === "Change to Current Source"
+      && doc.activeElement === sourceAction("current"), "tapping the source focuses the available type change");
+    keypress(doc.activeElement, "Home");
+    check(doc.activeElement === sourceAction("current"), "menu keyboard navigation skips the existing type");
+    sourceAction("current").click();
+    check(menu.hidden && doc.activeElement === sourceGroup() && !mainSource("voltage") && !query("[data-added-source]")
+      && get("sourceEditor").hidden, "switching to current replaces the main symbol without adding a branch");
+    check(["cx", "cy", "r"].map(attribute => mainSource("current").getAttribute(attribute)).join() === originalPosition
+      && annotationText("source") === "IDC" && sourceGroup().querySelector("[data-source-direction]"), "the current symbol fits the same position and gets a matching default reference");
+    check(field("voltage") === "12 V" && field("current") === "12 mA" && hasRole(circuitQuantity("current"), "calculated"),
+      "Find Current solves the current-source value from load voltage and resistance");
+    check(centeredCurrent("12 mA") && balancedCurrent() && get("voltageField").querySelector("label").textContent === "Load voltage",
+      "current-source mode preserves flow placement and identifies the voltage input");
+    fire(operatingValue("voltage"), "click");
+    check(!inline.hidden && doc.activeElement === inlineValue && inlineUnit.value === "", "the load voltage remains editable on the drawing");
+    submitInline("-9 V");
+    check(centeredCurrent("-9 mA") && arrowDirection() === -1 && circuitQuantity("current").textContent === "-9 mA",
+      "signed load voltage determines the direction and current readout");
+
+    edit("source", "Bench driver");
     mode("voltage");
-    check(field("voltage") === "12 V" && field("mainVoltage") === "10 V" && field("voltageBranchCurrent") === "10 mA"
-      && circuitQuantity("voltage").textContent === "10 V", "Find Voltage solves the main voltage after accounting for the added series sources");
-    mode("resistance"); change("current", "7 mA");
-    check(field("voltage") === "14 V" && field("resistance") === "2 kΩ" && field("voltageBranchCurrent") === "5 mA"
-      && resistorValue(1).textContent === "2 kΩ", "Find Resistance uses the total load voltage and the entered load current");
-    change("addedSource", "");
-    check(get("calculationStatus").textContent.includes("I1") && field("voltageBranchCurrent") === "—", "a missing extra-source value identifies the component and clears the unsolved branch current");
-    change("addedSource", "4 mA");
-    check(doc.documentElement.scrollWidth <= frame.clientWidth && get("sourceSelect").options.length === 4, "all additional sources are available through the fitted phone editor");
+    fire(circuitQuantity("current"), "click");
+    check(!inline.hidden && inlineUnit.value === "m" && !operatingValue("voltage").hasAttribute("data-edit-quantity"),
+      "Find Voltage makes the source current editable and the computed voltage read-only");
+    submitInline("-6 mA");
+    check(field("voltage") === "-6 V" && hasRole(circuitQuantity("current"), "known") && hasRole(operatingValue("voltage"), "calculated"),
+      "the edited current determines the signed load voltage and its calculation role");
+    mode("resistance");
+    check(field("resistance") === "1.5 kΩ" && resistorValue(1).textContent === "1.5 kΩ" && hasRole(resistorValue(1), "calculated"),
+      "Find Resistance uses entered source current and load voltage to solve the selected part");
+    check(doc.documentElement.scrollWidth <= frame.clientWidth && groundLabelMatches(20, 12), "the replacement symbol keeps the schematic fitted on phones");
     await wait(1100);
     const sourceSnapshot = entries()[0];
-    check(sourceSnapshot.state.sources?.length === 4 && sourceSnapshot.state.mode === "resistance", "memory saves the added source topology and signed inputs");
+    check(sourceSnapshot.state.sourceType === "current" && sourceSnapshot.state.current === -.006
+      && !sourceSnapshot.state.sources, "memory saves the source type and signed input in the existing circuit");
     downloaded = undefined;
     get("downloadCircuit").click();
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
-    const sourcesExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
-    check(sourcesExport.querySelectorAll("[data-added-source]").length === 4
-      && !sourcesExport.querySelector("[data-schematic-control], [data-network-context]"), "static exports retain added source symbols and values");
-    for (let remaining = 4; remaining > 0; remaining--) get("removeSource").click();
-    check(get("sourceEditor").hidden && !query("[data-added-source]"), "removing the sources restores the original source layout");
+    const currentExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
+    check(currentExport.querySelector("[data-current-source]") && currentExport.querySelector("[data-source-direction]")
+      && !currentExport.querySelector("[data-voltage-source], [data-schematic-control], [data-network-context], [data-edit-quantity]"),
+      "static exports retain the new symbol and strip interaction controls");
+    check(rightClick(annotation("source")) && get("constructionTarget").textContent === "Bench driver"
+      && visibleMenuActions().join() === "Change to Voltage Source" && doc.activeElement === sourceAction("voltage"), "the source label opens the reverse conversion choice");
+    sourceAction("voltage").click();
+    check(mainSource("voltage") && !mainSource("current") && !query("[data-added-source]") && annotationText("source") === "Bench driver",
+      "reversing the conversion preserves a custom source label and the single source branch");
+    check(field("resistance") === "1.5 kΩ" && field("voltage") === "-9 V" && centeredCurrent("-6 mA"),
+      "source conversion preserves a valid operating point in the inverse solve");
     memory.querySelector("summary").click(); await wait(250);
     query(`[data-memory-restore="${sourceSnapshot.id}"]`).click(); await wait(50);
-    check(addition("V2") && addition("I2") && field("resistance") === "2 kΩ" && field("voltageBranchCurrent") === "5 mA", "recall reconstructs the additional branches and recalculates their operating point");
+    check(mainSource("current") && field("resistance") === "1.5 kΩ" && annotationText("source") === "Bench driver",
+      "recalling a switched source restores its symbol, label and results");
+
+    const history = JSON.parse(localStorage.getItem(key));
+    const original = history.entries.find(entry => entry.id === originalId);
+    history.entries.unshift({ ...original, id: "legacy-sources", savedAt: new Date().toISOString(),
+      state: { ...original.state, sources: [{ id: 2, kind: "voltage", value: 3 }, { id: 1, kind: "current", value: .004 }] } });
+    localStorage.setItem(key, JSON.stringify(history));
+    const reloaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
+    win.location.reload(); await reloaded;
+    doc = win.document;
+    query('[data-memory-restore="legacy-sources"]').click(); await wait(50);
+    get("memoryClose").click();
+    const addition = ref => query(`[data-added-source="${ref}"]`);
+    check(addition("V2") && addition("I1") && field("voltage") === "15 V" && field("voltageBranchCurrent") === "11 mA",
+      "legacy snapshots still restore both supplementary source types and their branch values");
+    switchSource("voltage", "current");
+    check(mainSource("current") && circuitQuantity("current").textContent === "11 mA" && field("voltage") === "15 V"
+      && centeredCurrent("15 mA") && field("mainVoltage") === "12 V",
+      "the main conversion accounts for legacy series and parallel offsets");
+    mode("voltage");
+    check(field("voltage") === "15 V" && field("mainCurrent") === "11 mA", "the current-driven calculation combines signed parallel inputs");
+    switchSource("current", "voltage");
+    check(circuitQuantity("voltage").textContent === "12 V" && field("voltage") === "15 V",
+      "the reverse conversion applies the series offset and maintains the load voltage");
+    check(rightClick(addition("I1").querySelector("[data-added-source-core]")) && get("constructionTarget").textContent === "I1"
+      && !sourceAction("voltage").hidden && sourceAction("current").hidden, "the menu targets the clicked legacy source");
+    sourceAction("voltage").click();
+    check(mainSource("voltage") && addition("V2") && !addition("I1") && get("sourceSelect").options.length === 2
+      && field("V3") === "0 V", "converting a supplementary element replaces one entry and starts its new unit value at zero");
+    fire(query('[data-added-source-value="V3"]'), "click");
+    check(!get("schematicFieldEditor").hidden, "a converted supplementary source still has an inline editor");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);
