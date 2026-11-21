@@ -212,6 +212,13 @@
     return svg(host, "text", { x, y, fill, "font-size": size, "font-family": "Consolas, monospace", ...extra }, content);
   }
 
+  function fitText(label, width) {
+    if (label.getComputedTextLength() > width) {
+      label.setAttribute("textLength", width);
+      label.setAttribute("lengthAdjust", "spacingAndGlyphs");
+    }
+  }
+
   function control(key, label) { return { "data-schematic-control": key, role: "button", tabindex: 0, "aria-label": label }; }
   function focusControl(key) {
     schematic.querySelector(`[data-schematic-control="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
@@ -236,16 +243,13 @@
       width, height: pitch * (lines.length - 1) + size + 6, rx: 4 });
     lines.forEach((value, index) => {
       const line = text(label, x, y + index * pitch, value, size, fill, { "text-anchor": centered ? "middle" : "start", "font-weight": 700 });
-      if (line.getComputedTextLength() > width - 12) {
-        line.setAttribute("textLength", width - 12);
-        line.setAttribute("lengthAdjust", "spacingAndGlyphs");
-      }
+      fitText(line, width - 12);
     });
   }
 
-  function layout(node, compact) {
-    if (!node.children) return { node, width: compact ? 143 : 174, height: compact ? 110 : 124 };
-    const children = node.children.map(child => layout(child, compact));
+  function layout(node, columnWidth, rowHeight) {
+    if (!node.children) return { node, width: columnWidth, height: rowHeight };
+    const children = node.children.map(child => layout(child, columnWidth, rowHeight));
     const widths = children.map(child => child.width), heights = children.map(child => child.height);
     if (node.kind === "series") return { node, children, width: Math.max(...widths), height: heights.reduce((sum, h) => sum + h, 0) };
     return { node, children, width: widths.reduce((sum, w) => sum + w, 0), height: Math.max(...heights) + 44 };
@@ -303,26 +307,37 @@
     });
   }
 
-  function drawCurrent(host, from, to, wireY, current) {
+  function drawCurrent(host, x, y, radius, current) {
     if (!Number.isFinite(current) || current === 0) return;
-    const sign = Math.sign(current), center = (from + to) / 2, y = wireY - 10, tip = center + sign * 22;
-    const direction = sign > 0 ? "forward" : "reverse";
-    const arrow = svg(host, "g", { "data-current-direction": direction, role: "img",
-      "aria-label": `Conventional current ${direction}, ${format(Math.abs(current), "A")}` });
-    const heel = tip - sign * 8;
-    svg(arrow, "path", { d: `M${center - sign * 22} ${y}H${tip}M${heel} ${y - 5}L${tip} ${y}L${heel} ${y + 5}`,
-      fill: "none", stroke: color.text, "stroke-width": 2, "stroke-linejoin": "round" });
-    text(arrow, center, y - 8, "I", 12, color.text, { "text-anchor": "middle" });
+    const clockwise = current > 0, gap = clockwise ? 13 : -13;
+    const top = y - Math.sqrt(radius ** 2 - gap ** 2);
+    const arrow = svg(host, "g", { "data-current-direction": clockwise ? "forward" : "reverse", role: "img",
+      "aria-label": `Conventional current ${clockwise ? "clockwise" : "counterclockwise"}, ${format(Math.abs(current), "A")}` });
+    const head = svg(svg(arrow, "defs"), "marker", { id: "currentArrowHead", orient: "auto", markerUnits: "userSpaceOnUse",
+      markerWidth: 14, markerHeight: 14, refX: 12, refY: 7, viewBox: "0 0 14 14" });
+    svg(head, "path", { d: "M2 2L12 7L2 12", fill: "none", stroke: color.text, "stroke-width": 2.5, "stroke-linejoin": "round" });
+    svg(arrow, "path", { d: `M${x + gap} ${top}A${radius} ${radius} 0 1 ${clockwise ? 1 : 0} ${x - gap} ${top}`,
+      fill: "none", stroke: color.text, "stroke-width": 2.5, "marker-end": "url(#currentArrowHead)" });
+    const value = text(arrow, x, y, format(current, "A"), 18, color.text, { "data-current-value": "", "text-anchor": "middle",
+      "dominant-baseline": "central", "font-weight": 700 });
+    fitText(value, 2 * radius - 16);
   }
 
   function drawCircuit() {
     const focusedControl = document.activeElement?.dataset.schematicControl;
-    const compact = mobile.matches && !desktopView, box = layout(state.network, compact), symbols = compact ? compactSymbols : fullSymbols;
-    const naturalWidth = Math.max(compact ? 348 : 432, box.width + (compact ? 200 : 224));
+    const compact = mobile.matches && !desktopView, symbols = compact ? compactSymbols : fullSymbols;
+    const columnWidth = compact ? 143 : 174, box = layout(state.network, columnWidth, compact ? 110 : 124);
+    const radius = compact ? 44 : 52, sourceLeft = compact ? 63 : 81, sourceTextWidth = compact ? 92 : 102;
+    const currentX = sourceLeft + symbols.source + 8 + sourceTextWidth + 14 + radius;
+    // Leave a clear channel between the source text and the leftmost branch.
+    const leftmostBranch = currentX + radius + 30;
+    const naturalWidth = Math.ceil(leftmostBranch + box.width - columnWidth / 2 + 95);
     const width = Math.max(naturalWidth, viewport.clientWidth), offset = (width - naturalWidth) / 2;
     const names = wrapLabel(state.title || titleDefault, Math.floor((width - 38) / 13));
-    const y = 116 + 23 * names.length, bottom = y + box.height, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 134;
-    const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = (compact ? 63 : 81) + offset, sourceY = (y + bottom) / 2;
+    const y = 116 + 23 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15));
+    const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
+    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 134;
+    const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const sourceVoltage = state.mode === "voltage" ? result.voltage : state.voltage;
     const topColor = state.mode === "voltage" && sourceVoltage != null ? color.calculated : color.net;
     const sourceColor = sourceVoltage == null ? color.missing : state.mode === "voltage" ? color.calculated : color.known;
@@ -339,7 +354,11 @@
 
     const drawing = svg(schematic, "g", { "stroke-width": symbols.stroke, "stroke-linecap": "round" });
     line(drawing, sourceX, y, x, y, topColor); line(drawing, sourceX, bottom, x, bottom);
-    drawCurrent(drawing, sourceX, x, y, result.current);
+    if (networkY > y) {
+      line(drawing, x, y, x, networkY, topColor);
+      line(drawing, x, networkY + box.height, x, bottom);
+    }
+    drawCurrent(drawing, currentX + offset, sourceY, radius, result.current);
     const sourceTop = sourceY - symbols.source, sourceBottom = sourceY + symbols.source;
     line(drawing, sourceX, y, sourceX, sourceTop - leadLength, topColor);
     line(drawing, sourceX, sourceBottom + leadLength, sourceX, bottom);
@@ -356,14 +375,14 @@
     const labelX = sourceX + symbols.source + 8;
     drawLabel(drawing, "source", "source label", sourceLabel, labelX, sourceY - 6 - (sourceLabel.length - 1) * 16,
       { size: 13, fill: sourceColor, target: "source" });
-    text(drawing, labelX, sourceY + 14, format(sourceVoltage, "V"), 14);
+    fitText(text(drawing, labelX, sourceY + 14, format(sourceVoltage, "V"), 14), sourceTextWidth);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
     line(ground, groundX, bottom, groundX, bottom + leadLength).dataset.symbolLead = "ground";
     symbols.ground.forEach((half, index) => line(ground, groundX - half, bottom + leadLength + symbols.groundPitch * index, groundX + half, bottom + leadLength + symbols.groundPitch * index));
     drawLabel(drawing, "ground", "ground label", [state.groundLabel || labelDefaults.ground],
       groundX + symbols.ground[0] + 10, bottom + leadLength + 7, { size: 12, fill: color.net });
-    drawNetwork(drawing, box, x, y, symbols, topColor);
+    drawNetwork(drawing, box, x, networkY, symbols, topColor);
 
     const values = [["Voltage", "voltage", "V"], ["Current", "current", "A"], ["Resistance", "resistance", "Ω"], ["Power", "power", "W"]];
     const tileWidth = (width - 42) / 2;

@@ -47,11 +47,24 @@
       get("annotationInput").value = value;
       query(save ? '#annotationForm [type="submit"]' : "#annotationCancel").click();
     };
-    const arrowDirection = () => {
-      const path = query("[data-current-direction] path");
-      if (!path) return 0;
-      const [, from, to] = path.getAttribute("d").match(/^M([\d.]+) [\d.]+H([\d.]+)/);
-      return Math.sign(Number(to) - Number(from));
+    const currentArc = () => query("[data-current-direction] > path");
+    const arcParameters = path => path.getAttribute("d").match(/[\d.]+/g).map(Number);
+    const arrowDirection = () => currentArc() ? (arcParameters(currentArc())[6] ? 1 : -1) : 0;
+    const centeredCurrent = expected => {
+      const arc = currentArc(), value = arc?.parentElement.querySelector("[data-current-value]");
+      if (!value) return false;
+      const [start, top, radius, verticalRadius, , largeArc, , end] = arcParameters(arc);
+      const centerX = (start + end) / 2, centerY = top + Math.sqrt(radius ** 2 - (start - centerX) ** 2);
+      return radius === verticalRadius && largeArc === 1 && arc.hasAttribute("marker-end") && value.textContent === expected
+        && value.getAttribute("text-anchor") === "middle" && value.getAttribute("dominant-baseline") === "central"
+        && Math.abs(Number(value.getAttribute("x")) - centerX) < .01 && Math.abs(Number(value.getAttribute("y")) - centerY) < .01;
+    };
+    const clearanceForCurrent = () => {
+      const arc = currentArc(), bounds = arc.getBBox(), [topRail, bottomRail] = arc.parentElement.parentElement.children;
+      const source = annotation("source").getBBox();
+      const firstPart = Math.min(...[...doc.querySelectorAll("[data-resistor-core]")].map(core => core.getBBox().x));
+      return bounds.y > Number(topRail.getAttribute("y1")) && bounds.y + bounds.height < Number(bottomRail.getAttribute("y1"))
+        && bounds.x > source.x + source.width && bounds.x + bounds.width < firstPart;
     };
     const centeredTitle = () => [...annotation("title").querySelectorAll("text")].every(node =>
       node.getAttribute("text-anchor") === "middle" && Number(node.getAttribute("x")) === Number(get("schematic").getAttribute("width")) / 2);
@@ -70,7 +83,8 @@
     check(!memory.open && tab.getAttribute("aria-expanded") === "false", "the side drawers start collapsed");
     check(entries().length === 1 && localStorage.getItem("minipcb-divider-memory-v1") === divider, "history has an independent Original state");
     const originalId = entries()[0].id;
-    check(arrowDirection() === 1, "positive conventional current points from the source toward the network");
+    check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
+    check(centeredCurrent("12 mA") && clearanceForCurrent(), "the round arrow surrounds the current value and clears the circuit wires and symbols");
     check(centeredTitle(), "the default circuit title is centered in the frame");
     keypress(annotation("title"), "Enter");
     check(get("annotationEditor").open && doc.activeElement === get("annotationInput"), "the schematic title is keyboard-accessible and focuses its editor");
@@ -108,7 +122,7 @@
     check(get("schematic").querySelector('line[stroke="#ff8e8e"]'), "the calculated source net is red");
     change("current", "-6 mA");
     check(field("voltage") === "-10 V" && field("power") === "60 mW" && field("voltageRange") === "-10.205 V to -9.7919 V", "signed current produces correctly ordered ranges and positive dissipation");
-    check(arrowDirection() === -1, "negative conventional current reverses the arrow");
+    check(arrowDirection() === -1 && centeredCurrent("-6 mA"), "negative conventional current reverses the sweep and shows the signed value");
     change("current", "0");
     check(field("voltage") === "0 V" && field("power") === "0 W", "zero current gives a valid zero-voltage operating point");
     check(arrowDirection() === 0, "zero current has no directional arrow");
@@ -147,6 +161,7 @@
     frame.style.width = "390px"; await wait(250);
     check(doc.documentElement.scrollWidth <= frame.clientWidth && !get("viewToggle").hidden, `phone layout fits without page-level horizontal scrolling (${doc.documentElement.scrollWidth}/${frame.clientWidth}px; desktop toggle ${get("viewToggle").hidden ? "hidden" : "visible"})`);
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
+    check(centeredCurrent("6 mA") && clearanceForCurrent(), "the compact mixed network preserves the flow arrow and centered current value");
     check(centeredTitle() && annotation("title").querySelectorAll("text").length > 1, "long circuit titles wrap and remain centered on phones");
     get("editResistorLabel").click();
     check(get("annotationEditor").open, "phones can edit the selected label from the native resistor controls");
@@ -169,7 +184,9 @@
     const exported = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(downloaded.type === "image/svg+xml" && !exported.querySelector("parsererror"), "SVG download is valid vector markup");
     check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,") && !exported.querySelector("[data-schematic-control], [data-part], foreignObject, .part-hit, .control-hit"), "exports embed the logo and exclude editing controls");
-    check(exported.querySelector('[data-current-direction="forward"]') && ["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains flow direction and annotation text");
+    check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
+      && exported.querySelector("#currentArrowHead") && exported.querySelector("[data-current-value]")?.textContent === "6 mA", "the export retains the round path, embedded arrowhead, and centered value");
+    check(["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains annotation text");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
     mode("current");
