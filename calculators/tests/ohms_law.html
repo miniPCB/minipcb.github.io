@@ -54,6 +54,12 @@
       return panel?.getAttribute("fill") === background && bar?.getAttribute("fill") === accent
         && label?.getAttribute("fill") === accent;
     });
+    const solveLegendMatches = (root = doc) => {
+      const [known, knownLabel, calculated, calculatedLabel, ...extra] = root.querySelector("[data-solve-legend]")?.children || [];
+      return known?.getAttribute("fill") === "#173b31" && knownLabel?.getAttribute("fill") === "#6ee7ac"
+        && knownLabel.textContent === "Known" && calculated?.getAttribute("fill") === "#462b32"
+        && calculatedLabel?.getAttribute("fill") === "#ff8e8e" && calculatedLabel.textContent === "Calculated" && !extra.length;
+    };
     const circuitGeometry = () => [get("schematic").getAttribute("viewBox"),
       ...[...doc.querySelectorAll("#schematic line, [data-voltage-source], [data-resistor-core], [data-current-value]")].map(node =>
         ["x", "y", "width", "height", "x1", "x2", "y1", "y2", "cx", "cy", "r"].map(attribute => node.getAttribute(attribute)).join())].join(" ");
@@ -170,6 +176,7 @@
       && hasRole(circuitQuantity("current"), "calculated") && hasRole(operatingValue("current"), "calculated")
       && hasRole(resistorValue(1), "known"), "Find Current highlights the same calculated quantity on the diagram and operating point");
     check(operatingPaletteMatches(), "the operating-point cards use the divider palette for backgrounds, labels and accent bars");
+    check(solveLegendMatches(), "the schematic legend contains only the two tinted solve-role badges");
     check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12 V" && !schematicInput("current"),
       "the known source voltage is a native text field and calculated current stays read-only");
     const sourceInput = schematicInput("voltage");
@@ -316,6 +323,9 @@
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
     check(resistorReadingsFit(), "compact resistor power and stress rows fit their information blocks");
     check(operatingPaletteMatches(), "the compact schematic uses the same card palette as the full schematic");
+    const legendBounds = query("[data-solve-legend]").getBoundingClientRect();
+    check(solveLegendMatches() && legendBounds.top > query('[data-operating-point="power"]').getBoundingClientRect().bottom
+      && legendBounds.bottom < get("schematic").getBoundingClientRect().bottom, "the compact legend fits below the operating-point cards");
     const compactPackage = schematicInput("package-3"), compactBounds = compactPackage.getBoundingClientRect();
     check(compactPackage.value === "1206" && compactBounds.left >= 0 && compactBounds.right <= frame.clientWidth
       && compactBounds.height > 0, "the native package dropdown fits inside the compact phone schematic");
@@ -353,6 +363,7 @@
     check(hasRole(exported.querySelector('[data-operating-value="resistance"]'), "calculated")
       && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known")
       && operatingPaletteMatches(exported), "SVG downloads preserve both the value roles and operating-point palette");
+    check(solveLegendMatches(exported), "SVG downloads retain the two solve-role badges");
     check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
       && exported.querySelector("#currentArrowHead") && exported.querySelector("[data-current-value]")?.textContent === "6 mA", "the export retains the round path, embedded arrowhead, and centered value");
     check(exported.querySelectorAll('[data-resistor-stress][data-stress-basis="nominal"]').length === 3

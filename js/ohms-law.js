@@ -298,7 +298,6 @@
   function line(host, x1, y1, x2, y2, stroke = color.net) {
     return svg(host, "line", { x1, y1, x2, y2, stroke });
   }
-  function dot(host, cx, cy, fill = color.net) { svg(host, "circle", { cx, cy, r: 4, fill }); }
   function junction(host, cx, cy, r, fill = color.net) { svg(host, "circle", { cx, cy, r, fill, "data-wire-junction": "" }); }
   function text(host, x, y, content, size = 16, fill = color.text, extra = {}) {
     return svg(host, "text", { x, y, fill, "font-size": size, "font-family": "Consolas, monospace", ...extra }, content);
@@ -604,7 +603,7 @@
     const rowHeight = 2 * (symbols.source + leadLength + 8), seriesHeight = series.length * rowHeight;
     const y = 116 + 23 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15), rowHeight + seriesHeight);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
-    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 171;
+    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 184;
     const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const values = displayValues(), kind = primarySourceKind();
     const sourceCalculated = state.mode === kind;
@@ -688,10 +687,12 @@
         { "data-operating-value": field, "data-value-role": role, ...(quantityInput ? { "data-circuit-quantity": field } : {}) });
       if (quantityInput) drawQuantityField(value, field, { x: labelX, y: tileY + 22, width: Math.min(118, tileWidth - 28), height: 26 });
     });
-    [["Known", "known", 16], ["Calculated", "calculated", 104], ["Missing", "missing", 230]].forEach(([label, role, keyX]) => {
-      dot(artwork, keyX + 4, tileTop + 139, color[role]);
-      text(artwork, keyX + 15, tileTop + 143, label, 12, color.muted);
-    });
+    const legend = svg(artwork, "g", { transform: `translate(16 ${tileTop + 126})`, "data-solve-legend": "", role: "group",
+      "aria-label": "Circuit color key, green for known values and red for calculated values" });
+    for (const [x, label, role, background, badgeWidth] of [[0, "Known", "known", "#173b31", 86], [94, "Calculated", "calculated", "#462b32", 110]]) {
+      svg(legend, "rect", { x, y: 0, width: badgeWidth, height: 28, rx: 8, fill: background });
+      text(legend, x + 12, 19, label, 14, color[role]);
+    }
     text(artwork, 16, height - 11, "Nominal stress · package reference limits", 12, color.muted);
     for (const [key, entry] of schematicInputs) {
       if (entry.seen) continue;
