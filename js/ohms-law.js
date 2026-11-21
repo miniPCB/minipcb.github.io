@@ -7,6 +7,7 @@
   const titleDefault = "Ohm’s Law";
   const labelDefaults = { source: "VDC", ground: "GND" }, labelLimit = 24, titleLimit = 72;
   const constructionMenu = byId("constructionMenu"), annotationEditor = byId("annotationEditor"), annotationInput = byId("annotationInput");
+  const fieldEditor = byId("schematicFieldEditor"), fieldValue = byId("schematicFieldValue"), fieldUnit = byId("schematicFieldUnit"), fieldPackage = byId("schematicFieldPackage");
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
   const prefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
   const units = { voltage: "V", current: "A", resistance: "Ω" };
@@ -22,7 +23,7 @@
   // Keep the voltage divider's documented 0805 reference available offline.
   let packageLimits = new Map([["0805", { power: 0.14, voltage: 50 }]]);
   let selectedId = 1, nextId = 2, desktopView = false, memory, result, build, embeddedLogo, copyRows, constructionTarget, annotationEdit;
-  let selectedSourceKey;
+  let selectedSourceKey, fieldEdit;
   const nextSourceId = { voltage: 2, current: 1 };
   let state = { version: 1, title: "", mode: "current", voltage: 12, current: 0.012, target: null, network: newPart(1) };
 
@@ -185,6 +186,11 @@
     return Number.isFinite(value) ? { value, prefix } : null;
   }
 
+  function parseInputQuantity(text, kind, prefix) {
+    const parsed = parseQuantity(text, units[kind], prefix);
+    return parsed && (kind !== "resistance" || parsed.value > 0) ? parsed : null;
+  }
+
   function trackDraft(input, edit) {
     input.addEventListener("input", () => edit(false));
     input.addEventListener("change", () => edit(true));
@@ -200,12 +206,11 @@
     const input = byId(id), selector = byId(`${id}Unit`);
     const available = Object.keys(prefixes);
     function update(commit) {
-      const parsed = parseQuantity(input.value, units[getKind()], selector.value);
-      const valid = parsed && (id !== "resistance" || parsed.value > 0);
-      const value = valid ? parsed.value : null, changed = value !== read();
+      const parsed = parseInputQuantity(input.value, getKind(), selector.value);
+      const value = parsed?.value ?? null, changed = value !== read();
       write(value);
-      input.setAttribute("aria-invalid", String(!valid));
-      if (commit && valid) {
+      input.setAttribute("aria-invalid", String(!parsed));
+      if (commit && parsed) {
         selector.value = parsed.prefix;
         input.value = value / prefixes[parsed.prefix];
       }
@@ -299,15 +304,20 @@
 
   function control(key, label) { return { "data-schematic-control": key, role: "button", tabindex: 0, "aria-label": label }; }
 
+  function editableField(field, key, label, value) {
+    return { ...control(key, `Edit ${label}, ${value}`), "data-edit-quantity": field, "data-edit-label": label };
+  }
+
   function quantityTextAttributes(field, value, role) {
     const attributes = { "data-circuit-quantity": field, "data-value-role": role };
     if (role === "calculated") return attributes;
     const label = field === "voltage" ? "supply voltage" : "circuit current";
-    return { ...attributes, ...control(`quantity-${field}`, `Edit ${label}, ${format(value, units[field])}`), "data-edit-quantity": field };
+    return { ...attributes, ...editableField(field, `quantity-${field}`, label, format(value, units[field])) };
   }
 
+  function schematicControl(key) { return schematic.querySelector(`[data-schematic-control="${CSS.escape(key)}"]`); }
   function focusControl(key) {
-    schematic.querySelector(`[data-schematic-control="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+    schematicControl(key)?.focus({ preventScroll: true });
   }
 
   function wrapLabel(value, max) {
@@ -365,18 +375,26 @@
       const action = calculated ? "Select calculated resistor" : "Edit resistor";
       const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. ${action}`),
         "data-part": node.id, "aria-pressed": String(node.id === selectedId) });
-      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: middle - 39, width: width - 10, height: 98, rx: 8, "stroke-width": 1 });
+      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: middle - 39, width: width - 10, height: 114, rx: 8, "stroke-width": 1 });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, fill).dataset.symbolLead = "top";
       line(part, x, end, x, end + leadLength, fill).dataset.symbolLead = "bottom";
       line(part, x, end + leadLength, x, bottom);
       svg(part, "rect", { x: x - bodyWidth / 2, y: top, width: bodyWidth, height: bodyHeight, rx: symbols.radius, fill: "#13202c", stroke: fill, "data-resistor-core": "" });
-      const size = symbols === compactSymbols ? 12 : 15, lines = wrapLabel(partLabel(node), symbols === compactSymbols ? 10 : 12);
+      const compact = symbols === compactSymbols, size = compact ? 12 : 15, lines = wrapLabel(partLabel(node), compact ? 10 : 12);
       drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, lines, x + 24, middle - 3 - (lines.length - 1) * (size + 3),
         { size, fill, target: node.id });
-      text(part, x + 24, middle + 17, format(value, "Ω"), symbols === compactSymbols ? 12 : 14, fill,
-        { "data-resistor-value": "", "data-value-role": role });
-      drawStress(part, node, x + 24, middle + 34, width - 62, symbols === compactSymbols);
+      const caption = partCaption(node), formatted = format(value, "Ω"), valueX = x + 24, fieldWidth = width - 62;
+      fitText(text(host, valueX, middle + 17, formatted, compact ? 12 : 14, fill,
+        { "data-resistor-value": node.id, "data-value-role": role, "data-network-context": node.id,
+          ...(calculated ? {} : editableField("resistance", `resistance-${node.id}`, `${caption} resistance`, formatted)) }), fieldWidth);
+      const footprint = svg(host, "g", { ...editableField("partPackage", `package-${node.id}`, `${caption} package`, node.package),
+        "data-network-context": node.id });
+      const packageSize = compact ? 12 : 13;
+      const packageLabel = text(footprint, valueX, middle + 33, "Package", packageSize, color.muted);
+      fitText(text(footprint, valueX + fieldWidth, middle + 33, node.package, packageSize, color.known,
+        { "text-anchor": "end", "data-resistor-package": node.id }), fieldWidth - packageLabel.getComputedTextLength() - 6);
+      drawStress(part, node, valueX, middle + 50, fieldWidth, compact);
       return;
     }
     if (node.kind === "series") {
@@ -453,12 +471,15 @@
 
   function drawAddedSource(host, source, x, y, top, bottom, symbols, topColor, textWidth) {
     const key = sourceKey(source), fill = color[valueRole(source.value, false)];
-    const group = drawSourceSymbol(host, { key, kind: source.kind, fill }, x, y, top, bottom, symbols, topColor);
+    const branch = svg(host, "g");
+    const group = drawSourceSymbol(branch, { key, kind: source.kind, fill }, x, y, top, bottom, symbols, topColor);
     const labelX = x + symbols.source + 8;
     text(group, labelX, y - 6, key, 13, fill, { "font-weight": 700 });
-    const value = text(group, labelX, y + 14, format(source.value, units[source.kind]), 14, fill, { "data-added-source-value": "" });
-    fitText(value, textWidth);
-    return group;
+    const value = format(source.value, units[source.kind]);
+    fitText(text(branch, labelX, y + 14, value, 14, fill,
+      { ...editableField("addedSource", `value-${key}`, `${key} ${sourceKind(source).toLowerCase()}`, value), "data-added-source-value": key,
+        "data-network-context": "source", "data-source-key": key }), textWidth);
+    return branch;
   }
 
   function rightEdge(element) {
@@ -469,7 +490,7 @@
   function drawCircuit() {
     const focusedControl = document.activeElement?.dataset.schematicControl;
     const compact = mobile.matches && !desktopView, symbols = compact ? compactSymbols : fullSymbols;
-    const columnWidth = compact ? 160 : 182, box = layout(state.network, columnWidth, compact ? 132 : 142);
+    const columnWidth = compact ? 160 : 182, box = layout(state.network, columnWidth, compact ? 154 : 164);
     const series = sources().filter(source => source.kind === "voltage");
     const parallel = sources().filter(source => source.kind === "current");
     const radius = compact ? 44 : 52, railLeft = compact ? 63 : 81, sourceTextWidth = compact ? 92 : 102;
@@ -550,8 +571,9 @@
       text(schematic, tileX + 9, tileY + 16, label, compact ? 14 : 12, color.muted);
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
       const fill = role === "derived" ? color.text : color[role];
+      const currentInput = field === "current" && (!Number.isFinite(result.current) || result.current === 0);
       text(schematic, tileX + 9, tileY + 35, format(values[field], unit), compact ? 19 : 16, fill,
-        { "data-operating-value": field, "data-value-role": role });
+        { "data-operating-value": field, "data-value-role": role, ...(currentInput ? quantityTextAttributes("current", values.current, role) : {}) });
     });
     [["Known", "known", 16], ["Calculated", "calculated", 104], ["Missing", "missing", 230]].forEach(([label, role, keyX]) => {
       dot(schematic, keyX + 4, tileTop + 119, color[role]);
@@ -560,6 +582,7 @@
     text(schematic, 16, height - 11, "Nominal stress · package reference limits", 12, color.muted);
     if (focusedControl) focusControl(focusedControl);
     updateView();
+    positionFieldEditor();
   }
 
   function addRows(table, rows) {
@@ -760,7 +783,7 @@
     const target = anchor.dataset.part ?? anchor.dataset.networkContext;
     constructionTarget = { target, control: anchor.dataset.schematicControl || "source" };
     const sourceMenu = target === "source";
-    const sourceLabel = anchor.closest("[data-added-source]")?.dataset.addedSource || state.sourceLabel || labelDefaults.source;
+    const sourceLabel = anchor.dataset.sourceKey || anchor.closest("[data-added-source]")?.dataset.addedSource || state.sourceLabel || labelDefaults.source;
     byId("constructionTarget").textContent = sourceMenu ? sourceLabel : partCaption(findPart(Number(target)));
     for (const button of constructionMenu.querySelectorAll("button")) button.hidden = button.hasAttribute("data-add-source") !== sourceMenu;
     constructionMenu.hidden = false;
@@ -813,15 +836,102 @@
     openAnnotation(`part-${selectedId}`, () => button.focus({ preventScroll: true }));
   });
 
+  function positionFieldEditor() {
+    if (!fieldEdit) return;
+    const anchor = schematicControl(fieldEdit.key);
+    if (!anchor) { closeFieldEditor(); return; }
+    const bounds = anchor.getBoundingClientRect(), view = window.visualViewport;
+    const left = view?.offsetLeft ?? 0, top = view?.offsetTop ?? 0;
+    const right = left + (view?.width ?? document.documentElement.clientWidth);
+    const bottom = top + (view?.height ?? document.documentElement.clientHeight);
+    const below = bounds.bottom + 5;
+    const editorTop = below + fieldEditor.offsetHeight <= bottom - 8 ? below : bounds.top - fieldEditor.offsetHeight - 5;
+    fieldEditor.style.left = `${Math.max(left + 8, Math.min(bounds.left, right - fieldEditor.offsetWidth - 8))}px`;
+    fieldEditor.style.top = `${Math.max(top + 8, Math.min(editorTop, bottom - fieldEditor.offsetHeight - 8))}px`;
+  }
+
+  function openFieldEditor(control) {
+    closeFieldEditor();
+    const { editQuantity: field, editLabel: label, schematicControl: key } = control.dataset;
+    const isPackage = field === "partPackage", input = byId(field);
+    if (field === "resistance" || isPackage) {
+      const id = Number(control.dataset.networkContext);
+      if (id !== selectedId) selectPart(id);
+    } else if (field === "addedSource") selectAddedSource(control.dataset.sourceKey);
+
+    const heading = byId("schematicFieldName"), active = isPackage ? fieldPackage : fieldValue;
+    heading.textContent = label;
+    heading.htmlFor = active.id;
+    fieldPackage.hidden = !isPackage;
+    fieldValue.hidden = fieldUnit.hidden = isPackage;
+    if (isPackage) {
+      fieldPackage.replaceChildren(...[...input.options].map(option => option.cloneNode(true)));
+      fieldPackage.value = input.value;
+    } else {
+      const unit = byId(`${field}Unit`);
+      fieldUnit.replaceChildren(...[...unit.options].map(option => option.cloneNode(true)));
+      fieldUnit.value = unit.value;
+      fieldValue.value = input.value;
+      fieldValue.removeAttribute("aria-invalid");
+    }
+    byId("schematicFieldError").hidden = true;
+    fieldEdit = { field, key };
+    fieldEditor.hidden = false;
+    positionFieldEditor();
+    active.focus({ preventScroll: true });
+    if (!isPackage) fieldValue.select();
+  }
+
+  function closeFieldEditor(restoreFocus = false) {
+    if (!fieldEdit) return;
+    const { key } = fieldEdit;
+    fieldEdit = null;
+    fieldEditor.hidden = true;
+    if (restoreFocus) focusControl(key);
+  }
+
+  function applyFieldEdit() {
+    if (!fieldEdit) return;
+    const { field, key } = fieldEdit, input = byId(field);
+    if (field === "partPackage") input.value = fieldPackage.value;
+    else {
+      const kind = field === "addedSource" ? selectedSource()?.kind : field;
+      if (!parseInputQuantity(fieldValue.value, kind, fieldUnit.value)) {
+        const error = byId("schematicFieldError");
+        error.textContent = kind === "resistance" ? "Enter a resistance greater than zero." : `Enter a valid value in ${units[kind]}.`;
+        error.hidden = false;
+        fieldValue.setAttribute("aria-invalid", "true");
+        positionFieldEditor();
+        fieldValue.focus({ preventScroll: true });
+        return;
+      }
+      input.value = fieldValue.value;
+      byId(`${field}Unit`).value = fieldUnit.value;
+    }
+    closeFieldEditor();
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    focusControl(key);
+  }
+
+  fieldEditor.addEventListener("submit", event => { event.preventDefault(); applyFieldEdit(); });
+  fieldPackage.addEventListener("change", applyFieldEdit);
+  fieldEditor.addEventListener("keydown", event => {
+    if (event.key === "Escape") { event.preventDefault(); closeFieldEditor(true); }
+  });
+  fieldEditor.addEventListener("focusout", event => {
+    if (event.relatedTarget && !fieldEditor.contains(event.relatedTarget)) closeFieldEditor();
+  });
+  for (const event of ["resize", "scroll"]) window.visualViewport?.addEventListener(event, positionFieldEditor);
+
   function activateSchematicControl(event) {
     const control = event.target.closest("[data-schematic-control]");
     if (!control) return;
     event.preventDefault();
-    if (control.dataset.addedSource) {
+    if (control.dataset.editQuantity) openFieldEditor(control);
+    else if (control.dataset.addedSource) {
       selectAddedSource(control.dataset.addedSource);
       byId("addedSource").focus();
-    } else if (control.dataset.editQuantity) byId(control.dataset.editQuantity).focus();
-    else if (control.dataset.annotation) openAnnotation(control.dataset.annotation, () => focusControl(control.dataset.schematicControl));
+    } else if (control.dataset.annotation) openAnnotation(control.dataset.annotation, () => focusControl(control.dataset.schematicControl));
     else if (control.dataset.networkContext === "source") openConstruction(control);
     else {
       selectPart(Number(control.dataset.part));
@@ -860,9 +970,15 @@
       buttons[event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length].focus();
     }
   });
-  document.addEventListener("pointerdown", event => { if (!constructionMenu.contains(event.target)) closeConstruction(); });
-  document.addEventListener("scroll", event => { if (!constructionMenu.contains(event.target)) closeConstruction(true); }, true);
-  window.addEventListener("resize", () => closeConstruction(true));
+  document.addEventListener("pointerdown", event => {
+    if (!constructionMenu.contains(event.target)) closeConstruction();
+    if (!fieldEditor.contains(event.target)) closeFieldEditor();
+  });
+  document.addEventListener("scroll", event => {
+    if (!constructionMenu.contains(event.target)) closeConstruction(true);
+    positionFieldEditor();
+  }, true);
+  window.addEventListener("resize", () => { closeConstruction(true); positionFieldEditor(); });
 
   const toggleView = byId("viewToggle");
   function updateView() {
@@ -911,6 +1027,7 @@
     capture: () => result.error || draft.size ? null : { title: state.title || titleDefault, summary: `${format(result.voltage, "V")} · ${format(result.current, "A")} · ${format(result.resistance, "Ω")}`, state },
     restore(snapshot) {
       if (!validSnapshot(snapshot)) throw new Error("The saved circuit is invalid.");
+      closeFieldEditor();
       state = snapshot; draft.clear();
       const allParts = parts(state.network);
       selectedId = state.target ?? allParts[0].id;
@@ -919,7 +1036,7 @@
       for (const source of sources()) nextSourceId[source.kind] = Math.max(nextSourceId[source.kind], source.id + 1);
       syncControls(); refresh();
     },
-    canCollapse: () => !annotationEditor.open && constructionMenu.hidden && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
+    canCollapse: () => !annotationEditor.open && !fieldEdit && constructionMenu.hidden && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
   });
 
   const logoReady = fetch("../logo.png").then(response => {
@@ -959,7 +1076,7 @@
       snapshot.removeAttribute("id"); snapshot.setAttribute("role", "img"); snapshot.setAttribute("aria-label", state.title || titleDefault);
       for (const hit of snapshot.querySelectorAll(".part-hit, .control-hit")) hit.remove();
       for (const control of snapshot.querySelectorAll("[data-schematic-control], [data-network-context]")) {
-        for (const attr of ["data-schematic-control", "data-edit-quantity", "data-part", "data-annotation", "data-network-context", "role", "tabindex", "aria-pressed", "aria-label", "aria-haspopup"]) control.removeAttribute(attr);
+        for (const attr of ["data-schematic-control", "data-edit-quantity", "data-edit-label", "data-source-key", "data-part", "data-annotation", "data-network-context", "role", "tabindex", "aria-pressed", "aria-label", "aria-haspopup"]) control.removeAttribute(attr);
       }
       const width = Number(snapshot.getAttribute("width")), height = Number(snapshot.getAttribute("height"));
       const imageFormat = byId("imageFormat").value;
