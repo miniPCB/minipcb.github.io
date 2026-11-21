@@ -45,6 +45,15 @@
     const hasRole = (element, role) => element.getAttribute("data-value-role") === role && element.getAttribute("fill") === {
       known: "#6ee7ac", calculated: "#ff8e8e", missing: "#ffcf73"
     }[role];
+    const operatingPaletteMatches = (root = doc) => [
+      ["voltage", "#75d5ff", "#12354b"], ["current", "#81e6b8", "#143d35"],
+      ["resistance", "#ffd083", "#44331c"], ["power", "#d0acff", "#2c2348"]
+    ].every(([field, accent, background]) => {
+      const card = root.querySelector(`[data-operating-point="${field}"]`);
+      const [panel, bar, label] = card?.children || [];
+      return panel?.getAttribute("fill") === background && bar?.getAttribute("fill") === accent
+        && label?.getAttribute("fill") === accent;
+    });
     const circuitGeometry = () => [get("schematic").getAttribute("viewBox"),
       ...[...doc.querySelectorAll("#schematic line, [data-voltage-source], [data-resistor-core], [data-current-value]")].map(node =>
         ["x", "y", "width", "height", "x1", "x2", "y1", "y2", "cx", "cy", "r"].map(attribute => node.getAttribute(attribute)).join())].join(" ");
@@ -160,6 +169,7 @@
     check(choices[0].getAttribute("aria-pressed") === "true" && hasRole(circuitQuantity("voltage"), "known")
       && hasRole(circuitQuantity("current"), "calculated") && hasRole(operatingValue("current"), "calculated")
       && hasRole(resistorValue(1), "known"), "Find Current highlights the same calculated quantity on the diagram and operating point");
+    check(operatingPaletteMatches(), "the operating-point cards use the divider palette for backgrounds, labels and accent bars");
     check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12 V" && !schematicInput("current"),
       "the known source voltage is a native text field and calculated current stays read-only");
     const sourceInput = schematicInput("voltage");
@@ -170,7 +180,8 @@
     mode("voltage");
     check(choices[1].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
       && hasRole(circuitQuantity("voltage"), "calculated") && hasRole(circuitQuantity("current"), "known")
-      && hasRole(operatingValue("voltage"), "calculated"), "Find Voltage changes value roles while retaining the same circuit geometry");
+      && hasRole(operatingValue("voltage"), "calculated") && operatingPaletteMatches(),
+      "Find Voltage changes value roles while retaining the circuit geometry and card colors");
     const currentInput = schematicInput("current");
     check(currentInput.value === "12 mA" && !schematicInput("voltage"), "Find Voltage switches the directly editable quantity to current");
     enterValue("current", "0");
@@ -304,6 +315,7 @@
     check(centeredCurrent("6 mA") && balancedCurrent(), "the compact mixed network preserves equal horizontal clearance for the arrow");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
     check(resistorReadingsFit(), "compact resistor power and stress rows fit their information blocks");
+    check(operatingPaletteMatches(), "the compact schematic uses the same card palette as the full schematic");
     const compactPackage = schematicInput("package-3"), compactBounds = compactPackage.getBoundingClientRect();
     check(compactPackage.value === "1206" && compactBounds.left >= 0 && compactBounds.right <= frame.clientWidth
       && compactBounds.height > 0, "the native package dropdown fits inside the compact phone schematic");
@@ -339,7 +351,8 @@
       && !exported.querySelector("[data-schematic-control], [data-field-readout], [data-part], foreignObject, input, select, .part-hit, .control-hit")
       && exported.querySelector('[data-resistor-package="3"]').textContent === "1206", "exports embed the logo and restore static text in place of native controls");
     check(hasRole(exported.querySelector('[data-operating-value="resistance"]'), "calculated")
-      && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known"), "SVG downloads preserve the live mode’s value roles");
+      && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known")
+      && operatingPaletteMatches(exported), "SVG downloads preserve both the value roles and operating-point palette");
     check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
       && exported.querySelector("#currentArrowHead") && exported.querySelector("[data-current-value]")?.textContent === "6 mA", "the export retains the round path, embedded arrowhead, and centered value");
     check(exported.querySelectorAll('[data-resistor-stress][data-stress-basis="nominal"]').length === 3

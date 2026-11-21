@@ -666,20 +666,27 @@
       { size: compact ? 12 : 16, fill: color.net, weight: 400 });
     drawNetwork(drawing, box, x, networkY, symbols, topColor);
 
-    const tiles = [[series.length || kind === "current" ? "Load voltage" : "Voltage", "voltage", "V"],
-      [parallel.length ? "Load current" : "Current", "current", "A"], ["Resistance", "resistance", "Ω"], ["Total power", "power", "W"]];
+    const tiles = [
+      [series.length || kind === "current" ? "Load voltage" : "Voltage", "voltage", "V", "#75d5ff", "#12354b"],
+      [parallel.length ? "Load current" : "Current", "current", "A", "#81e6b8", "#143d35"],
+      ["Resistance", "resistance", "Ω", "#ffd083", "#44331c"],
+      ["Total power", "power", "W", "#d0acff", "#2c2348"]
+    ];
     const tileWidth = (width - 42) / 2;
-    tiles.forEach(([label, field, unit], index) => {
+    tiles.forEach(([label, field, unit, accent, background], index) => {
       const tileX = 16 + index % 2 * (tileWidth + 10), tileY = tileTop + Math.floor(index / 2) * 61;
-      svg(artwork, "rect", { x: tileX, y: tileY, width: tileWidth, height: 54, rx: 6, fill: "#152635", stroke: "#304c61" });
-      text(artwork, tileX + 9, tileY + 16, label, compact ? 14 : 12, color.muted);
+      const tile = svg(artwork, "g", { "data-operating-point": field });
+      svg(tile, "rect", { x: tileX, y: tileY, width: tileWidth, height: 54, rx: 8, fill: background });
+      svg(tile, "rect", { x: tileX, y: tileY + 9, width: 4, height: 36, rx: 2, fill: accent });
+      const labelX = tileX + 14;
+      text(tile, labelX, tileY + 16, label, compact ? 14 : 13, accent);
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
       const fill = role === "derived" ? color.text : color[role];
       const quantityInput = kind === "current" ? field === "voltage"
         : field === "current" && (!Number.isFinite(result.current) || result.current === 0);
-      const value = text(artwork, tileX + 9, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
+      const value = text(tile, labelX, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
         { "data-operating-value": field, "data-value-role": role, ...(quantityInput ? { "data-circuit-quantity": field } : {}) });
-      if (quantityInput) drawQuantityField(value, field, { x: tileX + 9, y: tileY + 22, width: Math.min(118, tileWidth - 18), height: 26 });
+      if (quantityInput) drawQuantityField(value, field, { x: labelX, y: tileY + 22, width: Math.min(118, tileWidth - 28), height: 26 });
     });
     [["Known", "known", 16], ["Calculated", "calculated", 104], ["Missing", "missing", 230]].forEach(([label, role, keyX]) => {
       dot(artwork, keyX + 4, tileTop + 139, color[role]);
