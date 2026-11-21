@@ -71,12 +71,21 @@
         && value.getAttribute("text-anchor") === "middle" && value.getAttribute("dominant-baseline") === "central"
         && Math.abs(Number(value.getAttribute("x")) - centerX) < .01 && Math.abs(Number(value.getAttribute("y")) - centerY) < .01;
     };
-    const clearanceForCurrent = () => {
+    const balancedCurrent = () => {
       const arc = currentArc(), bounds = arc.getBBox(), [topRail, bottomRail] = arc.parentElement.parentElement.children;
-      const source = annotation("source").getBBox();
-      const firstPart = Math.min(...[...doc.querySelectorAll("[data-resistor-core]")].map(core => core.getBBox().x));
+      const caption = annotation("source");
+      const rightEdge = element => { const box = element.getBBox(); return box.x + box.width; };
+      const leftGap = bounds.x - Math.max(rightEdge(caption), rightEdge(caption.nextElementSibling));
+      const firstBlock = Math.min(...[...doc.querySelectorAll("#schematic .part-hit")].map(block => block.getBBox().x));
+      const rightGap = firstBlock - bounds.x - bounds.width;
       return bounds.y > Number(topRail.getAttribute("y1")) && bounds.y + bounds.height < Number(bottomRail.getAttribute("y1"))
-        && bounds.x > source.x + source.width && bounds.x + bounds.width < firstPart;
+        && leftGap > 0 && rightGap > 0 && Math.abs(leftGap - rightGap) < .05;
+    };
+    const groundLabelMatches = (inset, size) => {
+      const symbol = query("[data-ground-symbol]"), label = annotation("ground").querySelector("text");
+      const groundX = Number(symbol.firstElementChild.getAttribute("x1")), lastBarY = Number(symbol.lastElementChild.getAttribute("y1"));
+      return Number(label.getAttribute("x")) - groundX === inset && Number(label.getAttribute("y")) - lastBarY === 2
+        && label.getAttribute("font-size") === String(size) && label.getAttribute("font-weight") === "400" && label.getAttribute("fill") === "#54d2ff";
     };
     const centeredTitle = () => [...annotation("title").querySelectorAll("text")].every(node =>
       node.getAttribute("text-anchor") === "middle" && Number(node.getAttribute("x")) === Number(get("schematic").getAttribute("width")) / 2);
@@ -100,11 +109,13 @@
     check(field("resistanceRange") === "990 Ω to 1.01 kΩ", "default tolerance produces a resistance interval");
     check(symbolMatches(20, 52, 3), "full resistor body, stroke and leads match the voltage divider proportions");
     check(query('[data-ground-symbol] [data-symbol-lead="ground"]').getAttribute("x1") === query('[data-voltage-source]').getAttribute("cx"), "ground is centered directly below the source");
+    check(groundLabelMatches(28, 16), "the full-size ground label matches the divider placement and type style");
     check(!memory.open && tab.getAttribute("aria-expanded") === "false", "the side drawers start collapsed");
     check(entries().length === 1 && localStorage.getItem("minipcb-divider-memory-v1") === divider, "history has an independent Original state");
     const originalId = entries()[0].id;
     check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
-    check(centeredCurrent("12 mA") && clearanceForCurrent(), "the round arrow surrounds the current value and clears the circuit wires and symbols");
+    check(centeredCurrent("12 mA") && balancedCurrent(), "the round arrow has equal clear space on both sides");
+    const originalArrowX = query("[data-current-value]").getAttribute("x");
     check(centeredTitle(), "the default circuit title is centered in the frame");
     keypress(annotation("title"), "Enter");
     check(get("annotationEditor").open && doc.activeElement === get("annotationInput"), "the schematic title is keyboard-accessible and focuses its editor");
@@ -113,6 +124,7 @@
     edit("title", "Bench circuit with a centered editable title that wraps on phones");
     edit("source", "Bench supply"); edit("ground", "Signal ground"); edit("part-1", "Reference load");
     check(annotationText("source") === "Bench supply" && annotationText("ground") === "Signal ground" && annotationText("part-1") === "Reference load", "source, ground and individual resistor labels can all be edited on the drawing");
+    check(query("[data-current-value]").getAttribute("x") !== originalArrowX && balancedCurrent(), "the arrow recenters when the source caption becomes wider");
     check(field("current") === "12 mA" && get("partSelect").selectedOptions[0].text === "Reference load (R1)", "custom labeling preserves electrical identity and updates the selector");
 
     change("voltage", "10 V"); change("resistance", "2 kΩ");
@@ -187,7 +199,8 @@
     frame.style.width = "390px"; await wait(250);
     check(doc.documentElement.scrollWidth <= frame.clientWidth && !get("viewToggle").hidden, `phone layout fits without page-level horizontal scrolling (${doc.documentElement.scrollWidth}/${frame.clientWidth}px; desktop toggle ${get("viewToggle").hidden ? "hidden" : "visible"})`);
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
-    check(centeredCurrent("6 mA") && clearanceForCurrent(), "the compact mixed network preserves the flow arrow and centered current value");
+    check(centeredCurrent("6 mA") && balancedCurrent(), "the compact mixed network preserves equal horizontal clearance for the arrow");
+    check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
     check(stressBlocksFit(), "compact resistor stress rows fit their information blocks");
     check(centeredTitle() && annotation("title").querySelectorAll("text").length > 1, "long circuit titles wrap and remain centered on phones");
     get("editResistorLabel").click();

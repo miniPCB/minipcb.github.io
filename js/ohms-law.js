@@ -14,6 +14,7 @@
   const color = { net: "#54d2ff", known: "#6ee7ac", calculated: "#ff8e8e", missing: "#ffcf73", text: "#eaf6ff", muted: "#a8bece" };
   // Match the voltage divider's full and compact schematic dimensions.
   const leadLength = 20;
+  const resistorBlockInset = 24;
   const fullSymbols = { width: 20, height: 52, radius: 2, stroke: 3, junction: 5, source: 30, ground: [20, 12, 4], groundPitch: 10 };
   const compactSymbols = { width: 14, height: 38, radius: 1, stroke: 2.5, junction: 4, source: 19, ground: [14, 9, 4], groundPitch: 7 };
   const mobile = matchMedia("(max-width: 780px)");
@@ -253,16 +254,17 @@
     return [...lines, value];
   }
 
-  function drawLabel(host, key, description, lines, x, y, { size, fill, centered = false, target } = {}) {
+  function drawLabel(host, key, description, lines, x, y, { size, fill, centered = false, target, weight = 700 } = {}) {
     const label = svg(host, "g", { ...control(`label-${key}`, `Edit ${description}: ${lines.join(" ")}`),
       "data-annotation": key, "aria-haspopup": "dialog", ...(target == null ? {} : { "data-network-context": target }) });
     const pitch = size + 3, width = Math.max(38, ...lines.map(value => [...value].length * size * .65 + 12));
     svg(label, "rect", { class: "control-hit", x: centered ? x - width / 2 : x - 5, y: y - size,
       width, height: pitch * (lines.length - 1) + size + 6, rx: 4 });
     lines.forEach((value, index) => {
-      const line = text(label, x, y + index * pitch, value, size, fill, { "text-anchor": centered ? "middle" : "start", "font-weight": 700 });
+      const line = text(label, x, y + index * pitch, value, size, fill, { "text-anchor": centered ? "middle" : "start", "font-weight": weight });
       fitText(line, width - 12);
     });
+    return label;
   }
 
   function layout(node, columnWidth, rowHeight) {
@@ -295,7 +297,7 @@
       const top = y + (height - bodyHeight) / 2, end = top + bodyHeight, middle = (top + end) / 2;
       const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. Edit resistor`),
         "data-part": node.id, "aria-pressed": String(node.id === selectedId) });
-      svg(part, "rect", { class: "part-hit", x: x - 24, y: middle - 39, width: width - 10, height: 98, rx: 8, "stroke-width": 1 });
+      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: middle - 39, width: width - 10, height: 98, rx: 8, "stroke-width": 1 });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, role).dataset.symbolLead = "top";
       line(part, x, end, x, end + leadLength, role).dataset.symbolLead = "bottom";
@@ -360,10 +362,9 @@
     const compact = mobile.matches && !desktopView, symbols = compact ? compactSymbols : fullSymbols;
     const columnWidth = compact ? 160 : 182, box = layout(state.network, columnWidth, compact ? 132 : 142);
     const radius = compact ? 44 : 52, sourceLeft = compact ? 63 : 81, sourceTextWidth = compact ? 92 : 102;
-    const currentX = sourceLeft + symbols.source + 8 + sourceTextWidth + 14 + radius;
-    // Leave a clear channel between the source text and the leftmost branch.
-    const leftmostBranch = currentX + radius + 30;
-    const naturalWidth = Math.ceil(leftmostBranch + box.width - columnWidth / 2 + 95);
+    const sourceTextLeft = sourceLeft + symbols.source + 8;
+    const firstBlockLeft = sourceTextLeft + sourceTextWidth + 2 * (radius + 10);
+    const naturalWidth = Math.ceil(firstBlockLeft + resistorBlockInset + box.width - columnWidth / 2 + 95);
     const width = Math.max(naturalWidth, viewport.clientWidth), offset = (width - naturalWidth) / 2;
     const names = wrapLabel(state.title || titleDefault, Math.floor((width - 38) / 13));
     const y = 116 + 23 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15));
@@ -390,7 +391,6 @@
       line(drawing, x, y, x, networkY, topColor);
       line(drawing, x, networkY + box.height, x, bottom);
     }
-    drawCurrent(drawing, currentX + offset, sourceY, radius, result.current);
     const sourceTop = sourceY - symbols.source, sourceBottom = sourceY + symbols.source;
     line(drawing, sourceX, y, sourceX, sourceTop - leadLength, topColor);
     line(drawing, sourceX, sourceBottom + leadLength, sourceX, bottom);
@@ -404,16 +404,23 @@
     text(source, sourceX, sourceY - 2, "+", compact ? 14 : 18, sourceColor, { "text-anchor": "middle" });
     text(source, sourceX, sourceY + (compact ? 11 : 15), "−", compact ? 14 : 18, sourceColor, { "text-anchor": "middle" });
     const sourceLabel = wrapLabel(state.sourceLabel || labelDefaults.source, compact ? 10 : 11);
-    const labelX = sourceX + symbols.source + 8;
-    drawLabel(drawing, "source", "source label", sourceLabel, labelX, sourceY - 6 - (sourceLabel.length - 1) * 16,
+    const labelX = sourceTextLeft + offset;
+    const caption = drawLabel(drawing, "source", "source label", sourceLabel, labelX, sourceY - 6 - (sourceLabel.length - 1) * 16,
       { size: 13, fill: sourceColor, target: "source" });
-    fitText(text(drawing, labelX, sourceY + 14, format(sourceVoltage, "V"), 14), sourceTextWidth);
+    const voltage = text(drawing, labelX, sourceY + 14, format(sourceVoltage, "V"), 14);
+    fitText(voltage, sourceTextWidth);
+    const sourceRight = Math.max(...[caption, voltage].map(element => {
+      const bounds = element.getBBox();
+      return bounds.x + bounds.width;
+    }));
+    drawCurrent(drawing, (sourceRight + firstBlockLeft + offset) / 2, sourceY, radius, result.current);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
     line(ground, groundX, bottom, groundX, bottom + leadLength).dataset.symbolLead = "ground";
     symbols.ground.forEach((half, index) => line(ground, groundX - half, bottom + leadLength + symbols.groundPitch * index, groundX + half, bottom + leadLength + symbols.groundPitch * index));
     drawLabel(drawing, "ground", "ground label", [state.groundLabel || labelDefaults.ground],
-      groundX + symbols.ground[0] + 10, bottom + leadLength + 7, { size: 12, fill: color.net });
+      groundX + (compact ? 20 : 28), bottom + leadLength + (compact ? 16 : 22),
+      { size: compact ? 12 : 16, fill: color.net, weight: 400 });
     drawNetwork(drawing, box, x, networkY, symbols, topColor);
 
     const values = [["Voltage", "voltage", "V"], ["Current", "current", "A"], ["Resistance", "resistance", "Ω"], ["Power", "power", "W"]];
