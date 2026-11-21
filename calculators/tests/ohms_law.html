@@ -40,6 +40,7 @@
     const part = id => query(`#schematic [data-part="${id}"]`);
     const circuitQuantity = field => query(`[data-circuit-quantity="${field}"]`);
     const operatingValue = field => query(`[data-operating-value="${field}"]`);
+    const operatingRange = field => query(`[data-operating-range="${field}"]`)?.textContent;
     const resistorValue = id => query(`[data-resistor-value="${id}"]`);
     const resistorPower = id => query(`[data-resistor-power="${id}"]`).textContent;
     const hasRole = (element, role) => element.getAttribute("data-value-role") === role && element.getAttribute("fill") === {
@@ -103,6 +104,10 @@
     };
     const pickPackage = (id, value) => {
       const input = schematicInput(`package-${id}`);
+      input.value = value; fire(input, "change");
+    };
+    const pickTolerance = (id, value) => {
+      const input = schematicInput(`tolerance-${id}`);
       input.value = value; fire(input, "change");
     };
     const currentArc = () => query("[data-current-direction] > path");
@@ -217,6 +222,24 @@
     change("partPackage", "0805");
     check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "restoring the initial footprint restores its stress values");
     check(field("resistanceRange") === "990 Ω to 1.01 kΩ", "default tolerance produces a resistance interval");
+    const tolerance = schematicInput("tolerance-1");
+    check(tolerance.tagName === "SELECT" && tolerance.selectedOptions[0].textContent === "±1%"
+      && [...tolerance.options].some(option => option.textContent === "±0.1%"), "the schematic uses a native tolerance dropdown");
+    check(operatingRange("current") === "11.881 mA to 12.121 mA" && operatingRange("current") === field("currentRange")
+      && !operatingRange("voltage"), "the current card and characteristics show the same fixed-voltage range");
+    pickTolerance(1, "custom");
+    const customTolerance = get("customTolerance"), toleranceForm = get("toleranceForm");
+    check(get("toleranceDialog").open && customTolerance.value === "1" && tolerance.value === "1",
+      "choosing a custom tolerance opens the current value for editing");
+    customTolerance.value = "100"; toleranceForm.requestSubmit();
+    check(!customTolerance.validity.valid && field("resistanceRange") === "990 Ω to 1.01 kΩ", "an invalid custom tolerance leaves the range intact");
+    customTolerance.value = "3.7"; fire(customTolerance, "input"); toleranceForm.requestSubmit(); await wait(30);
+    check(!get("toleranceDialog").open && tolerance.value === "3.7" && tolerance.selectedOptions[0].textContent === "±3.7%"
+      && doc.activeElement === tolerance && field("resistanceRange") === "963 Ω to 1.037 kΩ",
+      "a valid custom tolerance becomes a selected option and updates the resistance range");
+    pickTolerance(1, "0");
+    check(operatingRange("current") === "12 mA to 12 mA", "an exact resistor gives equal current endpoints");
+    pickTolerance(1, "1");
     check(symbolMatches(20, 52, 3), "full resistor body, stroke and leads match the voltage divider proportions");
     check(query('[data-ground-symbol] [data-symbol-lead="ground"]').getAttribute("x1") === query('[data-voltage-source]').getAttribute("cx"), "ground is centered directly below the source");
     check(groundLabelMatches(28, 16), "the full-size ground label matches the divider placement and type style");
@@ -344,16 +367,19 @@
     check([1, 2, 3].map(id => stress(id, "Pstress")).join() === "5.71%,25.71%,11.43%"
       && [1, 2, 3].map(id => stress(id, "Vstress")).join() === "8.00%,12.00%,8.00%", "each series or parallel resistor uses its own dissipation and absolute drop");
     check(get("schematic").querySelectorAll('circle[r="5"][data-wire-junction][fill="#54d2ff"]').length === 3, "parallel rails and ground have exactly three full-size junctions");
-    enterValue("tolerance-3", "5%"); select(2); pickPackage(3, "1206");
+    pickTolerance(3, "5"); select(2); pickPackage(3, "1206");
     check(field("resistanceRange") === "1.632 kΩ to 1.7009 kΩ" && readings(3).slice(-2).join() === "±5%,1206"
       && readings(2).at(-1) === "0805", "tolerance changes the interval and a package field updates its own resistor");
     check(stress(3, "Pstress") === "6.40%" && stress(3, "Vstress") === "4.00%" && stress(1, "Pstress") === "5.71%", "editing a package updates that resistor’s two stress readings only");
 
     mode("voltage"); change("current", "6 mA");
-    check(field("voltage") === "10 V" && field("voltageRange") === "9.7919 V to 10.205 V", "current-driven mode solves voltage and its tolerance range");
+    check(field("voltage") === "10 V" && field("voltageRange") === "9.7919 V to 10.205 V"
+      && operatingRange("voltage") === field("voltageRange") && !operatingRange("current"),
+      "Find Voltage shows the fixed-current range for the mixed network");
     check(get("schematic").querySelector('line[stroke="#ff8e8e"]'), "the calculated source net is red");
     change("current", "-6 mA");
-    check(field("voltage") === "-10 V" && field("power") === "60 mW" && field("voltageRange") === "-10.205 V to -9.7919 V", "signed current produces correctly ordered ranges and positive dissipation");
+    check(field("voltage") === "-10 V" && field("power") === "60 mW" && operatingRange("voltage") === "-10.205 V to -9.7919 V",
+      "signed current produces correctly ordered ranges and positive dissipation");
     check([1, 2, 3].map(resistorPower).join() === "8 mW,36 mW,16 mW", "reverse polarity retains positive resistor dissipation");
     check(stress(1, "Pstress") === "5.71%" && stress(1, "Vstress") === "8.00%", "reversed polarity leaves both stress percentages nonnegative");
     check(arrowDirection() === -1 && centeredCurrent("-6 mA"), "negative conventional current reverses the sweep and shows the signed value");
@@ -391,6 +417,7 @@
     enterValue("resistance-3", "1 kΩ"); mode("resistance");
     change("current", "0");
     check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("nonzero") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
+    check(operatingRange("current") === "—", "the range card clears with an unsolved circuit");
     check(get("ltspiceDownload").disabled && get("markdownDownload").disabled, "an incomplete circuit cannot produce a simulation or measurement report");
     check(field("voltage") === "10 V" && field("current") === "0 A" && resistorIds.every(id => hasRole(resistorValue(id), "calculated")),
       "an unsolved network leaves the available inputs visible and all calculated values marked");
@@ -495,6 +522,7 @@
       && exported.querySelector('[data-resistor-stress="3"] [data-stress-metric="Vstress"] [data-stress-value]').textContent === "4.00%", "SVG downloads include nominal stress in every resistor block");
     check([1, 2, 3].map(id => exported.querySelector(`[data-resistor-power="${id}"]`).textContent).join() === "8 mW,36 mW,16 mW"
       && exported.querySelector('[data-operating-value="power"]').textContent === "60 mW", "SVG downloads retain each resistor's dissipation and total power");
+    check(exported.querySelector('[data-operating-range="current"]').textContent === field("currentRange"), "SVG downloads retain the displayed tolerance range");
     check(["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains annotation text");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
@@ -581,6 +609,8 @@
     mode("resistance");
     check(field("resistance") === "1.5 kΩ" && resistorValue(1).textContent === "1.5 kΩ" && hasRole(resistorValue(1), "calculated"),
       "Find Resistance uses entered source current and load voltage to solve the selected part");
+    check(operatingRange("voltage") === "-9.09 V to -8.91 V" && field("voltageRange") === operatingRange("voltage"),
+      "for a current source in Find Resistance, the voltage range holds current fixed");
     check(doc.documentElement.scrollWidth <= frame.clientWidth && groundLabelMatches(20, 12), "the replacement symbol keeps the schematic fitted on phones");
     await wait(1100);
     const sourceSnapshot = entries()[0];
@@ -615,7 +645,7 @@
       state: { ...original.state, sources: [{ id: 2, kind: "voltage", value: 3 }, { id: 1, kind: "current", value: .004 }] } });
     history.entries.unshift({ ...original, id: "legacy-resistance-target", savedAt: new Date().toISOString(),
       state: { ...original.state, mode: "resistance", current: .004, target: 2, network: { kind: "series",
-        children: [original.state.network, { ...original.state.network, id: 2 }] } } });
+        children: [{ ...original.state.network, tolerance: 3.7 }, { ...original.state.network, id: 2 }] } } });
     localStorage.setItem(key, JSON.stringify(history));
     const reloaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
     win.location.reload(); await reloaded;
@@ -656,6 +686,8 @@
     check(resistorValue(1).textContent === "1 kΩ" && resistorValue(2).textContent === "2 kΩ"
       && [1, 2].every(id => hasRole(resistorValue(id), "calculated")),
       "recalling an old single-target calculation preserves its solved values in the all-resistor mode");
+    check(schematicInput("tolerance-1").value === "3.7" && field("resistanceRange") === "2.943 kΩ to 3.057 kΩ",
+      "saved custom tolerances are retained and included in the range");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);

@@ -11,11 +11,13 @@
   const constructionMenu = byId("constructionMenu"), annotationEditor = byId("annotationEditor"), annotationInput = byId("annotationInput");
   const frameExportDialog = byId("frameExportDialog");
   const resistanceDialog = byId("calculatedResistanceDialog");
-  let frameExportSnapshot, resistanceEdit;
+  const toleranceDialog = byId("toleranceDialog"), customTolerance = byId("customTolerance");
+  let frameExportSnapshot, resistanceEdit, toleranceEdit;
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
   const prefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
   const units = { voltage: "V", current: "A", resistance: "Ω" };
   const packages = ["0201", "0402", "0603", "0805", "1206", "1210", "2010", "2512", "Through-hole", "Other"];
+  const toleranceChoices = [0, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20];
   const color = { net: "#54d2ff", known: "#6ee7ac", calculated: "#ff8e8e", missing: "#ffcf73", text: "#eaf6ff", muted: "#a8bece" };
   // Match the voltage divider's full and compact schematic dimensions.
   const leadLength = 20;
@@ -245,6 +247,17 @@
     return /^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(amount) && value < 100 ? { value } : null;
   }
 
+  function toleranceOptions(value) {
+    const values = [...new Set([...toleranceChoices, value])].filter(Number.isFinite).sort((a, b) => a - b);
+    const options = values.map(value => new Option(`±${value}%`, value));
+    if (value === null) {
+      const unset = new Option("—", "");
+      unset.disabled = true;
+      options.unshift(unset);
+    }
+    return [...options, new Option("Custom…", "custom")];
+  }
+
   function trackDraft(input, edit) {
     input.addEventListener("input", () => edit(false));
     input.addEventListener("change", () => edit(true));
@@ -373,6 +386,15 @@
       memory?.schedule();
       return;
     }
+    if (kind === "tolerance" && input.value === "custom") {
+      resetSchematicInput(entry);
+      toleranceEdit = entry;
+      customTolerance.value = value ?? "";
+      customTolerance.setCustomValidity("");
+      toleranceDialog.showModal();
+      customTolerance.select();
+      return;
+    }
     const parsed = kind === "tolerance" ? parseTolerance(input.value)
       : selector ? parseInputQuantity(input.value, kind, selector.value)
       ?? (value === null && !input.value.trim() ? { value: null, prefix: selector.value } : null) : { value: input.value };
@@ -406,14 +428,15 @@
     let entry = schematicInputs.get(key);
     if (!entry) {
       const object = svg(inputs, "foreignObject");
-      const input = document.createElement(kind === "package" ? "select" : "input");
+      const dropdown = kind === "package" || kind === "tolerance";
+      const input = document.createElement(dropdown ? "select" : "input");
       input.className = "schematic-input";
       input.dataset.schematicInput = key;
       entry = { key, object, input };
       schematicInputs.set(key, entry);
-      if (kind === "package") {
+      if (dropdown) {
         object.append(input);
-        input.append(...packages.map(pkg => new Option(pkg)));
+        if (kind === "package") input.append(...packages.map(pkg => new Option(pkg)));
         input.addEventListener("change", () => commitSchematicInput(entry));
       } else {
         if (units[kind]) {
@@ -452,9 +475,9 @@
       }
     }
     const { object, input, selector } = entry;
+    if (kind === "tolerance" && entry.value !== value) input.replaceChildren(...toleranceOptions(value));
     const prefix = selector ? inputPrefix(key, value) : "";
-    const fieldText = kind === "package" ? value : Number.isFinite(value)
-      ? selector ? String(Number((value / prefixes[prefix]).toPrecision(15))) : `±${value}%` : "";
+    const fieldText = selector && Number.isFinite(value) ? String(Number((value / prefixes[prefix]).toPrecision(15))) : String(value ?? "");
     Object.assign(entry, { kind, value, write, choose, text: fieldText, prefix, seen: true });
     for (const [attr, dimension] of Object.entries(box)) object.setAttribute(attr, dimension);
     input.setAttribute("aria-label", label);
@@ -727,7 +750,7 @@
     const rowHeight = 2 * (symbols.source + leadLength + 8), seriesHeight = series.length * rowHeight;
     const y = 134 + 24 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15), rowHeight + seriesHeight);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
-    const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 165;
+    const rangeRowHeight = 28, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 165 + rangeRowHeight;
     const x = naturalWidth - rightPadding - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const values = displayValues(), kind = primarySourceKind();
     const sourceCalculated = state.mode === kind;
@@ -797,12 +820,13 @@
       ["Resistance", "resistance", "Ω", "#ffd083", "#44331c"],
       ["Total power", "power", "W", "#d0acff", "#2c2348"]
     ];
-    const tileWidth = (width - 42) / 2;
+    const tileWidth = (width - 42) / 2, interval = loadRange();
     tiles.forEach(([label, field, unit, accent, background], index) => {
-      const tileX = 16 + index % 2 * (tileWidth + 10), tileY = tileTop + Math.floor(index / 2) * 61;
+      const tileX = 16 + index % 2 * (tileWidth + 10), tileY = tileTop + Math.floor(index / 2) * (61 + rangeRowHeight);
       const tile = svg(artwork, "g", { "data-operating-point": field });
-      svg(tile, "rect", { x: tileX, y: tileY, width: tileWidth, height: 54, rx: 8, fill: background });
-      svg(tile, "rect", { x: tileX, y: tileY + 9, width: 4, height: 36, rx: 2, fill: accent });
+      const tileHeight = index < 2 ? 54 + rangeRowHeight : 54;
+      svg(tile, "rect", { x: tileX, y: tileY, width: tileWidth, height: tileHeight, rx: 8, fill: background });
+      svg(tile, "rect", { x: tileX, y: tileY + 9, width: 4, height: tileHeight - 18, rx: 2, fill: accent });
       const labelX = tileX + 14;
       text(tile, labelX, tileY + 16, label, compact ? 14 : 13, accent);
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
@@ -811,8 +835,12 @@
       const value = text(tile, labelX, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
         { "data-operating-value": field, "data-value-role": role, ...(quantityInput ? { "data-circuit-quantity": field } : {}) });
       if (quantityInput) drawQuantityField(value, field, { x: labelX, y: tileY + 22, width: Math.min(118, tileWidth - 28), height: 26 });
+      if (field === interval.field) {
+        text(tile, labelX, tileY + 58, `Range at fixed ${interval.fixed}`, 12, accent);
+        fitText(text(tile, labelX, tileY + 73, interval.text, 14, color.text, { "data-operating-range": field }), tileWidth - 28);
+      }
     });
-    const legend = svg(artwork, "g", { transform: `translate(16 ${tileTop + 126})`, "data-solve-legend": "", role: "group",
+    const legend = svg(artwork, "g", { transform: `translate(16 ${tileTop + 126 + rangeRowHeight})`, "data-solve-legend": "", role: "group",
       "aria-label": "Circuit color key, green for known values and red for calculated values" });
     for (const [x, label, role, background, badgeWidth] of [[0, "Known", "known", "#173b31", 86], [94, "Calculated", "calculated", "#462b32", 110]]) {
       svg(legend, "rect", { x, y: 0, width: badgeWidth, height: 28, rx: 8, fill: background });
@@ -845,6 +873,14 @@
     return `${format(lower, unit)} to ${format(upper, unit)}`;
   }
 
+  function loadRange() {
+    const { mode } = state, { range, current, voltage } = result;
+    const voltageVaries = mode === "voltage" || (mode === "resistance" && primarySourceKind() === "current");
+    const field = voltageVaries ? "voltage" : "current", fixed = voltageVaries ? "current" : "voltage";
+    const endpoints = range?.map(resistance => voltageVaries ? current * resistance : voltage / resistance);
+    return { field, fixed, text: rangeText(endpoints, units[field]) };
+  }
+
   function renderCharacteristics() {
     const { voltage, current, resistance, power } = displayValues(), { range, readings } = result;
     const extras = sources(), hasSeries = extras.some(source => source.kind === "voltage"), hasParallel = extras.some(source => source.kind === "current");
@@ -864,8 +900,8 @@
       rows.push([currentDriven ? "Main source current" : "Voltage-source branch current", format(mainCurrent, "A"), currentDriven ? "mainCurrent" : "voltageBranchCurrent"]);
     }
     for (const source of extras) rows.push([`${sourceKey(source)} · ${sourceKind(source).toLowerCase()}`, format(source.value, units[source.kind]), sourceKey(source)]);
-    if (state.mode === "voltage") rows.push(["Voltage range at fixed current", rangeText(range?.map(value => current * value), "V"), "voltageRange"]);
-    else rows.push(["Current range at fixed voltage", rangeText(range?.map(value => voltage / value), "A"), "currentRange"]);
+    const interval = loadRange();
+    rows.push([`${modes[interval.field]} range at fixed ${interval.fixed}`, interval.text, `${interval.field}Range`]);
     addRows(byId("characteristicsTable"), rows);
     copyRows = [["Characteristic", "Value"], ...rows.map(([label, value]) => [label, value])];
 
@@ -1025,6 +1061,25 @@
     part.tolerance = tolerance;
     toleranceInput.setAttribute("aria-invalid", String(tolerance === null));
     finishEdit(toleranceInput, commit, changed);
+  });
+  customTolerance.addEventListener("input", () => customTolerance.setCustomValidity(""));
+  byId("toleranceForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const parsed = parseTolerance(customTolerance.value);
+    if (!parsed) {
+      customTolerance.setCustomValidity("Enter a tolerance from 0% up to, but below, 100%.");
+      customTolerance.reportValidity();
+      return;
+    }
+    toleranceEdit.write(parsed.value);
+    refresh();
+    toleranceDialog.close();
+  });
+  byId("toleranceCancel").addEventListener("click", () => toleranceDialog.close());
+  toleranceDialog.addEventListener("close", () => {
+    if (toleranceDialog.open || !toleranceEdit) return;
+    toleranceEdit.input.focus({ preventScroll: true });
+    toleranceEdit = null;
   });
   function addResistor(kind, target) {
     const part = newPart(nextId++);
@@ -1219,7 +1274,7 @@
   byId("characteristicsClose").addEventListener("click", () => openCharacteristics(false, true));
   document.addEventListener("keydown", event => {
     const inCharacteristics = event.target.closest?.("#characteristicsDrawer, #characteristicsToggle");
-    if (event.key === "Escape" && !annotationEditor.open && !resistanceDialog.open && constructionMenu.hidden && !characteristics.inert
+    if (event.key === "Escape" && !annotationEditor.open && !resistanceDialog.open && !toleranceDialog.open && constructionMenu.hidden && !characteristics.inert
       && (!memoryPanel.open || inCharacteristics) && !event.defaultPrevented && byId("memoryMenu").hidden) {
       event.preventDefault(); openCharacteristics(false, true);
     }
@@ -1255,7 +1310,7 @@
       for (const source of sources()) nextSourceId[source.kind] = Math.max(nextSourceId[source.kind], source.id + 1);
       syncControls(); refresh();
     },
-    canCollapse: () => !annotationEditor.open && !resistanceDialog.open && !inputs.contains(document.activeElement) && constructionMenu.hidden
+    canCollapse: () => !annotationEditor.open && !resistanceDialog.open && !toleranceDialog.open && !inputs.contains(document.activeElement) && constructionMenu.hidden
       && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
   });
 
