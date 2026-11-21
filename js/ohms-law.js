@@ -737,10 +737,11 @@
     const series = sources().filter(source => source.kind === "voltage");
     const parallel = sources().filter(source => source.kind === "current");
     const radius = compact ? 57 : 62, railLeft = compact ? 63 : 81, sourceTextWidth = compact ? 106 : 116;
+    const instrumentClearance = compact ? 26 : 32;
     const branchWidth = symbols.source + 8 + sourceTextWidth + 32;
     const sourceLeft = railLeft + branchWidth * parallel.length;
     const sourceTextLeft = sourceLeft + symbols.source + 8;
-    const firstBlockLeft = sourceTextLeft + sourceTextWidth + 2 * (radius + 10);
+    const firstBlockLeft = sourceTextLeft + sourceTextWidth + 2 * (radius + instrumentClearance);
     const rightPadding = columnWidth / 2 - 12;
     const naturalWidth = Math.ceil(firstBlockLeft + resistorBlockInset + box.width - columnWidth / 2 + rightPadding);
     const width = Math.max(naturalWidth, viewport.clientWidth), offset = (width - naturalWidth) / 2;
