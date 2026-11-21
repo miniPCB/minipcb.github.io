@@ -41,6 +41,7 @@
     const circuitQuantity = field => query(`[data-circuit-quantity="${field}"]`);
     const operatingValue = field => query(`[data-operating-value="${field}"]`);
     const resistorValue = id => query(`[data-resistor-value="${id}"]`);
+    const resistorPower = id => query(`[data-resistor-power="${id}"]`).textContent;
     const hasRole = (element, role) => element.getAttribute("data-value-role") === role && element.getAttribute("fill") === {
       known: "#6ee7ac", calculated: "#ff8e8e", missing: "#ffcf73"
     }[role];
@@ -50,12 +51,14 @@
     const stress = (id, metric) => part(id).querySelector(`[data-stress-metric="${metric}"] [data-stress-value]`).textContent;
     const reportedStress = (id, metric) => [...query(`[data-report-id="${id}"] table`).rows]
       .find(row => row.cells[0].textContent === `${metric} (nominal)`).cells[1].textContent;
-    const stressBlocksFit = () => [...doc.querySelectorAll("[data-resistor-stress]")].every(group => {
+    const resistorReadingsFit = () => [...doc.querySelectorAll("[data-resistor-stress]")].every(group => {
       const bounds = group.getBBox(), block = group.parentElement.querySelector(".part-hit").getBBox();
-      return bounds.x + bounds.width < block.x + block.width && bounds.y + bounds.height < block.y + block.height
-        && [...group.children].every(row => {
+      const powerRow = group.previousElementSibling, powerBounds = powerRow.getBBox();
+      return powerBounds.y + powerBounds.height < bounds.y && bounds.y + bounds.height < block.y + block.height
+        && [powerRow, ...group.children].every(row => {
           const label = row.firstElementChild.getBBox();
-          return label.x + label.width < row.querySelector("[data-stress-value]").getBBox().x;
+          const value = row.children[1].getBBox();
+          return label.x + label.width < value.x && value.x + value.width < block.x + block.width;
         });
     });
     const annotation = name => query(`[data-annotation="${name}"]`);
@@ -122,6 +125,8 @@
     const memory = get("calculatorMemory"), tab = get("characteristicsToggle");
 
     check(field("current") === "12 mA" && field("power") === "144 mW", "default circuit calculates current and power");
+    check(resistorPower(1) === "144 mW" && operatingValue("power").textContent === "144 mW"
+      && operatingValue("power").previousElementSibling.textContent === "Total power", "the resistor and total readings match for a single load");
     check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "default resistor uses independent 140 mW and 50 V references");
     check(reportedStress(1, "Pstress") === "102.86%" && reportedStress(1, "Vstress") === "24.00%", "characteristics reports the same nominal stresses as the schematic");
     check(schematicInput("package-1").tagName === "SELECT" && schematicInput("package-1").value === "0805",
@@ -132,7 +137,8 @@
     pickPackage(1, "0402");
     check(stress(1, "Pstress") === "288.00%" && stress(1, "Vstress") === "40.00%", "footprint changes update both package denominators");
     change("partPackage", "Through-hole");
-    check(stress(1, "Pstress") === "—" && stress(1, "Vstress") === "—" && field("power") === "144 mW", "unrated footprints leave stress unassessed while keeping the operating point");
+    check(stress(1, "Pstress") === "—" && stress(1, "Vstress") === "—" && resistorPower(1) === "144 mW",
+      "dissipation remains available for an unrated footprint");
     change("partPackage", "0805");
     check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "restoring the initial footprint restores its stress values");
     check(field("resistanceRange") === "990 Ω to 1.01 kΩ", "default tolerance produces a resistance interval");
@@ -209,6 +215,7 @@
     fire(resistanceInput, "blur");
     check(get("resistance").value === "2" && get("resistanceUnit").value === "k" && field("current") === "5 mA",
       "leaving a resistance field commits its value and synchronizes the multiplier");
+    check(resistorPower(1) === "50 mW", "a schematic resistance edit updates its dissipation");
     check(rightClick(part(1).querySelector("[data-resistor-core]")) && !menu.hidden && get("constructionTarget").textContent === "Reference load (R1)", "right-clicking a resistor body opens its construction menu");
     check(visibleMenuActions().join() === resistorActions, "the resistor context menu offers only resistor actions");
     const menuBox = menu.getBoundingClientRect();
@@ -221,11 +228,14 @@
     check(!menu.hidden && doc.activeElement.dataset.connect === "series", "Shift+F10 opens the same menu from the keyboard");
     useMenu("series");
     check(part(1) && part(2) && field("resistance") === "3 kΩ" && doc.activeElement === part(2), "adding in series through the menu grows the circuit and focuses the new part");
+    check(resistorPower(1) === "22.222 mW" && resistorPower(2) === "11.111 mW", "series dissipation reflects each resistance at the shared current");
     part(1).dispatchEvent(new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     check(get("partSelect").value === "1" && doc.activeElement === get("resistance"), "SVG resistor is keyboard-operable and opens its editor");
     rightClick(annotation("part-1").querySelector("text")); useMenu("parallel");
     check(part(3) && field("resistance") === "1.6667 kΩ" && field("current") === "6 mA", "adding a parallel resistor to one part produces a mixed circuit");
     check(readings(1).slice(1, 4).join() === "4 V,2 mA,8 mW" && readings(2).slice(1, 4).join() === "6 V,6 mA,36 mW" && readings(3).slice(1, 4).join() === "4 V,4 mA,16 mW", "mixed-circuit readings obey voltage, current and power conservation");
+    check([1, 2, 3].map(resistorPower).join() === "8 mW,36 mW,16 mW" && operatingValue("power").textContent === "60 mW",
+      "mixed-circuit blocks report distinct powers that sum to the total");
     check([1, 2, 3].map(id => stress(id, "Pstress")).join() === "5.71%,25.71%,11.43%"
       && [1, 2, 3].map(id => stress(id, "Vstress")).join() === "8.00%,12.00%,8.00%", "each series or parallel resistor uses its own dissipation and absolute drop");
     check(get("schematic").querySelectorAll('circle[r="5"][data-wire-junction][fill="#54d2ff"]').length === 3, "parallel rails and ground have exactly three full-size junctions");
@@ -239,10 +249,12 @@
     check(get("schematic").querySelector('line[stroke="#ff8e8e"]'), "the calculated source net is red");
     change("current", "-6 mA");
     check(field("voltage") === "-10 V" && field("power") === "60 mW" && field("voltageRange") === "-10.205 V to -9.7919 V", "signed current produces correctly ordered ranges and positive dissipation");
+    check([1, 2, 3].map(resistorPower).join() === "8 mW,36 mW,16 mW", "reverse polarity retains positive resistor dissipation");
     check(stress(1, "Pstress") === "5.71%" && stress(1, "Vstress") === "8.00%", "reversed polarity leaves both stress percentages nonnegative");
     check(arrowDirection() === -1 && centeredCurrent("-6 mA"), "negative conventional current reverses the sweep and shows the signed value");
     change("current", "0");
-    check(field("voltage") === "0 V" && field("power") === "0 W", "zero current gives a valid zero-voltage operating point");
+    check(field("voltage") === "0 V" && field("power") === "0 W" && [1, 2, 3].every(id => resistorPower(id) === "0 W"),
+      "zero current gives zero dissipation for every resistor");
     check(stress(1, "Pstress") === "0.00%" && stress(1, "Vstress") === "0.00%", "a valid zero operating point displays zero stress for a rated resistor");
     check(arrowDirection() === 0, "zero current has no directional arrow");
     change("current", "6 mA"); select(1); mode("resistance");
@@ -256,7 +268,8 @@
     change("current", "10mA");
     check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("cannot reach") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
     check(field("voltage") === "10 V" && field("current") === "10 mA" && hasRole(resistorValue(3), "calculated"), "an unsolved resistance leaves available inputs visible and the target marked");
-    check(stress(3, "Pstress") === "—" && stress(3, "Vstress") === "—", "an invalid operating point clears each stress result");
+    check(stress(3, "Pstress") === "—" && stress(3, "Vstress") === "—" && [1, 2, 3].every(id => resistorPower(id) === "—"),
+      "an invalid operating point clears dissipation and stress readings");
     check(arrowDirection() === 0, "a failed solve clears the current arrow");
     change("current", "6mA");
     await wait(1100);
@@ -290,7 +303,7 @@
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
     check(centeredCurrent("6 mA") && balancedCurrent(), "the compact mixed network preserves equal horizontal clearance for the arrow");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
-    check(stressBlocksFit(), "compact resistor stress rows fit their information blocks");
+    check(resistorReadingsFit(), "compact resistor power and stress rows fit their information blocks");
     const compactPackage = schematicInput("package-3"), compactBounds = compactPackage.getBoundingClientRect();
     check(compactPackage.value === "1206" && compactBounds.left >= 0 && compactBounds.right <= frame.clientWidth
       && compactBounds.height > 0, "the native package dropdown fits inside the compact phone schematic");
@@ -331,6 +344,8 @@
       && exported.querySelector("#currentArrowHead") && exported.querySelector("[data-current-value]")?.textContent === "6 mA", "the export retains the round path, embedded arrowhead, and centered value");
     check(exported.querySelectorAll('[data-resistor-stress][data-stress-basis="nominal"]').length === 3
       && exported.querySelector('[data-resistor-stress="3"] [data-stress-metric="Vstress"] [data-stress-value]').textContent === "4.00%", "SVG downloads include nominal stress in every resistor block");
+    check([1, 2, 3].map(id => exported.querySelector(`[data-resistor-power="${id}"]`).textContent).join() === "8 mW,36 mW,16 mW"
+      && exported.querySelector('[data-operating-value="power"]').textContent === "60 mW", "SVG downloads retain each resistor's dissipation and total power");
     check(["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains annotation text");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 

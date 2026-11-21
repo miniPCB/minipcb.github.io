@@ -452,13 +452,14 @@
     const { node, width, height, children } = box, bottom = y + height;
     if (!children) {
       const calculated = node.id === state.target, value = calculated ? result.solved : node.resistance;
+      const power = result.readings?.get(node.id)?.power, dissipation = format(power, "W");
       const role = valueRole(value, calculated), fill = color[role];
       const bodyWidth = symbols.width, bodyHeight = symbols.height;
       const top = y + (height - bodyHeight) / 2, end = top + bodyHeight, middle = (top + end) / 2;
       const action = calculated ? "Select calculated resistor" : "Edit resistor";
-      const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. ${action}`),
+      const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. Power ${power === undefined ? "unavailable" : dissipation}. ${action}`),
         "data-part": node.id, "aria-pressed": String(node.id === selectedId) });
-      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: middle - 53, width: width - 10, height: 130, rx: 8, "stroke-width": 1 });
+      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: middle - 53, width: width - 10, height: 146, rx: 8, "stroke-width": 1 });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, fill).dataset.symbolLead = "top";
       line(part, x, end, x, end + leadLength, fill).dataset.symbolLead = "bottom";
@@ -474,13 +475,18 @@
       if (!calculated) drawField(resistance, { x: valueX, y: middle - 26, width: fieldWidth, height: 25 },
         { key: `resistance-${node.id}`, label: `${caption} resistance`, kind: "resistance", value,
           write(next) { node.resistance = next; selectedId = node.id; syncPart(); } });
-      const footprint = text(host, valueX, middle + 20, node.package, compact ? 12 : 13, color.known,
+      const readingSize = compact ? 12 : 13;
+      const footprint = text(host, valueX, middle + 20, node.package, readingSize, color.known,
         { "data-resistor-package": node.id, "data-network-context": node.id });
       fitText(footprint, fieldWidth);
       drawField(footprint, { x: valueX, y: middle + 5, width: fieldWidth, height: 25 },
         { key: `package-${node.id}`, label: `${caption} package`, kind: "package", value: node.package,
           write(next) { node.package = next; selectedId = node.id; syncPart(); } });
-      drawStress(part, node, valueX, middle + 48, fieldWidth, compact);
+      const powerRow = svg(part, "g"), powerLabel = text(powerRow, valueX, middle + 48, "Power", readingSize, color.muted);
+      fitText(text(powerRow, valueX + fieldWidth, middle + 48, dissipation, readingSize,
+        power === undefined ? color.muted : color.text, { "text-anchor": "end", "data-resistor-power": node.id }),
+        fieldWidth - powerLabel.getComputedTextLength() - 6);
+      drawStress(part, node, valueX, middle + 64, fieldWidth, compact);
       return;
     }
     if (node.kind === "series") {
@@ -584,7 +590,7 @@
     const focusedControl = document.activeElement?.dataset.schematicControl;
     for (const entry of schematicInputs.values()) entry.seen = false;
     const compact = mobile.matches && !desktopView, symbols = compact ? compactSymbols : fullSymbols;
-    const columnWidth = compact ? 176 : 190, box = layout(state.network, columnWidth, compact ? 174 : 184);
+    const columnWidth = compact ? 176 : 190, box = layout(state.network, columnWidth, compact ? 198 : 208);
     const series = sources().filter(source => source.kind === "voltage");
     const parallel = sources().filter(source => source.kind === "current");
     const radius = compact ? 44 : 52, railLeft = compact ? 63 : 81, sourceTextWidth = compact ? 92 : 102;
@@ -661,7 +667,7 @@
     drawNetwork(drawing, box, x, networkY, symbols, topColor);
 
     const tiles = [[series.length || kind === "current" ? "Load voltage" : "Voltage", "voltage", "V"],
-      [parallel.length ? "Load current" : "Current", "current", "A"], ["Resistance", "resistance", "Ω"], ["Power", "power", "W"]];
+      [parallel.length ? "Load current" : "Current", "current", "A"], ["Resistance", "resistance", "Ω"], ["Total power", "power", "W"]];
     const tileWidth = (width - 42) / 2;
     tiles.forEach(([label, field, unit], index) => {
       const tileX = 16 + index % 2 * (tileWidth + 10), tileY = tileTop + Math.floor(index / 2) * 61;
