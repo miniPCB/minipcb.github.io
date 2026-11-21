@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Solve Ohm’s law and analyze editable series and parallel resistor networks.">
+  <title>Ohm’s Law Calculator | miniPCB</title>
+  <link rel="icon" href="../favicon.png" type="image/png">
+  <link rel="stylesheet" href="ohms_law.css">
+  <script src="../js/divider-memory.js?v=20261120-adapter" defer></script>
+  <script src="../js/circuit-image-export.js" defer></script>
+  <script src="../js/ohms-law.js" defer></script>
+</head>
+<body>
+  <nav id="toolNav" class="tool-nav" aria-label="Tool navigation">
+    <a href="../tools.html">Tools</a><span aria-hidden="true">/</span><span aria-current="page">Ohm’s Law</span>
+    <div class="exports">
+      <label class="sr-only" for="imageFormat">Circuit image format</label>
+      <select id="imageFormat"><option value="svg">SVG</option><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="bmp">BMP</option></select>
+      <button id="downloadCircuit" type="button">Download circuit</button>
+    </div>
+  </nav>
+
+  <main id="calculatorWorkspace" class="page">
+    <h1>Ohm’s Law Calculator</h1>
+    <div class="workbench">
+      <section class="controls" aria-labelledby="solveHeading">
+        <h2 id="solveHeading">Solve for</h2>
+        <div class="modes" role="group" aria-labelledby="solveHeading">
+          <button type="button" data-mode="current" aria-pressed="true">Current <span>I</span></button>
+          <button type="button" data-mode="voltage" aria-pressed="false">Voltage <span>V</span></button>
+          <button type="button" data-mode="resistance" aria-pressed="false">Resistance <span>R</span></button>
+        </div>
+        <div id="voltageField" class="field">
+          <label for="voltage">Supply voltage</label>
+          <div class="quantity"><input id="voltage" type="text" inputmode="decimal" autocomplete="off"><select id="voltageUnit" aria-label="Voltage unit"></select></div>
+        </div>
+        <div id="currentField" class="field" hidden>
+          <label for="current">Circuit current</label>
+          <div class="quantity"><input id="current" type="text" inputmode="decimal" autocomplete="off"><select id="currentUnit" aria-label="Current unit"></select></div>
+        </div>
+      </section>
+
+      <section class="diagram" aria-label="Circuit workspace">
+        <div class="diagram-tools">
+          <label for="circuitTitle">Circuit title <input id="circuitTitle" type="text" maxlength="72" placeholder="Ohm’s Law" autocomplete="off"></label>
+          <button id="viewToggle" type="button" aria-controls="schematicViewport" aria-pressed="false" hidden>Desktop view</button>
+        </div>
+        <div id="schematicViewport" class="schematic-viewport" aria-label="Circuit schematic" role="region">
+          <svg id="schematic" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Editable DC circuit"></svg>
+        </div>
+        <p id="calculationStatus" class="notice" role="status" hidden></p>
+        <p id="exportStatus" class="notice" role="status" hidden></p>
+      </section>
+
+      <section id="partEditor" class="controls part-editor" aria-labelledby="networkHeading">
+        <h2 id="networkHeading">Resistor network</h2>
+        <div class="field"><label for="partSelect">Selected resistor</label><select id="partSelect"></select></div>
+        <div class="field">
+          <label for="resistance">Resistance</label>
+          <div id="resistanceField" class="quantity"><input id="resistance" type="text" inputmode="decimal" autocomplete="off"><select id="resistanceUnit" aria-label="Resistance unit"></select></div>
+          <div id="solvedResistance" class="solved-resistance" hidden></div>
+          <button id="solveSelected" type="button" hidden>Solve for this resistor</button>
+        </div>
+        <div class="part-specs">
+          <div class="field"><label for="tolerance">Tolerance (%)</label><input id="tolerance" type="number" min="0" max="100" step="any" inputmode="decimal"></div>
+          <div class="field"><label for="partPackage">Package</label><select id="partPackage"></select></div>
+        </div>
+        <div class="construction" role="group" aria-label="Modify the selected resistor connection">
+          <button type="button" data-add="series">Add in series</button>
+          <button type="button" data-add="parallel">Add in parallel</button>
+          <button id="removePart" type="button">Remove selected</button>
+        </div>
+      </section>
+    </div>
+
+    <details id="calculatorMemory" class="calculator-memory" hidden>
+      <summary class="edge-tab" aria-controls="memoryBody" aria-haspopup="menu" title="Memory actions: right-click, Shift+F10 or long press">
+        <svg class="memory-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+        <span>Memory</span><span id="memoryCount">0</span>
+      </summary>
+      <div id="memoryBody" class="memory-body" role="region" aria-labelledby="memoryHeading">
+        <header class="drawer-header"><h2 id="memoryHeading">Memory</h2><button id="memoryClose" class="close" type="button" aria-label="Close calculation memory">×</button></header>
+        <p id="memoryStatus" class="memory-status" role="status"></p>
+        <ol id="memoryList" class="memory-list" aria-label="Saved calculations"></ol>
+      </div>
+      <div id="memoryResize" role="separator" tabindex="0" aria-label="Memory pane width" aria-orientation="vertical" aria-controls="calculatorMemory" aria-valuemin="220" aria-valuemax="520" aria-valuenow="300"></div>
+    </details>
+  </main>
+
+  <button id="characteristicsToggle" class="edge-tab characteristics-tab" type="button" aria-expanded="false" aria-controls="characteristicsDrawer">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
+    <span>Circuit characteristics</span>
+  </button>
+  <aside id="characteristicsDrawer" class="characteristics-drawer" aria-labelledby="characteristicsHeading" aria-hidden="true" inert>
+    <header class="drawer-header">
+      <h2 id="characteristicsHeading">Circuit characteristics</h2>
+      <button id="copyCharacteristics" type="button" aria-label="Copy characteristics for Excel">Copy</button>
+      <button id="characteristicsClose" class="close" type="button" aria-label="Close circuit characteristics">×</button>
+    </header>
+    <div class="characteristics-scroll" tabindex="0" role="region" aria-label="Circuit measurements">
+      <p id="copyStatus" class="sr-only" role="status"></p>
+      <textarea id="copyFallback" aria-label="Circuit characteristics to copy" rows="6" readonly hidden></textarea>
+      <table id="characteristicsTable" aria-label="Circuit totals and ranges"><tbody></tbody></table>
+      <div id="partCharacteristics"></div>
+    </div>
+  </aside>
+
+  <div id="memoryMenu" class="memory-menu" role="menu" aria-label="Memory actions" hidden>
+    <p id="memoryMenuInfo" hidden></p>
+    <button type="button" role="menuitem" data-memory-action="restore">Restore calculation</button>
+    <button type="button" role="menuitem" data-memory-action="rename">Rename</button>
+    <button id="memorySave" type="button" role="menuitem" data-memory-action="save">Save now</button>
+    <button id="memoryAuto" type="button" role="menuitemcheckbox" aria-checked="true" data-memory-action="auto">Autosave</button>
+    <button type="button" role="menuitem" data-memory-action="delete">Delete calculation</button>
+    <button id="memoryClear" type="button" role="menuitem" data-memory-action="clear">Clear memory</button>
+  </div>
+  <noscript><p class="notice">Enable JavaScript to edit and calculate this circuit.</p></noscript>
+</body>
+</html>

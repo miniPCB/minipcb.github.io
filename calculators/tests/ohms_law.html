@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Ohm’s Law calculator checks</title>
+<style>body{font:16px system-ui}iframe{display:block;width:1280px;height:900px;border:0}pre{white-space:pre-wrap}</style>
+<h1>Ohm’s Law calculator checks</h1>
+<pre id="results">RUNNING</pre>
+<script>
+(async function () {
+  const key = "minipcb-ohms-law-memory-v1", messages = [];
+  const results = document.getElementById("results");
+  if (!["localhost", "127.0.0.1"].includes(location.hostname)) {
+    results.textContent = "Run from a local development server.";
+    return;
+  }
+  const prior = localStorage.getItem(key), divider = localStorage.getItem("minipcb-divider-memory-v1");
+  const frame = document.createElement("iframe");
+  frame.title = "Ohm’s Law calculator under test";
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  function check(condition, description) {
+    if (!condition) throw new Error(description);
+    messages.push(`PASS ${description}`);
+  }
+  try {
+    localStorage.removeItem(key);
+    frame.src = "../ohms_law.html";
+    const loaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
+    document.body.append(frame); await loaded;
+    const win = frame.contentWindow, doc = win.document, get = id => doc.getElementById(id);
+    const query = selector => doc.querySelector(selector);
+    const fire = (element, event) => element.dispatchEvent(new win.Event(event, { bubbles: true }));
+    const field = name => query(`#characteristicsTable [data-field="${name}"]`).textContent;
+    const readings = id => [...query(`[data-report-id="${id}"] table`).rows].map(row => row.cells[1].textContent);
+    const entries = () => JSON.parse(localStorage.getItem(key)).entries;
+    const change = (id, value) => { const input = get(id); input.value = value; fire(input, "input"); fire(input, "change"); };
+    const mode = value => query(`[data-mode="${value}"]`).click();
+    const add = kind => query(`[data-add="${kind}"]`).click();
+    const select = id => { get("partSelect").value = id; fire(get("partSelect"), "change"); };
+    const part = id => query(`#schematic [data-part="${id}"]`);
+    const symbolMatches = (width, height, stroke) => {
+      const core = part(1).querySelector("[data-resistor-core]"), leads = part(1).querySelectorAll("[data-symbol-lead]");
+      return Number(core.getAttribute("width")) === width && Number(core.getAttribute("height")) === height
+        && parseFloat(win.getComputedStyle(core).strokeWidth) === stroke && leads.length === 2
+        && [...leads].every(lead => Number(lead.getAttribute("y2")) - Number(lead.getAttribute("y1")) === 20);
+    };
+    const memory = get("calculatorMemory"), tab = get("characteristicsToggle");
+
+    check(field("current") === "12 mA" && field("power") === "144 mW", "default circuit calculates current and power");
+    check(field("resistanceRange") === "990 Ω to 1.01 kΩ", "default tolerance produces a resistance interval");
+    check(symbolMatches(20, 52, 3), "full resistor body, stroke and leads match the voltage divider proportions");
+    check(query('[data-ground-symbol] [data-symbol-lead="ground"]').getAttribute("x1") === query('[data-voltage-source]').getAttribute("cx"), "ground is centered directly below the source");
+    check(!memory.open && tab.getAttribute("aria-expanded") === "false", "the side drawers start collapsed");
+    check(entries().length === 1 && localStorage.getItem("minipcb-divider-memory-v1") === divider, "history has an independent Original state");
+
+    change("voltage", "10 V"); change("resistance", "2 kΩ");
+    check(get("resistance").value === "2" && get("resistanceUnit").value === "k" && field("current") === "5 mA", "unit suffix synchronizes the multiplier and live result");
+    add("series");
+    check(part(1) && part(2) && field("resistance") === "3 kΩ", "adding a series resistor grows the schematic and adds resistance");
+    part(1).dispatchEvent(new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    check(get("partSelect").value === "1" && doc.activeElement === get("resistance"), "SVG resistor is keyboard-operable and opens its editor");
+    add("parallel");
+    check(part(3) && field("resistance") === "1.6667 kΩ" && field("current") === "6 mA", "adding a parallel resistor to one part produces a mixed circuit");
+    check(readings(1).slice(1, 4).join() === "4 V,2 mA,8 mW" && readings(2).slice(1, 4).join() === "6 V,6 mA,36 mW" && readings(3).slice(1, 4).join() === "4 V,4 mA,16 mW", "mixed-circuit readings obey voltage, current and power conservation");
+    check(get("schematic").querySelectorAll('circle[r="5"][data-wire-junction][fill="#54d2ff"]').length === 3, "parallel rails and ground have exactly three full-size junctions");
+    change("tolerance", 5); change("partPackage", "1206");
+    check(field("resistanceRange") === "1.632 kΩ to 1.7009 kΩ" && readings(3).slice(-2).join() === "±5%,1206", "tolerance changes the interval and package follows the physical resistor");
+
+    mode("voltage"); change("current", "6 mA");
+    check(field("voltage") === "10 V" && field("voltageRange") === "9.7919 V to 10.205 V", "current-driven mode solves voltage and its tolerance range");
+    check(get("schematic").querySelector('line[stroke="#ff8e8e"]'), "the calculated source net is red");
+    change("current", "-6 mA");
+    check(field("voltage") === "-10 V" && field("power") === "60 mW" && field("voltageRange") === "-10.205 V to -9.7919 V", "signed current produces correctly ordered ranges and positive dissipation");
+    change("current", "0");
+    check(field("voltage") === "0 V" && field("power") === "0 W", "zero current gives a valid zero-voltage operating point");
+    change("current", "6 mA"); select(1); mode("resistance");
+    check(get("solvedResistance").textContent === "2 kΩ" && get("resistanceField").hidden, "inverse mode calculates a physical resistor in a mixed circuit");
+    select(3); change("resistance", "2k");
+    check(readings(1)[0] === "1 kΩ" && !get("resistanceField").hidden, "the other physical resistors remain editable while solving for the target");
+    get("solveSelected").click();
+    check(get("solvedResistance").textContent === "1 kΩ", "the inverse calculation can target another resistor");
+    change("current", "10mA");
+    check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("cannot reach") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
+    change("current", "6mA");
+    await wait(1100);
+    const saved = entries().find(entry => entry.state.mode === "resistance" && entry.state.target === 3);
+    check(saved?.state.network.children[0].children[1].package === "1206", "memory autosaves a complete valid inverse circuit");
+    get("current").value = "7mA"; fire(get("current"), "input");
+    await wait(1100);
+    check(entries()[0].id === saved.id, "live input drafts are excluded from autosave");
+    change("current", "0");
+    await wait(1100);
+    check(entries()[0].id === saved.id, "invalid inverse inputs are excluded from autosave");
+
+    memory.querySelector("summary").click(); await wait(250);
+    tab.click(); await wait(250);
+    check(memory.open && tab.getAttribute("aria-expanded") === "true", "both drawers can remain open on wide screens");
+    get("characteristicsClose").focus();
+    get("characteristicsClose").dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    check(memory.open && doc.activeElement === tab && tab.getAttribute("aria-expanded") === "false", "Escape closes the focused right drawer and returns focus");
+    query(`[data-memory-restore="${saved.id}"]`).click(); await wait(50);
+    check(get("partSelect").value === "3" && get("solvedResistance").textContent === "1 kΩ" && field("current") === "6 mA", "memory restores the topology, inputs and target, then recalculates");
+    get("memoryClose").click();
+    check(!memory.open && doc.activeElement === memory.querySelector("summary"), "Memory close returns focus to the edge tab");
+
+    frame.style.width = "390px"; await wait(250);
+    check(doc.documentElement.scrollWidth <= frame.clientWidth && !get("viewToggle").hidden, `phone layout fits without page-level horizontal scrolling (${doc.documentElement.scrollWidth}/${frame.clientWidth}px; desktop toggle ${get("viewToggle").hidden ? "hidden" : "visible"})`);
+    check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
+    get("viewToggle").click();
+    check(get("schematicViewport").scrollWidth > get("schematicViewport").clientWidth && field("current") === "6 mA", "desktop view exposes the full schematic and preserves results");
+    check(symbolMatches(20, 52, 3), "desktop view on phones restores full-size symbol proportions");
+    get("viewToggle").click();
+    tab.click(); memory.querySelector("summary").click(); await wait(250);
+    check(memory.open && tab.getAttribute("aria-expanded") === "false", "opening Memory closes an overlapping phone drawer");
+    tab.click(); await wait(250);
+    check(!memory.open && tab.getAttribute("aria-expanded") === "true", "opening characteristics closes an overlapping phone drawer");
+
+    let downloaded;
+    const createObjectURL = win.URL.createObjectURL.bind(win.URL);
+    win.URL.createObjectURL = blob => { downloaded = blob; return createObjectURL(blob); };
+    win.HTMLAnchorElement.prototype.click = function () {};
+    get("downloadCircuit").click();
+    for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
+    const exported = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
+    check(downloaded.type === "image/svg+xml" && !exported.querySelector("parsererror"), "SVG download is valid vector markup");
+    check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,") && !exported.querySelector("[data-part], foreignObject, .part-hit"), "exports embed the logo and exclude editing controls");
+    check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
+
+    mode("current");
+    get("voltage").value = "9"; fire(get("voltage"), "input");
+    get("voltage").value = "10"; fire(get("voltage"), "input");
+    fire(get("voltage"), "blur");
+    get("removePart").click();
+    check(!part(3) && part(1) && part(2) && field("resistance") === "3 kΩ", "removing a branch reconnects the remaining circuit correctly");
+    await wait(1100);
+    check(entries()[0].state.network.children.length === 2 && entries()[0].state.network.kind === "series", "a reverted input draft does not prevent later topology edits from saving");
+    document.body.dataset.status = "PASS";
+  } catch (error) {
+    messages.push(`FAIL ${error.stack || error}`);
+    document.body.dataset.status = "FAIL";
+  } finally {
+    frame.remove();
+    if (prior === null) localStorage.removeItem(key); else localStorage.setItem(key, prior);
+    results.textContent = messages.join("\n");
+  }
+})();
+</script>

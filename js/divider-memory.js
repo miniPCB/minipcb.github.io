@@ -2,7 +2,8 @@
 (function (root) {
   "use strict";
   function create(adapter) {
-    const key = "minipcb-divider-memory-v1", limit = 50, delay = 1000;
+    const key = adapter.storageKey || "minipcb-divider-memory-v1", limit = 50, delay = 1000;
+    const defaultTitle = (adapter.defaultTitle || "Voltage Divider").toLowerCase();
     const get = id => document.getElementById(id), panel = get("calculatorMemory"), list = get("memoryList");
     const menu = get("memoryMenu"), summary = panel.querySelector("summary"), body = get("memoryBody"), workspace = get("calculatorWorkspace"), resizer = get("memoryResize");
     let entries = [], active = null, pending = null, timer = null, restoring = false, persistent = true, ignored = null;
@@ -76,8 +77,8 @@
     function groupedEntries() {
       const groups = new Map(); let session = null;
       for (const entry of [...entries].reverse().sort((a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt))) {
-        const value = Array.isArray(entry.state.controls) ? entry.state.controls.find(row => Array.isArray(row) && row[0] === "circuitTitle")?.[1] : "";
-        const title = typeof value === "string" && value.trim().toLowerCase() !== "voltage divider" ? value.trim() : "";
+        const value = adapter.circuitTitle ? adapter.circuitTitle(entry.state) : Array.isArray(entry.state.controls) ? entry.state.controls.find(row => Array.isArray(row) && row[0] === "circuitTitle")?.[1] : "";
+        const title = typeof value === "string" && value.trim().toLowerCase() !== defaultTitle ? value.trim() : "";
         const name = typeof entry.name === "string" && !/^(?:Original · )?\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(entry.name) ? entry.name.trim() : "";
         const time = Date.parse(entry.savedAt), day = localStamp(entry.savedAt).slice(0, 10); let group;
         if (title) {
