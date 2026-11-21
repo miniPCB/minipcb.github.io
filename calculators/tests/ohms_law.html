@@ -37,6 +37,15 @@
     const mode = value => query(`[data-mode="${value}"]`).click();
     const select = id => { get("partSelect").value = id; fire(get("partSelect"), "change"); };
     const part = id => query(`#schematic [data-part="${id}"]`);
+    const circuitQuantity = field => query(`[data-circuit-quantity="${field}"]`);
+    const operatingValue = field => query(`[data-operating-value="${field}"]`);
+    const resistorValue = id => part(id).querySelector("[data-resistor-value]");
+    const hasRole = (element, role) => element.getAttribute("data-value-role") === role && element.getAttribute("fill") === {
+      known: "#6ee7ac", calculated: "#ff8e8e", missing: "#ffcf73"
+    }[role];
+    const circuitGeometry = () => [get("schematic").getAttribute("viewBox"),
+      ...[...doc.querySelectorAll("#schematic line, [data-voltage-source], [data-resistor-core], [data-current-value]")].map(node =>
+        ["x", "y", "width", "height", "x1", "x2", "y1", "y2", "cx", "cy", "r"].map(attribute => node.getAttribute(attribute)).join())].join(" ");
     const stress = (id, metric) => part(id).querySelector(`[data-stress-metric="${metric}"] [data-stress-value]`).textContent;
     const reportedStress = (id, metric) => [...query(`[data-report-id="${id}"] table`).rows]
       .find(row => row.cells[0].textContent === `${metric} (nominal)`).cells[1].textContent;
@@ -113,6 +122,31 @@
     check(!memory.open && tab.getAttribute("aria-expanded") === "false", "the side drawers start collapsed");
     check(entries().length === 1 && localStorage.getItem("minipcb-divider-memory-v1") === divider, "history has an independent Original state");
     const originalId = entries()[0].id;
+    const choices = [...doc.querySelectorAll(".mode-choice")];
+    check(choices.map(button => button.querySelector("strong").textContent).join() === "Find Current,Find Voltage,Find Resistance"
+      && choices.map(button => button.querySelector("span").textContent).join() === "Given V, R,Given I, R,Given V, I", "mode cards show the quantity to find and its required inputs");
+    const initialGeometry = circuitGeometry();
+    check(choices[0].getAttribute("aria-pressed") === "true" && hasRole(circuitQuantity("voltage"), "known")
+      && hasRole(circuitQuantity("current"), "calculated") && hasRole(operatingValue("current"), "calculated")
+      && hasRole(resistorValue(1), "known"), "Find Current highlights the same calculated quantity on the diagram and operating point");
+    fire(circuitQuantity("voltage"), "click");
+    check(doc.activeElement === get("voltage") && !circuitQuantity("current").hasAttribute("data-edit-quantity"), "the known voltage readout focuses its editor and the calculated current is read-only");
+    mode("voltage");
+    check(choices[1].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
+      && hasRole(circuitQuantity("voltage"), "calculated") && hasRole(circuitQuantity("current"), "known")
+      && hasRole(operatingValue("voltage"), "calculated"), "Find Voltage changes value roles while retaining the same circuit geometry");
+    keypress(circuitQuantity("current"), "Enter");
+    check(doc.activeElement === get("current") && !circuitQuantity("voltage").hasAttribute("data-edit-quantity"), "the known current readout is keyboard editable and the calculated source is read-only");
+    change("current", "");
+    check(hasRole(operatingValue("current"), "missing") && hasRole(circuitQuantity("voltage"), "calculated")
+      && operatingValue("resistance").textContent === "1 kΩ" && query("[data-voltage-source]").getAttribute("stroke") === "#ff8e8e",
+    "a missing input stays distinct from the unsolved voltage while the known network resistance remains visible");
+    change("current", "12 mA");
+    mode("resistance");
+    check(choices[2].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
+      && hasRole(circuitQuantity("voltage"), "known") && hasRole(circuitQuantity("current"), "known")
+      && hasRole(resistorValue(1), "calculated") && hasRole(operatingValue("resistance"), "calculated"), "Find Resistance marks the target resistor and equivalent resistance consistently");
+    mode("current");
     check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
     check(centeredCurrent("12 mA") && balancedCurrent(), "the round arrow has equal clear space on both sides");
     const originalArrowX = query("[data-current-value]").getAttribute("x");
@@ -167,10 +201,13 @@
     check(get("solvedResistance").textContent === "2 kΩ" && get("resistanceField").hidden, "inverse mode calculates a physical resistor in a mixed circuit");
     select(3); change("resistance", "2k");
     check(readings(1)[0] === "1 kΩ" && !get("resistanceField").hidden, "the other physical resistors remain editable while solving for the target");
+    mode("resistance");
+    check(hasRole(resistorValue(1), "calculated") && hasRole(resistorValue(3), "known"), "reselecting the active mode keeps the current resistor target");
     get("solveSelected").click();
     check(get("solvedResistance").textContent === "1 kΩ", "the inverse calculation can target another resistor");
     change("current", "10mA");
     check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("cannot reach") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
+    check(field("voltage") === "10 V" && field("current") === "10 mA" && hasRole(resistorValue(3), "calculated"), "an unsolved resistance leaves available inputs visible and the target marked");
     check(stress(3, "Pstress") === "—" && stress(3, "Vstress") === "—", "an invalid operating point clears each stress result");
     check(arrowDirection() === 0, "a failed solve clears the current arrow");
     change("current", "6mA");
@@ -198,6 +235,8 @@
 
     frame.style.width = "390px"; await wait(250);
     check(doc.documentElement.scrollWidth <= frame.clientWidth && !get("viewToggle").hidden, `phone layout fits without page-level horizontal scrolling (${doc.documentElement.scrollWidth}/${frame.clientWidth}px; desktop toggle ${get("viewToggle").hidden ? "hidden" : "visible"})`);
+    check(choices.every(button => button.getBoundingClientRect().height >= 44 && win.getComputedStyle(button.querySelector("span")).display !== "none"),
+      "phone mode cards keep touch-sized targets and visible input hints");
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
     check(centeredCurrent("6 mA") && balancedCurrent(), "the compact mixed network preserves equal horizontal clearance for the arrow");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
@@ -223,7 +262,9 @@
     for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
     const exported = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(downloaded.type === "image/svg+xml" && !exported.querySelector("parsererror"), "SVG download is valid vector markup");
-    check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,") && !exported.querySelector("[data-schematic-control], [data-part], foreignObject, .part-hit, .control-hit"), "exports embed the logo and exclude editing controls");
+    check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,") && !exported.querySelector("[data-schematic-control], [data-edit-quantity], [data-part], foreignObject, .part-hit, .control-hit"), "exports embed the logo and exclude editing controls");
+    check(hasRole(exported.querySelector('[data-operating-value="resistance"]'), "calculated")
+      && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known"), "SVG downloads preserve the live mode’s value roles");
     check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
       && exported.querySelector("#currentArrowHead") && exported.querySelector("[data-current-value]")?.textContent === "6 mA", "the export retains the round path, embedded arrowhead, and centered value");
     check(exported.querySelectorAll('[data-resistor-stress][data-stress-basis="nominal"]').length === 3
@@ -247,6 +288,63 @@
     memory.querySelector("summary").click(); await wait(250);
     query(`[data-memory-restore="${originalId}"]`).click(); await wait(50);
     check(annotationText("part-1") === "R1" && annotationText("title") === "Ohm’s Law" && annotationText("source") === "VDC" && field("current") === "12 mA", "a snapshot without labels recalls with the original defaults");
+    get("memoryClose").click();
+
+    const mainSource = () => query("[data-voltage-source]");
+    const sourceAction = kind => query(`[data-add-source="${kind}"]`);
+    const addition = key => query(`[data-added-source="${key}"]`);
+    const addedCore = key => addition(key).querySelector("[data-added-source-core]");
+    const addSource = kind => { rightClick(mainSource()); sourceAction(kind).click(); };
+    rightClick(part(1).querySelector("[data-resistor-core]"));
+    check(sourceAction("voltage").hidden && sourceAction("current").hidden, "resistor menus retain only resistor construction actions");
+    keypress(doc.activeElement, "Escape");
+    check(rightClick(mainSource()) && !sourceAction("voltage").hidden && !sourceAction("current").hidden, "the voltage source menu offers both additional source types");
+    keypress(doc.activeElement, "End");
+    check(doc.activeElement === sourceAction("current"), "source construction choices are reachable through menu keyboard navigation");
+    sourceAction("voltage").click();
+    check(!get("sourceEditor").hidden && get("sourceSelect").value === "V2" && doc.activeElement === get("addedSource")
+      && field("voltage") === "12 V", "adding a series source starts at zero and focuses its editor");
+    change("addedSource", "3 V");
+    check(field("voltage") === "15 V" && field("current") === "15 mA" && field("mainVoltage") === "12 V"
+      && addedCore("V2").getAttribute("cx") === mainSource().getAttribute("cx")
+      && Number(addedCore("V2").getAttribute("cy")) < Number(mainSource().getAttribute("cy")), "a series voltage source stacks on the branch and adds to the load voltage");
+    addSource("voltage"); change("addedSource", "-1 V");
+    check(field("voltage") === "14 V" && field("V3") === "-1 V", "multiple series voltages combine algebraically");
+    addSource("current"); change("addedSource", "4 mA");
+    check(field("voltage") === "14 V" && field("current") === "14 mA" && field("voltageBranchCurrent") === "10 mA"
+      && Number(addedCore("I1").getAttribute("cx")) < Number(mainSource().getAttribute("cx"))
+      && addition("I1").querySelector('[data-source-direction="into-supply"]'), "the parallel current source injects into the rail and changes voltage-branch current");
+    addSource("current"); change("addedSource", "-2 mA");
+    check(field("voltageBranchCurrent") === "12 mA" && field("I2") === "-2 mA", "signed parallel injections sum independently of the load current");
+    fire(addition("I1"), "click");
+    check(get("sourceSelect").value === "I1" && doc.activeElement === get("addedSource"), "clicking a source symbol focuses that source’s signed value");
+    change("addedSource", "17 mA");
+    check(field("voltageBranchCurrent") === "-1 mA" && centeredCurrent("14 mA"), "a large injection can reverse the voltage-branch current while the load arrow remains correct");
+    change("addedSource", "4 mA");
+    mode("voltage");
+    check(field("voltage") === "12 V" && field("mainVoltage") === "10 V" && field("voltageBranchCurrent") === "10 mA"
+      && circuitQuantity("voltage").textContent === "10 V", "Find Voltage solves the main voltage after accounting for the added series sources");
+    mode("resistance"); change("current", "7 mA");
+    check(field("voltage") === "14 V" && field("resistance") === "2 kΩ" && field("voltageBranchCurrent") === "5 mA"
+      && resistorValue(1).textContent === "2 kΩ", "Find Resistance uses the total load voltage and the entered load current");
+    change("addedSource", "");
+    check(get("calculationStatus").textContent.includes("I1") && field("voltageBranchCurrent") === "—", "a missing extra-source value identifies the component and clears the unsolved branch current");
+    change("addedSource", "4 mA");
+    check(doc.documentElement.scrollWidth <= frame.clientWidth && get("sourceSelect").options.length === 4, "all additional sources are available through the fitted phone editor");
+    await wait(1100);
+    const sourceSnapshot = entries()[0];
+    check(sourceSnapshot.state.sources?.length === 4 && sourceSnapshot.state.mode === "resistance", "memory saves the added source topology and signed inputs");
+    downloaded = undefined;
+    get("downloadCircuit").click();
+    for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
+    const sourcesExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
+    check(sourcesExport.querySelectorAll("[data-added-source]").length === 4
+      && !sourcesExport.querySelector("[data-schematic-control], [data-network-context]"), "static exports retain added source symbols and values");
+    for (let remaining = 4; remaining > 0; remaining--) get("removeSource").click();
+    check(get("sourceEditor").hidden && !query("[data-added-source]"), "removing the sources restores the original source layout");
+    memory.querySelector("summary").click(); await wait(250);
+    query(`[data-memory-restore="${sourceSnapshot.id}"]`).click(); await wait(50);
+    check(addition("V2") && addition("I2") && field("resistance") === "2 kΩ" && field("voltageBranchCurrent") === "5 mA", "recall reconstructs the additional branches and recalculates their operating point");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);
