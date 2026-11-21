@@ -67,7 +67,7 @@
     const reportedStress = (id, metric) => [...query(`[data-report-id="${id}"] table`).rows]
       .find(row => row.cells[0].textContent === `${metric} (nominal)`).cells[1].textContent;
     const resistorReadingsFit = () => [...doc.querySelectorAll("[data-resistor-stress]")].every(group => {
-      const bounds = group.getBBox(), block = group.parentElement.querySelector(".part-hit").getBBox();
+      const bounds = group.getBBox(), block = group.parentElement.querySelector(".part-info-box").getBBox();
       const powerRow = group.previousElementSibling, powerBounds = powerRow.getBBox();
       return powerBounds.y + powerBounds.height < bounds.y && bounds.y + bounds.height < block.y + block.height
         && [powerRow, ...group.children].every(row => {
@@ -131,20 +131,22 @@
         && leftGap > 0 && rightGap > 0 && Math.abs(leftGap - rightGap) < .05;
     };
     const voltmeterMatches = (reading, topColor = "#54d2ff", root = doc) => {
-      const meter = root.querySelector("[data-voltmeter]"), body = meter?.querySelector("[data-voltmeter-body]");
-      if (!body || root.querySelector("[data-current-direction]")) return false;
+      const meter = root.querySelector("[data-voltmeter]"), panel = meter?.querySelector("[data-voltmeter-panel]");
+      if (!panel || panel.localName !== "rect" || meter.querySelectorAll("circle").length !== 2
+        || root.querySelector("[data-current-direction]")) return false;
       const [topLead, bottomLead] = meter.querySelectorAll("line"), [topNode, bottomNode] = meter.querySelectorAll("[data-wire-junction]");
       const [topRail, bottomRail] = meter.parentElement.children;
-      const x = body.getAttribute("cx"), y = Number(body.getAttribute("cy")), radius = Number(body.getAttribute("r"));
+      const x = String(Number(panel.getAttribute("x")) + Number(panel.getAttribute("width")) / 2);
+      const top = Number(panel.getAttribute("y")), height = Number(panel.getAttribute("height"));
       const joined = (lead, node, rail, fill) => lead.getAttribute("x1") === x && lead.getAttribute("x2") === x
         && lead.hasAttribute("stroke-dasharray") && lead.getAttribute("stroke") === fill
         && node.getAttribute("cx") === x && node.getAttribute("cy") === rail.getAttribute("y1") && node.getAttribute("fill") === fill;
       const value = meter.querySelector("[data-voltmeter-value]");
       return joined(topLead, topNode, topRail, topColor) && joined(bottomLead, bottomNode, bottomRail, "#54d2ff")
-        && topLead.getAttribute("y1") === topRail.getAttribute("y1") && Number(topLead.getAttribute("y2")) === y - radius
-        && Number(bottomLead.getAttribute("y1")) === y + radius && bottomLead.getAttribute("y2") === bottomRail.getAttribute("y1")
+        && topLead.getAttribute("y1") === topRail.getAttribute("y1") && Number(topLead.getAttribute("y2")) === top
+        && Number(bottomLead.getAttribute("y1")) === top + height && bottomLead.getAttribute("y2") === bottomRail.getAttribute("y1")
         && value.textContent === reading && value.getAttribute("text-anchor") === "middle"
-        && value.getAttribute("x") === x && Number(value.getAttribute("y")) === y;
+        && value.getAttribute("x") === x && meter.querySelector("text").textContent === "Load voltage";
     };
     const groundLabelMatches = (inset, size) => {
       const symbol = query("[data-ground-symbol]"), label = annotation("ground").querySelector("text");
@@ -280,9 +282,9 @@
     mode("resistance");
     check(choices[2].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
       && hasRole(circuitQuantity("voltage"), "known") && hasRole(circuitQuantity("current"), "known")
-      && hasRole(resistorValue(1), "calculated") && hasRole(operatingValue("resistance"), "calculated"), "Find Resistance marks the target resistor and equivalent resistance consistently");
-    check(!schematicInput("resistance-1") && !schematicUnit("resistance-1") && schematicInput("package-1").tagName === "SELECT",
-      "a calculated resistor’s package remains selectable while its solved value stays read-only");
+      && hasRole(resistorValue(1), "calculated") && hasRole(operatingValue("resistance"), "calculated"), "Find Resistance marks the resistor and equivalent resistance consistently");
+    check(schematicInput("resistance-1").dataset.valueRole === "calculated" && schematicUnit("resistance-1").value === "k"
+      && schematicInput("package-1").tagName === "SELECT", "a calculated resistor still offers a value editor, unit selector and package selector");
     mode("current");
     check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
     check(centeredCurrent("12 mA") && balancedInstrument(), "the round arrow has equal clear space on both sides");
@@ -361,23 +363,43 @@
     check(stress(1, "Pstress") === "0.00%" && stress(1, "Vstress") === "0.00%", "a valid zero operating point displays zero stress for a rated resistor");
     check(arrowDirection() === 0, "zero current has no directional arrow");
     change("current", "6 mA"); select(1); mode("resistance");
-    check(get("solvedResistance").textContent === "2 kΩ" && get("resistanceField").hidden, "inverse mode calculates a physical resistor in a mixed circuit");
-    select(3); change("resistance", "2k");
-    check(readings(1)[0] === "1 kΩ" && !get("resistanceField").hidden, "the other physical resistors remain editable while solving for the target");
-    mode("resistance");
-    check(hasRole(resistorValue(1), "calculated") && hasRole(resistorValue(3), "known"), "reselecting the active mode keeps the current resistor target");
-    componentAction(3, "solveSelected");
-    check(get("solvedResistance").textContent === "1 kΩ", "the inverse calculation can target another resistor");
-    change("current", "10mA");
-    check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("cannot reach") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
+    const resistorIds = [1, 2, 3];
+    const physicalValues = () => resistorIds.map(id => resistorValue(id).textContent).join();
+    check(physicalValues() === "2 kΩ,1 kΩ,1 kΩ" && resistorIds.every(id =>
+      hasRole(resistorValue(id), "calculated") && schematicInput(`resistance-${id}`).dataset.valueRole === "calculated"),
+      "every physical resistor is calculated and editable in the mixed network");
+    change("voltage", "15 V");
+    check(physicalValues() === "3 kΩ,1.5 kΩ,1.5 kΩ" && field("resistance") === "2.5 kΩ",
+      "proportional resistor values give the required equivalent resistance");
+    const resistanceDialog = get("calculatedResistanceDialog");
+    enterValue("resistance-3", "2 kΩ");
+    check(resistanceDialog.open && choices[2].getAttribute("aria-pressed") === "true" && physicalValues() === "3 kΩ,1.5 kΩ,1.5 kΩ",
+      "editing a calculated resistance offers the two source solve modes before applying");
+    get("calculatedResistanceCancel").click(); await wait(30);
+    check(!resistanceDialog.open && doc.activeElement === schematicInput("resistance-3") && physicalValues() === "3 kΩ,1.5 kΩ,1.5 kΩ",
+      "canceling a calculated edit restores the exact solution and editor focus");
+    enterValue("resistance-3", "2 kΩ");
+    query('[data-resistance-mode="current"]').click(); await wait(30);
+    check(choices[0].getAttribute("aria-pressed") === "true" && physicalValues() === "3 kΩ,1.5 kΩ,2 kΩ"
+      && field("current") === "5.5556 mA", "applying a resistor value preserves the other solved values and calculates current");
+    enterValue("resistance-1", "2 kΩ"); enterValue("resistance-2", "1 kΩ"); enterValue("resistance-3", "1 kΩ");
+    change("voltage", "10 V"); mode("resistance");
+    enterValue("resistance-3", "2 kΩ");
+    query('[data-resistance-mode="voltage"]').click(); await wait(30);
+    check(choices[1].getAttribute("aria-pressed") === "true" && physicalValues() === "2 kΩ,1 kΩ,2 kΩ"
+      && field("voltage") === "12 V", "an edited resistor can instead be used to calculate voltage");
+    enterValue("resistance-3", "1 kΩ"); mode("resistance");
+    change("current", "0");
+    check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("nonzero") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
     check(get("ltspiceDownload").disabled && get("markdownDownload").disabled, "an incomplete circuit cannot produce a simulation or measurement report");
-    check(field("voltage") === "10 V" && field("current") === "10 mA" && hasRole(resistorValue(3), "calculated"), "an unsolved resistance leaves available inputs visible and the target marked");
+    check(field("voltage") === "10 V" && field("current") === "0 A" && resistorIds.every(id => hasRole(resistorValue(id), "calculated")),
+      "an unsolved network leaves the available inputs visible and all calculated values marked");
     check(stress(3, "Pstress") === "—" && stress(3, "Vstress") === "—" && [1, 2, 3].every(id => resistorPower(id) === "—"),
       "an invalid operating point clears dissipation and stress readings");
     check(arrowDirection() === 0, "a failed solve clears the current arrow");
     change("current", "6mA");
     await wait(1100);
-    const saved = entries().find(entry => entry.state.mode === "resistance" && entry.state.target === 3);
+    const saved = entries().find(entry => entry.state.mode === "resistance" && entry.state.network.children?.length === 2);
     check(saved?.state.network.children[0].children[1].package === "1206" && saved.state.network.children[0].children[0].label === "Reference load" && saved.state.sourceLabel === "Bench supply", "memory autosaves the custom labels with the complete valid inverse circuit");
     get("current").value = "7mA"; fire(get("current"), "input");
     await wait(1100);
@@ -393,7 +415,8 @@
     get("characteristicsClose").dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     check(memory.open && doc.activeElement === tab && tab.getAttribute("aria-expanded") === "false", "Escape closes the focused right drawer and returns focus");
     query(`[data-memory-restore="${saved.id}"]`).click(); await wait(50);
-    check(get("partSelect").value === "3" && get("solvedResistance").textContent === "1 kΩ" && field("current") === "6 mA", "memory restores the topology, inputs and target, then recalculates");
+    check(physicalValues() === "2 kΩ,1 kΩ,1 kΩ" && field("current") === "6 mA",
+      "memory restores the topology and inputs, then recalculates every part");
     check(annotationText("part-1") === "Reference load" && annotationText("title").startsWith("Bench circuit"), "recall restores the title and labels");
     get("memoryClose").click();
     check(!memory.open && doc.activeElement === memory.querySelector("summary"), "Memory close returns focus to the edge tab");
@@ -408,6 +431,9 @@
     check(centeredCurrent("6 mA") && balancedInstrument(), "the compact mixed network preserves equal horizontal clearance for the arrow");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
     check(resistorReadingsFit(), "compact resistor power and stress rows fit their information blocks");
+    check(schematicInput("tolerance-3").closest("foreignObject").getAttribute("y") === schematicInput("package-3").closest("foreignObject").getAttribute("y")
+      && query('[data-resistor-info="3"] .part-info-box').getAttribute("fill") === "#142535",
+      "the compact resistor card groups tolerance and package on a shared row");
     check(operatingPaletteMatches(), "the compact schematic uses the same card palette as the full schematic");
     const legendBounds = query("[data-solve-legend]").getBoundingClientRect();
     check(solveLegendMatches() && legendBounds.top > query('[data-operating-point="power"]').getBoundingClientRect().bottom
@@ -457,7 +483,8 @@
     check(downloaded.type === "image/svg+xml" && !exported.querySelector("parsererror"), "SVG download is valid vector markup");
     check(exported.querySelector("image").getAttribute("href").startsWith("data:image/png;base64,")
       && !exported.querySelector("[data-schematic-control], [data-field-readout], [data-part], [data-frame-download], foreignObject, input, select, .part-hit, .control-hit")
-      && exported.querySelector('[data-resistor-package="3"]').textContent === "1206", "exports embed the logo and restore static text in place of native controls");
+      && exported.querySelectorAll(".part-info-box").length === 3
+      && exported.querySelector('[data-resistor-package="3"]').textContent === "1206", "exports embed the logo and preserve static resistor cards");
     check(hasRole(exported.querySelector('[data-operating-value="resistance"]'), "calculated")
       && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known")
       && operatingPaletteMatches(exported), "SVG downloads preserve both the value roles and operating-point palette");
@@ -472,10 +499,10 @@
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
     for (const [format, type, suffix] of [["png", "image/png", ".png"], ["jpeg", "image/jpeg", ".jpg"], ["bmp", "image/bmp", ".bmp"]]) {
-      downloaded = undefined;
+      downloaded = downloadedName = undefined;
       requestImage(format);
-      for (let attempt = 0; !downloaded && attempt < 40; attempt++) await wait(50);
-      if (downloaded?.type !== type || !downloadedName.endsWith(suffix) || downloaded.size < 1000) throw new Error(`Invalid ${format} export`);
+      for (let attempt = 0; !downloadedName && attempt < 40; attempt++) await wait(50);
+      if (downloaded?.type !== type || !downloadedName?.endsWith(suffix) || downloaded.size < 1000) throw new Error(`Invalid ${format} export`);
     }
     check(!frameDialog.open, "PNG, JPEG and BMP downloads complete through the chooser");
     get("ltspiceDownload").click();
@@ -487,7 +514,7 @@
     get("markdownDownload").click();
     const report = await downloaded.text();
     check(downloadedName.endsWith(".md") && report.startsWith("# Bench circuit") && report.includes("Find Resistance")
-      && report.includes("| Total power | 60 mW |") && report.includes("R3 LOAD N1 1000")
+      && report.includes("| Total power | 60 mW |") && Math.abs(Number(report.match(/^R3 LOAD N1 (\S+)$/m)?.[1]) - 1000) < 1e-8
       && report.includes("| Vstress (nominal) | 4.00% |"), "Markdown reports the saved topology, measurements and nominal netlist");
 
     mode("current");
@@ -529,7 +556,7 @@
       && annotationText("source") === "IDC" && sourceGroup().querySelector("[data-source-direction]"), "the current symbol fits the same position and gets a matching default reference");
     check(field("voltage") === "12 V" && field("current") === "12 mA" && hasRole(circuitQuantity("current"), "calculated"),
       "Find Current solves the current-source value from load voltage and resistance");
-    check(voltmeterMatches("12 V") && balancedInstrument(query("[data-voltmeter-body]")),
+    check(voltmeterMatches("12 V") && balancedInstrument(query("[data-voltmeter-panel]")),
       "the voltmeter replaces the arrow and connects to both rails with dashed leads and junction dots");
     const voltageEditor = schematicInput("voltage");
     check(voltageEditor.value === "12" && schematicUnit("voltage").value === ""
@@ -586,6 +613,9 @@
     const original = history.entries.find(entry => entry.id === originalId);
     history.entries.unshift({ ...original, id: "legacy-sources", savedAt: new Date().toISOString(),
       state: { ...original.state, sources: [{ id: 2, kind: "voltage", value: 3 }, { id: 1, kind: "current", value: .004 }] } });
+    history.entries.unshift({ ...original, id: "legacy-resistance-target", savedAt: new Date().toISOString(),
+      state: { ...original.state, mode: "resistance", current: .004, target: 2, network: { kind: "series",
+        children: [original.state.network, { ...original.state.network, id: 2 }] } } });
     localStorage.setItem(key, JSON.stringify(history));
     const reloaded = new Promise(resolve => frame.addEventListener("load", resolve, { once: true }));
     win.location.reload(); await reloaded;
@@ -622,6 +652,10 @@
       "LTspice retains the connections for every voltage source in a saved stack");
     fire(addition("V3"), "click"); get("removeSource").click();
     check(!addition("V3") && addition("V2"), "a saved supplementary source can be removed through its component menu");
+    query('[data-memory-restore="legacy-resistance-target"]').click(); await wait(50);
+    check(resistorValue(1).textContent === "1 kΩ" && resistorValue(2).textContent === "2 kΩ"
+      && [1, 2].every(id => hasRole(resistorValue(id), "calculated")),
+      "recalling an old single-target calculation preserves its solved values in the all-resistor mode");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);

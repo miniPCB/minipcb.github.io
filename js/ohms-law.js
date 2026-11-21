@@ -10,7 +10,8 @@
   const groundDefault = "GND", labelLimit = 24, titleLimit = 72;
   const constructionMenu = byId("constructionMenu"), annotationEditor = byId("annotationEditor"), annotationInput = byId("annotationInput");
   const frameExportDialog = byId("frameExportDialog");
-  let frameExportSnapshot;
+  const resistanceDialog = byId("calculatedResistanceDialog");
+  let frameExportSnapshot, resistanceEdit;
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
   const prefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
   const units = { voltage: "V", current: "A", resistance: "Ω" };
@@ -29,9 +30,10 @@
   let selectedId = 1, nextId = 2, desktopView = false, memory, result, build, embeddedLogo, copyRows, constructionTarget, annotationEdit;
   let selectedSourceKey, drawingPointer, pendingDrawing;
   const nextSourceId = { voltage: 2, current: 1 };
-  let state = { version: 1, title: "", mode: "current", voltage: 12, current: 0.012, target: null, network: newPart(1) };
+  const defaultResistance = 1000;
+  let state = { version: 1, title: "", mode: "current", voltage: 12, current: 0.012, network: newPart(1) };
 
-  function newPart(id) { return { id, resistance: 1000, tolerance: 1, package: "0805" }; }
+  function newPart(id) { return { id, resistance: defaultResistance, tolerance: 1, package: "0805" }; }
   function parts(node) { return node.children ? node.children.flatMap(parts) : [node]; }
   function partName(id) { return `R${id}`; }
   function findPart(id) { return parts(state.network).find(part => part.id === id); }
@@ -85,8 +87,8 @@
     }
   }
 
-  function analyze() {
-    const { mode, network, target } = state;
+  function analyze(legacyTarget = null) {
+    const { mode, network } = state;
     const currentDriven = primarySourceKind() === "current";
     const allParts = parts(network);
     for (const field of ["voltage", "current"]) {
@@ -103,18 +105,37 @@
     if (![seriesVoltage, parallelCurrent, voltage, current].every(Number.isFinite)) {
       return { error: "The combined sources exceed the calculator’s numeric range." };
     }
-    const invalid = allParts.find(part => part.id !== target && !(part.resistance > 0));
+    const invalid = mode !== "resistance" && allParts.find(part => !(part.resistance > 0));
     if (invalid) return { error: `Enter a resistance greater than zero for ${partName(invalid.id)}.` };
     const invalidTolerance = allParts.find(part => part.tolerance === null);
     if (invalidTolerance) return { error: `Enter a tolerance from 0% up to, but below, 100% for ${partName(invalidTolerance.id)}.` };
-    let solved;
+    let resistances;
     if (mode === "resistance") {
       const wanted = voltage / current;
       if (!(wanted > 0 && Number.isFinite(wanted))) return { error: "To solve for resistance, enter nonzero voltage and current with the same sign." };
-      solved = inverse(network, target, wanted);
-      if (!(solved > 0 && Number.isFinite(solved))) return { error: `${partName(target)} cannot reach ${format(wanted, "Ω")} with the other resistors at their present values.` };
+      const reference = part => part.resistance ?? defaultResistance;
+      if (legacyTarget !== null) {
+        const solved = inverse(network, legacyTarget, wanted);
+        resistances = new Map(allParts.map(part => [part.id, part.id === legacyTarget ? solved : reference(part)]));
+      } else {
+        // Scaling a series/parallel network preserves its part ratios.
+        let referenceFor = reference, nominal = equivalent(network, referenceFor);
+        if (!(nominal > 0 && Number.isFinite(nominal))) {
+          const largest = allParts.reduce((max, part) => Math.max(max, reference(part)), 0);
+          referenceFor = part => reference(part) / largest;
+          nominal = equivalent(network, referenceFor);
+        }
+        const scale = wanted / nominal;
+        resistances = new Map(allParts.map(part => {
+          const referenceValue = referenceFor(part), scaled = referenceValue * scale;
+          return [part.id, scaled > 0 && Number.isFinite(scaled) ? scaled : (referenceValue / nominal) * wanted];
+        }));
+      }
+      if ([...resistances.values()].some(value => !(value > 0 && Number.isFinite(value)))) {
+        return { error: "The calculated resistances exceed the calculator’s numeric range." };
+      }
     }
-    const resistanceFor = part => part.id === target ? solved : part.resistance;
+    const resistanceFor = part => resistances ? resistances.get(part.id) : part.resistance;
     const resistance = equivalent(network, resistanceFor);
     if (mode === "voltage") voltage = current * resistance;
     if (mode === "current") current = voltage / resistance;
@@ -126,7 +147,11 @@
     const readings = new Map();
     distribute(network, voltage, current, resistanceFor, readings);
     if ([...readings.values()].some(reading => !Object.values(reading).every(Number.isFinite))) return { error: "A resistor’s operating point exceeds the calculator’s numeric range." };
-    return { voltage, mainVoltage, current, mainCurrent, resistance, power, solved, range, readings };
+    return { voltage, mainVoltage, current, mainCurrent, resistance, power, resistances, range, readings };
+  }
+
+  function partResistance(part) {
+    return state.mode === "resistance" ? result.resistances?.get(part.id) : part.resistance;
   }
 
   function insert(node, id, kind, added) {
@@ -150,7 +175,8 @@
 
   function engineeringPrefix(value) {
     if (!value) return "";
-    return [...Object.keys(prefixes)].reverse().find(prefix => Math.abs(value) >= prefixes[prefix]) ?? "µ";
+    const magnitude = Number(Math.abs(value).toPrecision(15));
+    return [...Object.keys(prefixes)].reverse().find(prefix => magnitude >= prefixes[prefix]) ?? "µ";
   }
   function inputPrefix(key, value) {
     const prefix = selectedPrefixes.get(key) ?? engineeringPrefix(value);
@@ -215,7 +241,7 @@
   }
 
   function parseTolerance(text) {
-    const amount = text.trim().replace(/%$/, "").trim(), value = Number(amount);
+    const amount = text.trim().replace(/^±|%$/g, "").trim(), value = Number(amount);
     return /^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(amount) && value < 100 ? { value } : null;
   }
 
@@ -292,13 +318,11 @@
 
   function syncPart() {
     const allParts = parts(state.network), part = selectedPart();
-    byId("partSelect").replaceChildren(...allParts.map(item => new Option(partCaption(item) + (item.id === state.target ? " (calculated)" : ""), item.id)));
+    byId("partSelect").replaceChildren(...allParts.map(item => new Option(partCaption(item), item.id)));
     byId("partSelect").value = String(part.id);
     byId("partPackage").value = part.package;
     byId("tolerance").value = part.tolerance ?? "";
     byId("tolerance").setAttribute("aria-invalid", String(part.tolerance === null));
-    byId("resistanceField").hidden = part.id === state.target;
-    byId("solvedResistance").hidden = part.id !== state.target;
     showResistance();
   }
 
@@ -343,7 +367,7 @@
   }
 
   function commitSchematicInput(entry, report = false) {
-    const { key, input, selector, text, prefix, kind, value, write } = entry;
+    const { key, input, selector, text, prefix, kind, value, write, choose } = entry;
     if (input.value === text && (!selector || selector.value === prefix)) {
       resetSchematicInput(entry);
       memory?.schedule();
@@ -365,13 +389,18 @@
       }
       return;
     }
+    if (choose && parsed.value !== value) {
+      resetSchematicInput(entry);
+      choose(parsed.value, parsed.prefix);
+      return;
+    }
     if (selector) selectedPrefixes.set(key, parsed.prefix);
     resetSchematicInput(entry);
-    write(parsed.value);
+    if (!choose) write(parsed.value);
     refresh();
   }
 
-  function drawField(readout, box, { key, label, kind, value, write, centered }) {
+  function drawField(readout, box, { key, label, kind, value, write, centered, choose }) {
     readout.setAttribute("data-field-readout", "");
     readout.setAttribute("aria-hidden", "true");
     let entry = schematicInputs.get(key);
@@ -425,11 +454,14 @@
     const { object, input, selector } = entry;
     const prefix = selector ? inputPrefix(key, value) : "";
     const fieldText = kind === "package" ? value : Number.isFinite(value)
-      ? selector ? String(Number((value / prefixes[prefix]).toPrecision(15))) : `${value}%` : "";
-    Object.assign(entry, { kind, value, write, text: fieldText, prefix, seen: true });
+      ? selector ? String(Number((value / prefixes[prefix]).toPrecision(15))) : `±${value}%` : "";
+    Object.assign(entry, { kind, value, write, choose, text: fieldText, prefix, seen: true });
     for (const [attr, dimension] of Object.entries(box)) object.setAttribute(attr, dimension);
     input.setAttribute("aria-label", label);
     selector?.setAttribute("aria-label", `${label} unit`);
+    const role = readout.dataset.valueRole || "known";
+    input.dataset.valueRole = role;
+    if (selector) selector.dataset.valueRole = role;
     input.toggleAttribute("data-centered", !!centered);
     if (!draft.has(input)) resetSchematicInput(entry);
   }
@@ -456,10 +488,10 @@
     return [...lines, value];
   }
 
-  function drawLabel(host, key, description, lines, x, y, { size, fill, centered = false, target, weight = 700 } = {}) {
+  function drawLabel(host, key, description, lines, x, y, { size, fill, centered = false, target, weight = 700, maxWidth = Infinity } = {}) {
     const label = svg(host, "g", { ...control(`label-${key}`, `Edit ${description}: ${lines.join(" ")}`),
       "data-annotation": key, "aria-haspopup": "dialog", ...(target == null ? {} : { "data-network-context": target }) });
-    const pitch = size + 3, width = Math.max(38, ...lines.map(value => [...value].length * size * .65 + 12));
+    const pitch = size + 3, width = Math.min(maxWidth, Math.max(38, ...lines.map(value => [...value].length * size * .65 + 12)));
     svg(label, "rect", { class: "control-hit", x: centered ? x - width / 2 : x - 5, y: y - size,
       width, height: pitch * (lines.length - 1) + size + 6, rx: 4 });
     lines.forEach((value, index) => {
@@ -479,13 +511,12 @@
 
   function drawStress(host, part, x, y, width, compact) {
     const group = svg(host, "g", { "data-resistor-stress": part.id, "data-stress-basis": "nominal" });
-    const size = compact ? 12 : 13;
+    const size = compact ? 11 : 12, gap = 10, cellWidth = (width - gap) / 2;
     stressRows(part).forEach(({ label, value, description }, index) => {
-      const row = svg(group, "g", { "data-stress-metric": label });
-      const baseline = y + index * 16;
+      const row = svg(group, "g", { "data-stress-metric": label }), left = x + index * (cellWidth + gap);
       const fill = value === null ? color.muted : value > 100 ? color.calculated : value === 100 ? color.missing : color.known;
-      const caption = text(row, x, baseline, label, size, color.muted), formatted = formatStress(value);
-      fitText(text(row, x + width, baseline, formatted, size, fill, { "text-anchor": "end", "data-stress-value": "" }), width - caption.getComputedTextLength() - 6);
+      const caption = text(row, left, y, label, size, color.muted), formatted = formatStress(value);
+      fitText(text(row, left + cellWidth, y, formatted, size, fill, { "text-anchor": "end", "data-stress-value": "" }), cellWidth - caption.getComputedTextLength() - 5);
       svg(row, "title", {}, `Nominal ${label} ${formatted}. ${description}`);
     });
   }
@@ -493,7 +524,7 @@
   function drawNetwork(host, box, x, y, symbols, topColor) {
     const { node, width, height, children } = box, bottom = y + height;
     if (!children) {
-      const calculated = node.id === state.target, value = calculated ? result.solved : node.resistance;
+      const calculated = state.mode === "resistance", value = partResistance(node);
       const power = result.readings?.get(node.id)?.power, dissipation = format(power, "W");
       const role = valueRole(value, calculated), fill = color[role];
       const bodyWidth = symbols.width, bodyHeight = symbols.height;
@@ -501,40 +532,50 @@
       const action = "Resistor options";
       const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. Power ${power === undefined ? "unavailable" : dissipation}. ${action}`),
         "data-part": node.id, "aria-pressed": String(node.id === selectedId), "aria-haspopup": "menu" });
-      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: middle - 53, width: width - 10, height: 174, rx: 8, "stroke-width": 1 });
+      const cardY = middle - 80, cardHeight = 186;
+      svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: cardY, width: width - 10, height: cardHeight, fill: "transparent" });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, fill).dataset.symbolLead = "top";
       line(part, x, end, x, end + leadLength, fill).dataset.symbolLead = "bottom";
       line(part, x, end + leadLength, x, bottom);
       svg(part, "rect", { x: x - bodyWidth / 2, y: top, width: bodyWidth, height: bodyHeight, rx: symbols.radius, fill: "#13202c", stroke: fill, "data-resistor-core": "" });
-      const compact = symbols === compactSymbols, size = compact ? 12 : 15, lines = wrapLabel(partLabel(node), compact ? 10 : 12);
-      drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, lines, x + 24, middle - 33 - (lines.length - 1) * (size + 3),
-        { size, fill, target: node.id });
-      const caption = partCaption(node), formatted = format(value, "Ω"), valueX = x + 24, fieldWidth = width - 62;
-      const resistance = text(host, valueX, middle - 10, formatted, compact ? 12 : 14, fill,
-        { "data-resistor-value": node.id, "data-value-role": role, "data-network-context": node.id });
-      fitText(resistance, fieldWidth);
-      if (!calculated) drawField(resistance, { x: valueX, y: middle - 26, width: fieldWidth, height: 25 },
-        { key: resistanceKey(node.id), label: `${caption} resistance`, kind: "resistance", value,
-          write(next) { node.resistance = next; selectedId = node.id; syncPart(); } });
-      const readingSize = compact ? 12 : 13;
-      const footprint = text(host, valueX, middle + 20, node.package, readingSize, color.known,
-        { "data-resistor-package": node.id, "data-network-context": node.id });
-      fitText(footprint, fieldWidth);
-      drawField(footprint, { x: valueX, y: middle + 5, width: fieldWidth, height: 25 },
-        { key: `package-${node.id}`, label: `${caption} package`, kind: "package", value: node.package,
-          write(next) { node.package = next; selectedId = node.id; syncPart(); } });
-      text(host, valueX, middle + 52, "Tol.", readingSize, color.muted);
-      const tolerance = text(host, valueX + 38, middle + 52, node.tolerance === null ? "—" : `±${node.tolerance}%`,
-        readingSize, color[node.tolerance === null ? "missing" : "known"], { "data-resistor-tolerance": node.id });
-      drawField(tolerance, { x: valueX + 38, y: middle + 35, width: fieldWidth - 38, height: 25 },
-        { key: `tolerance-${node.id}`, label: `${caption} tolerance (%)`, kind: "tolerance", value: node.tolerance,
-          write(next) { node.tolerance = next; selectedId = node.id; syncPart(); } });
-      const powerRow = svg(part, "g"), powerLabel = text(powerRow, valueX, middle + 76, "Power", readingSize, color.muted);
-      fitText(text(powerRow, valueX + fieldWidth, middle + 76, dissipation, readingSize,
+      const compact = symbols === compactSymbols, size = compact ? 15 : 18;
+      const cardX = x + 24, cardWidth = width - 60, valueX = cardX + 12, fieldWidth = cardWidth - 24, caption = partCaption(node);
+      const info = svg(part, "g", { "data-resistor-info": node.id });
+      svg(info, "rect", { class: "part-info-box", x: cardX, y: cardY, width: cardWidth, height: cardHeight, rx: 10,
+        fill: "#142535", stroke: "#39586f", "stroke-width": 1 });
+      drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, [partLabel(node)], valueX, cardY + 28,
+        { size, fill, target: node.id, maxWidth: fieldWidth + 10 });
+      const toleranceWidth = compact ? 62 : (fieldWidth - 12) / 2;
+      const setting = (field, left, rowY, fieldSize, content, value, fill, extra = {}) => {
+        const box = { x: left, y: rowY, width: fieldSize, height: 34, class: "resistor-field" };
+        svg(info, "rect", { x: left, y: rowY, width: fieldSize, height: box.height, rx: 6, fill: "#172c3d", stroke: "#39586f", "stroke-width": 1 });
+        const readout = text(info, left + 9, rowY + 22, content, compact ? 13 : 15, fill,
+          { [`data-resistor-${field}`]: node.id, "data-network-context": node.id, ...extra });
+        fitText(readout, fieldSize - 18);
+        return { readout, box, value };
+      };
+      const resistance = setting("value", valueX, cardY + 40, fieldWidth, format(value, "Ω"), value, fill, { "data-value-role": role });
+      const tolerance = setting("tolerance", valueX, cardY + 84, toleranceWidth, node.tolerance === null ? "—" : `±${node.tolerance}%`,
+        node.tolerance, node.tolerance === null ? color.missing : "#c6d7e5");
+      const footprint = setting("package", valueX + toleranceWidth + 12, cardY + 84, fieldWidth - toleranceWidth - 12,
+        node.package, node.package, color.known);
+      for (const [field, kind, key, label] of [
+        [resistance, "resistance", resistanceKey(node.id), "resistance"],
+        [tolerance, "tolerance", `tolerance-${node.id}`, "tolerance (%)"],
+        [footprint, "package", `package-${node.id}`, "package"]
+      ]) {
+        drawField(field.readout, field.box, { key, kind, label: `${caption} ${label}`, value: field.value,
+          choose: calculated && kind === "resistance" ? (next, prefix) => requestResistanceEdit(node.id, next, prefix) : null,
+          write(next) { node[kind] = next; selectedId = node.id; syncPart(); } });
+      }
+      line(info, valueX, cardY + 129, valueX + fieldWidth, cardY + 129, "#39586f").setAttribute("stroke-width", "1");
+      const readingSize = compact ? 12 : 13, powerY = cardY + 151;
+      const powerRow = svg(info, "g"), powerLabel = text(powerRow, valueX, powerY, "Power", readingSize, color.muted);
+      fitText(text(powerRow, valueX + fieldWidth, powerY, dissipation, readingSize,
         power === undefined ? color.muted : color.text, { "text-anchor": "end", "data-resistor-power": node.id }),
         fieldWidth - powerLabel.getComputedTextLength() - 6);
-      drawStress(part, node, valueX, middle + 92, fieldWidth, compact);
+      drawStress(info, node, valueX, cardY + 173, fieldWidth, compact);
       return;
     }
     if (node.kind === "series") {
@@ -591,16 +632,20 @@
     const role = valueRole(voltage, state.mode === "voltage"), fill = color[role], reading = format(voltage, "V");
     const meter = svg(host, "g", { "data-voltmeter": "", role: "group",
       "aria-label": `Voltmeter, load voltage ${Number.isFinite(voltage) ? reading : "unavailable"}` });
-    line(meter, x, top, x, y - radius, topColor).setAttribute("stroke-dasharray", "6 6");
-    line(meter, x, y + radius, x, bottom).setAttribute("stroke-dasharray", "6 6");
+    const panelHalfWidth = radius - 2, panelHalfHeight = 30;
+    for (const [from, to, stroke] of [[top, y - panelHalfHeight, topColor], [y + panelHalfHeight, bottom, color.net]]) {
+      const probe = line(meter, x, from, x, to, stroke);
+      probe.setAttribute("stroke-dasharray", "3 6"); probe.setAttribute("stroke-width", "1.5");
+    }
     junction(meter, x, top, symbols.junction, topColor);
     junction(meter, x, bottom, symbols.junction);
-    svg(meter, "circle", { cx: x, cy: y, r: radius, fill: "#13202c", stroke: fill, "data-voltmeter-body": "" });
-    text(meter, x, y - 23, "V", 18, fill, { "text-anchor": "middle", "font-weight": 700 });
-    const value = text(meter, x, y, reading, 18, fill, { "data-circuit-quantity": "voltage",
+    svg(meter, "rect", { x: x - panelHalfWidth, y: y - panelHalfHeight, width: 2 * panelHalfWidth, height: 2 * panelHalfHeight,
+      rx: 8, fill: "#12354b", stroke: "#39586f", "stroke-width": 1, "data-voltmeter-panel": "" });
+    text(meter, x, y - 11, "Load voltage", 12, "#75d5ff", { "text-anchor": "middle" });
+    const value = text(meter, x, y + 11, reading, 18, fill, { "data-circuit-quantity": "voltage",
       "data-value-role": role, "data-voltmeter-value": "", "text-anchor": "middle", "dominant-baseline": "central", "font-weight": 700 });
-    fitText(value, 2 * radius - 16);
-    drawQuantityField(value, "voltage", { x: x - radius + 8, y: y - 13, width: 2 * radius - 16, height: 26 }, true);
+    fitText(value, 2 * panelHalfWidth - 16);
+    drawQuantityField(value, "voltage", { x: x - panelHalfWidth + 7, y: y - 2, width: 2 * panelHalfWidth - 14, height: 26 }, true);
   }
 
   function drawSourceSymbol(host, source, x, y, top, bottom, symbols, topColor) {
@@ -665,7 +710,7 @@
     const focusedControl = document.activeElement?.dataset.schematicControl;
     for (const entry of schematicInputs.values()) entry.seen = false;
     const compact = mobile.matches && !desktopView, symbols = compact ? compactSymbols : fullSymbols;
-    const columnWidth = compact ? 176 : 190, box = layout(state.network, columnWidth, compact ? 250 : 260);
+    const columnWidth = compact ? 252 : 312, box = layout(state.network, columnWidth, compact ? 250 : 260);
     const series = sources().filter(source => source.kind === "voltage");
     const parallel = sources().filter(source => source.kind === "current");
     const radius = compact ? 57 : 62, railLeft = compact ? 63 : 81, sourceTextWidth = compact ? 106 : 116;
@@ -673,16 +718,17 @@
     const sourceLeft = railLeft + branchWidth * parallel.length;
     const sourceTextLeft = sourceLeft + symbols.source + 8;
     const firstBlockLeft = sourceTextLeft + sourceTextWidth + 2 * (radius + 10);
-    const naturalWidth = Math.ceil(firstBlockLeft + resistorBlockInset + box.width - columnWidth / 2 + 95);
+    const rightPadding = columnWidth / 2 - 12;
+    const naturalWidth = Math.ceil(firstBlockLeft + resistorBlockInset + box.width - columnWidth / 2 + rightPadding);
     const width = Math.max(naturalWidth, viewport.clientWidth), offset = (width - naturalWidth) / 2;
     const title = state.title || titleDefault;
-    const names = compact ? wrapLabel(title, Math.floor((width - 32) / 12.4)) : [title];
+    const names = compact ? wrapLabel(title, Math.max(12, Math.floor((viewport.clientWidth - 32) / 12.4))) : [title];
     const titleSize = compact ? 20 : Math.min(34, (width - 64) / (title.length * .62));
     const rowHeight = 2 * (symbols.source + leadLength + 8), seriesHeight = series.length * rowHeight;
     const y = 134 + 24 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15), rowHeight + seriesHeight);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
     const tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 165;
-    const x = naturalWidth - 95 - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
+    const x = naturalWidth - rightPadding - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const values = displayValues(), kind = primarySourceKind();
     const sourceCalculated = state.mode === kind;
     const sourceValue = sourceCalculated ? (kind === "voltage" ? result.mainVoltage : result.mainCurrent) : state[kind];
@@ -835,7 +881,7 @@
       }
       details.firstElementChild.textContent = name;
       details.lastElementChild.setAttribute("aria-label", `${name} measurements`);
-      const data = [["Resistance", format(part.id === state.target ? result.solved : part.resistance, "Ω")],
+      const data = [["Resistance", format(partResistance(part), "Ω")],
         ["Voltage drop", format(reading?.voltage, "V")], ["Current", format(reading?.current, "A")],
         ["Power", format(reading?.power, "W")],
         ...stressRows(part).flatMap(({ label, value, limit, rating }) => [[`${label} (nominal)`, formatStress(value)], [`Package ${rating} reference`, limit]]),
@@ -850,7 +896,6 @@
     result = analyze();
     const status = byId("calculationStatus");
     status.hidden = !result.error; status.textContent = result.error || "";
-    byId("solvedResistance").textContent = format(result.solved, "Ω");
     for (const id of ["ltspiceDownload", "markdownDownload"]) byId(id).disabled = Boolean(result.error);
     drawCircuit(); renderCharacteristics();
     memory?.schedule();
@@ -869,11 +914,10 @@
       field("groundLabel", "Ground label", snapshot.groundLabel || groundDefault));
     if (snapshot.mode !== "voltage") fields.push(field("voltage", sourceInputLabel("voltage", snapshot), format(snapshot.voltage, "V")));
     if (snapshot.mode !== "current") fields.push(field("current", sourceInputLabel("current", snapshot), format(snapshot.current, "A")));
-    if (snapshot.target) fields.push(field("target", "Calculated resistor", partName(snapshot.target)));
     const describedParts = parts(snapshot.network).map(part => {
-      const resistance = part.id === snapshot.target ? "Calculated" : format(part.resistance, "Ω"), tolerance = `±${part.tolerance}%`;
+      const resistance = format(part.resistance, "Ω"), tolerance = `±${part.tolerance}%`;
       return { name: partName(part.id), summary: `${part.label ? part.label + ", " : ""}${resistance}, ${tolerance}, ${part.package}`, values: {
-        label: { label: "label", value: partLabel(part) }, resistance: { label: "resistance", value: resistance },
+        label: { label: "label", value: partLabel(part) }, resistance: { label: snapshot.mode === "resistance" ? "reference resistance" : "resistance", value: resistance },
         tolerance: { label: "tolerance", value: tolerance }, package: { label: "package", value: part.package }
       } };
     });
@@ -909,7 +953,7 @@
       && (snapshot.sourceType === undefined || Object.hasOwn(nextSourceId, snapshot.sourceType))
       && (snapshot.sources === undefined || Array.isArray(snapshot.sources) && snapshot.sources.every(validSource))
       && [snapshot.voltage, snapshot.current].every(value => value === null || Number.isFinite(value)) && validNode(snapshot.network)
-      && (snapshot.mode === "resistance" ? ids.has(snapshot.target) : snapshot.target === null);
+      && (snapshot.target == null || (snapshot.mode === "resistance" && ids.has(snapshot.target)));
   }
 
   function drawersOverlap() {
@@ -930,7 +974,6 @@
     if (button.dataset.mode === state.mode) return;
     draft.clear();
     state.mode = button.dataset.mode;
-    state.target = state.mode === "resistance" ? selectedId : null;
     syncControls(); refresh();
   });
   byId("partSelect").addEventListener("change", event => selectPart(Number(event.target.value)));
@@ -995,7 +1038,6 @@
     selectedPrefixes.delete(resistanceKey(id));
     state.network = remove(state.network, id);
     const next = allParts[index + 1] || allParts[index - 1];
-    if (state.target === id) state.target = next.id;
     selectPart(next.id);
     focusControl(`part-${next.id}`);
   }
@@ -1012,9 +1054,7 @@
       const action = button.dataset.componentAction;
       if (!action) button.hidden = sourceMenu ? !choice || choice === kind : Boolean(choice);
       else if (sourceMenu) button.hidden = !componentOptions || action !== "source" || !addedKey;
-      else button.hidden = !componentOptions || action === "source"
-        || (action === "resistor" && parts(state.network).length === 1)
-        || (action === "solve" && (state.mode !== "resistance" || Number(target) === state.target));
+      else button.hidden = !componentOptions || action === "source" || (action === "resistor" && parts(state.network).length === 1);
     }
     constructionMenu.hidden = false;
     const bounds = anchor.getBoundingClientRect();
@@ -1061,6 +1101,32 @@
   byId("annotationForm").addEventListener("submit", event => { event.preventDefault(); closeAnnotation(true); });
   byId("annotationCancel").addEventListener("click", () => closeAnnotation(false));
   annotationEditor.addEventListener("cancel", event => { event.preventDefault(); closeAnnotation(false); });
+
+  function requestResistanceEdit(id, value, prefix) {
+    resistanceEdit = { id, value, prefix };
+    byId("calculatedResistanceHelp").textContent = `Use ${format(value, "Ω")} for ${partCaption(findPart(id))}. Choose the quantity to recalculate.`;
+    resistanceDialog.showModal();
+  }
+
+  resistanceDialog.addEventListener("click", event => {
+    const mode = event.target.closest("[data-resistance-mode]")?.dataset.resistanceMode;
+    if (!mode || !resistanceEdit) return;
+    const { id, value, prefix } = resistanceEdit;
+    for (const part of parts(state.network)) {
+      part.resistance = part.id === id ? value : partResistance(part) ?? part.resistance ?? defaultResistance;
+    }
+    state.mode = mode; selectedId = id;
+    selectedPrefixes.set(resistanceKey(id), prefix);
+    syncControls(); refresh();
+    resistanceDialog.close();
+  });
+  byId("calculatedResistanceCancel").addEventListener("click", () => resistanceDialog.close());
+  resistanceDialog.addEventListener("close", () => {
+    if (resistanceDialog.open || !resistanceEdit) return;
+    schematicInputs.get(resistanceKey(resistanceEdit.id))?.input.focus({ preventScroll: true });
+    resistanceEdit = null;
+  });
+
   function activateSchematicControl(event) {
     const control = event.target.closest("[data-schematic-control]");
     if (!control) return;
@@ -1095,7 +1161,6 @@
     switch (action.dataset.componentAction) {
       case "source": removeSource(addedKey); break;
       case "resistor": removePart(id); break;
-      case "solve": state.target = id; selectPart(id); focusControl(key); break;
       case "label": openAnnotation(key, () => focusControl(key)); break;
       default:
         if (target === "source") changeSourceType(action.dataset.changeSource, addedKey);
@@ -1154,7 +1219,7 @@
   byId("characteristicsClose").addEventListener("click", () => openCharacteristics(false, true));
   document.addEventListener("keydown", event => {
     const inCharacteristics = event.target.closest?.("#characteristicsDrawer, #characteristicsToggle");
-    if (event.key === "Escape" && !annotationEditor.open && constructionMenu.hidden && !characteristics.inert
+    if (event.key === "Escape" && !annotationEditor.open && !resistanceDialog.open && constructionMenu.hidden && !characteristics.inert
       && (!memoryPanel.open || inCharacteristics) && !event.defaultPrevented && byId("memoryMenu").hidden) {
       event.preventDefault(); openCharacteristics(false, true);
     }
@@ -1179,12 +1244,18 @@
       state = snapshot; draft.clear(); selectedPrefixes.clear();
       const allParts = parts(state.network);
       selectedId = state.target ?? allParts[0].id;
+      // Preserve the effective component values from older single-target saves.
+      if (state.target != null) {
+        const previous = analyze(state.target);
+        if (!previous.error) findPart(state.target).resistance = previous.resistances.get(state.target);
+      }
+      delete state.target;
       nextId = Math.max(nextId, ...allParts.map(part => part.id + 1));
       selectedSourceKey = undefined;
       for (const source of sources()) nextSourceId[source.kind] = Math.max(nextSourceId[source.kind], source.id + 1);
       syncControls(); refresh();
     },
-    canCollapse: () => !annotationEditor.open && !inputs.contains(document.activeElement) && constructionMenu.hidden
+    canCollapse: () => !annotationEditor.open && !resistanceDialog.open && !inputs.contains(document.activeElement) && constructionMenu.hidden
       && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
   });
 
@@ -1288,7 +1359,7 @@
     function visit(node, from, to) {
       if (!node.children) {
         const component = { name: partName(node.id), kind: "resistance", from, to,
-          value: node.id === state.target ? result.solved : node.resistance };
+          value: partResistance(node) };
         resistors.push(component);
         return component;
       }
