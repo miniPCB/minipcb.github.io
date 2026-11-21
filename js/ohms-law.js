@@ -742,9 +742,7 @@
   });
   function addResistor(kind, target) {
     const part = newPart(nextId++);
-    const network = state.network;
-    if (target === "source") state.network = { kind, children: [...(network.kind === kind ? network.children : [network]), part] };
-    else state.network = insert(network, Number(target), kind, part);
+    state.network = insert(state.network, Number(target), kind, part);
     selectPart(part.id);
     return part.id;
   }
@@ -761,14 +759,16 @@
   function openConstruction(anchor, clientX, clientY) {
     const target = anchor.dataset.part ?? anchor.dataset.networkContext;
     constructionTarget = { target, control: anchor.dataset.schematicControl || "source" };
-    byId("constructionTarget").textContent = target === "source" ? "Entire circuit" : partCaption(findPart(Number(target)));
-    for (const button of constructionMenu.querySelectorAll("[data-add-source]")) button.hidden = target !== "source";
+    const sourceMenu = target === "source";
+    const sourceLabel = anchor.closest("[data-added-source]")?.dataset.addedSource || state.sourceLabel || labelDefaults.source;
+    byId("constructionTarget").textContent = sourceMenu ? sourceLabel : partCaption(findPart(Number(target)));
+    for (const button of constructionMenu.querySelectorAll("button")) button.hidden = button.hasAttribute("data-add-source") !== sourceMenu;
     constructionMenu.hidden = false;
     const bounds = anchor.getBoundingClientRect();
     const { clientWidth, clientHeight } = document.documentElement;
     constructionMenu.style.left = `${Math.max(12, Math.min(clientX ?? bounds.left, clientWidth - constructionMenu.offsetWidth - 12))}px`;
     constructionMenu.style.top = `${Math.max(12, Math.min(clientY ?? bounds.bottom, clientHeight - constructionMenu.offsetHeight - 12))}px`;
-    constructionMenu.querySelector("button").focus({ preventScroll: true });
+    constructionMenu.querySelector("button:not([hidden])").focus({ preventScroll: true });
   }
 
   function closeConstruction(restoreFocus = false) {
@@ -842,13 +842,12 @@
     else if (["Enter", " "].includes(event.key)) activateSchematicControl(event);
   });
   constructionMenu.addEventListener("click", event => {
-    const kind = event.target.closest("[data-connect]")?.dataset.connect;
-    const source = event.target.closest("[data-add-source]")?.dataset.addSource;
-    if ((!kind && !source) || !constructionTarget) return;
+    const action = event.target.closest("button:not([hidden])");
+    if (!action || !constructionTarget) return;
     const { target } = constructionTarget;
     closeConstruction();
-    if (source && target === "source") addSource(source);
-    else if (kind) focusControl(`part-${addResistor(kind, target)}`);
+    if (target === "source") addSource(action.dataset.addSource);
+    else focusControl(`part-${addResistor(action.dataset.connect, target)}`);
   });
   constructionMenu.addEventListener("keydown", event => {
     if (["Escape", "Tab"].includes(event.key)) {

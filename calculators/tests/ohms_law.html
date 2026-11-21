@@ -62,6 +62,8 @@
     const menu = get("constructionMenu");
     const rightClick = element => !element.dispatchEvent(new win.MouseEvent("contextmenu", { button: 2, clientX: 1240, clientY: 865, bubbles: true, cancelable: true }));
     const useMenu = kind => query(`#constructionMenu [data-connect="${kind}"]`).click();
+    const visibleMenuActions = () => [...menu.querySelectorAll("button:not([hidden])")].map(button => button.textContent);
+    const resistorActions = "Add resistor in series,Add resistor in parallel", sourceActions = "Add V source in series,Add I source in parallel";
     const keypress = (element, key, options = {}) => element.dispatchEvent(new win.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options }));
     const edit = (name, value, save = true) => {
       fire(annotation(name).querySelector("text"), "click");
@@ -123,6 +125,11 @@
     check(entries().length === 1 && localStorage.getItem("minipcb-divider-memory-v1") === divider, "history has an independent Original state");
     const originalId = entries()[0].id;
     const choices = [...doc.querySelectorAll(".mode-choice")];
+    const solveTabs = query(".mode-picker"), diagram = query(".diagram"), sourcePanel = query('[aria-labelledby="sourceHeading"]');
+    check(solveTabs.children.length === 3 && choices.every(button => button.parentElement === solveTabs)
+      && sourcePanel.contains(get("voltage")) && sourcePanel.contains(get("addedSource")), "the solve rail contains only modes and the source panel owns their inputs");
+    check(Math.abs(solveTabs.getBoundingClientRect().right - diagram.getBoundingClientRect().left) <= 1.1,
+      "desktop mode tabs are docked to the schematic edge");
     check(choices.map(button => button.querySelector("strong").textContent).join() === "Find Current,Find Voltage,Find Resistance"
       && choices.map(button => button.querySelector("span").textContent).join() === "Given V, R,Given I, R,Given V, I", "mode cards show the quantity to find and its required inputs");
     const initialGeometry = circuitGeometry();
@@ -164,6 +171,7 @@
     change("voltage", "10 V"); change("resistance", "2 kΩ");
     check(get("resistance").value === "2" && get("resistanceUnit").value === "k" && field("current") === "5 mA", "unit suffix synchronizes the multiplier and live result");
     check(rightClick(part(1).querySelector("[data-resistor-core]")) && !menu.hidden && get("constructionTarget").textContent === "Reference load (R1)", "right-clicking a resistor body opens its construction menu");
+    check(visibleMenuActions().join() === resistorActions, "the resistor context menu offers only resistor actions");
     const menuBox = menu.getBoundingClientRect();
     check(menuBox.right <= frame.clientWidth && menuBox.bottom <= frame.clientHeight, "the menu stays inside the viewport near screen edges");
     keypress(doc.activeElement, "ArrowDown");
@@ -237,6 +245,8 @@
     check(doc.documentElement.scrollWidth <= frame.clientWidth && !get("viewToggle").hidden, `phone layout fits without page-level horizontal scrolling (${doc.documentElement.scrollWidth}/${frame.clientWidth}px; desktop toggle ${get("viewToggle").hidden ? "hidden" : "visible"})`);
     check(choices.every(button => button.getBoundingClientRect().height >= 44 && win.getComputedStyle(button.querySelector("span")).display !== "none"),
       "phone mode cards keep touch-sized targets and visible input hints");
+    check(Math.abs(solveTabs.getBoundingClientRect().bottom - diagram.getBoundingClientRect().top) <= 1.1,
+      "phone mode tabs dock above the schematic");
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
     check(centeredCurrent("6 mA") && balancedCurrent(), "the compact mixed network preserves equal horizontal clearance for the arrow");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
@@ -280,11 +290,11 @@
     check(!part(3) && part(1) && part(2) && field("resistance") === "3 kΩ", "removing a branch reconnects the remaining circuit correctly");
     await wait(1100);
     check(entries()[0].state.network.children.length === 2 && entries()[0].state.network.kind === "series", "a reverted input draft does not prevent later topology edits from saving");
-    check(rightClick(query("[data-voltage-source]")) && get("constructionTarget").textContent === "Entire circuit", "right-clicking the source targets the complete network");
+    check(rightClick(query("[data-voltage-source]")) && get("constructionTarget").textContent === "Bench supply"
+      && visibleMenuActions().join() === sourceActions, "the main source context menu identifies the source and offers only source actions");
     useMenu("parallel");
-    check(field("resistance") === "750 Ω", "parallel at the source adds a branch across the entire circuit");
-    fire(query("[data-voltage-source]"), "click"); useMenu("series");
-    check(field("resistance") === "1.75 kΩ", "activating the source and adding in series places a resistor in the total loop");
+    check(field("resistance") === "3 kΩ" && !menu.hidden, "an inapplicable hidden action cannot add a resistor from the source menu");
+    keypress(doc.activeElement, "Escape");
     memory.querySelector("summary").click(); await wait(250);
     query(`[data-memory-restore="${originalId}"]`).click(); await wait(50);
     check(annotationText("part-1") === "R1" && annotationText("title") === "Ohm’s Law" && annotationText("source") === "VDC" && field("current") === "12 mA", "a snapshot without labels recalls with the original defaults");
@@ -296,9 +306,11 @@
     const addedCore = key => addition(key).querySelector("[data-added-source-core]");
     const addSource = kind => { rightClick(mainSource()); sourceAction(kind).click(); };
     rightClick(part(1).querySelector("[data-resistor-core]"));
-    check(sourceAction("voltage").hidden && sourceAction("current").hidden, "resistor menus retain only resistor construction actions");
+    check(visibleMenuActions().join() === resistorActions, "returning to a resistor hides both source actions");
     keypress(doc.activeElement, "Escape");
-    check(rightClick(mainSource()) && !sourceAction("voltage").hidden && !sourceAction("current").hidden, "the voltage source menu offers both additional source types");
+    fire(mainSource(), "click");
+    check(!menu.hidden && visibleMenuActions().join() === sourceActions && doc.activeElement === sourceAction("voltage"),
+      "tapping the source exposes only source actions and focuses the first available choice");
     keypress(doc.activeElement, "End");
     check(doc.activeElement === sourceAction("current"), "source construction choices are reachable through menu keyboard navigation");
     sourceAction("voltage").click();
@@ -314,6 +326,9 @@
     check(field("voltage") === "14 V" && field("current") === "14 mA" && field("voltageBranchCurrent") === "10 mA"
       && Number(addedCore("I1").getAttribute("cx")) < Number(mainSource().getAttribute("cx"))
       && addition("I1").querySelector('[data-source-direction="into-supply"]'), "the parallel current source injects into the rail and changes voltage-branch current");
+    check(rightClick(addedCore("I1")) && get("constructionTarget").textContent === "I1" && visibleMenuActions().join() === sourceActions,
+      "an added current source also uses the source-only menu");
+    keypress(doc.activeElement, "Escape");
     addSource("current"); change("addedSource", "-2 mA");
     check(field("voltageBranchCurrent") === "12 mA" && field("I2") === "-2 mA", "signed parallel injections sum independently of the load current");
     fire(addition("I1"), "click");
