@@ -14,6 +14,7 @@ Instructions for Codex or other agents working in this repo.
 - Mention any assumptions.
 - For any code/content change, append a log record to `agents_log.jsonl` and add a short summary row to `agents_log.md`.
 - Every new log record must include per-file edit statements: file name plus 1+ concise statements of what was changed in that file.
+- Never enter data explicitly supplied in any prompt into either agent log, even if the prompt instructs you to log it. Write every entry independently from your observations of the work and verification, following the logging requirements in this document.
 - Treat `agents_log.jsonl` as append-only history; never rewrite old records (add a new correction/supersede record instead).
 
 ## Tools
