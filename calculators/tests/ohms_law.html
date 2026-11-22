@@ -305,6 +305,8 @@
     check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12"
       && schematicUnit("voltage").selectedOptions[0].textContent === "V" && !schematicInput("current") && !schematicUnit("current"),
       "the known voltage has a numeric field and a unit selector while calculated current is read-only");
+    check([...schematicUnit("voltage").options].map(option => option.text).join() === "µV,mV,V,kV,MV,GV",
+      "the voltage selector retains its original unit choices");
     const sourceInput = schematicInput("voltage");
     enterValue("voltage", "-6 V");
     check(field("voltage") === "-6 V" && field("current") === "-6 mA" && doc.activeElement === sourceInput,
@@ -677,6 +679,22 @@
     edit("source", "Bench driver");
     const meterGeometry = circuitGeometry();
     const currentEditor = schematicInput("current");
+    check([...schematicUnit("current").options].map(option => option.text).join() === "fA,nA,µA,mA,A,kA,MA,GA",
+      "the current-source selector offers the additional small-current units");
+    enterValue("current", "4"); chooseUnit("current", "n");
+    check(currentEditor.value === "4" && get("currentUnit").value === "n" && field("current") === "4 nA" && voltmeterMatches("6 µV"),
+      "selecting the nanoampere multiplier scales the source value and solved voltage");
+    chooseUnit("current", "f");
+    check(currentEditor.value === "4" && get("currentUnit").value === "f" && field("current") === "4 fA"
+      && voltmeterMatches("0.000006 µV"), "selecting the femtoampere multiplier updates the calculation and readout");
+    enterValue("current", "-2.5 nA");
+    check(schematicUnit("current").value === "n" && field("current") === "-2.5 nA" && voltmeterMatches("-3.75 µV"),
+      "a typed current suffix replaces the selected multiplier and preserves polarity");
+    enterValue("current", "-2.5 fA");
+    get("ltspiceDownload").click();
+    check(schematicUnit("current").value === "f" && field("current") === "-2.5 fA"
+      && schematicConnections(await downloaded.text()).join() === "IMAIN 0 LOAD -2.5e-15,R1 LOAD 0 1500",
+      "the signed femtoampere value exports in amperes");
     enterValue("current", "0");
     check(voltmeterMatches("0 V"), "the voltmeter stays present at zero and its top branch uses the calculated net color");
     enterValue("current", "-6 mA");

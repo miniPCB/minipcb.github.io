@@ -16,7 +16,8 @@
   let frameExportSnapshot, resistanceEdit, toleranceEdit, ratingPartId;
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
   const sourceModes = { voltage: ["current", "resistance"], current: ["voltage"] };
-  const prefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
+  const standardPrefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
+  const prefixes = { f: 1e-15, n: 1e-9, ...standardPrefixes };
   const units = { voltage: "V", current: "A", resistance: "Ω" };
   const packages = ["0201", "0402", "0603", "0805", "1206", "1210", "2010", "2512"];
   const legacyPackages = ["Through-hole", "Other"];
@@ -190,24 +191,29 @@
     return children.length === 1 ? children[0] : { kind: node.kind, children };
   }
 
-  function engineeringPrefix(value) {
+  function prefixesFor(unit) { return unit === "A" ? prefixes : standardPrefixes; }
+
+  function engineeringPrefix(value, unit) {
     if (!value) return "";
     const magnitude = Number(Math.abs(value).toPrecision(15));
-    return [...Object.keys(prefixes)].reverse().find(prefix => magnitude >= prefixes[prefix]) ?? "µ";
+    const available = Object.keys(prefixesFor(unit));
+    const smallest = available[0];
+    return available.reverse().find(prefix => magnitude >= prefixes[prefix]) ?? smallest;
   }
-  function inputPrefix(key, value) {
-    const prefix = selectedPrefixes.get(key) ?? engineeringPrefix(value);
-    const amount = value / prefixes[prefix];
-    return Number.isFinite(amount) && (amount !== 0 || !value) ? prefix : engineeringPrefix(value);
+  function inputPrefix(key, value, unit) {
+    const prefix = selectedPrefixes.get(key) ?? engineeringPrefix(value, unit);
+    const amount = value / prefixesFor(unit)[prefix];
+    return Number.isFinite(amount) && (amount !== 0 || !value) ? prefix : engineeringPrefix(value, unit);
   }
 
   function unitOptions(kind) {
-    return Object.keys(prefixes).map(prefix => new Option(prefix + units[kind], prefix));
+    const unit = units[kind];
+    return Object.keys(prefixesFor(unit)).map(prefix => new Option(prefix + unit, prefix));
   }
 
   function format(value, unit, precision = 5) {
     if (!Number.isFinite(value)) return "—";
-    const prefix = engineeringPrefix(value);
+    const prefix = engineeringPrefix(value, unit);
     return `${Number((value / prefixes[prefix]).toPrecision(precision))} ${prefix}${unit}`;
   }
 
@@ -246,11 +252,11 @@
   }
   function parseQuantity(text, unit, defaultPrefix) {
     const normalized = text.trim().replaceAll("μ", "µ").replaceAll("u", "µ").replace(/ohms?$/i, "Ω");
-    const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*([µmkKMG]?)([VAΩW])?$/i);
+    const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*([fnµmkKMG]?)([VAΩW])?$/i);
     if (!match || match[3] && match[3].toUpperCase() !== unit) return null;
     const typedUnit = !!(match[2] || match[3]);
     const prefix = typedUnit ? match[2].replace("K", "k") : defaultPrefix;
-    const value = Number(match[1]) * prefixes[prefix];
+    const value = Number(match[1]) * prefixesFor(unit)[prefix];
     return Number.isFinite(value) ? { value, prefix } : null;
   }
 
@@ -311,10 +317,10 @@
   function setupQuantity(id, read, write, getKind = () => id, getKey = () => id) {
     const input = byId(id), selector = byId(`${id}Unit`);
     function update(commit, changingUnit = false) {
-      const parsed = parseInputQuantity(input.value, getKind(), selector.value);
+      const kind = getKind(), parsed = parseInputQuantity(input.value, kind, selector.value);
       const value = parsed?.value ?? null, key = getKey(), previous = read();
       const prefix = parsed?.prefix ?? (changingUnit && !input.value.trim() ? selector.value : undefined);
-      const prefixChanged = commit && prefix !== undefined && prefix !== inputPrefix(key, previous);
+      const prefixChanged = commit && prefix !== undefined && prefix !== inputPrefix(key, previous, units[kind]);
       write(value);
       input.setAttribute("aria-invalid", String(!parsed));
       if (commit && prefix !== undefined) {
@@ -333,7 +339,7 @@
         selector.dataset.kind = kind;
       }
       const value = read();
-      selector.value = inputPrefix(getKey(), value);
+      selector.value = inputPrefix(getKey(), value, units[kind]);
       input.value = value === null ? "" : value / prefixes[selector.value];
       input.setAttribute("aria-invalid", String(value === null));
     };
@@ -536,7 +542,7 @@
       input.replaceChildren(...packageOptions(packagePart, value));
       Object.assign(entry, { footprint: packagePart.package, rating: packagePart.powerRating, packageLimits });
     }
-    const prefix = selector ? inputPrefix(key, value) : "";
+    const prefix = selector ? inputPrefix(key, value, units[kind]) : "";
     const fieldText = selector && Number.isFinite(value) ? String(Number((value / prefixes[prefix]).toPrecision(15))) : String(value ?? "");
     Object.assign(entry, { kind, value, write, choose, packagePart, text: fieldText, prefix, seen: true });
     for (const [attr, dimension] of Object.entries(box)) object.setAttribute(attr, dimension);
