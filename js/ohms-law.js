@@ -12,8 +12,7 @@
   const frameExportDialog = byId("frameExportDialog");
   const resistanceDialog = byId("calculatedResistanceDialog");
   const toleranceDialog = byId("toleranceDialog"), customTolerance = byId("customTolerance");
-  const powerRatingDialog = byId("powerRatingDialog"), ratingFootprint = byId("ratingFootprint"), customPowerRating = byId("customPowerRating");
-  let frameExportSnapshot, resistanceEdit, toleranceEdit, ratingPartId;
+  let frameExportSnapshot, resistanceEdit, toleranceEdit;
   const modes = { current: "Current", voltage: "Voltage", resistance: "Resistance" };
   const sourceModes = { voltage: ["current", "resistance"], current: ["voltage"] };
   const standardPrefixes = { µ: 1e-6, m: 1e-3, "": 1, k: 1e3, M: 1e6, G: 1e9 };
@@ -211,10 +210,10 @@
     return Object.keys(prefixesFor(unit)).map(prefix => new Option(prefix + unit, prefix));
   }
 
-  function format(value, unit, precision = 5) {
+  function format(value, unit) {
     if (!Number.isFinite(value)) return "—";
     const prefix = engineeringPrefix(value, unit);
-    return `${Number((value / prefixes[prefix]).toPrecision(precision))} ${prefix}${unit}`;
+    return `${Number((value / prefixes[prefix]).toPrecision(5))} ${prefix}${unit}`;
   }
 
   function displayValues() {
@@ -252,7 +251,7 @@
   }
   function parseQuantity(text, unit, defaultPrefix) {
     const normalized = text.trim().replaceAll("μ", "µ").replaceAll("u", "µ").replace(/ohms?$/i, "Ω");
-    const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*([fnµmkKMG]?)([VAΩW])?$/i);
+    const match = normalized.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*([fnµmkKMG]?)([VAΩ])?$/i);
     if (!match || match[3] && match[3].toUpperCase() !== unit) return null;
     const typedUnit = !!(match[2] || match[3]);
     const prefix = typedUnit ? match[2].replace("K", "k") : defaultPrefix;
@@ -263,11 +262,6 @@
   function parseInputQuantity(text, kind, prefix) {
     const parsed = parseQuantity(text, units[kind], prefix);
     return parsed && (kind !== "resistance" || parsed.value > 0) ? parsed : null;
-  }
-
-  function parsePowerRating(text) {
-    const parsed = parseQuantity(text, "W", "m");
-    return parsed?.value > 0 ? parsed : null;
   }
 
   function parseTolerance(text) {
@@ -282,23 +276,6 @@
       const unset = new Option("—", "");
       unset.disabled = true;
       options.unshift(unset);
-    }
-    return [...options, new Option("Custom…", "custom")];
-  }
-
-  function packageLabel(footprint, powerRating) {
-    const name = packages.includes(footprint) ? footprint : "Saved footprint";
-    const limit = powerRating ?? packageLimits.get(footprint)?.power;
-    const basis = powerRating === undefined && Number.isFinite(limit) ? " ref." : "";
-    return `${name} · ${format(limit, "W")}${basis}`;
-  }
-
-  function packageOptions(part, selection) {
-    const options = packages.map(footprint => new Option(packageLabel(footprint), footprint));
-    if (selection === "saved") {
-      const saved = new Option(packageLabel(part.package, part.powerRating), selection);
-      saved.disabled = true;
-      options.unshift(saved);
     }
     return [...options, new Option("Custom…", "custom")];
   }
@@ -388,11 +365,10 @@
     showResistance();
   }
 
-  function setPartPackage(part, footprint, powerRating) {
-    if (!packages.includes(footprint) && footprint !== part.package) return;
+  function setPartPackage(part, footprint) {
+    if (!packages.includes(footprint)) return;
     part.package = footprint;
-    if (powerRating === undefined) delete part.powerRating;
-    else part.powerRating = powerRating;
+    delete part.powerRating;
     selectedId = part.id;
     syncPart();
   }
@@ -453,11 +429,6 @@
       customTolerance.select();
       return;
     }
-    if (kind === "package" && input.value === "custom") {
-      resetSchematicInput(entry);
-      openPowerRating(entry.packagePart);
-      return;
-    }
     const parsed = kind === "tolerance" ? parseTolerance(input.value)
       : selector ? parseInputQuantity(input.value, kind, selector.value)
       ?? (value === null && !input.value.trim() ? { value: null, prefix: selector.value } : null) : { value: input.value };
@@ -485,7 +456,7 @@
     refresh();
   }
 
-  function drawField(readout, box, { key, label, kind, value, write, centered, choose, packagePart }) {
+  function drawField(readout, box, { key, label, kind, value, write, centered, choose }) {
     readout.setAttribute("data-field-readout", "");
     readout.setAttribute("aria-hidden", "true");
     let entry = schematicInputs.get(key);
@@ -538,13 +509,18 @@
     }
     const { object, input, selector } = entry;
     if (kind === "tolerance" && entry.value !== value) input.replaceChildren(...toleranceOptions(value));
-    if (packagePart && (entry.footprint !== packagePart.package || entry.rating !== packagePart.powerRating || entry.packageLimits !== packageLimits)) {
-      input.replaceChildren(...packageOptions(packagePart, value));
-      Object.assign(entry, { footprint: packagePart.package, rating: packagePart.powerRating, packageLimits });
+    if (kind === "package" && entry.value !== value) {
+      const options = packages.map(footprint => new Option(footprint));
+      if (!packages.includes(value)) {
+        const saved = new Option("Select SMT…", value);
+        saved.disabled = true;
+        options.unshift(saved);
+      }
+      input.replaceChildren(...options);
     }
     const prefix = selector ? inputPrefix(key, value, units[kind]) : "";
     const fieldText = selector && Number.isFinite(value) ? String(Number((value / prefixes[prefix]).toPrecision(15))) : String(value ?? "");
-    Object.assign(entry, { kind, value, write, choose, packagePart, text: fieldText, prefix, seen: true });
+    Object.assign(entry, { kind, value, write, choose, text: fieldText, prefix, seen: true });
     for (const [attr, dimension] of Object.entries(box)) object.setAttribute(attr, dimension);
     input.setAttribute("aria-label", label);
     selector?.setAttribute("aria-label", `${label} unit`);
@@ -621,7 +597,7 @@
       const action = "Resistor options";
       const part = svg(host, "g", { ...control(`part-${node.id}`, `${partCaption(node)}, ${value == null ? "resistance unavailable" : format(value, "Ω")}. Power ${power === undefined ? "unavailable" : dissipation}. ${action}`),
         "data-part": node.id, "aria-pressed": String(node.id === selectedId), "aria-haspopup": "menu" });
-      const cardHeight = 224, cardY = middle - cardHeight / 2;
+      const cardHeight = 186, cardY = middle - cardHeight / 2;
       svg(part, "rect", { class: "part-hit", x: x - resistorBlockInset, y: cardY, width: width - 10, height: cardHeight, fill: "transparent" });
       line(part, x, y, x, top - leadLength, topColor);
       line(part, x, top - leadLength, x, top, fill).dataset.symbolLead = "top";
@@ -635,7 +611,7 @@
         fill: "#142535", stroke: "#39586f", "stroke-width": 1 });
       drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, [partLabel(node)], valueX, cardY + 28,
         { size, fill, target: node.id, maxWidth: fieldWidth + 10 });
-      const readingSize = compact ? 12 : 13, toleranceWidth = compact ? 74 : fieldWidth / 2;
+      const readingSize = compact ? 12 : 13, settingGap = 12, settingWidth = (fieldWidth - settingGap) / 2;
       const setting = (field, left, rowY, fieldSize, content, value, fill, extra = {}) => {
         const box = { x: left, y: rowY, width: fieldSize, height: 34, class: "resistor-field" };
         svg(info, "rect", { x: left, y: rowY, width: fieldSize, height: box.height, rx: 6, fill: "#172c3d", stroke: "#39586f", "stroke-width": 1 });
@@ -645,8 +621,8 @@
         return { readout, box, value };
       };
       const resistance = setting("value", valueX, cardY + 40, fieldWidth, format(value, "Ω"), value, fill, { "data-value-role": role });
-      text(info, valueX, cardY + 106, "Tolerance", readingSize, color.muted);
-      const tolerance = setting("tolerance", valueX + fieldWidth - toleranceWidth, cardY + 84, toleranceWidth, node.tolerance === null ? "—" : `±${node.tolerance}%`,
+      const settingsY = cardY + 84;
+      const tolerance = setting("tolerance", valueX, settingsY, settingWidth, node.tolerance === null ? "—" : `±${node.tolerance}%`,
         node.tolerance, node.tolerance === null ? color.missing : "#c6d7e5");
       for (const [field, kind, key, label] of [
         [resistance, "resistance", resistanceKey(node.id), "resistance"],
@@ -656,20 +632,19 @@
           choose: calculated && kind === "resistance" ? (next, prefix) => requestResistanceEdit(node.id, next, prefix) : null,
           write(next) { node[kind] = next; selectedId = node.id; syncPart(); } });
       }
-      const selection = node.powerRating !== undefined || !packages.includes(node.package) ? "saved" : node.package;
-      const footprint = setting("package", valueX, cardY + 126, fieldWidth, packageLabel(node.package, node.powerRating),
-        selection, color.known, { "data-footprint": node.package });
+      const footprint = setting("package", valueX + settingWidth + settingGap, settingsY, settingWidth, node.package,
+        node.package, color.known, { "data-footprint": node.package });
       drawField(footprint.readout, footprint.box, {
-        key: `package-${node.id}`, label: `${caption} footprint and power rating`, kind: "package", value: footprint.value, packagePart: node,
+        key: `package-${node.id}`, label: `${caption} footprint`, kind: "package", value: footprint.value,
         write(next) { setPartPackage(node, next); }
       });
-      line(info, valueX, cardY + 169, valueX + fieldWidth, cardY + 169, "#39586f").setAttribute("stroke-width", "1");
-      const powerY = cardY + 190;
+      line(info, valueX, cardY + 129, valueX + fieldWidth, cardY + 129, "#39586f").setAttribute("stroke-width", "1");
+      const powerY = cardY + 151;
       const powerRow = svg(info, "g"), powerLabel = text(powerRow, valueX, powerY, "Dissipation", readingSize, color.muted);
       fitText(text(powerRow, valueX + fieldWidth, powerY, dissipation, readingSize,
         power === undefined ? color.muted : color.text, { "text-anchor": "end", "data-resistor-power": node.id }),
         fieldWidth - powerLabel.getComputedTextLength() - 6);
-      drawStress(info, node, valueX, cardY + 211, fieldWidth, compact);
+      drawStress(info, node, valueX, cardY + 173, fieldWidth, compact);
       return;
     }
     if (node.kind === "series") {
@@ -1185,42 +1160,6 @@
     toleranceEdit = null;
   });
 
-  function openPowerRating(part) {
-    const options = packages.map(footprint => new Option(footprint));
-    if (!packages.includes(part.package)) options.unshift(new Option("Keep saved footprint", part.package));
-    ratingFootprint.replaceChildren(...options);
-    ratingFootprint.value = part.package;
-    customPowerRating.value = part.powerRating === undefined ? "" : format(part.powerRating, "W", 15);
-    customPowerRating.setCustomValidity("");
-    ratingPartId = part.id;
-    byId("powerRatingHeading").textContent = `Custom power rating for ${partName(part.id)}`;
-    powerRatingDialog.showModal();
-    customPowerRating.select();
-  }
-
-  customPowerRating.addEventListener("input", () => customPowerRating.setCustomValidity(""));
-  byId("powerRatingForm").addEventListener("submit", event => {
-    event.preventDefault();
-    const parsed = parsePowerRating(customPowerRating.value);
-    if (!parsed) {
-      customPowerRating.setCustomValidity("Enter a positive rating in W or mW.");
-      customPowerRating.reportValidity();
-      return;
-    }
-    const part = findPart(ratingPartId);
-    if (part) {
-      setPartPackage(part, ratingFootprint.value, parsed.value);
-      refresh();
-    }
-    powerRatingDialog.close();
-  });
-  byId("powerRatingCancel").addEventListener("click", () => powerRatingDialog.close());
-  powerRatingDialog.addEventListener("close", () => {
-    if (powerRatingDialog.open) return;
-    schematicInputs.get(`package-${ratingPartId}`)?.input.focus({ preventScroll: true });
-    ratingPartId = undefined;
-  });
-
   function addResistor(kind, target) {
     const part = newPart(nextId++);
     state.network = insert(state.network, Number(target), kind, part);
@@ -1419,8 +1358,7 @@
   byId("characteristicsClose").addEventListener("click", () => openCharacteristics(false, true));
   document.addEventListener("keydown", event => {
     const inCharacteristics = event.target.closest?.("#characteristicsDrawer, #characteristicsToggle");
-    if (event.key === "Escape" && !annotationEditor.open && !resistanceDialog.open && !toleranceDialog.open && !powerRatingDialog.open
-      && constructionMenu.hidden && !characteristics.inert
+    if (event.key === "Escape" && !annotationEditor.open && !resistanceDialog.open && !toleranceDialog.open && constructionMenu.hidden && !characteristics.inert
       && (!memoryPanel.open || inCharacteristics) && !event.defaultPrevented && byId("memoryMenu").hidden) {
       event.preventDefault(); openCharacteristics(false, true);
     }
@@ -1460,8 +1398,7 @@
       for (const source of sources()) nextSourceId[source.kind] = Math.max(nextSourceId[source.kind], source.id + 1);
       syncControls(); refresh();
     },
-    canCollapse: () => !annotationEditor.open && !resistanceDialog.open && !toleranceDialog.open && !powerRatingDialog.open
-      && !inputs.contains(document.activeElement) && constructionMenu.hidden
+    canCollapse: () => !annotationEditor.open && !resistanceDialog.open && !toleranceDialog.open && !inputs.contains(document.activeElement) && constructionMenu.hidden
       && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
   });
 

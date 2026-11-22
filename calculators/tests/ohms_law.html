@@ -110,11 +110,11 @@
       const input = schematicInput(`package-${id}`);
       input.value = value; fire(input, "change");
     };
-    const submitRating = value => {
-      type(get("customPowerRating"), value);
-      get("powerRatingForm").requestSubmit();
+    const partSettingsAligned = id => {
+      const tolerance = schematicInput(`tolerance-${id}`).getBoundingClientRect();
+      const footprint = schematicInput(`package-${id}`).getBoundingClientRect();
+      return tolerance.top === footprint.top && tolerance.right < footprint.left;
     };
-    const applyRating = (id, value) => { pickPackage(id, "custom"); submitRating(value); };
     const pickTolerance = (id, value) => {
       const input = schematicInput(`tolerance-${id}`);
       input.value = value; fire(input, "change");
@@ -222,39 +222,19 @@
     check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "default resistor uses independent 140 mW and 50 V references");
     check(reportedStress(1, "Pstress") === "102.86%" && reportedStress(1, "Vstress") === "24.00%", "characteristics reports the same nominal stresses as the schematic");
     const packageEditor = schematicInput("package-1");
-    check(packageEditor.tagName === "SELECT" && packageEditor.value === "0805" && packageEditor.selectedOptions[0].text === "0805 · 140 mW ref."
-      && !schematicInput("power-rating-1"), "a single control displays the default footprint and power reference");
-    check([...packageEditor.options].map(option => option.value).join() === "0201,0402,0603,0805,1206,1210,2010,2512,custom",
-      "the dropdown offers the SMT references and a custom rating action");
-    check(packageEditor.getAttribute("aria-label") === "R1 footprint and power rating"
-      && ![...get("schematic").querySelectorAll("text")].some(label => label.textContent === "Package"),
-      "the combined dropdown has an accessible name");
+    check(packageEditor.tagName === "SELECT" && packageEditor.value === "0805" && packageEditor.selectedOptions[0].text === "0805"
+      && !get("powerRatingDialog"), "a single control displays the default footprint size");
+    check([...packageEditor.options].map(option => option.text).join() === "0201,0402,0603,0805,1206,1210,2010,2512",
+      "the dropdown lists only SMT package sizes");
+    check(packageEditor.getAttribute("aria-label") === "R1 footprint" && schematicInput("tolerance-1").getAttribute("aria-label") === "R1 tolerance (%)"
+      && partSettingsAligned(1) && ![...get("schematic").querySelectorAll("text")].some(label => ["Package", "Tolerance"].includes(label.textContent)),
+      "the side-by-side controls keep accessible names and omit visible captions");
     pickPackage(1, "0402");
-    check(packageEditor.selectedOptions[0].text === "0402 · 50 mW ref." && stress(1, "Pstress") === "288.00%" && stress(1, "Vstress") === "40.00%",
+    check(packageEditor.selectedOptions[0].text === "0402" && stress(1, "Pstress") === "288.00%" && stress(1, "Vstress") === "40.00%",
       "choosing a footprint reference updates both stresses");
-    pickPackage(1, "custom");
-    const powerDialog = get("powerRatingDialog"), rating = get("customPowerRating"), ratingFootprint = get("ratingFootprint");
-    check(powerDialog.open && doc.activeElement === rating && ratingFootprint.value === "0402" && packageEditor.value === "0402",
-      "Custom opens a focused editor with the current footprint preselected");
-    submitRating("0 W");
-    check(!rating.validity.valid && powerDialog.open && stress(1, "Pstress") === "288.00%", "an invalid rating leaves the preset intact");
-    submitRating("0.2 W"); await wait(30);
-    check(!powerDialog.open && doc.activeElement === packageEditor && packageEditor.selectedOptions[0].text === "0402 · 200 mW"
-      && stress(1, "Pstress") === "72.00%" && stress(1, "Vstress") === "40.00%"
-      && resistorPower(1) === "144 mW", "a custom rating affects power stress while dissipation and the voltage limit remain independent");
-    pickPackage(1, "custom");
-    check(rating.value === "200 mW" && ratingFootprint.value === "0402", "the custom selection can be reopened and edited");
-    ratingFootprint.value = "0805";
-    submitRating("200 mW"); await wait(30);
-    check(packageEditor.selectedOptions[0].text === "0805 · 200 mW" && stress(1, "Pstress") === "72.00%" && stress(1, "Vstress") === "24.00%",
-      "the editor can change the footprint while retaining the custom power rating");
-    pickPackage(1, "custom"); type(rating, "500 mW"); get("powerRatingCancel").click(); await wait(30);
-    check(doc.activeElement === packageEditor && packageEditor.selectedOptions[0].text === "0805 · 200 mW", "cancel preserves the saved pair and restores focus");
-    applyRating(1, "125"); await wait(30);
-    check(packageEditor.selectedOptions[0].text === "0805 · 125 mW" && stress(1, "Pstress") === "115.20%", "a bare number is entered in milliwatts");
     pickPackage(1, "0805");
-    check(packageEditor.selectedOptions[0].text === "0805 · 140 mW ref." && stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%",
-      "choosing a reference replaces the custom rating");
+    check(packageEditor.selectedOptions[0].text === "0805" && stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%",
+      "returning to the original footprint restores both stress readings");
     check(field("resistanceRange") === "990 Ω to 1.01 kΩ", "default tolerance produces a resistance interval");
     const tolerance = schematicInput("tolerance-1");
     check(tolerance.tagName === "SELECT" && tolerance.selectedOptions[0].textContent === "±1%"
@@ -490,12 +470,11 @@
     check(arrowDirection() === 0, "a failed solve clears the current arrow");
     change("current", "6mA");
     pickTolerance("voltage", "2");
-    applyRating(3, "0.2 W");
     await wait(1100);
     const saved = entries().find(entry => entry.state.mode === "resistance" && entry.state.network.children?.length === 2);
-    check(saved?.state.network.children[0].children[1].package === "1206" && saved.state.network.children[0].children[1].powerRating === .2
+    check(saved?.state.network.children[0].children[1].package === "1206"
       && saved.state.voltageTolerance === 2 && saved.state.network.children[0].children[0].label === "Reference load"
-      && saved.state.sourceLabel === "Bench supply", "memory autosaves the power rating and voltage tolerance with the circuit and its labels");
+      && saved.state.sourceLabel === "Bench supply", "memory autosaves the footprint and voltage tolerance with the circuit and its labels");
     get("current").value = "7mA"; fire(get("current"), "input");
     await wait(1100);
     check(entries()[0].id === saved.id, "live input drafts are excluded from autosave");
@@ -512,8 +491,8 @@
     query(`[data-memory-restore="${saved.id}"]`).click(); await wait(50);
     check(physicalValues() === "2 kΩ,1 kΩ,1 kΩ" && field("current") === "6 mA",
       "memory restores the topology and inputs, then recalculates every part");
-    check(schematicInput("package-3").selectedOptions[0].text === "1206 · 200 mW" && schematicInput("tolerance-voltage").value === "2"
-      && stress(3, "Pstress") === "8.00%", "recall restores the explicit rating and source tolerance and recalculates stress");
+    check(schematicInput("package-3").selectedOptions[0].text === "1206" && schematicInput("tolerance-voltage").value === "2"
+      && stress(3, "Pstress") === "6.40%", "recall restores the footprint and source tolerance and recalculates stress");
     check(annotationText("part-1") === "Reference load" && annotationText("title").startsWith("Bench circuit"), "recall restores the title and labels");
     get("memoryClose").click();
     check(!memory.open && doc.activeElement === memory.querySelector("summary"), "Memory close returns focus to the edge tab");
@@ -530,14 +509,14 @@
     check(centeredCurrent("6 mA") && balancedInstrument(), "the compact mixed network preserves equal horizontal clearance for the arrow");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
     check(resistorReadingsFit(), "compact resistor power and stress rows fit their information blocks");
-    check(schematicInput("tolerance-3").getBoundingClientRect().bottom < schematicInput("package-3").getBoundingClientRect().top
-      && query('[data-resistor-info="3"] .part-info-box').getAttribute("fill") === "#142535", "the combined selector has its own row on phones");
+    check(partSettingsAligned(3) && query('[data-resistor-info="3"] .part-info-box').getAttribute("fill") === "#142535",
+      "tolerance and footprint also share a row on phones");
     check(operatingPaletteMatches(), "the compact schematic uses the same card palette as the full schematic");
     const legendBounds = query("[data-solve-legend]").getBoundingClientRect();
     check(solveLegendMatches() && legendBounds.top > query('[data-operating-point="power"]').getBoundingClientRect().bottom
       && legendBounds.bottom < get("schematic").getBoundingClientRect().bottom, "the compact legend fits below the operating-point cards");
     const compactPackage = schematicInput("package-3"), compactBounds = compactPackage.getBoundingClientRect();
-    check(compactPackage.selectedOptions[0].text === "1206 · 200 mW" && compactBounds.left >= 0 && compactBounds.right <= frame.clientWidth
+    check(compactPackage.selectedOptions[0].text === "1206" && compactBounds.left >= 0 && compactBounds.right <= frame.clientWidth
       && compactBounds.height > 0, "the native package dropdown fits inside the compact phone schematic");
     const compactResistance = schematicInput("resistance-1");
     const compactValueBounds = compactResistance.getBoundingClientRect(), compactUnitBounds = schematicUnit("resistance-1").getBoundingClientRect();
@@ -609,8 +588,9 @@
       && exported.querySelector('[data-operating-value="power"]').textContent === "60 mW", "SVG downloads retain each resistor's dissipation and total power");
     check(exported.querySelector('[data-operating-range="current"]').textContent === field("currentRange")
       && exported.querySelector('[data-source-tolerance="voltage"]').textContent === "±2%"
-      && exported.querySelector('[data-resistor-package="3"]').textContent === "1206 · 200 mW",
-      "SVG downloads retain the source tolerance, explicit power rating and combined range");
+      && exported.querySelector('[data-resistor-package="3"]').textContent === "1206"
+      && exported.querySelector('[data-resistor-package="3"]').getAttribute("y") === exported.querySelector('[data-resistor-tolerance="3"]').getAttribute("y"),
+      "SVG downloads retain the source tolerance, range, and side-by-side resistor settings");
     check(["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains annotation text");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
@@ -631,7 +611,7 @@
     const report = await downloaded.text();
     check(downloadedName.endsWith(".md") && report.startsWith("# Bench circuit") && report.includes("Find Resistance")
       && report.includes("| Total power | 60 mW |") && Math.abs(Number(report.match(/^R3 LOAD N1 (\S+)$/m)?.[1]) - 1000) < 1e-8
-      && report.includes("| Vstress (nominal) | 4.00% |") && report.includes("| Power rating | 200 mW |")
+      && report.includes("| Vstress (nominal) | 4.00% |") && report.includes("| Package power reference | 250 mW |")
       && report.includes("| Voltage source tolerance | ±2% |"), "Markdown reports the source tolerance, rating, measurements and nominal netlist");
 
     mode("current");
@@ -755,6 +735,8 @@
       state: { ...original.state, sourceType: "current", mode: "current", voltage: -9, sources: [parallelSource] } });
     history.entries.unshift({ ...original, id: "legacy-package", savedAt: new Date().toISOString(),
       state: { ...original.state, network: { ...original.state.network, package: "Through-hole" } } });
+    history.entries.unshift({ ...original, id: "legacy-power-rating", savedAt: new Date().toISOString(),
+      state: { ...original.state, network: { ...original.state.network, package: "0402", powerRating: .2 } } });
     history.entries.unshift({ ...original, id: "legacy-resistance-target", savedAt: new Date().toISOString(),
       state: { ...original.state, mode: "resistance", current: .004, target: 2, network: { kind: "series",
         children: [{ ...original.state.network, tolerance: 3.7 }, { ...original.state.network, id: 2 }] } } });
@@ -818,12 +800,19 @@
       "an old current-source resistance solve retains its solved parts and original memory after recall");
     query('[data-memory-restore="legacy-package"]').click(); await wait(50);
     const restoredPackage = schematicInput("package-1");
-    check(restoredPackage.selectedOptions[0].disabled && ![...restoredPackage.options].some(option => option.text === "Through-hole")
+    check(restoredPackage.selectedOptions[0].disabled && restoredPackage.selectedOptions[0].text === "Select SMT…"
+      && ![...restoredPackage.options].some(option => option.text === "Through-hole")
       && stress(1, "Pstress") === "—" && stress(1, "Vstress") === "—" && field("sourceTolerance") === "±0%",
       "old packages can be recalled without assigning an unrelated footprint or tolerance");
-    applyRating(1, "125 mW"); await wait(30);
-    check(restoredPackage.selectedOptions[0].text === "Saved footprint · 125 mW" && stress(1, "Pstress") === "115.20%" && stress(1, "Vstress") === "—",
-      "a custom rating can assess power on a legacy part without a voltage reference");
+    pickPackage(1, "0805");
+    check(restoredPackage.options.length === 8 && stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%",
+      "choosing a supported footprint sets its power and voltage references");
+    query('[data-memory-restore="legacy-power-rating"]').click(); await wait(50);
+    check(restoredPackage.selectedOptions[0].text === "0402" && stress(1, "Pstress") === "72.00%" && stress(1, "Vstress") === "40.00%",
+      "a previously saved rating remains in effect when recalled with a supported footprint");
+    pickPackage(1, "0805");
+    check(stress(1, "Pstress") === "102.86%" && entries().find(entry => entry.id === "legacy-power-rating").state.network.powerRating === .2,
+      "changing an old footprint uses the reference without rewriting the saved rating");
     document.body.dataset.status = "PASS";
   } catch (error) {
     messages.push(`FAIL ${error.stack || error}`);
