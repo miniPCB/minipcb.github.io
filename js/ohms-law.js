@@ -1230,7 +1230,7 @@
       const action = button.dataset.componentAction;
       if (!action) button.hidden = sourceMenu ? !choice || choice === kind : Boolean(choice);
       else if (sourceMenu) button.hidden = !componentOptions || action !== "source" || !addedKey;
-      else button.hidden = !componentOptions || action === "source" || (action === "resistor" && parts(state.network).length === 1);
+      else button.hidden = !componentOptions || action !== "resistor" || parts(state.network).length === 1;
     }
     constructionMenu.hidden = false;
     const bounds = anchor.getBoundingClientRect();
@@ -1382,11 +1382,9 @@
     if (!action || !constructionTarget) return;
     const { target, addedKey } = constructionTarget;
     closeConstruction();
-    const id = Number(target), key = `part-${id}`;
     switch (action.dataset.componentAction) {
       case "source": removeSource(addedKey); break;
-      case "resistor": removePart(id); break;
-      case "label": openAnnotation(key, () => focusControl(key)); break;
+      case "resistor": removePart(Number(target)); break;
       default:
         if (target === "source") changeSourceType(action.dataset.changeSource, addedKey);
         else focusControl(`part-${addResistor(action.dataset.connect, target)}`);

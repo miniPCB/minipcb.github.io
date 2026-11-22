@@ -573,8 +573,13 @@
       && win.getComputedStyle(titleInput).fontSize === "16px",
       "the touch-sized title editor fits above the wiring in a compact mixed schematic");
     keypress(titleInput, "Escape");
-    componentAction(3, "editResistorLabel");
-    check(get("annotationEditor").open, "phones can edit a resistor label from its component menu");
+    fire(part(3).querySelector("[data-resistor-core]"), "click");
+    check(!menu.hidden && visibleMenuActions().join() === `${resistorActions},Remove resistor`,
+      "tapping a resistor body offers the construction and removal actions");
+    keypress(doc.activeElement, "Escape");
+    fire(annotation("part-3").querySelector("text"), "click");
+    check(get("annotationEditor").open && doc.activeElement === get("annotationInput")
+      && get("annotationInput").value === annotationText("part-3"), "tapping a reference designator opens its editor on phones");
     get("annotationCancel").click();
     viewToggle.click();
     check(viewport.scrollWidth > viewport.clientWidth && !viewToggle.hidden && viewToggle.textContent === "Fit to screen"
