@@ -92,6 +92,17 @@
     const useMenu = kind => query(`#constructionMenu [data-connect="${kind}"]`).click();
     const mainSource = kind => query(`[data-${kind}-source]`);
     const sourceGroup = () => query('[data-schematic-control="source"]');
+    const sourceCard = (key, root = doc) => root.querySelector(`[data-source-info="${key}"]`);
+    const sourceCardMatches = (key, root = doc) => {
+      const card = sourceCard(key, root);
+      const panel = card?.querySelector(".source-info-box"), partPanel = root.querySelector(".part-info-box");
+      const fields = card?.querySelectorAll('rect[rx="6"]');
+      return panel && partPanel && fields.length === (key === "current" || key === "voltage" ? 2 : 1)
+        && ["fill", "stroke", "rx"].every(attribute => panel.getAttribute(attribute) === partPanel.getAttribute(attribute))
+        && [...fields].every(field => field.getAttribute("height") === "34"
+          && Number(field.getAttribute("x")) >= Number(panel.getAttribute("x"))
+          && Number(field.getAttribute("y")) + 34 < Number(panel.getAttribute("y")) + Number(panel.getAttribute("height")));
+    };
     const sourceAction = kind => query(`[data-change-source="${kind}"]`);
     const switchSource = (from, to) => { rightClick(mainSource(from)); sourceAction(to).click(); };
     const componentAction = (id, action) => { fire(part(id), "click"); get(action).click(); };
@@ -143,12 +154,9 @@
     };
     const balancedInstrument = (shape = currentArc()) => {
       const bounds = shape.getBBox(), [topRail, bottomRail] = shape.parentElement.parentElement.children;
-      const caption = annotation("source");
-      const rightEdge = element => { const box = element.getBBox(); return box.x + box.width; };
-      const readout = caption.nextElementSibling;
+      const source = query(".source-info-box").getBBox();
       const compact = query("[data-voltage-source], [data-current-source]").getAttribute("r") === "19";
-      const sourceEdge = Math.max(rightEdge(caption), rightEdge(readout), Number(readout.getAttribute("x")) + (compact ? 106 : 116));
-      const leftGap = bounds.x - sourceEdge;
+      const leftGap = bounds.x - source.x - source.width;
       const firstBlock = Math.min(...[...doc.querySelectorAll("#schematic .part-hit")].map(block => block.getBBox().x));
       const rightGap = firstBlock - bounds.x - bounds.width;
       const minClearance = compact ? 26 : 32;
@@ -225,6 +233,10 @@
     };
 
     check(field("current") === "12 mA" && field("power") === "144 mW", "default circuit calculates current and power");
+    check(sourceCardMatches("voltage") && sourceCard("voltage").contains(annotation("source"))
+      && schematicInput("voltage").closest("foreignObject").classList.contains("component-field")
+      && schematicInput("tolerance-voltage").closest("foreignObject").classList.contains("component-field"),
+      "the voltage source groups its editable label, value and tolerance in a matching component card");
     check(resistorPower(1) === "144 mW" && operatingValue("power").textContent === "144 mW"
       && operatingValue("power").previousElementSibling.textContent === "Total power", "the resistor and total readings match for a single load");
     check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "default resistor uses independent 140 mW and 50 V references");
@@ -360,11 +372,22 @@
     check(centeredCurrent("12 mA") && balancedInstrument(), "the round arrow has equal clear space on both sides");
     check(centeredTitle() && annotation("title").querySelector("text").getAttribute("font-size") === "34"
       && annotation("title").querySelector("text").getAttribute("font-weight") === "600", "the desktop editable title matches the divider's centered typography");
+    const titleForm = get("titleEditor"), titleInput = get("titleInput");
+    const openTitle = () => fire(annotation("title").querySelector("text"), "click");
     keypress(annotation("title"), "Enter");
-    check(get("annotationEditor").open && doc.activeElement === get("annotationInput"), "the schematic title is keyboard-accessible and focuses its editor");
-    get("annotationInput").value = "Draft title"; get("annotationCancel").click();
-    check(annotationText("title") === "Ohm’s Law" && doc.activeElement === annotation("title"), "canceling a title edit restores its focus and prior value");
-    edit("title", "Bench circuit with a centered editable title that wraps on phones");
+    check(!titleForm.hidden && titleForm.parentElement === get("schematicViewport") && !get("annotationEditor").open
+      && doc.activeElement === titleInput && titleInput.value === "Ohm’s Law" && titleInput.selectionStart === 0
+      && titleInput.selectionEnd === titleInput.value.length, "the title opens an inline editor and selects its current text");
+    type(titleInput, "Draft title"); keypress(titleInput, "Escape");
+    check(titleForm.hidden && annotationText("title") === "Ohm’s Law" && doc.activeElement === annotation("title"),
+      "Escape discards the title draft and returns focus to the title");
+    openTitle(); type(titleInput, "Unapplied title"); choices[0].focus();
+    check(titleForm.hidden && annotationText("title") === "Ohm’s Law" && doc.activeElement === choices[0],
+      "leaving the title editor discards its draft while preserving the new focus");
+    openTitle(); type(titleInput, "Bench circuit with a centered editable title that wraps on phones");
+    titleForm.querySelector("button").click();
+    check(titleForm.hidden && annotationText("title").startsWith("Bench circuit") && doc.activeElement === annotation("title"),
+      "the inline checkmark applies the title and returns focus to it");
     edit("source", "Bench supply"); edit("ground", "Signal ground"); edit("part-1", "Reference load");
     check(annotationText("source") === "Bench supply" && annotationText("ground") === "Signal ground" && annotationText("part-1") === "Reference load", "source, ground and individual resistor labels can all be edited on the drawing");
     check(balancedInstrument(), "the arrow remains balanced after relabeling the source and resistor");
@@ -542,6 +565,14 @@
     keypress(compactResistance, "Escape");
     frame.style.width = "390px"; await wait(100);
     check(centeredTitle() && annotation("title").querySelectorAll("text").length > 1, "long circuit titles wrap and remain centered on phones");
+    openTitle();
+    const titleBounds = titleForm.getBoundingClientRect(), viewportBounds = get("schematicViewport").getBoundingClientRect();
+    const railTop = currentArc().parentElement.parentElement.firstElementChild.getBoundingClientRect().top;
+    check(titleBounds.left >= viewportBounds.left && titleBounds.right <= viewportBounds.right
+      && titleBounds.bottom < railTop && titleForm.querySelector("button").getBoundingClientRect().height >= 44
+      && win.getComputedStyle(titleInput).fontSize === "16px",
+      "the touch-sized title editor fits above the wiring in a compact mixed schematic");
+    keypress(titleInput, "Escape");
     componentAction(3, "editResistorLabel");
     check(get("annotationEditor").open, "phones can edit a resistor label from its component menu");
     get("annotationCancel").click();
@@ -602,11 +633,13 @@
     check([1, 2, 3].map(id => exported.querySelector(`[data-resistor-power="${id}"]`).textContent).join() === "8 mW,36 mW,16 mW"
       && exported.querySelector('[data-operating-value="power"]').textContent === "60 mW", "SVG downloads retain each resistor's dissipation and total power");
     check(exported.querySelector('[data-operating-range="current"]').textContent === field("currentRange")
+      && sourceCardMatches("voltage", exported) && sourceCard("voltage", exported).textContent.includes("Bench supply")
       && exported.querySelector('[data-source-tolerance="voltage"]').textContent === "±2%"
       && exported.querySelector('[data-resistor-package="3"]').textContent === "1206"
       && exported.querySelector('[data-resistor-package="3"]').getAttribute("y") === exported.querySelector('[data-resistor-tolerance="3"]').getAttribute("y"),
       "SVG downloads retain the source tolerance, range, and side-by-side resistor settings");
     check(["Bench circuit", "Reference", "Signal ground"].every(label => exported.documentElement.textContent.includes(label)), "the export retains annotation text");
+    check(!exported.querySelector('#titleEditor, [aria-controls="titleEditor"]'), "the vector export omits the title editor and its control reference");
     check(exported.documentElement.textContent.includes("Unpublished source") || exported.querySelector("[data-build-commit]"), "export attributes the build or labels the source unpublished");
 
     for (const [format, type, suffix] of [["png", "image/png", ".png"], ["jpeg", "image/jpeg", ".jpg"], ["bmp", "image/bmp", ".bmp"]]) {
@@ -673,6 +706,9 @@
     check(choices[0].disabled && !choices[1].disabled && choices[2].disabled && choices[1].getAttribute("aria-pressed") === "true"
       && schematicInput("current").value === "8" && schematicUnit("current").value === "m" && !schematicInput("voltage")
       && hasRole(circuitQuantity("voltage"), "calculated"), "a current source permits only Find Voltage and exposes the current editor");
+    check(sourceCardMatches("current") && !sourceCard("voltage")
+      && sourceCard("current").querySelector('[data-circuit-quantity="current"]').textContent === "8 mA",
+      "the current source uses the same card styling and its own nominal reading");
 
     edit("source", "Bench driver");
     const meterGeometry = circuitGeometry();
@@ -721,6 +757,7 @@
     const currentExport = new DOMParser().parseFromString(await downloaded.text(), "image/svg+xml");
     check(currentExport.querySelector("[data-current-source]") && currentExport.querySelector("[data-source-direction]")
       && voltmeterMatches("-9 V", currentExport)
+      && sourceCardMatches("current", currentExport) && sourceCard("current", currentExport).textContent.includes("Bench driver")
       && currentExport.querySelector('[data-source-tolerance="current"]').textContent === "±2.4%"
       && !currentExport.querySelector("[data-voltage-source], [data-schematic-control], [data-network-context], foreignObject, [data-field-readout]"),
       "static image exports retain the current symbol and voltmeter with its reading");
@@ -770,6 +807,9 @@
     check(addition("V2") && addition("I1") && field("voltage") === "15 V" && field("voltageBranchCurrent") === "11 mA"
       && schematicInput("voltage").value === "12" && query('[data-mode="voltage"]').disabled,
       "an old voltage solve restores the calculated main source value and both supplementary offsets");
+    check(["voltage", "V2", "I1"].every(key => sourceCardMatches(key))
+      && sourceCard("V2").getBBox().y + sourceCard("V2").getBBox().height < sourceCard("voltage").getBBox().y,
+      "saved series and parallel sources use matching cards with clearance between stacked rows");
     switchSource("voltage", "current");
     check(mainSource("current") && schematicInput("current").value === "11" && field("mainCurrent") === "11 mA"
       && field("current") === "15 mA" && voltmeterMatches("15 V") && field("mainVoltage") === "12 V",

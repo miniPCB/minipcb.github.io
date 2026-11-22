@@ -8,6 +8,7 @@
   const memoryPanel = byId("calculatorMemory"), characteristics = byId("characteristicsDrawer"), characteristicsTab = byId("characteristicsToggle");
   const titleDefault = "Ohm’s Law";
   const groundDefault = "GND", labelLimit = 24, titleLimit = 72;
+  const titleEditor = byId("titleEditor"), titleInput = byId("titleInput");
   const constructionMenu = byId("constructionMenu"), annotationEditor = byId("annotationEditor"), annotationInput = byId("annotationInput");
   const frameExportDialog = byId("frameExportDialog");
   const resistanceDialog = byId("calculatedResistanceDialog");
@@ -25,6 +26,7 @@
   // Match the voltage divider's full and compact schematic dimensions.
   const leadLength = 20;
   const resistorBlockInset = 24;
+  const addedSourceCardHeight = 82;
   const fullSymbols = { width: 20, height: 52, radius: 2, stroke: 3, junction: 5, source: 30, ground: [20, 12, 4], groundPitch: 10 };
   const compactSymbols = { width: 14, height: 38, radius: 1, stroke: 2.5, junction: 4, source: 19, ground: [14, 9, 4], groundPitch: 7 };
   const mobile = matchMedia("(max-width: 780px)");
@@ -561,7 +563,8 @@
 
   function drawLabel(host, key, description, lines, x, y, { size, fill, centered = false, target, weight = 700, maxWidth = Infinity } = {}) {
     const label = svg(host, "g", { ...control(`label-${key}`, `Edit ${description}: ${lines.join(" ")}`),
-      "data-annotation": key, "aria-haspopup": "dialog", ...(target == null ? {} : { "data-network-context": target }) });
+      "data-annotation": key, ...(key === "title" ? { "aria-controls": titleEditor.id } : { "aria-haspopup": "dialog" }),
+      ...(target == null ? {} : { "data-network-context": target }) });
     const pitch = size + 3, width = Math.min(maxWidth, Math.max(38, ...lines.map(value => [...value].length * size * .65 + 12)));
     svg(label, "rect", { class: "control-hit", x: centered ? x - width / 2 : x - 5, y: y - size,
       width, height: pitch * (lines.length - 1) + size + 6, rx: 4 });
@@ -592,6 +595,19 @@
     });
   }
 
+  function drawInfoBox(host, x, y, width, height, className) {
+    svg(host, "rect", { class: className, x, y, width, height, rx: 10,
+      fill: "#142535", stroke: "#39586f", "stroke-width": 1 });
+  }
+
+  function drawInfoField(host, x, y, width, content, size, fill, attributes) {
+    const box = { x, y, width, height: 34, class: "component-field" };
+    svg(host, "rect", { x, y, width, height: box.height, rx: 6, fill: "#172c3d", stroke: "#39586f", "stroke-width": 1 });
+    const readout = text(host, x + 9, y + 22, content, size, fill, attributes);
+    fitText(readout, width - 18);
+    return { readout, box };
+  }
+
   function drawNetwork(host, box, x, y, symbols, topColor) {
     const { node, width, height, children } = box, bottom = y + height;
     if (!children) {
@@ -613,18 +629,14 @@
       const compact = symbols === compactSymbols, size = compact ? 15 : 18;
       const cardX = x + 24, cardWidth = width - 60, valueX = cardX + 12, fieldWidth = cardWidth - 24, caption = partCaption(node);
       const info = svg(part, "g", { "data-resistor-info": node.id });
-      svg(info, "rect", { class: "part-info-box", x: cardX, y: cardY, width: cardWidth, height: cardHeight, rx: 10,
-        fill: "#142535", stroke: "#39586f", "stroke-width": 1 });
+      drawInfoBox(info, cardX, cardY, cardWidth, cardHeight, "part-info-box");
       drawLabel(host, `part-${node.id}`, `${partName(node.id)} label`, [partLabel(node)], valueX, cardY + 28,
         { size, fill, target: node.id, maxWidth: fieldWidth + 10 });
       const readingSize = compact ? 12 : 13, settingGap = 12, settingWidth = (fieldWidth - settingGap) / 2;
       const setting = (field, left, rowY, fieldSize, content, value, fill, extra = {}) => {
-        const box = { x: left, y: rowY, width: fieldSize, height: 34, class: "resistor-field" };
-        svg(info, "rect", { x: left, y: rowY, width: fieldSize, height: box.height, rx: 6, fill: "#172c3d", stroke: "#39586f", "stroke-width": 1 });
-        const readout = text(info, left + 9, rowY + 22, content, compact ? 13 : 15, fill,
+        const row = drawInfoField(info, left, rowY, fieldSize, content, compact ? 13 : 15, fill,
           { [`data-resistor-${field}`]: node.id, "data-network-context": node.id, ...extra });
-        fitText(readout, fieldSize - 18);
-        return { readout, box, value };
+        return { ...row, value };
       };
       const resistance = setting("value", valueX, cardY + 40, fieldWidth, format(value, "Ω"), value, fill, { "data-value-role": role });
       const settingsY = cardY + 84;
@@ -751,27 +763,21 @@
       text(group, x, y - 2, "+", compact ? 14 : 18, source.fill, { "text-anchor": "middle" });
       text(group, x, y + (compact ? 11 : 15), "−", compact ? 14 : 18, source.fill, { "text-anchor": "middle" });
     }
-    return group;
   }
 
-  function drawAddedSource(host, source, x, y, top, bottom, symbols, topColor, textWidth) {
+  function drawAddedSource(host, source, x, y, top, bottom, symbols, topColor, cardWidth) {
     const key = sourceKey(source), fill = color[valueRole(source.value, false)];
-    const branch = svg(host, "g");
-    const group = drawSourceSymbol(branch, { key, kind: source.kind, fill }, x, y, top, bottom, symbols, topColor);
-    const labelX = x + symbols.source + 8;
-    text(group, labelX, y - 6, key, 13, fill, { "font-weight": 700 });
-    const readout = text(branch, labelX, y + 17, format(source.value, units[source.kind]), 14, fill,
-      { "data-added-source-value": key, "data-network-context": "source", "data-source-key": key });
-    fitText(readout, textWidth);
-    drawField(readout, { x: labelX, y: y, width: textWidth, height: 26 },
+    drawSourceSymbol(host, { key, kind: source.kind, fill }, x, y, top, bottom, symbols, topColor);
+    const compact = symbols === compactSymbols;
+    const cardX = x + symbols.source + 8, cardY = y - addedSourceCardHeight / 2;
+    const info = svg(host, "g", { "data-source-info": key, "data-network-context": "source", "data-source-key": key });
+    drawInfoBox(info, cardX, cardY, cardWidth, addedSourceCardHeight, "source-info-box");
+    text(info, cardX + 12, cardY + 28, key, compact ? 15 : 18, fill, { "font-weight": 700 });
+    const { readout, box } = drawInfoField(info, cardX + 12, cardY + 40, cardWidth - 24,
+      format(source.value, units[source.kind]), compact ? 13 : 15, fill, { "data-added-source-value": key });
+    drawField(readout, box,
       { key, label: `${key} ${sourceKind(source).toLowerCase()}`, kind: source.kind, value: source.value,
         write(next) { source.value = next; selectAddedSource(key); } });
-    return branch;
-  }
-
-  function rightEdge(element) {
-    const bounds = element.getBBox();
-    return bounds.x + bounds.width;
   }
 
   function drawFrameDownload(width, compact) {
@@ -794,20 +800,32 @@
     const columnWidth = compact ? 252 : 312, box = layout(state.network, columnWidth, compact ? 250 : 260);
     const series = sources().filter(source => source.kind === "voltage");
     const parallel = sources().filter(source => source.kind === "current");
-    const radius = compact ? 57 : 62, railLeft = compact ? 63 : 81, sourceTextWidth = compact ? 106 : 116;
+    const radius = compact ? 57 : 62, railLeft = compact ? 63 : 81, sourceCardWidth = compact ? 152 : 168;
     const instrumentClearance = compact ? 26 : 32;
-    const branchWidth = symbols.source + 8 + sourceTextWidth + 32;
+    const branchWidth = symbols.source + 8 + sourceCardWidth + 32;
     const sourceLeft = railLeft + branchWidth * parallel.length;
-    const sourceTextLeft = sourceLeft + symbols.source + 8;
-    const firstBlockLeft = sourceTextLeft + sourceTextWidth + 2 * (radius + instrumentClearance);
+    const sourceCardLeft = sourceLeft + symbols.source + 8, sourceCardRight = sourceCardLeft + sourceCardWidth;
+    const firstBlockLeft = sourceCardRight + 2 * (radius + instrumentClearance);
     const rightPadding = columnWidth / 2 - 12;
     const naturalWidth = Math.ceil(firstBlockLeft + resistorBlockInset + box.width - columnWidth / 2 + rightPadding);
     const width = Math.max(naturalWidth, viewport.clientWidth), offset = (width - naturalWidth) / 2;
     const title = state.title || titleDefault;
     const names = compact ? wrapLabel(title, Math.max(12, Math.floor((viewport.clientWidth - 32) / 12.4))) : [title];
     const titleSize = compact ? 20 : Math.min(34, (width - 64) / (title.length * .62));
-    const rowHeight = 2 * (symbols.source + leadLength + 8), seriesHeight = series.length * rowHeight;
-    const y = 134 + 24 * names.length, loopHeight = Math.max(box.height, 2 * (radius + 15), rowHeight + seriesHeight + 24);
+    const stampY = 65, titleY = 112;
+    // The native editor retains its screen height when the drawing is fitted.
+    const scale = desktopView || !viewport.clientWidth ? 1 : viewport.clientWidth / width;
+    const editorHeight = (parseFloat(getComputedStyle(viewport).getPropertyValue("--title-editor-height")) || 34) / scale;
+    const titleCenter = titleY + (names.length - 1) * (titleSize + 3) / 2 - titleSize / 2 + 3;
+    const editorBottom = Math.max(titleCenter + editorHeight / 2, stampY + 4 + 4 / scale + editorHeight);
+    const sourceLabel = wrapLabel(state.sourceLabel || defaultSourceLabel(), compact ? 13 : 12);
+    const sourceTitleSize = compact ? 15 : 18, extraHeadingHeight = (sourceLabel.length - 1) * (sourceTitleSize + 3);
+    const sourceCardHeight = 126 + extraHeadingHeight;
+    const rowHeight = Math.max(2 * (symbols.source + leadLength + 8), (sourceCardHeight + addedSourceCardHeight) / 2 + 14);
+    const seriesHeight = series.length * rowHeight;
+    const sourceStackHeight = seriesHeight + Math.max(rowHeight + 24, sourceCardHeight + 32);
+    const y = Math.max(134 + 24 * names.length, Math.ceil(editorBottom + 8 / scale));
+    const loopHeight = Math.max(box.height, 2 * (radius + 15), sourceStackHeight);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
     const rangeRowHeight = 28, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 165 + rangeRowHeight;
     const x = naturalWidth - rightPadding - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
@@ -822,8 +840,8 @@
     svg(artwork, "image", { x: 16, y: 13, width: 112, height: 36, href: embeddedLogo || "../logo.png", "data-circuit-logo": "" });
     const stamp = build ? svg(artwork, "a", { href: `https://github.com/miniPCB/minipcb.github.io/commit/${build.commit}`, target: "_blank", rel: "noopener noreferrer", "data-built-at": build.builtAt, "data-build-commit": build.commit }) : artwork;
     const buildLabel = build ? `${build.builtAt.slice(0, 19).replace("T", " ")} UTC · ${build.commit.slice(0, 7)}` : "Unpublished source";
-    text(stamp, 16, 65, buildLabel, 11, color.muted);
-    drawLabel(artwork, "title", "circuit title", names, width / 2, 112, { size: titleSize, fill: color.text, centered: true, weight: 600 });
+    text(stamp, 16, stampY, buildLabel, 11, color.muted, { "data-circuit-build-label": "" });
+    drawLabel(artwork, "title", "circuit title", names, width / 2, titleY, { size: titleSize, fill: color.text, centered: true, weight: 600 });
     drawFrameDownload(width, compact);
 
     const drawing = svg(artwork, "g", { "stroke-width": symbols.stroke, "stroke-linecap": "round" });
@@ -834,7 +852,7 @@
     }
     parallel.forEach((source, index) => {
       const branchX = railLeft + offset + index * branchWidth;
-      drawAddedSource(drawing, source, branchX, sourceY, y, bottom, symbols, topColor, sourceTextWidth);
+      drawAddedSource(drawing, source, branchX, sourceY, y, bottom, symbols, topColor, sourceCardWidth);
       if (index > 0) {
         junction(drawing, branchX, y, symbols.junction, topColor);
         junction(drawing, branchX, bottom, symbols.junction);
@@ -842,34 +860,35 @@
     });
     if (parallel.length) junction(drawing, sourceX, y, symbols.junction, topColor);
 
-    const mainY = sourceY + seriesHeight / 2, sourceText = [];
+    const mainY = sourceY + seriesHeight / 2;
     [...series].reverse().forEach((source, index) => {
       const center = mainY - (series.length - index) * rowHeight;
-      sourceText.push(drawAddedSource(drawing, source, sourceX, center, index ? center - rowHeight / 2 : y,
-        center + rowHeight / 2, symbols, index ? color.net : topColor, sourceTextWidth));
+      drawAddedSource(drawing, source, sourceX, center, index ? center - rowHeight / 2 : y,
+        center + rowHeight / 2, symbols, index ? color.net : topColor, sourceCardWidth);
     });
     drawSourceSymbol(drawing, { kind, fill: sourceColor }, sourceX, mainY,
       series.length ? mainY - rowHeight / 2 : y, bottom, symbols, series.length ? color.net : topColor);
-    const sourceLabel = wrapLabel(state.sourceLabel || defaultSourceLabel(), compact ? 10 : 11);
-    const labelX = sourceTextLeft + offset;
-    const caption = drawLabel(drawing, "source", "source label", sourceLabel, labelX, mainY - 6 - (sourceLabel.length - 1) * 16,
-      { size: 13, fill: sourceColor, target: "source" });
-    const readout = text(drawing, labelX, mainY + 17, format(sourceValue, units[kind]), 14, sourceColor,
-      { "data-circuit-quantity": kind, "data-value-role": sourceRole, "data-network-context": "source" });
-    fitText(readout, sourceTextWidth);
-    drawQuantityField(readout, kind, { x: labelX, y: mainY, width: sourceTextWidth, height: 26 });
+    const cardX = sourceCardLeft + offset, cardY = mainY - sourceCardHeight / 2;
+    const info = svg(drawing, "g", { "data-source-info": kind, "data-network-context": "source" });
+    drawInfoBox(info, cardX, cardY, sourceCardWidth, sourceCardHeight, "source-info-box");
+    const labelX = cardX + 12, fieldWidth = sourceCardWidth - 24, numberSize = compact ? 13 : 15;
+    drawLabel(info, "source", "source label", sourceLabel, labelX, cardY + 28,
+      { size: sourceTitleSize, fill: sourceColor, target: "source", maxWidth: fieldWidth + 10 });
+    const fieldY = cardY + 40 + extraHeadingHeight;
+    const quantity = drawInfoField(info, labelX, fieldY, fieldWidth, format(sourceValue, units[kind]), numberSize, sourceColor,
+      { "data-circuit-quantity": kind, "data-value-role": sourceRole });
+    drawQuantityField(quantity.readout, kind, quantity.box);
     const tolerance = sourceTolerance(), toleranceKey = `${kind}Tolerance`;
-    const toleranceReadout = text(drawing, labelX, mainY + 49, `±${tolerance}%`, 14, color.muted, { "data-source-tolerance": kind });
-    fitText(toleranceReadout, sourceTextWidth);
-    drawField(toleranceReadout, { x: labelX, y: mainY + 31, width: sourceTextWidth, height: 26 }, {
+    const toleranceField = drawInfoField(info, labelX, fieldY + 44, fieldWidth, `±${tolerance}%`, numberSize, "#c6d7e5",
+      { "data-source-tolerance": kind });
+    drawField(toleranceField.readout, toleranceField.box, {
       key: `tolerance-${kind}`, label: `${modes[kind]} source tolerance (%)`, kind: "tolerance", value: tolerance,
       write(next) {
         if (next === 0) delete state[toleranceKey];
         else state[toleranceKey] = next;
       }
     });
-    const sourceRight = Math.max(labelX + sourceTextWidth, ...[caption, readout, ...sourceText].map(rightEdge));
-    const instrumentX = (sourceRight + firstBlockLeft + offset) / 2;
+    const instrumentX = (sourceCardRight + firstBlockLeft) / 2 + offset;
     if (kind === "current") drawVoltmeter(drawing, instrumentX, y, bottom, radius, symbols, topColor, values.voltage);
     else drawCurrent(drawing, instrumentX, sourceY, radius, values.current);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
@@ -934,6 +953,7 @@
       schematicInputs.delete(key);
     }
     if (focusedControl) focusControl(focusedControl);
+    positionTitleEditor();
   }
 
   function addRows(table, rows) {
@@ -1227,14 +1247,64 @@
     constructionTarget = null;
   }
 
+  function positionTitleEditor() {
+    if (titleEditor.hidden) return;
+    const label = schematicControl("label-title").getBoundingClientRect();
+    const frame = viewport.getBoundingClientRect(), inset = 16;
+    const width = Math.min(Math.max(260, label.width), viewport.clientWidth - 2 * inset);
+    const left = Math.min(Math.max(inset, (label.left + label.right - width) / 2 - frame.left), viewport.clientWidth - width - inset);
+    titleEditor.style.width = `${width}px`;
+    titleEditor.style.left = `${viewport.scrollLeft + left}px`;
+    const headerBottom = schematic.querySelector("[data-circuit-build-label]").getBoundingClientRect().bottom;
+    const top = Math.max((label.top + label.bottom - titleEditor.offsetHeight) / 2, headerBottom + 4);
+    titleEditor.style.top = `${viewport.scrollTop + top - frame.top}px`;
+  }
+
+  function openTitleEditor() {
+    if (!titleEditor.hidden) return;
+    titleInput.maxLength = titleLimit;
+    titleInput.value = state.title || titleDefault;
+    draft.add(titleInput);
+    titleEditor.hidden = false;
+    positionTitleEditor();
+    titleInput.focus({ preventScroll: true });
+    titleInput.select();
+    titleEditor.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  function closeTitleEditor(commit, restoreFocus = true) {
+    if (titleEditor.hidden) return;
+    titleEditor.hidden = true;
+    draft.delete(titleInput);
+    if (commit) {
+      const value = titleInput.value.trim().slice(0, titleLimit);
+      state.title = value === titleDefault ? "" : value;
+      refresh();
+    } else memory?.schedule();
+    if (restoreFocus) focusControl("label-title");
+  }
+
+  titleEditor.addEventListener("submit", event => { event.preventDefault(); closeTitleEditor(true); });
+  titleEditor.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || event.isComposing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeTitleEditor(false);
+  });
+  titleEditor.querySelector("button").addEventListener("pointerdown", event => event.preventDefault());
+  titleEditor.addEventListener("focusout", event => {
+    if (!titleEditor.contains(event.relatedTarget)) closeTitleEditor(false, false);
+  });
+  viewport.addEventListener("scroll", positionTitleEditor);
+
   function openAnnotation(key, focus) {
     const part = key.startsWith("part-") ? findPart(Number(key.slice(5))) : null;
-    const field = part ? "label" : key === "title" ? "title" : `${key}Label`;
-    const fallback = part ? partName(part.id) : key === "title" ? titleDefault : key === "source" ? defaultSourceLabel() : groundDefault;
+    const field = part ? "label" : `${key}Label`;
+    const fallback = part ? partName(part.id) : key === "source" ? defaultSourceLabel() : groundDefault;
     const owner = part || state;
     annotationEdit = { owner, field, fallback, focus };
-    byId("annotationHeading").textContent = key === "title" ? "Edit circuit title" : `Edit ${part ? partName(part.id) : key} label`;
-    annotationInput.maxLength = key === "title" ? titleLimit : labelLimit;
+    byId("annotationHeading").textContent = `Edit ${part ? partName(part.id) : key} label`;
+    annotationInput.maxLength = labelLimit;
     annotationInput.placeholder = fallback;
     annotationInput.value = owner[field] || fallback;
     annotationEditor.showModal(); annotationInput.select();
@@ -1245,7 +1315,6 @@
     if (commit) {
       const value = annotationInput.value.trim().slice(0, annotationInput.maxLength);
       if (value && value !== fallback) owner[field] = value;
-      else if (field === "title") owner.title = "";
       else delete owner[field];
       if (field === "label") syncPart();
       refresh();
@@ -1287,6 +1356,7 @@
     if (!control) return;
     event.preventDefault();
     if (control.hasAttribute("data-frame-download")) openFrameExport();
+    else if (control.dataset.annotation === "title") openTitleEditor();
     else if (control.dataset.annotation) openAnnotation(control.dataset.annotation, () => focusControl(control.dataset.schematicControl));
     else if (control.dataset.networkContext === "source") openConstruction(control, undefined, undefined, true);
     else {
@@ -1335,6 +1405,7 @@
   });
   document.addEventListener("pointerdown", event => {
     if (!constructionMenu.contains(event.target)) closeConstruction();
+    if (!titleEditor.contains(event.target)) closeTitleEditor(false, false);
     // Keep the artwork under the pointer until a click completes. Blurring a
     // field can otherwise replace the SVG target before it receives the click.
     if (artwork.contains(event.target)) drawingPointer = event.pointerId;
@@ -1402,6 +1473,7 @@
     capture: () => result.error || draft.size ? null : { title: state.title || titleDefault, summary: `${format(result.voltage, "V")} · ${format(result.current, "A")} · ${format(result.resistance, "Ω")}`, state },
     restore(snapshot) {
       if (!validSnapshot(snapshot)) throw new Error("The saved circuit is invalid.");
+      closeTitleEditor(false, false);
       state = snapshot; draft.clear(); selectedPrefixes.clear();
       const allParts = parts(state.network);
       selectedId = state.target ?? allParts[0].id;
@@ -1420,7 +1492,7 @@
       for (const source of sources()) nextSourceId[source.kind] = Math.max(nextSourceId[source.kind], source.id + 1);
       syncControls(); refresh();
     },
-    canCollapse: () => !annotationEditor.open && !resistanceDialog.open && !toleranceDialog.open && !inputs.contains(document.activeElement) && constructionMenu.hidden
+    canCollapse: () => titleEditor.hidden && !annotationEditor.open && !resistanceDialog.open && !toleranceDialog.open && !inputs.contains(document.activeElement) && constructionMenu.hidden
       && !document.activeElement?.closest("#characteristicsDrawer, #characteristicsToggle")
   });
 
@@ -1472,7 +1544,7 @@
       readout.removeAttribute("data-field-readout"); readout.removeAttribute("aria-hidden");
     }
     for (const control of node.querySelectorAll("[data-schematic-control], [data-network-context]")) {
-      for (const attr of ["data-schematic-control", "data-source-key", "data-part", "data-annotation", "data-network-context", "role", "tabindex", "aria-pressed", "aria-label", "aria-haspopup"]) control.removeAttribute(attr);
+      for (const attr of ["data-schematic-control", "data-source-key", "data-part", "data-annotation", "data-network-context", "role", "tabindex", "aria-pressed", "aria-label", "aria-haspopup", "aria-controls"]) control.removeAttribute(attr);
     }
     frameExportSnapshot = { title, node, width: Number(node.getAttribute("width")), height: Number(node.getAttribute("height")) };
     byId("frameExportTitle").textContent = title;
