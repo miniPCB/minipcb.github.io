@@ -230,6 +230,7 @@
     #frameExportStatus { margin: 18px 0 0; overflow-wrap: anywhere; }
     .schematic-inline { display: flex; gap: 3px; align-items: center; color: #c6e3ff; font: 14px ui-monospace, monospace; }
     .schematic-inline :is(select, input, button) { box-sizing: border-box; height: var(--schematic-control-height, 28px); min-height: 0; margin: 0; padding: 2px 5px; border: 1px solid #75d5ff; border-radius: 6px; background: #1e3547; color: inherit; font: inherit; }
+    .schematic-inline :is(input, select) { font-size: var(--schematic-value-size, inherit); }
     .schematic-inline select { width: 100%; }
     .schematic-inline .resistance-unit { flex: 0 0 68px; width: 68px; }
     .operating-condition-select { box-sizing: border-box; width: 100%; height: 30px; min-height: 0; margin: 0; padding: 3px 5px; border: 1px solid #365166; border-radius: 6px; background: #142535; color: #c6e3ff; font: 12px ui-monospace, monospace; cursor: pointer; }
@@ -499,6 +500,7 @@
       .circuit-toolbar .btn { min-height: 44px; }
       .resistor-menu button, .schematic-nearby button { min-height: 44px; }
       .schematic-inline :is(input,select,button) { min-height: 44px; font-size: 16px; }
+      .schematic-inline :is(input,select) { font-size: var(--schematic-value-size, 16px); }
       .schematic-inline button { min-width: 44px; }
       .schematic-inline select.resistance-unit { flex-basis: 76px; width: 76px; }
       .schematic-nearby-more { min-height: 44px; font-size: 14px; }
@@ -2157,6 +2159,16 @@
       return node;
     }
 
+    function schematicValueSize(content, width, height) {
+      return Math.min(Math.floor(height * .72), width / (Math.max(1, content.length) * .62));
+    }
+
+    function schematicValue(parent, x, y, content, width, height, color, field = null) {
+      const value = schematicText(parent, x, y, content, schematicValueSize(content, width, height), color, field);
+      value.setAttribute("dominant-baseline", "central");
+      return value;
+    }
+
     function schematicShape(parent, tag, attributes = {}) {
       const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
       for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
@@ -2314,7 +2326,7 @@
       const group = schematicShape(parent, "g", { class: "schematic-field", "data-field": field });
       if (id) group.id = id;
       schematicShape(group, "rect", { x, y, width, height, rx: 6, fill: "#142535", stroke: "#2b4152" });
-      schematicText(group, x + width - 8, y + height / 2 + 6, content, Math.min(18, (width - 16) / (content.length * 0.62)), SOLVE_ROLES[roles[roleKey]].color).setAttribute("text-anchor", "end");
+      schematicValue(group, x + width - 8, y + height / 2, content, width - 16, height, SOLVE_ROLES[roles[roleKey]].color).setAttribute("text-anchor", "end");
       schematicRole(group, roleKey, roles);
       if (editKey) schematicEditable(group, editKey, `${roleKey === "vin" ? "VTOP" : "VMID"} ${focus === "tolerance" ? "tolerance" : "value"}`, focus);
       return group;
@@ -2353,10 +2365,14 @@
           schematicField(panel, fieldX, y + top, row.content, row.field, row.id, key, roles, row.edit, row.focus || "value", 144, 44);
         }
         const nominal = rows.find(row => row.label === "Nominal");
-        if (nominal) { schematicText(panel, x + 12, y + 126, "Nominal", 12, "#a8bece"); const text = schematicText(panel, x + mobileWidth - 12, y + 126, nominal.content, 14, SOLVE_ROLES[roles[key]].color, nominal.field); text.id = nominal.id; text.setAttribute("text-anchor", "end"); }
+        if (nominal) {
+          schematicText(panel, x + 12, y + 126, "Nominal", 12, "#a8bece");
+          const text = schematicValue(panel, x + mobileWidth - 12, y + 121, nominal.content, mobileWidth - 100, 30, SOLVE_ROLES[roles[key]].color, nominal.field);
+          text.id = nominal.id; text.setAttribute("text-anchor", "end");
+        }
         for (const [row, left] of [[rows.at(-1), x + 12], [rows.at(-2), x + mobileWidth / 2 + 4]]) {
           schematicText(panel, left, y + height - 26, row.label, 10, "#a8bece");
-          schematicText(panel, left, y + height - 9, row.content, Math.min(14, (mobileWidth / 2 - 18) / (row.content.length * .62)), SOLVE_ROLES[roles[key]].color, row.field);
+          schematicValue(panel, left, y + height - 12, row.content, mobileWidth / 2 - 18, 24, SOLVE_ROLES[roles[key]].color, row.field);
         }
         return height;
       }
@@ -2436,11 +2452,12 @@
         const field = schematicShape(panel, "g", { "data-environment-field": key });
         schematicText(field, x + 14, top + (mobile ? 28 : 20), label, key === "radiationPct" ? 11 : 12, "#a8bece");
         schematicShape(field, "rect", { x: left, y: top, width, height: fieldHeight, rx: 6, fill: "#142535", stroke: "#365166" });
-        schematicText(field, left + 6, top + (mobile ? 28 : 20), text, Math.min(mobile ? 16 : 13, (width - 12) / (text.length * 0.62)), "#c6e3ff");
+        schematicValue(field, left + 6, top + fieldHeight / 2, text, width - 12, fieldHeight, "#c6e3ff");
         const object = schematicShape(field, "foreignObject", { x: left, y: top, width, height: fieldHeight, "data-schematic-controls": "" });
         const select = document.createElement("select"); select.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"); select.className = "operating-condition-select";
         select.dataset.operatingCondition = key; select.setAttribute("aria-label", { minC: "Minimum ambient temperature", maxC: "Maximum ambient temperature", tcrPpm: "TCR allowance in ppm per degree C", radiationPct: "Radiation resistance tolerance", agingPct: "Aging resistance tolerance" }[key]);
-        if (mobile) { select.style.height = "44px"; select.style.fontSize = "16px"; }
+        select.style.height = `${fieldHeight}px`;
+        select.style.fontSize = `${schematicValueSize(text, width - 28, fieldHeight)}px`;
         for (const choice of [...new Set([...choices, value])]) select.add(new Option(describe(choice), String(choice)));
         select.value = String(value); select.addEventListener("change", () => setOperatingCondition(key, select.value)); object.append(select);
         if (key === "tcrPpm") select.title = "TCR allowance in ppm/°C; default 25. Any higher ordered part TCR is retained.";
@@ -2510,7 +2527,7 @@
         ]) {
           const control = schematicShape(info, "g", { class: "schematic-field", "data-field": field, "data-part-control": focus });
           schematicShape(control, "rect", { x: left, y: top, width, height: 36, rx: 6, fill: "#142535", stroke: "#2b4152" });
-          schematicText(control, left + 10, top + 24, text, Math.min(18, (width - (focus === "value" ? 20 : 40)) / (text.length * 0.62)), color);
+          schematicValue(control, left + 10, top + 18, text, width - (focus === "value" ? 20 : 36), 36, color);
           if (state) schematicEditable(control, part.id, `${part.name} ${field}`, focus);
           if (focus !== "value" && control.hasAttribute("data-schematic-edit")) schematicShape(control, "path", { d: `M${left + width - 20} ${top + 15}l4 4 4-4`, fill: "none", stroke: color, "stroke-width": 1.5, "pointer-events": "none" });
         }
@@ -2522,7 +2539,7 @@
           schematicShape(cell, "rect", { x: left - 4, y: y + 136, width: 116, height: 27, rx: 4, fill: "transparent", "data-rating-hit": "" });
           schematicText(cell, left, y + 153, label, 10.5, "#a8bece");
           const color = { ok: "#6ee7ac", warn: "#ffba52", bad: "#ff8e8e" }[stressClass(value)];
-          const number = schematicText(cell, left + 108, y + 153, content, Math.min(12, 58 / (content.length * 0.62)), value === Infinity || Number.isFinite(value) ? color : "#a8bece");
+          const number = schematicValue(cell, left + 108, y + 149, content, 58, 22, value === Infinity || Number.isFinite(value) ? color : "#a8bece");
           number.setAttribute("text-anchor", "end"); number.setAttribute("data-stress-value", "");
           const limits = designRatings(part.rating, part.vmax, state?.environment?.settings || environmentSettings);
           schematicShape(cell, "title").textContent = (value === Infinity ? `${part.name}: FAIL. No allowable power at the selected temperature.` : !Number.isFinite(value) ? key === "v" && state && !state.pending && !state.pairSetup ? "Vstress not assessed: maximum continuous working voltage is not specified." : "Stress is unavailable until the circuit is calculated." : `${part.name}: nominal ${label} ${content}. ${key === "p" ? `Power / design power limit (${format(limits.power, "W")})` : `Absolute voltage drop / design voltage limit (${format(limits.voltage, "V")})`} × 100%.`) + " View ratings and shared design limits.";
@@ -2615,8 +2632,11 @@
       const loadInfo = schematicShape(drawing, "g", { "data-schematic-info": "load" });
       schematicInfoBox(loadInfo, loadX + 36, loadY - 42, 148, hasLoad ? 112 : 78);
       const type = schematicPill(loadInfo, loadX + 44, loadY - 38, currentLoad ? "IL" : "RL", SOLVE_ROLES[roles.rl].color, 72, null, true); schematicEditable(type.pill, "load-type", "load model", "type");
-      const loadValue = schematicText(loadInfo, loadX + 48, loadY + 10, loadText(model), 18, "#a8bece"); loadValue.id = "schematicLoadValue";
-      if (hasLoad) { const tolerance = schematicText(loadInfo, loadX + 48, loadY + 44, currentLoad ? `±${currentText(model.iloadTolerance)}` : `±${percent(state.tolerances.rl)}`, 16, "#a8bece"); schematicEditable(tolerance, "load", "load tolerance", "tolerance"); }
+      const loadValue = schematicValue(loadInfo, loadX + 48, loadY + 4, state ? loadText(model) : "—", 124, 32, "#a8bece"); loadValue.id = "schematicLoadValue";
+      if (hasLoad) {
+        const tolerance = schematicValue(loadInfo, loadX + 48, loadY + 38, currentLoad ? `±${currentText(model.iloadTolerance)}` : `±${percent(state.tolerances.rl)}`, 124, 30, "#a8bece");
+        schematicEditable(tolerance, "load", "load tolerance", "tolerance");
+      }
       schematicEditable(loadValue, "load", "load value");
       schematicShape(drawing, "path", { d: `M${mainX} ${mid}H${readoutX + 210}`, fill: "none", stroke: netColor, "stroke-width": mode === "vout" ? 4 : 3, "data-output-net": "VMID", "data-wire-net": "VMID" });
       for (const x of [mainX, loadX]) schematicShape(drawing, "circle", { cx: x, cy: mid, r: 5, fill: netColor, "data-wire-junction": "", "data-wire-net": "VMID" });
@@ -2724,8 +2744,11 @@
           card.querySelector("[data-resistor-stress]")?.remove(); box.setAttribute("height", "168");
           for (const control of card.querySelectorAll("[data-part-control]")) {
             control.setAttribute("transform", `translate(0 ${control.dataset.partControl === "value" ? 12 : 16})`);
-            control.querySelector("rect").setAttribute("height", "44");
-            control.querySelector("text").setAttribute("y", Number(control.querySelector("text").getAttribute("y")) + 4);
+            const rect = control.querySelector("rect"), value = control.querySelector("text"), arrow = control.querySelector("path");
+            rect.setAttribute("height", "44");
+            value.setAttribute("y", Number(rect.getAttribute("y")) + 22);
+            value.setAttribute("font-size", schematicValueSize(value.textContent, Number(rect.getAttribute("width")) - (control.dataset.partControl === "value" ? 20 : 36), 44));
+            arrow?.setAttribute("transform", "translate(0 4)");
           }
           card.querySelector("[data-part-fail]")?.setAttribute("transform", "translate(-70 0)");
           const wrapper = schematicShape(drawing, "g", { "data-schematic-symbol": card.dataset.schematicInfo, "data-arm": arm, role: "group", "aria-label": card.dataset.schematicInfo + " resistor settings" });
@@ -2777,7 +2800,7 @@
         schematicShape(card, "rect", { width: cardWidth, height: 88, rx: 12, fill: background });
         schematicShape(card, "rect", { x: 0, y: 14, width: 4, height: 60, rx: 2, fill: accent });
         schematicText(card, 14, 23, label, 13, accent);
-        schematicText(card, 14, 66, content, Math.min(34, (cardWidth - 28) / (content.length * 0.62)), "#f4fbff", `operating${key}`);
+        schematicValue(card, 14, 56, content, cardWidth - 28, 54, "#f4fbff", `operating${key}`);
         schematicShape(card, "title").textContent = `${state?.pair ? "Selected combination preview; nominal" : "Nominal operating point"}${key === "ratio" ? "; equivalent RTOP / equivalent RBOT, normalized to RBOT = 1; load excluded" : key === "rth" ? "; output source resistance, load excluded" : ""}.`;
       });
     }
@@ -3932,6 +3955,7 @@
       const root = document.createElement("div"), row = document.createElement("div"), error = document.createElement("div");
       root.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"); root.style.width = `${width}px`; row.className = "schematic-inline"; row.style.width = `${width}px`;
       if (height >= 36) { row.style.setProperty("--schematic-control-height", `${height}px`); row.style.fontSize = "16px"; }
+      if (context.key !== "design-title") row.style.setProperty("--schematic-value-size", `${Math.floor((height >= 36 ? height : 28) * .65)}px`);
       row.style.color = node.getAttribute("fill") || node.querySelector("text")?.getAttribute("fill") || "#c6e3ff";
       error.className = "schematic-inline-error"; error.setAttribute("role", "alert"); error.hidden = true;
       root.append(row, error); object.append(root); context.inline = { object, input: null, error, width };

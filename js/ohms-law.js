@@ -403,13 +403,24 @@
     }
   }
 
-  function fitTileText(label, width, height) {
+  function fitReadoutText(label, width, height) {
     const bounds = label.getBBox();
     const scale = Math.min(1, width / bounds.width, height / bounds.height);
     if (scale < 1) label.setAttribute("font-size", Number(label.getAttribute("font-size")) * scale);
   }
 
   function control(key, label) { return { "data-schematic-control": key, role: "button", tabindex: 0, "aria-label": label }; }
+
+  function sizeSchematicInput(input) {
+    const select = input.tagName === "SELECT";
+    const content = select ? input.selectedOptions[0]?.textContent : input.value;
+    // Reserve room for padding and the native dropdown arrow.
+    const width = input.offsetWidth - (select ? 28 : 15);
+    const height = input.offsetHeight;
+    if (width > 0 && height > 0) {
+      input.style.fontSize = `${Math.min(Math.floor(height * .72), width / (Math.max(1, content?.length || 0) * .6))}px`;
+    }
+  }
 
   function resetSchematicInput(entry) {
     const { input, selector, text, prefix, value } = entry;
@@ -419,6 +430,8 @@
     if (value === null) input.setAttribute("aria-invalid", "true");
     else input.removeAttribute("aria-invalid");
     input.setCustomValidity("");
+    sizeSchematicInput(input);
+    if (selector) sizeSchematicInput(selector);
   }
 
   function commitSchematicInput(entry, report = false) {
@@ -502,6 +515,7 @@
           draft.add(input);
           input.removeAttribute("aria-invalid");
           input.setCustomValidity("");
+          sizeSchematicInput(input);
         });
         input.addEventListener("blur", event => {
           if (!entry.selector || event.relatedTarget !== entry.selector) commitSchematicInput(entry);
@@ -537,6 +551,7 @@
     if (selector) selector.dataset.valueRole = role;
     input.toggleAttribute("data-centered", !!centered);
     if (!draft.has(input)) resetSchematicInput(entry);
+    else sizeSchematicInput(input);
   }
 
   function drawQuantityField(readout, kind, box, centered = false) {
@@ -590,7 +605,8 @@
       const row = svg(group, "g", { "data-stress-metric": label }), left = x + index * (cellWidth + gap);
       const fill = value === null ? color.muted : value > 100 ? color.calculated : value === 100 ? color.missing : color.known;
       const caption = text(row, left, y, label, size, color.muted), formatted = formatStress(value);
-      fitText(text(row, left + cellWidth, y, formatted, size, fill, { "text-anchor": "end", "data-stress-value": "" }), cellWidth - caption.getComputedTextLength() - 5);
+      fitReadoutText(text(row, left + cellWidth, y, formatted, 16, fill, { "text-anchor": "end", "data-stress-value": "" }),
+        cellWidth - caption.getComputedTextLength() - 5, 18);
       svg(row, "title", {}, `Nominal ${label} ${formatted}. ${description}`);
     });
   }
@@ -600,11 +616,11 @@
       fill: "#142535", stroke: "#39586f", "stroke-width": 1 });
   }
 
-  function drawInfoField(host, x, y, width, content, size, fill, attributes) {
+  function drawInfoField(host, x, y, width, content, fill, attributes) {
     const box = { x, y, width, height: 34, class: "component-field" };
     svg(host, "rect", { x, y, width, height: box.height, rx: 6, fill: "#172c3d", stroke: "#39586f", "stroke-width": 1 });
-    const readout = text(host, x + 9, y + 22, content, size, fill, attributes);
-    fitText(readout, width - 18);
+    const readout = text(host, x + 9, y + box.height / 2, content, 25, fill, { ...attributes, "dominant-baseline": "central" });
+    fitReadoutText(readout, width - 18, box.height - 6);
     return { readout, box };
   }
 
@@ -634,7 +650,7 @@
         { size, fill, target: node.id, maxWidth: fieldWidth + 10 });
       const readingSize = compact ? 12 : 13, settingGap = 12, settingWidth = (fieldWidth - settingGap) / 2;
       const setting = (field, left, rowY, fieldSize, content, value, fill, extra = {}) => {
-        const row = drawInfoField(info, left, rowY, fieldSize, content, compact ? 13 : 15, fill,
+        const row = drawInfoField(info, left, rowY, fieldSize, content, fill,
           { [`data-resistor-${field}`]: node.id, "data-network-context": node.id, ...extra });
         return { ...row, value };
       };
@@ -659,9 +675,9 @@
       line(info, valueX, cardY + 129, valueX + fieldWidth, cardY + 129, "#39586f").setAttribute("stroke-width", "1");
       const powerY = cardY + 151;
       const powerRow = svg(info, "g"), powerLabel = text(powerRow, valueX, powerY, "Dissipation", readingSize, color.muted);
-      fitText(text(powerRow, valueX + fieldWidth, powerY, dissipation, readingSize,
+      fitReadoutText(text(powerRow, valueX + fieldWidth, powerY, dissipation, 18,
         power === undefined ? color.muted : color.text, { "text-anchor": "end", "data-resistor-power": node.id }),
-        fieldWidth - powerLabel.getComputedTextLength() - 6);
+        fieldWidth - powerLabel.getComputedTextLength() - 6, 21);
       drawStress(info, node, valueX, cardY + 173, fieldWidth, compact);
       return;
     }
@@ -714,10 +730,10 @@
     } else {
       svg(meter, "circle", { cx: x, cy: y, r: radius, fill: "none", stroke: "#39586f", "stroke-width": 2.5 });
     }
-    const value = text(meter, x, y, reading, 18, color[role], { "data-circuit-quantity": "current",
+    const value = text(meter, x, y, reading, 24, color[role], { "data-circuit-quantity": "current",
       "data-value-role": role, "data-current-value": "", "text-anchor": "middle",
       "dominant-baseline": "central", "font-weight": 700 });
-    fitText(value, 2 * radius - 16);
+    fitReadoutText(value, 2 * radius - 16, 26);
     drawQuantityField(value, "current", { x: x - radius + 8, y: y - 13, width: 2 * radius - 16, height: 26 }, true);
   }
 
@@ -736,9 +752,9 @@
     svg(meter, "rect", { x: x - panelHalfWidth, y: y - panelHalfHeight, width: 2 * panelHalfWidth, height: 2 * panelHalfHeight,
       rx: 8, fill: "#12354b", stroke: "#39586f", "stroke-width": 1, "data-voltmeter-panel": "" });
     text(meter, x, y - 11, "Load voltage", 12, "#75d5ff", { "text-anchor": "middle" });
-    const value = text(meter, x, y + 11, reading, 18, color.calculated, { "data-circuit-quantity": "voltage",
+    const value = text(meter, x, y + 11, reading, 24, color.calculated, { "data-circuit-quantity": "voltage",
       "data-value-role": "calculated", "data-voltmeter-value": "", "text-anchor": "middle", "dominant-baseline": "central", "font-weight": 700 });
-    fitText(value, 2 * panelHalfWidth - 16);
+    fitReadoutText(value, 2 * panelHalfWidth - 16, 26);
   }
 
   function drawSourceSymbol(host, source, x, y, top, bottom, symbols, topColor) {
@@ -774,7 +790,7 @@
     drawInfoBox(info, cardX, cardY, cardWidth, addedSourceCardHeight, "source-info-box");
     text(info, cardX + 12, cardY + 28, key, compact ? 15 : 18, fill, { "font-weight": 700 });
     const { readout, box } = drawInfoField(info, cardX + 12, cardY + 40, cardWidth - 24,
-      format(source.value, units[source.kind]), compact ? 13 : 15, fill, { "data-added-source-value": key });
+      format(source.value, units[source.kind]), fill, { "data-added-source-value": key });
     drawField(readout, box,
       { key, label: `${key} ${sourceKind(source).toLowerCase()}`, kind: source.kind, value: source.value,
         write(next) { source.value = next; selectAddedSource(key); } });
@@ -871,15 +887,15 @@
     const cardX = sourceCardLeft + offset, cardY = mainY - sourceCardHeight / 2;
     const info = svg(drawing, "g", { "data-source-info": kind, "data-network-context": "source" });
     drawInfoBox(info, cardX, cardY, sourceCardWidth, sourceCardHeight, "source-info-box");
-    const labelX = cardX + 12, fieldWidth = sourceCardWidth - 24, numberSize = compact ? 13 : 15;
+    const labelX = cardX + 12, fieldWidth = sourceCardWidth - 24;
     drawLabel(info, "source", "source label", sourceLabel, labelX, cardY + 28,
       { size: sourceTitleSize, fill: sourceColor, target: "source", maxWidth: fieldWidth + 10 });
     const fieldY = cardY + 40 + extraHeadingHeight;
-    const quantity = drawInfoField(info, labelX, fieldY, fieldWidth, format(sourceValue, units[kind]), numberSize, sourceColor,
+    const quantity = drawInfoField(info, labelX, fieldY, fieldWidth, format(sourceValue, units[kind]), sourceColor,
       { "data-circuit-quantity": kind, "data-value-role": sourceRole });
     drawQuantityField(quantity.readout, kind, quantity.box);
     const tolerance = sourceTolerance(), toleranceKey = `${kind}Tolerance`;
-    const toleranceField = drawInfoField(info, labelX, fieldY + 44, fieldWidth, `±${tolerance}%`, numberSize, "#c6d7e5",
+    const toleranceField = drawInfoField(info, labelX, fieldY + 44, fieldWidth, `±${tolerance}%`, "#c6d7e5",
       { "data-source-tolerance": kind });
     drawField(toleranceField.readout, toleranceField.box, {
       key: `tolerance-${kind}`, label: `${modes[kind]} source tolerance (%)`, kind: "tolerance", value: tolerance,
@@ -936,9 +952,9 @@
           range.setAttribute("y", tileY + 62);
           valueHeight = 42;
         }
-        fitTileText(range, fitsOnOneLine ? textWidth - captionWidth : textWidth, fitsOnOneLine ? 28 : 22);
+        fitReadoutText(range, fitsOnOneLine ? textWidth - captionWidth : textWidth, fitsOnOneLine ? 28 : 22);
       }
-      fitTileText(value, textWidth - heading.getBBox().width - 12, valueHeight);
+      fitReadoutText(value, textWidth - heading.getBBox().width - 12, valueHeight);
     });
     const legend = svg(artwork, "g", { transform: `translate(16 ${tileTop + 126 + rangeRowHeight})`, "data-solve-legend": "", role: "group",
       "aria-label": "Circuit color key, green for known values and red for calculated values" });

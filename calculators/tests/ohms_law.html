@@ -134,6 +134,14 @@
       const footprint = schematicInput(`package-${id}`).getBoundingClientRect();
       return tolerance.top === footprint.top && tolerance.right < footprint.left;
     };
+    const componentValuesFit = () =>
+      [...doc.querySelectorAll("foreignObject.component-field")].every(field => field.getAttribute("height") === "34"
+        && Number.parseFloat(win.getComputedStyle(field.querySelector("[data-schematic-input]")).fontSize) >= 18)
+      && [...doc.querySelectorAll(":is([data-resistor-info], [data-source-info]) [data-field-readout]")].every(readout => {
+        const value = readout.getBBox(), box = readout.previousElementSibling.getBBox();
+        return value.x >= box.x && value.x + value.width <= box.x + box.width
+          && value.y >= box.y + 2 && value.y + value.height <= box.y + box.height - 2;
+      });
     const pickTolerance = (id, value) => {
       const input = schematicInput(`tolerance-${id}`);
       input.value = value; fire(input, "change");
@@ -237,6 +245,8 @@
       && schematicInput("voltage").closest("foreignObject").classList.contains("component-field")
       && schematicInput("tolerance-voltage").closest("foreignObject").classList.contains("component-field"),
       "the voltage source groups its editable label, value and tolerance in a matching component card");
+    check(componentValuesFit() && +resistorValue(1).getAttribute("font-size") >= 22,
+      "larger editable and static source and resistor values fit the existing 34-pixel fields");
     check(resistorPower(1) === "144 mW" && operatingValue("power").textContent === "144 mW"
       && operatingValue("power").previousElementSibling.textContent === "Total power", "the resistor and total readings match for a single load");
     check(stress(1, "Pstress") === "102.86%" && stress(1, "Vstress") === "24.00%", "default resistor uses independent 140 mW and 50 V references");
@@ -546,6 +556,7 @@
     check(resistorReadingsFit(), "compact resistor power and stress rows fit their information blocks");
     check(partSettingsAligned(3) && query('[data-resistor-info="3"] .part-info-box').getAttribute("fill") === "#142535",
       "tolerance and footprint also share a row on phones");
+    check(componentValuesFit(), "the compact component fields keep the larger values inside their original boxes");
     check(operatingPaletteMatches(), "the compact schematic uses the same card palette as the full schematic");
     check(operatingTextFits(), "the larger readouts fit in the compact mixed-network cards");
     const legendBounds = query("[data-solve-legend]").getBoundingClientRect();
@@ -630,6 +641,9 @@
     check(exported.querySelector('[data-operating-value="power"]').getAttribute("font-size") === operatingValue("power").getAttribute("font-size")
       && exported.querySelector('[data-operating-range="current"]').getAttribute("font-size") === query('[data-operating-range="current"]').getAttribute("font-size"),
       "SVG downloads retain the enlarged value and range typography");
+    check(exported.querySelector('[data-resistor-package="3"]').getAttribute("font-size") === query('[data-resistor-package="3"]').getAttribute("font-size")
+      && +exported.querySelector('[data-resistor-value="1"]').getAttribute("font-size") >= 22,
+      "the vector download preserves enlarged static component values");
     check(solveLegendMatches(exported), "SVG downloads retain the two solve-role badges");
     check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
       && arrowHasStroke("#6ee7ac", exported) && exported.querySelector("[data-current-value]")?.textContent === "6 mA",
