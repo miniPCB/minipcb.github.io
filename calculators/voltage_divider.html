@@ -1095,9 +1095,7 @@
     const byId = id => document.getElementById(id);
     const calculatorRepository = "https://github.com/miniPCB/minipcb.github.io";
     let calculatorBuild = null;
-    let environmentSettings = { ...ResistorEnvironment.estimateDefaults(), derating: { powerPct: 0, voltagePct: 0 } }, initialEnvironmentWork = JSON.stringify(environmentSettings), ratingEditContext = null, operatingConditionError = "";
-    let initialCircuitWork = null, schematicDraftWork = null, leaveWarningActive = false;
-    const initialPairWork = new Map();
+    let environmentSettings = { ...ResistorEnvironment.estimateDefaults(), derating: { powerPct: 0, voltagePct: 0 } }, ratingEditContext = null, operatingConditionError = "";
 
     function workFormValues(owner) {
       return [...owner.querySelectorAll("input, select")]
@@ -1106,31 +1104,8 @@
         .sort((a, b) => a[0].localeCompare(b[0]));
     }
 
-    function hasCircuitWork() {
-      if (initialCircuitWork === null) return false;
-      return JSON.stringify(workFormValues(form)) !== initialCircuitWork
-        || JSON.stringify(environmentSettings) !== initialEnvironmentWork
-        || ratingEditContext && JSON.stringify(workFormValues(byId("ratingForm"))) !== ratingEditContext.draft
-        || workFormValues(byId("pairForm")).some(([id, ...value]) => JSON.stringify(value) !== initialPairWork.get(id))
-        || appliedCatalogParts.size > 0 || footprintPreferences.size > 0 || catalogDesignVmid !== null || pairSpec !== null || pairComparisons.size > 0 || pairConstruction !== null
-        || !byId("automaticDesign").hidden || ARMS.some(arm => byId(`${arm}Parts`).dataset.topology)
-        || ((byId("schematicEditor").open || schematicEditContext?.inline) && JSON.stringify(workFormValues(byId("schematicEditForm"))) !== schematicDraftWork);
-    }
-
-    function confirmCircuitLeave(event) {
-      if (!hasCircuitWork()) return;
-      // Browsers supply the confirmation wording and require prior user interaction.
-      event.preventDefault();
-      event.returnValue = true;
-    }
-
-    function refreshLeaveWarning() {
+    function scheduleMemorySave() {
       window.dividerMemory?.schedule();
-      const active = hasCircuitWork();
-      if (active === leaveWarningActive) return;
-      leaveWarningActive = active;
-      if (active) window.addEventListener("beforeunload", confirmCircuitLeave);
-      else window.removeEventListener("beforeunload", confirmCircuitLeave);
     }
 
     const resultTabs = [...byId("resultTabs").querySelectorAll('[role="tab"]')];
@@ -1729,7 +1704,7 @@
         update();
         byId("designStatus").textContent = `VMID ${format(best.result.vout, "V")} · target error ${percent(best.error)}${best.error > errorLimit + 1e-10 ? " (outside preferred band)" : ""} · non-trim power spread ${percent(best.spread)} · ratio trim ${byId(trim.id).dataset.name}.`;
       } catch (error) { if (generation === designGeneration) byId("designStatus").textContent = error.message; }
-      finally { if (generation === designGeneration) { button.disabled = !resistorCatalog || !automaticRows().length; refreshLeaveWarning(); } }
+      finally { if (generation === designGeneration) { button.disabled = !resistorCatalog || !automaticRows().length; scheduleMemorySave(); } }
     }
 
     function fixChosenAutomaticValues() {
@@ -2018,7 +1993,6 @@
       byId("ratingFamily").disabled = !!part.catalog || !resistorCatalog;
       configureRatingReference(); updateRatingLimits();
       byId("ratingError").hidden = true;
-      ratingEditContext.draft = JSON.stringify(workFormValues(byId("ratingForm")));
       byId("ratingDialog").showModal();
       byId(node.dataset.stressMetric === "v" ? "designVoltageDerating" : "designPowerDerating").focus();
     }
@@ -2062,7 +2036,7 @@
     function closeRatingDialog() {
       const context = ratingEditContext; byId("ratingDialog").close(); ratingEditContext = null;
       if (context) [...byId("liveSchematic").querySelectorAll("[data-rating-part]")].find(node => node.dataset.ratingPart === context.part.id && node.dataset.stressMetric === context.metric)?.focus({ preventScroll: true });
-      refreshLeaveWarning();
+      scheduleMemorySave();
     }
 
     function saveDesignDerating(event) {
@@ -2415,7 +2389,7 @@
         renderSchematic();
       }
       byId("liveSchematic").querySelector(`[data-operating-condition="${key}"]`)?.focus({ preventScroll: true });
-      refreshLeaveWarning();
+      scheduleMemorySave();
     }
 
     function environmentReportRows(state) {
@@ -3651,7 +3625,7 @@
         publishPairSearch(spec, pair ? [pair] : [], "Recalled saved calculation. Find Design Solutions searches the full catalog again.");
         byId("pairFind").disabled = !resistorCatalog; refreshSchematicControls();
       } else if (byId("solveFor").value !== "pairs" && (!schematicState || !byId("inputError").hidden)) throw new Error(byId("inputError").textContent || "Saved inputs could not be calculated.");
-      refreshLeaveWarning();
+      scheduleMemorySave();
     }
 
     function restoreMemoryCalculation(saved) {
@@ -3879,7 +3853,7 @@
           number.textContent = format(value, "Ω"); delta.textContent = Math.abs(difference) < 1e-9 ? "exact" : Math.abs(difference) < 1000 ? `${difference > 0 ? "+" : "−"}${percent(Math.abs(difference))}` : "";
           option.append(number, delta); option.addEventListener("pointerdown", event => event.preventDefault()); option.addEventListener("click", () => choose(value)); list.append(option);
         }
-        input.setAttribute("aria-expanded", String(suggestions.length > 0)); inline.resize(); refreshLeaveWarning();
+        input.setAttribute("aria-expanded", String(suggestions.length > 0)); inline.resize(); scheduleMemorySave();
       };
       inline.accept = () => active >= 0 ? choose(suggestions[active]) : context.calculatedValueChoice ? setActive(suggestions.length ? 0 : -1) : saveInlinePartEditor();
       unit.addEventListener("change", () => {
@@ -3982,11 +3956,11 @@
         if (resistance) {
           unit.className = "resistance-unit"; unit.setAttribute("aria-label", `${name} resistance unit`);
           for (const option of byId("schematicEditUnit").options) unit.add(option.cloneNode(true)); unit.value = byId("schematicEditUnit").value;
-          unit.addEventListener("change", () => { byId("schematicEditUnit").value = unit.value; refreshLeaveWarning(); });
+          unit.addEventListener("change", () => { byId("schematicEditUnit").value = unit.value; scheduleMemorySave(); });
         } else unit.textContent = context.quickField ? context.quickField.unit : context.focus === "tolerance" ? "%" : ["source", "target"].includes(context.kind) ? "V" : byId("schematicEditUnit").selectedOptions[0].textContent;
         apply.type = "button"; apply.textContent = "✓"; apply.setAttribute("aria-label", "Apply value");
         row.append(input, unit, apply); context.inline.input = input; context.inline.accept = saveInlinePartEditor;
-        input.addEventListener("input", () => { field.value = input.value; refreshLeaveWarning(); }); apply.addEventListener("click", saveInlinePartEditor);
+        input.addEventListener("input", () => { field.value = input.value; scheduleMemorySave(); }); apply.addEventListener("click", saveInlinePartEditor);
         input.focus(); input.select(); object.scrollIntoView({ block: "nearest", inline: "nearest" }); return;
       }
       const select = document.createElement("select"); select.setAttribute("aria-label", `${name} ${context.focus === "power" ? "footprint" : "tolerance"}`);
@@ -4008,7 +3982,7 @@
       const field = byId(id), unit = key === "design-title" || key === "load-type" ? "" : key === "load" && current ? "µA" : tolerance ? "%" : key === "load" ? byId("rlUnit").selectedOptions[0].textContent : "V";
       byId(key === "design-title" ? "schematicEditTitle" : "schematicEditValue").value = field.value;
       schematicEditContext = { key, focus, mode: byId("solveFor").value, quickField: { id, unit, select: key === "load-type", absoluteCurrent: key === "load" && current && tolerance, text: key === "design-title", label: key === "design-title" ? "Design title" : key === "load-type" ? "Load model" : key, original: field.value } };
-      schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm"))); openInlinePartEditor(node);
+      openInlinePartEditor(node);
     }
 
     function saveQuickField() {
@@ -4129,7 +4103,6 @@
       byId("schematicEditHeading").textContent = `Edit ${part ? part.name + " catalog limits" : name}`;
       byId("schematicEditHelp").textContent = (part ? "These limits apply to this physical resistor." : "These settings define the design search. The shared TCR applies unless a resistor has an override.") + " Save your specifications, then use Find Design Solutions to run the search. Changed specifications clear the previous results.";
       byId("schematicEditSave").textContent = "Save specifications"; byId("schematicEditSave").disabled = !resistorCatalog; byId("schematicEditError").hidden = true;
-      schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
       if (inlineNode && inlineEditorField()) { openInlinePartEditor(inlineNode); return; }
       byId("schematicEditor").showModal();
       const toleranceId = { source: "pairSourceTol", target: "pairErrorPct", load: "pairLoadTol" }[key] || `pairTol${side}`;
@@ -4198,7 +4171,6 @@
       byId("schematicEditSave").textContent = "Save changes";
       byId("schematicEditError").hidden = true;
       for (const input of byId("schematicEditForm").querySelectorAll("input")) input.removeAttribute("aria-invalid");
-      schematicDraftWork = JSON.stringify(workFormValues(byId("schematicEditForm")));
       if ((inline || recommendation) && ["power", "tolerance", "value", "connection"].includes(focus)) { openInlinePartEditor(node); return; }
       byId("schematicEditor").showModal();
       const field = { tolerance: kind === "part" ? "PartTolerance" : "Tolerance", power: byId("schematicEditFootprint").disabled ? byId("schematicEditFamily").disabled ? "PartTolerance" : "Family" : "Footprint", connection: "Connection" }[focus] || "Value";
@@ -4217,7 +4189,7 @@
       context?.inline?.object.remove();
       byId("schematicEditor").close(); schematicEditContext = null;
       if (restoreFocus) focusSchematicEditorTarget(context);
-      refreshLeaveWarning();
+      scheduleMemorySave();
     }
 
     function schematicEditDraft(context) {
@@ -4441,7 +4413,7 @@
       refreshPairConstruction();
       if (action !== "fixed") byId("pairTrim").value = id;
       invalidatePairSearch("Search construction changed. Find resistor combinations to choose its values.");
-      refreshLeaveWarning();
+      scheduleMemorySave();
     }
 
     function resistorFootprint(part) {
@@ -4871,7 +4843,7 @@
       } finally {
         if (generation === pairGeneration) { byId("pairFind").disabled = !!pairSpec; byId("pairCancel").hidden = true; }
         refreshSchematicControls();
-        refreshLeaveWarning();
+        scheduleMemorySave();
       }
     }
 
@@ -6106,7 +6078,7 @@
     function update() {
       for (const input of form.querySelectorAll("input")) input.removeAttribute("aria-invalid");
       const mode = configureSolver();
-      if (mode === "pairs") { refreshLeaveWarning(); return; }
+      if (mode === "pairs") { scheduleMemorySave(); return; }
       try {
         const networks = Object.fromEntries(ARMS.map(arm => [arm, readNetwork(arm, mode)]));
         const inputs = {
@@ -6241,7 +6213,7 @@
       } catch (error) {
         clearResults(error.message);
       } finally {
-        refreshLeaveWarning();
+        scheduleMemorySave();
       }
     }
 
@@ -6537,17 +6509,12 @@
     }).then(blob => new Promise((resolve, reject) => {
       const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob);
     })).then(url => { circuitLogoDataUrl = url; renderSchematic(); return url; }).catch(() => null);
-    initialCircuitWork = JSON.stringify(workFormValues(form));
-    for (const [id, ...value] of workFormValues(byId("pairForm"))) initialPairWork.set(id, JSON.stringify(value));
-    // Recheck after UI handlers run, including programmatic SVG edits and part adoption.
-    for (const type of ["input", "change", "click", "submit"]) document.addEventListener(type, () => queueMicrotask(refreshLeaveWarning));
-    document.addEventListener("reset", () => setTimeout(refreshLeaveWarning, 0));
-    byId("schematicEditor").addEventListener("close", refreshLeaveWarning);
-    window.addEventListener("pageshow", refreshLeaveWarning);
+    // Schedule snapshots after UI handlers finish applying circuit changes.
+    for (const type of ["input", "change", "click", "submit"]) document.addEventListener(type, () => queueMicrotask(scheduleMemorySave));
+    document.addEventListener("reset", () => setTimeout(scheduleMemorySave, 0));
+    byId("schematicEditor").addEventListener("close", scheduleMemorySave);
+    window.addEventListener("pageshow", scheduleMemorySave);
     window.resistorCatalogReady = initializeCatalog().then(ready => {
-      // Catalog selects arrive asynchronously; preserve any inputs edited while loading.
-      for (const [id, ...value] of workFormValues(byId("pairForm"))) if (!initialPairWork.has(id)) initialPairWork.set(id, JSON.stringify(value));
-      refreshLeaveWarning();
       if (window.CalculatorMemory) window.dividerMemory = CalculatorMemory.create({
         capture: captureMemoryCalculation, restore: restoreMemoryCalculation, describe: describeMemorySettings,
         canCollapse: () => !schematicEditContext && !document.querySelector("dialog[open]") && ["resistorMenu", "pairAxisMenu"].every(id => byId(id).hidden) && !document.activeElement.closest("#characteristicsDrawer, #characteristicsToggle")

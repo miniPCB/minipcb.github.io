@@ -8,14 +8,14 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const reference=id=>svg().querySelector(`[data-select-resistor="${id}"]`),block=id=>svg().querySelector(`[data-schematic-symbol="${id}"]`),clean=()=>!d.querySelector('dialog[open]')&&!svg().querySelector('[data-inline-editor]');
  const data=()=>JSON.stringify(w.workFormValues(get('dividerForm')))+'|'+JSON.stringify(w.workFormValues(get('pairForm')))+'|'+w.schematicBomTsv()+'|'+get('liveSchematicDesc').textContent;
  const select=(id,key=null,label=id)=>{
-  const target=block(id),ref=reference(id),before=data(),frameBefore=w.circuitFrameSnapshot().markup,url=get('schematicDownload').href,model=state(),preview=w.eval('pairPreviewState'),spec=w.eval('pairSpec'),guard=w.eval('leaveWarningActive');
+  const target=block(id),ref=reference(id),before=data(),frameBefore=w.circuitFrameSnapshot().markup,url=get('schematicDownload').href,model=state(),preview=w.eval('pairPreviewState'),spec=w.eval('pairSpec');
   assert(ref?.getAttribute('aria-label').startsWith('Select ')&&!ref.hasAttribute('data-schematic-edit'),label+': reference is a selection control independent of editors');
   ref.dispatchEvent(key?new w.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}):new w.MouseEvent('click',{bubbles:true}));
   assert(d.activeElement===target&&target.classList.contains('schematic-selected-part')&&svg().querySelectorAll('.schematic-selected-part').length===1,label+': focuses and highlights only the corresponding physical resistor block');
   const halo=target.querySelector('[data-part-highlight]'),shape=halo?.querySelector('rect');
   assert(ref.getAttribute('aria-pressed')==='true'&&svg().querySelectorAll('[data-select-resistor][aria-pressed="true"]').length===1&&shape?.getAttribute('rx')==='14'&&halo.querySelector('linearGradient')&&w.getComputedStyle(target).outlineStyle==='none',label+': selection has a rounded gradient locator without a hard outline');
   assert(clean()&&d.activeElement.localName==='g',label+': no package dropdown, inline field or dialog opens');
-  assert(before===data()&&model===state()&&preview===w.eval('pairPreviewState')&&spec===w.eval('pairSpec')&&guard===w.eval('leaveWarningActive'),label+': inputs, analysis/build identity, preview, search and leave protection stay unchanged');
+  assert(before===data()&&model===state()&&preview===w.eval('pairPreviewState')&&spec===w.eval('pairSpec'),label+': selection preserves inputs, analysis/build identity, preview and search');
   assert(frameBefore===w.circuitFrameSnapshot().markup&&url===get('schematicDownload').href,label+': selection does not change static downloads');
  };
  for(const topology of ['single','series','parallel','mixed'])for(const width of [1440,390]){
@@ -26,7 +26,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
    for(const arm of ['r1','r2'])for(const id of [...new Set([state().physical[arm][0].id,state().physical[arm].at(-1).id])])select(id,mode==='vin'?'Enter':mode==='r2'?' ':null,`${topology}/${width}/${mode}/${id}`);
   }
  }
- await reset();select('r1');assert(!w.eval('leaveWarningActive'),'Selecting a default part does not dirty the design');
+ await reset();select('r1');
  const original=state(),stamp=get('liveSchematicDesc').textContent;frame.style.width='1440px';await pause();
  assert(block('r1').classList.contains('schematic-selected-part')&&reference('r1').getAttribute('aria-pressed')==='true'&&original===state()&&stamp===get('liveSchematicDesc').textContent,'Selection survives resize without recalculation');
  frame.style.width='390px';await pause();get('schematicViewToggle').click();
@@ -55,7 +55,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  assert(halo()&&Number(w.getComputedStyle(halo()).opacity)>.8,'Repeated activation restarts the effect and cancels the previous expiry');
  await sleep(1300);const fading=Number(w.getComputedStyle(halo()).opacity);assert(fading>0&&fading<.6,'The locator eases out before removal');
  await sleep(900);assert(!halo()&&block('r1').classList.contains('schematic-selected-part')&&d.activeElement===block('r1')&&w.getComputedStyle(block('r1')).outlineStyle==='none','The glow disappears after several seconds while keyboard focus remains');
- assert(data()===stable&&w.circuitFrameSnapshot().markup===image&&!w.eval('leaveWarningActive'),'Animation and expiry leave the circuit, downloads and clean state unchanged');
+ assert(data()===stable&&w.circuitFrameSnapshot().markup===image,'Animation and expiry preserve the circuit and downloads');
  select('r2',null,'switch locator');assert(svg().querySelectorAll('[data-part-highlight]').length===1&&block('r2').querySelector('[data-part-highlight]'),'Switching parts replaces the previous glow');await reset();
  assert(!svg().querySelector('[data-part-highlight]'),'Reset removes the transient locator');
  assert(!errors.length,'No runtime errors: '+errors.join('; '));

@@ -30,7 +30,6 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  assert(get(`${first}R`).value==="10"&&!get(`${first}Auto`).checked&&get(`${added}R`).value==="10"&&!get(`${added}Auto`).checked,"Both existing and added resistors start with a usable fixed value");
  assert(get("automaticDesign").hidden&&!!state(),"The added resistor keeps the current circuit calculated without an automatic-values dialog");
  assert(svg().querySelectorAll("[data-schematic-symbol]").length===3&&svg().textContent.includes("10 kΩ")&&!/NaN|Infinity/.test(svg().textContent),"New parts show populated values without invalid numbers");
- assert(w.eval("leaveWarningActive"),"Topology and undefined circuit work activate leave protection");
  action(added,"automatic");set("designTarget","4");await choose();
  assert(state()&&near(state().result.vout,4)&&pn(added)?.startsWith("TNPW")&&near(choices().get(added).resistanceOhms,10000),"The ratio trim chooses a real 10 kΩ TNPW part for an exactly reachable 4 V target");
  assert(get(`${added}R`).value==="10"&&get(`${added}R`).placeholder.includes("10 kΩ")&&get(`${first}R`).value==="10","Computed automatic values are separate from fixed entered resistance");
@@ -69,7 +68,7 @@ document.getElementById("calculator").addEventListener("load",async event=>{try{
  await choose();assertElectrical("Pruned branch");
  set("r1Connection","series");assert(!get("r1Parts").dataset.topology&&!state()&&get("r1Connection").querySelector('[value="mixed"]').disabled,"Choosing a whole-arm connection clears the mixed tree and disables its stale dropdown choice");await choose();assert(near(state().circuit.r1,state().physical.r1.reduce((sum,part)=>sum+part.resistance,0)),"Flattened construction uses every physical part in series");
  action(added,"fixed");assert(!get(`${added}Auto`).checked&&get(`${added}R`).valueAsNumber>0,"Keep fixed converts a chosen catalog value into an explicit input");
- await reset();assert(!state().networks.r1&&!get("r1Parts").dataset.topology&&choices().size===0&&get("automaticDesign").hidden&&!w.eval("leaveWarningActive"),"Reset clears topology, automatic roles, chosen parts, design UI and leave protection");
+ await reset();assert(!state().networks.r1&&!get("r1Parts").dataset.topology&&choices().size===0&&get("automaticDesign").hidden,"Reset clears topology, automatic roles, chosen parts and design UI");
  get("r1Multiple").click();get("r1Split").click();get("r1Multiple").click();const visibleResistance=state().circuit.r1;action("r1","series");assert(leaves("r1").length===2&&near(get(`${leaves("r1")[0]}R`).valueAsNumber*Number(get(`${leaves("r1")[0]}Unit`).value),visibleResistance),"Adding to a visible single resistor preserves that resistor rather than reactivating an older hidden construction");await reset();
  action("r1","parallel");added=leaves("r1")[1];action(added,"automatic");set("designTarget","8");await choose();
  assert(near(state().result.vout,8)&&near(choices().get(added).resistanceOhms,10000),"A parallel addition chooses a real part for an exact 8 V target");assertElectrical("Parallel trim");

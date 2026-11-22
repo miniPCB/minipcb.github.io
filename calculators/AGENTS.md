@@ -61,7 +61,7 @@ not add a permission or confirmation step to an authorized task.
   configuration must not require sideways scrolling or a right click.
 - Offer Desktop view on phones to restore the complete schematic and information.
   Layout/disclosure changes preserve circuit state, selected solutions, build
-  identity and clean leave protection. Keep touch construction menus accessible.
+  identity and memory. Keep touch construction menus accessible.
 - Calculation memory belongs outside the SVG in a fixed left-edge pullout drawer,
   matching Circuit Characteristics on the right. Start collapsed unless the browser
   remembers an open drawer; keep an attached edge tab with the memory count, a Close
@@ -106,8 +106,9 @@ not add a permission or confirmation step to an authorized task.
   automatic assignments and environmental/load tolerances; recalculate on recall.
   A search snapshot retains its selected assignment, not the full solution pool;
   allow a fresh full search and do not claim those results were all recalled.
-  History must stay out of exports and leave-warning input baselines. Report
-  blocked storage as visit-only memory rather than implying it survived reload.
+  Keep history out of exports. The Voltage Divider uses memory to retain
+  calculations and allows the browser to navigate freely. Report blocked
+  storage as visit-only memory rather than implying it survived reload.
 - Resistance value editors use a multiplier dropdown (µΩ, mΩ, Ω, kΩ, MΩ, GΩ).
   Continue accepting typed unit suffixes, synchronize the selected multiplier,
   and compute nearest suggestions in ohms without applying a multiplier twice.

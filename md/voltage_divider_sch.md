@@ -198,8 +198,8 @@ automatic-value and data controls sit in compact sections below the SVG.
 The toolbar above the SVG shows only its
 download buttons in every mode. A large, centered title sits directly above the
 schematic; click it to edit it in place. It defaults to **Voltage Divider**,
-accepts up to 80 characters and is included in the SVG download. Title changes
-participate in leave protection and circuit reset restores the default.
+accepts up to 80 characters and is included in the SVG download. Circuit reset
+restores the default title.
 The dynamic circuit summary remains the region's accessible label.
 
 On phones and narrow screens, a native mode selector replaces the large mode
@@ -220,7 +220,7 @@ primary phone cards; full stress information remains in the analysis and data.
 **Desktop view** restores the complete schematic and information on a phone;
 **Mobile view** returns to the fitted layout. The preference is saved locally.
 Layout and disclosure changes preserve physical values, topology, selected
-catalogs, generated solutions, analysis time and leave protection. Circuit-image
+catalogs, generated solutions, analysis time and memory. Circuit-image
 downloads capture the displayed layout; choose Desktop view for a full schematic
 image. LTspice and Markdown always retain the complete physical circuit and
 analysis, regardless of layout.
@@ -246,8 +246,10 @@ messages are announced to screen readers without adding text to the pane.
 Storage and recall failures remain visible. Click an entry's name to recall it.
 Autosave groups completed, valid input changes after a one-second pause; it does
 not save each typed character, unfinished editor drafts, invalid inputs or layout
-changes. **Save now** records the current calculation immediately. Autosave can
-be turned off, and duplicate input states share an existing entry.
+changes. A pending valid calculation saves when the page is hidden or left with
+Autosave on. You can navigate away directly. **Save now** records the current
+calculation immediately. Autosave can be turned off, and duplicate input states
+share an existing entry.
 
 Collapsible groups collect related memories. A shared custom circuit title keeps
 that design together across dates. Untitled calculations form local-day sessions,

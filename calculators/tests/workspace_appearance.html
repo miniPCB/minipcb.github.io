@@ -12,7 +12,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const originalState=JSON.stringify(w.captureMemoryState()),stamp=state().analyzedAt,build=buildIdentity(),originalBounds=bounds(),originalUrls=urls();
  toggle().focus();toggle().click();await pause();
  assert(toggle().getAttribute('aria-expanded')==='true'&&!drawer().inert&&drawer().getAttribute('aria-hidden')==='false'&&d.activeElement===toggle(),'Opening exposes the nonmodal panel and preserves keyboard focus');
- assert(bounds()===originalBounds&&urls()===originalUrls&&JSON.stringify(w.captureMemoryState())===originalState&&state().analyzedAt===stamp&&!w.eval('leaveWarningActive'),'Opening the drawer changes no circuit geometry, downloads, memory inputs, timestamp or leave protection');
+ assert(bounds()===originalBounds&&urls()===originalUrls&&JSON.stringify(w.captureMemoryState())===originalState&&state().analyzedAt===stamp,'Opening the drawer preserves circuit geometry, downloads, memory inputs and the analysis timestamp');
  assert(w.getComputedStyle(toggle()).backgroundColor!=='rgb(19, 45, 61)'&&drawer().getBoundingClientRect().right<=w.innerWidth,'The open tab has a selected color and the panel fits on the right');
  set('vin','14');assert(field('findResult').textContent==='7 V'&&toggle().getAttribute('aria-expanded')==='true'&&buildIdentity()===build,'Open characteristics follows a live circuit edit without changing its build identity');
  get('characteristicsClose').click();await pause();assert(drawer().inert&&toggle().getAttribute('aria-expanded')==='false'&&d.activeElement===toggle(),'The Close button collapses the panel and restores focus to its tab');
@@ -40,7 +40,7 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const xml=await(await fetch(get('schematicDownload').href)).text(),exported=new DOMParser().parseFromString(xml,'image/svg+xml'),measurements=exported.querySelector('[data-field="circuitCharacteristics"]'),last=measurements.querySelector('[data-field="calculator"]');
  assert(!exported.querySelector('parsererror,[role="button"],foreignObject')&&measurements&&measurements.querySelector('[data-field="nominalPower"]').textContent===field('nominalPower').textContent&&measurements.querySelector('#schematicCharacteristicsBody').getAttribute('display')!=='none'&&last&&Number(exported.documentElement.getAttribute('height'))>Number(svg().getAttribute('height')),'Full SVG keeps complete static characteristics below the workspace even with the drawer closed');
  const framed=new DOMParser().parseFromString(w.circuitFrameSnapshot().markup,'image/svg+xml');assert(!framed.querySelector('[data-field="circuitCharacteristics"]')&&framed.querySelectorAll('[data-operating-point]').length===4,'Framed images keep their circuit-only scope');
- assert(!w.eval('leaveWarningActive')&&errors.length===0,'Presentation changes stay clean with no uncaught errors: '+errors.join('; '));
+ assert(errors.length===0,'No uncaught errors during presentation changes: '+errors.join('; '));
  document.getElementById('results').textContent=JSON.stringify({status:failures.length?'FAIL':'PASS',checks:checks.length,failures},null,2);
 }catch(error){document.getElementById('results').textContent=JSON.stringify({status:'ERROR',error:error.stack,checks,failures},null,2)}});
 </script></html>
