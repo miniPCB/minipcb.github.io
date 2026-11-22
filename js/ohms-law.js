@@ -401,6 +401,12 @@
     }
   }
 
+  function fitTileText(label, width, height) {
+    const bounds = label.getBBox();
+    const scale = Math.min(1, width / bounds.width, height / bounds.height);
+    if (scale < 1) label.setAttribute("font-size", Number(label.getAttribute("font-size")) * scale);
+  }
+
   function control(key, label) { return { "data-schematic-control": key, role: "button", tabindex: 0, "aria-label": label }; }
 
   function resetSchematicInput(entry) {
@@ -888,16 +894,32 @@
       const tileHeight = index < 2 ? 54 + rangeRowHeight : 54;
       svg(tile, "rect", { x: tileX, y: tileY, width: tileWidth, height: tileHeight, rx: 8, fill: background });
       svg(tile, "rect", { x: tileX, y: tileY + 9, width: 4, height: tileHeight - 18, rx: 2, fill: accent });
-      const labelX = tileX + 14;
-      text(tile, labelX, tileY + 16, label, compact ? 14 : 13, accent);
+      const labelX = tileX + 14, valueX = tileX + tileWidth - 14, textWidth = valueX - labelX;
+      const hasRange = field === interval.field, rowY = tileY + (hasRange ? 21 : tileHeight / 2);
+      const heading = text(tile, labelX, rowY, label, 18, accent, { "dominant-baseline": "central" });
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
       const fill = role === "derived" ? color.text : color[role];
-      text(tile, labelX, tileY + 40, format(values[field], unit), compact ? 19 : 16, fill,
-        { "data-operating-value": field, "data-value-role": role });
-      if (field === interval.field) {
-        text(tile, labelX, tileY + 58, `Range ${interval.basis}`, 12, accent);
-        fitText(text(tile, labelX, tileY + 73, interval.text, 14, color.text, { "data-operating-range": field }), tileWidth - 28);
+      const value = text(tile, valueX, rowY, format(values[field], unit), 54, fill, {
+        "data-operating-value": field, "data-value-role": role, "text-anchor": "end", "dominant-baseline": "central", "font-weight": 700
+      });
+      let valueHeight = hasRange ? 33 : tileHeight - 12;
+      if (hasRange) {
+        const caption = text(tile, labelX, tileY + 48, `Range ${interval.basis}`, 13, accent, { "dominant-baseline": "central" });
+        const range = text(tile, valueX, tileY + 68, interval.text, 26, color.text, {
+          "data-operating-range": field, "text-anchor": "end", "dominant-baseline": "central", "font-weight": 600
+        });
+        const captionWidth = caption.getBBox().width + 12;
+        const fitsOnOneLine = captionWidth + range.getBBox().width <= textWidth;
+        if (fitsOnOneLine) {
+          heading.setAttribute("y", tileY + 25);
+          value.setAttribute("y", tileY + 25);
+          caption.setAttribute("y", tileY + 62);
+          range.setAttribute("y", tileY + 62);
+          valueHeight = 42;
+        }
+        fitTileText(range, fitsOnOneLine ? textWidth - captionWidth : textWidth, fitsOnOneLine ? 28 : 22);
       }
+      fitTileText(value, textWidth - heading.getBBox().width - 12, valueHeight);
     });
     const legend = svg(artwork, "g", { transform: `translate(16 ${tileTop + 126 + rangeRowHeight})`, "data-solve-legend": "", role: "group",
       "aria-label": "Circuit color key, green for known values and red for calculated values" });

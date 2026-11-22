@@ -55,6 +55,14 @@
       return panel?.getAttribute("fill") === background && bar?.getAttribute("fill") === accent
         && label?.getAttribute("fill") === accent;
     });
+    const operatingTextFits = () => [...doc.querySelectorAll("[data-operating-point]")].every((tile, index) => {
+      const panel = tile.firstElementChild.getBBox();
+      const boxes = [...tile.querySelectorAll("text")].map(label => label.getBBox());
+      return panel.height === (index < 2 ? 82 : 54) && boxes.every((box, i) =>
+        box.x >= panel.x && box.y >= panel.y && box.x + box.width <= panel.x + panel.width && box.y + box.height <= panel.y + panel.height
+        && boxes.slice(i + 1).every(other => box.x + box.width <= other.x || other.x + other.width <= box.x
+          || box.y + box.height <= other.y || other.y + other.height <= box.y));
+    });
     const solveLegendMatches = (root = doc) => {
       const [known, knownLabel, calculated, calculatedLabel, ...extra] = root.querySelector("[data-solve-legend]")?.children || [];
       return known?.getAttribute("fill") === "#173b31" && knownLabel?.getAttribute("fill") === "#6ee7ac"
@@ -282,6 +290,9 @@
       && hasRole(circuitQuantity("current"), "calculated") && hasRole(operatingValue("current"), "calculated")
       && hasRole(resistorValue(1), "known"), "Find Current highlights the same calculated quantity on the diagram and operating point");
     check(operatingPaletteMatches(), "the operating-point cards use the divider palette for backgrounds, labels and accent bars");
+    check(operatingTextFits() && Number(operatingValue("power").getAttribute("font-size")) >= 32
+      && Number(query('[data-operating-range="current"]').getAttribute("font-size")) >= 18,
+      "larger nominal values and tolerance endpoints fit the existing desktop cards");
     check(solveLegendMatches(), "the schematic legend contains only the two tinted solve-role badges");
     check(!get("schematic").textContent.includes("Nominal stress · package reference limits"), "the schematic footer ends with the solve legend");
     check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12"
@@ -512,6 +523,7 @@
     check(partSettingsAligned(3) && query('[data-resistor-info="3"] .part-info-box').getAttribute("fill") === "#142535",
       "tolerance and footprint also share a row on phones");
     check(operatingPaletteMatches(), "the compact schematic uses the same card palette as the full schematic");
+    check(operatingTextFits(), "the larger readouts fit in the compact mixed-network cards");
     const legendBounds = query("[data-solve-legend]").getBoundingClientRect();
     check(solveLegendMatches() && legendBounds.top > query('[data-operating-point="power"]').getBoundingClientRect().bottom
       && legendBounds.bottom < get("schematic").getBoundingClientRect().bottom, "the compact legend fits below the operating-point cards");
@@ -578,6 +590,9 @@
     check(hasRole(exported.querySelector('[data-operating-value="resistance"]'), "calculated")
       && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known")
       && operatingPaletteMatches(exported), "SVG downloads preserve both the value roles and operating-point palette");
+    check(exported.querySelector('[data-operating-value="power"]').getAttribute("font-size") === operatingValue("power").getAttribute("font-size")
+      && exported.querySelector('[data-operating-range="current"]').getAttribute("font-size") === query('[data-operating-range="current"]').getAttribute("font-size"),
+      "SVG downloads retain the enlarged value and range typography");
     check(solveLegendMatches(exported), "SVG downloads retain the two solve-role badges");
     check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
       && arrowHasStroke("#eaf6ff", exported) && exported.querySelector("[data-current-value]")?.textContent === "6 mA",
@@ -678,6 +693,7 @@
     check(schematicUnit("current").value === "f" && field("current") === "-2.5 fA"
       && schematicConnections(await downloaded.text()).join() === "IMAIN 0 LOAD -2.5e-15,R1 LOAD 0 1500",
       "the signed femtoampere value exports in amperes");
+    check(operatingTextFits(), "long signed voltage and power readings fit without overlapping the labels");
     enterValue("current", "0");
     check(voltmeterMatches("0 V"), "the voltmeter stays present at zero and its top branch uses the calculated net color");
     enterValue("current", "-6 mA");
