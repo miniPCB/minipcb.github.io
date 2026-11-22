@@ -703,7 +703,7 @@
     if (!result.error && current !== 0) {
       const clockwise = current > 0, gap = clockwise ? 13 : -13;
       const top = y - Math.sqrt(radius ** 2 - gap ** 2);
-      const stroke = role === "calculated" ? color.calculated : color.text;
+      const stroke = color[role];
       meter.dataset.currentDirection = clockwise ? "forward" : "reverse";
       meter.setAttribute("aria-label", `Conventional current ${clockwise ? "clockwise" : "counterclockwise"}, ${reading}`);
       const head = svg(svg(meter, "defs"), "marker", { id: "currentArrowHead", orient: "auto", markerUnits: "userSpaceOnUse",
