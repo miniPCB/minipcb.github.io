@@ -120,6 +120,8 @@
       input.value = value; fire(input, "change");
     };
     const currentArc = () => query("[data-current-direction] > path");
+    const arrowHasStroke = (stroke, root = doc) => root.querySelector("[data-current-direction] > path")?.getAttribute("stroke") === stroke
+      && root.querySelector("#currentArrowHead path")?.getAttribute("stroke") === stroke;
     const arcParameters = path => path.getAttribute("d").match(/[\d.]+/g).map(Number);
     const arrowDirection = () => currentArc() ? (arcParameters(currentArc())[6] ? 1 : -1) : 0;
     const centeredCurrent = expected => {
@@ -363,7 +365,7 @@
     check(schematicInput("resistance-1").dataset.valueRole === "calculated" && schematicUnit("resistance-1").value === "k"
       && schematicInput("package-1").tagName === "SELECT", "a calculated resistor still offers a value editor, unit selector and package selector");
     mode("current");
-    check(arrowDirection() === 1, "positive conventional current sweeps clockwise inside the circuit");
+    check(arrowDirection() === 1 && arrowHasStroke("#ff8e8e"), "the calculated clockwise current uses the calculated color on the arc and arrowhead");
     check(centeredCurrent("12 mA") && balancedInstrument(), "the round arrow has equal clear space on both sides");
     check(centeredTitle() && annotation("title").querySelector("text").getAttribute("font-size") === "34"
       && annotation("title").querySelector("text").getAttribute("font-weight") === "600", "the desktop editable title matches the divider's centered typography");
@@ -599,7 +601,8 @@
       && operatingPaletteMatches(exported), "SVG downloads preserve both the value roles and operating-point palette");
     check(solveLegendMatches(exported), "SVG downloads retain the two solve-role badges");
     check(exported.querySelector('[data-current-direction="forward"] > path[marker-end="url(#currentArrowHead)"]')
-      && exported.querySelector("#currentArrowHead") && exported.querySelector("[data-current-value]")?.textContent === "6 mA", "the export retains the round path, embedded arrowhead, and centered value");
+      && arrowHasStroke("#eaf6ff", exported) && exported.querySelector("[data-current-value]")?.textContent === "6 mA",
+      "the export retains the neutral arrow for a known current and its centered value");
     check(exported.querySelectorAll('[data-resistor-stress][data-stress-basis="nominal"]').length === 3
       && exported.querySelector('[data-resistor-stress="3"] [data-stress-metric="Vstress"] [data-stress-value]').textContent === "4.00%", "SVG downloads include nominal stress in every resistor block");
     check([1, 2, 3].map(id => exported.querySelector(`[data-resistor-power="${id}"]`).textContent).join() === "8 mW,36 mW,16 mW"
@@ -733,7 +736,7 @@
     sourceAction("voltage").click();
     check(mainSource("voltage") && !mainSource("current") && !query("[data-voltmeter], [data-added-source]") && annotationText("source") === "Bench driver",
       "reversing the conversion removes the meter and preserves the custom source label");
-    check(field("resistance") === "1.5 kΩ" && field("voltage") === "-9 V" && centeredCurrent("-6 mA")
+    check(field("resistance") === "1.5 kΩ" && field("voltage") === "-9 V" && centeredCurrent("-6 mA") && arrowHasStroke("#ff8e8e")
       && choices[0].getAttribute("aria-pressed") === "true" && choices[1].disabled && !choices[2].disabled && field("sourceTolerance") === "±1%",
       "converting to voltage enables current and resistance and preserves a valid operating point");
     memory.querySelector("summary").click(); await wait(250);

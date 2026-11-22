@@ -710,13 +710,14 @@
     if (!result.error && current !== 0) {
       const clockwise = current > 0, gap = clockwise ? 13 : -13;
       const top = y - Math.sqrt(radius ** 2 - gap ** 2);
+      const stroke = role === "calculated" ? color.calculated : color.text;
       meter.dataset.currentDirection = clockwise ? "forward" : "reverse";
       meter.setAttribute("aria-label", `Conventional current ${clockwise ? "clockwise" : "counterclockwise"}, ${reading}`);
       const head = svg(svg(meter, "defs"), "marker", { id: "currentArrowHead", orient: "auto", markerUnits: "userSpaceOnUse",
         markerWidth: 14, markerHeight: 14, refX: 12, refY: 7, viewBox: "0 0 14 14" });
-      svg(head, "path", { d: "M2 2L12 7L2 12", fill: "none", stroke: color.text, "stroke-width": 2.5, "stroke-linejoin": "round" });
+      svg(head, "path", { d: "M2 2L12 7L2 12", fill: "none", stroke, "stroke-width": 2.5, "stroke-linejoin": "round" });
       svg(meter, "path", { d: `M${x + gap} ${top}A${radius} ${radius} 0 1 ${clockwise ? 1 : 0} ${x - gap} ${top}`,
-        fill: "none", stroke: color.text, "stroke-width": 2.5, "marker-end": "url(#currentArrowHead)" });
+        fill: "none", stroke, "stroke-width": 2.5, "marker-end": "url(#currentArrowHead)" });
     } else {
       svg(meter, "circle", { cx: x, cy: y, r: radius, fill: "none", stroke: "#39586f", "stroke-width": 2.5 });
     }
