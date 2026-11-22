@@ -2180,7 +2180,7 @@
     const SOLVE_ROLES = {
       undefined: { color: "#f6d365", label: "Undefined", short: "Missing" },
       defined: { color: "#6ee7ac", label: "Known", short: "Known" },
-      solving: { color: "#ff8e8e", label: "Value to find", short: "Find" }
+      solving: { color: "#ff8e8e", label: "Calculated", short: "Find" }
     };
     const NET_COLOR = "#54d2ff", SYMBOL_LEAD_LENGTH = 20;
     const vmidNetColor = roles => roles.vout === "solving" ? SOLVE_ROLES.solving.color : NET_COLOR;
@@ -3364,8 +3364,10 @@
       // Keep nominal results in the frame so circuit-only images include them.
       const operatingWidth = width - 40;
       renderOperatingPoint(frame, state, x + 20, y + height - 44 - operatingPointHeight(operatingWidth), operatingWidth);
-      const key = schematicShape(frame, "g", { id: "schematicSolveStatus", transform: `translate(${x + 20} ${y + height - 38})`, "aria-label": "Circuit color key: red is unknown, green is known" });
-      for (const [left, label, background, color, keyWidth] of [[0, "Unknown", "#462b32", "#ff8e8e", 100], [108, "Known", "#173b31", "#6ee7ac", 86]]) {
+      const key = schematicShape(frame, "g", { id: "schematicSolveStatus", transform: `translate(${x + 20} ${y + height - 38})`, role: "group",
+        "aria-label": "Circuit color key, green for known values and red for calculated values" });
+      for (const [left, role, background, keyWidth] of [[0, "defined", "#173b31", 86], [94, "solving", "#462b32", 110]]) {
+        const { label, color } = SOLVE_ROLES[role];
         schematicShape(key, "rect", { x: left, y: 0, width: keyWidth, height: 28, rx: 8, fill: background });
         schematicText(key, left + 12, 19, label, 14, color);
       }
@@ -3711,7 +3713,7 @@
       svg.setAttribute("height", height);
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
       const descriptions = state && !state.pending && !state.pairSetup ? ARMS.flatMap(arm => state.physical[arm].map(part => `${part.name}${part.mpn ? " " + part.mpn : ""}: ${format(part.resistance, "Ω")}, ±${percent(part.tolerance)}, ${part.catalog ? `${format(part.catalog.ratedPowerW, "W")} rated at 70 °C; ${format(part.rating, "W")} allowed at ${part.catalog.temperatureC} °C in ${part.catalog.mode} mode` : `rated ${format(part.rating, "W")}`}; Pstress ${percent(part.stress.p)}, Vstress ${percent(part.stress.v)}.${(alternativeParts.get(part.id) || []).map(alt => ` Alternative ${alt.mpn}: ${format(alt.powerW, "W")} allowed at ${alt.temperatureC} °C, ${alt.workingVoltageV} V, ${alt.mode}.`).join("")}`)) : [];
-      const roleDescription = `${solveLabel}. Yellow means missing or invalid input; green means known; red identifies the value to find. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
+      const roleDescription = `${solveLabel}. Yellow indicates missing or invalid input. Green indicates known values. Red marks values the selected mode calculates. ${Object.entries({ vin: "VTOP", vout: "VMID", r1: "RTOP", r2: "RBOT", rl: "RL" }).map(([key, name]) => `${name}: ${SOLVE_ROLES[roles[key]].label}`).join(". ")}.`;
       const voltageDescription = state && !state.pairSetup && !state.pending ? `Nominal VMID ${format(state.result.vout, "V")}; minimum ${format(state.bounds.min, "V")}; maximum ${format(state.bounds.max, "V")}.${state.pair ? ` Target error ${percent(state.pair.error)}.` : ""} ${environmentScope(state.environment)}. ` : "";
       const searchDescription = mode === "pairs" ? `Search target VMID ${byId("pairVmid").value || "not set"} V; allowed error ±${byId("pairErrorPct").value || "not set"}%. Edit the circuit specifications directly; additional constraints are in Search limits. Find combinations runs the search. Circuit inputs and BOM change only on Apply. ` : "";
       descriptions.unshift(deratingSummary(state?.environment?.settings || environmentSettings));

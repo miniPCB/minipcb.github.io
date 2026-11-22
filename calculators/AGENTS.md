@@ -41,12 +41,13 @@ not add a permission or confirmation step to an authorized task.
   Retain the backing source fields required by direct editors and the solver,
   with their container hidden and inert; do not expose it during validation.
   A part's focused Options editor may still expose its catalog-specific settings.
-- Put Known/Unknown color keys inside the circuit frame so circuit-image exports
-  retain them. Keep the four nominal operating-point blocks inside the frame,
-  beneath the circuit and above the keys, without a section heading. Reflow them
-  on phones and include them in framed image exports. The blue RTOP : RBOT tile
-  uses the nominal equivalent arm resistances, excludes the load, and normalizes
-  RBOT to 1. Keep its information color distinct from red Unknown role colors.
+- Put the green Known and red Calculated keys in that order inside the circuit
+  frame so circuit-image exports retain them. Keep the four nominal operating-point
+  blocks inside the frame, beneath the circuit and above the keys, without a
+  section heading. Reflow them on phones and include them in framed image exports.
+  The blue RTOP : RBOT tile uses the nominal equivalent arm resistances, excludes
+  the load, and normalizes RBOT to 1. Keep its information color distinct from
+  the red Calculated role.
 - Offer Find Design Solutions only in Find real resistor combinations.
   Find VMID, including multi-part networks, and calculated inverse quantities
   update directly from their known inputs without an unrelated search action.
