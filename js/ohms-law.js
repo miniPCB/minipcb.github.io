@@ -728,7 +728,7 @@
     });
   }
 
-  function drawCurrent(host, x, y, radius, current) {
+  function drawCurrent(host, x, y, radius, fieldWidth, current) {
     const reading = format(current, "A"), role = valueRole(current, state.mode === "current");
     const meter = svg(host, "g", { "data-current-indicator": "", role: role === "calculated" ? "img" : "group",
       "aria-label": `Circuit current ${Number.isFinite(current) ? reading : "unavailable"}` });
@@ -746,7 +746,7 @@
     } else {
       svg(meter, "circle", { cx: x, cy: y, r: radius, fill: "none", stroke: "#39586f", "stroke-width": 2.5 });
     }
-    const fieldWidth = 2 * radius - 8, height = schematicFieldHeight;
+    const height = schematicFieldHeight;
     const value = text(meter, x, y, reading, schematicReadoutSize, color[role], { "data-circuit-quantity": "current",
       "data-value-role": role, "data-current-value": "", "text-anchor": "middle",
       "dominant-baseline": "central", "font-weight": 700 });
@@ -754,12 +754,12 @@
     drawQuantityField(value, "current", { x: x - fieldWidth / 2, y: y - height / 2, width: fieldWidth, height }, true);
   }
 
-  function drawVoltmeter(host, x, top, bottom, radius, symbols, topColor, voltage) {
+  function drawVoltmeter(host, x, top, bottom, panelHalfWidth, symbols, topColor, voltage) {
     const y = (top + bottom) / 2;
     const reading = format(voltage, "V");
     const meter = svg(host, "g", { "data-voltmeter": "", role: "group",
       "aria-label": `Voltmeter, load voltage ${Number.isFinite(voltage) ? reading : "unavailable"}` });
-    const panelHalfWidth = radius - 2, panelHalfHeight = 30;
+    const panelHalfHeight = 30;
     for (const [from, to, stroke] of [[top, y - panelHalfHeight, topColor], [y + panelHalfHeight, bottom, color.net]]) {
       const probe = line(meter, x, from, x, to, stroke);
       probe.setAttribute("stroke-dasharray", "3 6"); probe.setAttribute("stroke-width", "1.5");
@@ -833,12 +833,14 @@
     const columnWidth = compact ? 252 : 312, box = layout(state.network, columnWidth, compact ? 250 : 260);
     const series = sources().filter(source => source.kind === "voltage");
     const parallel = sources().filter(source => source.kind === "current");
-    const radius = compact ? 57 : 62, railLeft = compact ? 63 : 81, sourceCardWidth = compact ? 152 : 168;
+    const railLeft = compact ? 63 : 81, sourceCardWidth = compact ? 152 : 168;
+    const currentFieldWidth = compact ? 106 : 116, voltagePanelHalfWidth = compact ? 55 : 60;
+    const flowRadius = currentFieldWidth / 2 + 18;
     const instrumentClearance = compact ? 26 : 32;
     const branchWidth = symbols.source + 8 + sourceCardWidth + 32;
     const sourceLeft = railLeft + branchWidth * parallel.length;
     const sourceCardLeft = sourceLeft + symbols.source + 8, sourceCardRight = sourceCardLeft + sourceCardWidth;
-    const firstBlockLeft = sourceCardRight + 2 * (radius + instrumentClearance);
+    const firstBlockLeft = sourceCardRight + 2 * (flowRadius + instrumentClearance);
     const rightPadding = columnWidth / 2 - 12;
     const naturalWidth = Math.ceil(firstBlockLeft + resistorBlockInset + box.width - columnWidth / 2 + rightPadding);
     const width = Math.max(naturalWidth, viewport.clientWidth), offset = (width - naturalWidth) / 2;
@@ -858,7 +860,7 @@
     const seriesHeight = series.length * rowHeight;
     const sourceStackHeight = seriesHeight + Math.max(rowHeight + 24, sourceCardHeight + 32);
     const y = Math.max(134 + 24 * names.length, Math.ceil(editorBottom + 8 / scale));
-    const loopHeight = Math.max(box.height, 2 * (radius + 15), sourceStackHeight);
+    const loopHeight = Math.max(box.height, 2 * (flowRadius + 15), sourceStackHeight);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
     const tileHeight = 82, tileGap = 7, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13;
     const legendY = tileTop + 2 * tileHeight + tileGap + 11, height = legendY + 39;
@@ -923,8 +925,8 @@
       }
     });
     const instrumentX = (sourceCardRight + firstBlockLeft) / 2 + offset;
-    if (kind === "current") drawVoltmeter(drawing, instrumentX, y, bottom, radius, symbols, topColor, values.voltage);
-    else drawCurrent(drawing, instrumentX, sourceY, radius, values.current);
+    if (kind === "current") drawVoltmeter(drawing, instrumentX, y, bottom, voltagePanelHalfWidth, symbols, topColor, values.voltage);
+    else drawCurrent(drawing, instrumentX, sourceY, flowRadius, currentFieldWidth, values.current);
     const groundX = sourceX, ground = svg(drawing, "g", { "data-ground-symbol": "" });
     junction(drawing, groundX, bottom, symbols.junction);
     line(ground, groundX, bottom, groundX, bottom + leadLength).dataset.symbolLead = "ground";

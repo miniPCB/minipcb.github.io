@@ -155,6 +155,10 @@
       && root.querySelector("#currentArrowHead path")?.getAttribute("stroke") === stroke;
     const arcParameters = path => path.getAttribute("d").match(/[\d.]+/g).map(Number);
     const arrowDirection = () => currentArc() ? (arcParameters(currentArc())[6] ? 1 : -1) : 0;
+    const currentEditorClearance = () => {
+      const arc = currentArc(), { width, height } = schematicInput("current").closest("foreignObject").getBBox();
+      return arcParameters(arc)[2] - Number(arc.getAttribute("stroke-width")) / 2 - Math.hypot(width / 2, height / 2);
+    };
     const centeredCurrent = expected => {
       const arc = currentArc(), value = arc?.parentElement.querySelector("[data-current-value]");
       if (!value) return false;
@@ -359,8 +363,8 @@
     const currentPosition = () => ["x", "y", "width", "height"].map(attr => currentInput.closest("foreignObject").getAttribute(attr)).join();
     const flowingCurrentPosition = currentPosition();
     check(currentInput.value === "12" && schematicUnit("current").value === "m" && schematicInput("voltage")
-      && currentInput.getAttribute("aria-label") === "Target current" && quantityTypographyMatches("current", "voltage", "resistance-1"),
-      "the current value and multiplier match the source and resistor controls in Find Resistance");
+      && currentInput.getAttribute("aria-label") === "Target current" && quantityTypographyMatches("current", "voltage", "resistance-1")
+      && currentEditorClearance() >= 12, "the desktop arrow leaves room around the full-size current controls");
     enterValue("current", "0");
     check(field("voltage") === "12 V" && arrowDirection() === 0 && doc.activeElement === currentInput
       && currentPosition() === flowingCurrentPosition && query("[data-current-indicator] > circle")
@@ -565,10 +569,8 @@
     check(symbolMatches(14, 38, 2.5) && query('[data-voltage-source]').getAttribute("r") === "19", "compact view uses the divider’s compact symbol proportions");
     check(centeredCurrent("6 mA") && balancedInstrument() && arrowHasStroke("#6ee7ac"),
       "the compact mixed network preserves the known current color and equal arrow clearance");
-    const currentBox = schematicInput("current").closest("foreignObject").getBBox();
-    check(quantityTypographyMatches("current", "voltage", "resistance-1")
-      && Math.hypot(currentBox.width / 2, currentBox.height / 2) <= arcParameters(currentArc())[2] - 1.25,
-      "the compact current editor matches the surrounding controls and fits inside the arrow stroke");
+    check(quantityTypographyMatches("current", "voltage", "resistance-1") && currentEditorClearance() >= 12,
+      "the compact arrow also leaves room around the full-size current controls");
     check(groundLabelMatches(20, 12), "the compact ground label keeps the same relative alignment and regular weight");
     check(resistorReadingsFit(), "compact resistor power and stress rows fit their information blocks");
     check(partSettingsAligned(3) && query('[data-resistor-info="3"] .part-info-box').getAttribute("fill") === "#142535",
