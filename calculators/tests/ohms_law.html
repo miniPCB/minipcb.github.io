@@ -41,6 +41,7 @@
     const circuitQuantity = field => query(`[data-circuit-quantity="${field}"]`);
     const operatingValue = field => query(`[data-operating-value="${field}"]`);
     const operatingRange = field => query(`[data-operating-range="${field}"]`)?.textContent;
+    const operatingFields = ["voltage", "current", "resistance", "power"];
     const resistorValue = id => query(`[data-resistor-value="${id}"]`);
     const resistorPower = id => query(`[data-resistor-power="${id}"]`).textContent;
     const hasRole = (element, role) => element.getAttribute("data-value-role") === role && element.getAttribute("fill") === {
@@ -51,14 +52,15 @@
       ["resistance", "#ffd083", "#44331c"], ["power", "#d0acff", "#2c2348"]
     ].every(([field, accent, background]) => {
       const card = root.querySelector(`[data-operating-point="${field}"]`);
-      const [panel, bar, label] = card?.children || [];
+      const [panel, bar, label, value, range, ...extra] = card?.children || [];
       return panel?.getAttribute("fill") === background && bar?.getAttribute("fill") === accent
-        && label?.getAttribute("fill") === accent;
+        && label?.getAttribute("fill") === accent && value?.getAttribute("fill") === "#fff"
+        && range?.getAttribute("fill") === "#fff" && !extra.length;
     });
-    const operatingTextFits = () => [...doc.querySelectorAll("[data-operating-point]")].every((tile, index) => {
+    const operatingTextFits = () => [...doc.querySelectorAll("[data-operating-point]")].every(tile => {
       const panel = tile.firstElementChild.getBBox();
       const boxes = [...tile.querySelectorAll("text")].map(label => label.getBBox());
-      return panel.height === (index < 2 ? 82 : 54) && boxes.every((box, i) =>
+      return panel.height === 82 && boxes.length === 3 && boxes.every((box, i) =>
         box.x >= panel.x && box.y >= panel.y && box.x + box.width <= panel.x + panel.width && box.y + box.height <= panel.y + panel.height
         && boxes.slice(i + 1).every(other => box.x + box.width <= other.x || other.x + other.width <= box.x
           || box.y + box.height <= other.y || other.y + other.height <= box.y));
@@ -269,13 +271,16 @@
     const tolerance = schematicInput("tolerance-1");
     check(tolerance.tagName === "SELECT" && tolerance.selectedOptions[0].textContent === "±1%"
       && [...tolerance.options].some(option => option.textContent === "±0.1%"), "the schematic uses a native tolerance dropdown");
-    check(operatingRange("current") === "11.881 mA to 12.121 mA" && operatingRange("current") === field("currentRange")
-      && !operatingRange("voltage"), "the current card and characteristics show the same fixed-voltage range");
+    check(operatingRange("voltage") === "12 V to 12 V" && operatingRange("current") === "11.881 mA to 12.121 mA"
+      && operatingRange("resistance") === "990 Ω to 1.01 kΩ" && operatingRange("power") === "142.57 mW to 145.45 mW"
+      && operatingFields.every(key => operatingRange(key) === field(`${key}Range`)),
+      "all four tiles and the characteristics agree on the fixed-voltage intervals");
     const voltageTolerance = schematicInput("tolerance-voltage");
     pickTolerance("voltage", "5");
     check(voltageTolerance.value === "5" && field("sourceTolerance") === "±5%" && field("current") === "12 mA"
-      && operatingRange("current") === "11.287 mA to 12.727 mA" && operatingRange("current") === field("currentRange"),
-      "the voltage and resistor tolerances jointly bound the current without changing its nominal value");
+      && operatingRange("voltage") === "11.4 V to 12.6 V" && operatingRange("current") === "11.287 mA to 12.727 mA"
+      && operatingRange("power") === "128.67 mW to 160.36 mW",
+      "the supply and resistor tolerances jointly bound current and power at the nominal circuit settings");
     pickTolerance("voltage", "0");
     pickTolerance(1, "custom");
     const customTolerance = get("customTolerance"), toleranceForm = get("toleranceForm");
@@ -288,7 +293,8 @@
       && doc.activeElement === tolerance && field("resistanceRange") === "963 Ω to 1.037 kΩ",
       "a valid custom tolerance becomes a selected option and updates the resistance range");
     pickTolerance(1, "0");
-    check(operatingRange("current") === "12 mA to 12 mA", "an exact resistor gives equal current endpoints");
+    check(operatingRange("current") === "12 mA to 12 mA" && operatingRange("power") === "144 mW to 144 mW",
+      "an exact source and resistor give equal current and power endpoints");
     pickTolerance(1, "1");
     check(symbolMatches(20, 52, 3), "full resistor body, stroke and leads match the voltage divider proportions");
     check(query('[data-ground-symbol] [data-symbol-lead="ground"]').getAttribute("x1") === query('[data-voltage-source]').getAttribute("cx"), "ground is centered directly below the source");
@@ -309,12 +315,14 @@
       && choices.map(button => button.querySelector("span").textContent).join() === "Given V, R,Given I, R,Given V, I", "mode cards show the quantity to find and its required inputs");
     const initialGeometry = circuitGeometry();
     check(choices[0].getAttribute("aria-pressed") === "true" && hasRole(circuitQuantity("voltage"), "known")
-      && hasRole(circuitQuantity("current"), "calculated") && hasRole(operatingValue("current"), "calculated")
-      && hasRole(resistorValue(1), "known"), "Find Current highlights the same calculated quantity on the diagram and operating point");
-    check(operatingPaletteMatches(), "the operating-point cards use the divider palette for backgrounds, labels and accent bars");
-    check(operatingTextFits() && Number(operatingValue("power").getAttribute("font-size")) >= 32
-      && Number(query('[data-operating-range="current"]').getAttribute("font-size")) >= 18,
-      "larger nominal values and tolerance endpoints fit the existing desktop cards");
+      && hasRole(circuitQuantity("current"), "calculated") && operatingValue("current").dataset.valueRole === "calculated"
+      && hasRole(resistorValue(1), "known"), "Find Current identifies the calculated quantity on the diagram and in the tile metadata");
+    check(operatingPaletteMatches(), "white values and ranges accompany the colored labels, accents and backgrounds");
+    const sizes = selector => [...doc.querySelectorAll(selector)].map(node => Number(node.getAttribute("font-size")));
+    const nominals = sizes("[data-operating-value]"), intervals = sizes("[data-operating-range]");
+    check(operatingTextFits() && Math.min(...nominals) >= 32 && Math.max(...nominals) - Math.min(...nominals) < 1
+      && Math.min(...intervals) >= 20 && Math.max(...intervals) - Math.min(...intervals) < 1
+      && !get("schematic").textContent.includes("Range at fixed"), "the desktop cards use consistent type sizes and show ranges without a caption");
     check(solveLegendMatches(), "the schematic legend contains only the two tinted solve-role badges");
     check(!get("schematic").textContent.includes("Nominal stress · package reference limits"), "the schematic footer ends with the solve legend");
     check(schematicInput("voltage").tagName === "INPUT" && schematicInput("voltage").value === "12"
@@ -364,7 +372,7 @@
     enterValue("current", "12 mA");
     check(centeredCurrent("12 mA") && doc.activeElement === currentInput, "the current field re-centers in the restored flow arrow");
     change("current", "");
-    check(hasRole(operatingValue("current"), "missing") && hasRole(circuitQuantity("current"), "missing")
+    check(operatingValue("current").dataset.valueRole === "missing" && hasRole(circuitQuantity("current"), "missing")
       && arrowDirection() === 0 && currentPosition() === flowingCurrentPosition && hasRole(circuitQuantity("voltage"), "known")
       && operatingValue("resistance").textContent === "—" && query("[data-voltage-source]").getAttribute("stroke") === "#6ee7ac",
       "a missing target current clears the resistance result and leaves the fixed source voltage visible");
@@ -374,7 +382,7 @@
     change("current", "12 mA");
     check(choices[2].getAttribute("aria-pressed") === "true" && circuitGeometry() === initialGeometry
       && hasRole(circuitQuantity("voltage"), "known") && hasRole(circuitQuantity("current"), "known")
-      && hasRole(resistorValue(1), "calculated") && hasRole(operatingValue("resistance"), "calculated"), "Find Resistance marks the resistor and equivalent resistance consistently");
+      && hasRole(resistorValue(1), "calculated") && operatingValue("resistance").dataset.valueRole === "calculated", "Find Resistance identifies the calculated resistor and equivalent resistance");
     check(schematicInput("resistance-1").dataset.valueRole === "calculated" && schematicUnit("resistance-1").value === "k"
       && schematicInput("package-1").tagName === "SELECT", "a calculated resistor still offers a value editor, unit selector and package selector");
     mode("current");
@@ -457,8 +465,9 @@
 
     switchSource("voltage", "current");
     check(field("voltage") === "10 V" && field("voltageRange") === "9.7919 V to 10.205 V"
-      && operatingRange("voltage") === field("voltageRange") && !operatingRange("current"),
-      "Find Voltage shows the fixed-current range for the mixed network");
+      && operatingRange("voltage") === field("voltageRange") && operatingRange("current") === "6 mA to 6 mA"
+      && operatingRange("power") === "58.751 mW to 61.232 mW",
+      "Find Voltage uses fixed current and the mixed network’s resistance interval");
     check(voltmeterMatches("10 V"), "the calculated load voltage uses the calculated net color");
     change("current", "-6 mA");
     check(field("voltage") === "-10 V" && field("power") === "60 mW" && operatingRange("voltage") === "-10.205 V to -9.7919 V",
@@ -505,7 +514,8 @@
     change("voltage", "10 V"); mode("resistance");
     change("current", "0");
     check(!get("calculationStatus").hidden && get("calculationStatus").textContent.includes("nonzero") && field("resistance") === "—", "impossible inverse requests clear prior results and explain the problem");
-    check(operatingRange("current") === "—", "the range card clears with an unsolved circuit");
+    check(operatingFields.every(key => operatingRange(key) === "—" && field(`${key}Range`) === "—"),
+      "all intervals clear with an unsolved circuit");
     check(get("ltspiceDownload").disabled && get("markdownDownload").disabled, "an incomplete circuit cannot produce a simulation or measurement report");
     check(field("voltage") === "10 V" && field("current") === "0 A" && resistorIds.every(id => hasRole(resistorValue(id), "calculated")),
       "an unsolved network leaves the available inputs visible and all calculated values marked");
@@ -635,7 +645,7 @@
       && !exported.querySelector("[data-schematic-control], [data-field-readout], [data-part], [data-frame-download], foreignObject, input, select, .part-hit, .control-hit")
       && exported.querySelectorAll(".part-info-box").length === 3
       && exported.querySelector('[data-resistor-package="3"]').dataset.footprint === "1206", "exports embed the logo and preserve static resistor cards");
-    check(hasRole(exported.querySelector('[data-operating-value="resistance"]'), "calculated")
+    check(exported.querySelector('[data-operating-value="resistance"]').dataset.valueRole === "calculated"
       && hasRole(exported.querySelector('[data-circuit-quantity="current"]'), "known")
       && operatingPaletteMatches(exported), "SVG downloads preserve both the value roles and operating-point palette");
     check(exported.querySelector('[data-operating-value="power"]').getAttribute("font-size") === operatingValue("power").getAttribute("font-size")
@@ -652,7 +662,7 @@
       && exported.querySelector('[data-resistor-stress="3"] [data-stress-metric="Vstress"] [data-stress-value]').textContent === "4.00%", "SVG downloads include nominal stress in every resistor block");
     check([1, 2, 3].map(id => exported.querySelector(`[data-resistor-power="${id}"]`).textContent).join() === "8 mW,36 mW,16 mW"
       && exported.querySelector('[data-operating-value="power"]').textContent === "60 mW", "SVG downloads retain each resistor's dissipation and total power");
-    check(exported.querySelector('[data-operating-range="current"]').textContent === field("currentRange")
+    check(operatingFields.every(key => exported.querySelector(`[data-operating-range="${key}"]`).textContent === field(`${key}Range`))
       && sourceCardMatches("voltage", exported) && sourceCard("voltage", exported).textContent.includes("Bench supply")
       && exported.querySelector('[data-source-tolerance="voltage"]').textContent === "±2%"
       && exported.querySelector('[data-resistor-package="3"]').textContent === "1206"
@@ -680,7 +690,8 @@
     check(downloadedName.endsWith(".md") && report.startsWith("# Bench circuit") && report.includes("Find Resistance")
       && report.includes("| Total power | 60 mW |") && Math.abs(Number(report.match(/^R3 LOAD N1 (\S+)$/m)?.[1]) - 1000) < 1e-8
       && report.includes("| Vstress (nominal) | 4.00% |") && report.includes("| Package power reference | 250 mW |")
-      && report.includes("| Voltage source tolerance | ±2% |"), "Markdown reports the source tolerance, rating, measurements and nominal netlist");
+      && report.includes("| Voltage source tolerance | ±2% |") && report.includes("| Total power range | 56.465 mW to 63.751 mW |"),
+      "Markdown includes the same tolerance interval as the mixed-network power tile");
 
     mode("current");
     get("voltage").value = "9"; fire(get("voltage"), "input");
@@ -763,8 +774,9 @@
     pickTolerance("current", "custom");
     customTolerance.value = "2.4"; toleranceForm.requestSubmit(); await wait(30);
     check(doc.activeElement === currentTolerance && currentTolerance.value === "2.4" && field("sourceTolerance") === "±2.4%"
-      && field("voltage") === "-9 V" && operatingRange("voltage") === "-9.3082 V to -8.6962 V",
-      "a custom current tolerance combines with the resistance tolerance to bound the signed voltage");
+      && field("voltage") === "-9 V" && operatingRange("voltage") === "-9.3082 V to -8.6962 V"
+      && operatingRange("current") === "-6.144 mA to -5.856 mA" && operatingRange("power") === "50.925 mW to 57.189 mW",
+      "a custom current tolerance bounds signed voltage and current as well as nonnegative power");
     check(doc.documentElement.scrollWidth <= frame.clientWidth && groundLabelMatches(20, 12), "the replacement symbol keeps the schematic fitted on phones");
     await wait(1100);
     const sourceSnapshot = entries()[0];
@@ -867,8 +879,9 @@
     pickTolerance("current", "10");
     check(operatingRange("voltage") === "-10.403 V to -7.623 V", "only the main current source varies when a saved parallel source supplies a fixed offset");
     enterValue("current", "-4 mA");
-    check(field("voltage") === "0 V" && operatingRange("voltage") === "-404 mV to 404 mV",
-      "the output range can cross zero when nominal source currents cancel");
+    check(field("voltage") === "0 V" && operatingRange("voltage") === "-404 mV to 404 mV"
+      && operatingRange("power") === "0 W to 161.6 µW",
+      "the power interval reaches zero inside an interval of drive currents that crosses zero");
     query('[data-memory-restore="legacy-current-inverse"]').click(); await wait(50);
     check(schematicInput("current").value === "3" && field("current") === "4 mA" && voltmeterMatches("12 V")
       && resistorValue(1).textContent === "1 kΩ" && resistorValue(2).textContent === "2 kΩ" && hasRole(resistorValue(2), "known")

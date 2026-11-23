@@ -151,12 +151,27 @@
     const mainVoltage = !currentDriven && mode !== "voltage" ? state.voltage : voltage - seriesVoltage;
     const mainCurrent = currentDriven && mode !== "current" ? state.current : current - parallelCurrent;
     const power = voltage * current;
-    const range = [-1, 1].map(sign => equivalent(network, part => resistanceFor(part) * (1 + sign * part.tolerance / 100)));
-    if (!(range[0] > 0) || ![voltage, mainVoltage, current, mainCurrent, power, resistance, ...range].every(Number.isFinite)) return { error: "These inputs exceed the calculator’s numeric range." };
+    const resistanceRange = [-1, 1].map(sign => equivalent(network, part => resistanceFor(part) * (1 + sign * part.tolerance / 100)));
+    if (!(resistanceRange[0] > 0) || ![voltage, mainVoltage, current, mainCurrent, power, resistance, ...resistanceRange].every(Number.isFinite)) return { error: "These inputs exceed the calculator’s numeric range." };
     const readings = new Map();
     distribute(network, voltage, current, resistanceFor, readings);
     if ([...readings.values()].some(reading => !Object.values(reading).every(Number.isFinite))) return { error: "A resistor’s operating point exceeds the calculator’s numeric range." };
-    return { voltage, mainVoltage, current, mainCurrent, resistance, power, resistances, range, readings };
+    const nominalDrive = currentDriven ? current : voltage, mainDrive = currentDriven ? mainCurrent : mainVoltage;
+    const spread = Math.abs(mainDrive) * (sourceTolerance() / 100);
+    const driveRange = [nominalDrive - spread, nominalDrive + spread];
+    const ranges = toleranceRanges(resistanceRange, driveRange, currentDriven);
+    return { voltage, mainVoltage, current, mainCurrent, resistance, power, resistances, ranges, readings };
+  }
+
+  function toleranceRanges(resistance, drive, currentDriven) {
+    const corners = resistance.flatMap(ohms => drive.map(source => {
+      const response = currentDriven ? source * ohms : source / ohms;
+      return { response, power: source * response };
+    }));
+    const response = corners.map(corner => corner.response), power = corners.map(corner => corner.power);
+    // Dissipation is zero inside a drive interval that crosses zero.
+    if (drive[0] < 0 && drive[1] > 0) power.push(0);
+    return { resistance, voltage: currentDriven ? response : drive, current: currentDriven ? drive : response, power };
   }
 
   function partResistance(part) {
@@ -843,7 +858,8 @@
     const y = Math.max(134 + 24 * names.length, Math.ceil(editorBottom + 8 / scale));
     const loopHeight = Math.max(box.height, 2 * (radius + 15), sourceStackHeight);
     const bottom = y + loopHeight, networkY = y + (loopHeight - box.height) / 2;
-    const rangeRowHeight = 28, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13, height = tileTop + 165 + rangeRowHeight;
+    const tileHeight = 82, tileGap = 7, tileTop = bottom + leadLength + 2 * symbols.groundPitch + 13;
+    const legendY = tileTop + 2 * tileHeight + tileGap + 11, height = legendY + 39;
     const x = naturalWidth - rightPadding - box.width / 2 + offset, sourceX = sourceLeft + offset, sourceY = (y + bottom) / 2;
     const values = displayValues(), kind = primarySourceKind();
     const sourceValue = state[kind], sourceRole = valueRole(sourceValue, false);
@@ -922,41 +938,28 @@
       ["Resistance", "resistance", "Ω", "#ffd083", "#44331c"],
       ["Total power", "power", "W", "#d0acff", "#2c2348"]
     ];
-    const tileWidth = (width - 42) / 2, interval = loadRange();
+    const tileWidth = (width - 42) / 2;
     tiles.forEach(([label, field, unit, accent, background], index) => {
-      const tileX = 16 + index % 2 * (tileWidth + 10), tileY = tileTop + Math.floor(index / 2) * (61 + rangeRowHeight);
+      const tileX = 16 + index % 2 * (tileWidth + 10), tileY = tileTop + Math.floor(index / 2) * (tileHeight + tileGap);
       const tile = svg(artwork, "g", { "data-operating-point": field });
-      const tileHeight = index < 2 ? 54 + rangeRowHeight : 54;
       svg(tile, "rect", { x: tileX, y: tileY, width: tileWidth, height: tileHeight, rx: 8, fill: background });
       svg(tile, "rect", { x: tileX, y: tileY + 9, width: 4, height: tileHeight - 18, rx: 2, fill: accent });
       const labelX = tileX + 14, valueX = tileX + tileWidth - 14, textWidth = valueX - labelX;
-      const hasRange = field === interval.field, rowY = tileY + (hasRange ? 21 : tileHeight / 2);
+      const rowY = tileY + 25;
       const heading = text(tile, labelX, rowY, label, 18, accent, { "dominant-baseline": "central" });
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
-      const fill = role === "derived" ? color.text : color[role];
-      const value = text(tile, valueX, rowY, format(values[field], unit), 54, fill, {
+      const value = text(tile, valueX, rowY, format(values[field], unit), 36, "#fff", {
         "data-operating-value": field, "data-value-role": role, "text-anchor": "end", "dominant-baseline": "central", "font-weight": 700
       });
-      let valueHeight = hasRange ? 33 : tileHeight - 12;
-      if (hasRange) {
-        const caption = text(tile, labelX, tileY + 48, `Range ${interval.basis}`, 13, accent, { "dominant-baseline": "central" });
-        const range = text(tile, valueX, tileY + 68, interval.text, 26, color.text, {
-          "data-operating-range": field, "text-anchor": "end", "dominant-baseline": "central", "font-weight": 600
-        });
-        const captionWidth = caption.getBBox().width + 12;
-        const fitsOnOneLine = captionWidth + range.getBBox().width <= textWidth;
-        if (fitsOnOneLine) {
-          heading.setAttribute("y", tileY + 25);
-          value.setAttribute("y", tileY + 25);
-          caption.setAttribute("y", tileY + 62);
-          range.setAttribute("y", tileY + 62);
-          valueHeight = 42;
-        }
-        fitReadoutText(range, fitsOnOneLine ? textWidth - captionWidth : textWidth, fitsOnOneLine ? 28 : 22);
-      }
-      fitReadoutText(value, textWidth - heading.getBBox().width - 12, valueHeight);
+      const interval = rangeText(result.ranges?.[field], unit);
+      const range = text(tile, valueX, tileY + 62, interval, 24, "#fff", {
+        "data-operating-range": field, "aria-label": `Tolerance range ${interval === "—" ? "unavailable" : interval}`,
+        "text-anchor": "end", "dominant-baseline": "central", "font-weight": 600
+      });
+      fitReadoutText(value, textWidth - heading.getBBox().width - 12, 42);
+      fitReadoutText(range, textWidth, 28);
     });
-    const legend = svg(artwork, "g", { transform: `translate(16 ${tileTop + 126 + rangeRowHeight})`, "data-solve-legend": "", role: "group",
+    const legend = svg(artwork, "g", { transform: `translate(16 ${legendY})`, "data-solve-legend": "", role: "group",
       "aria-label": "Circuit color key, green for known values and red for calculated values" });
     for (const [x, label, role, background, badgeWidth] of [[0, "Known", "known", "#173b31", 86], [94, "Calculated", "calculated", "#462b32", 110]]) {
       svg(legend, "rect", { x, y: 0, width: badgeWidth, height: 28, rx: 8, fill: background });
@@ -988,28 +991,18 @@
     return `${format(Math.min(...values), unit)} to ${format(Math.max(...values), unit)}`;
   }
 
-  function loadRange() {
-    const { range, current, voltage, mainCurrent, mainVoltage } = result;
-    const voltageVaries = primarySourceKind() === "current";
-    const field = voltageVaries ? "voltage" : "current";
-    const tolerance = sourceTolerance();
-    const nominal = voltageVaries ? current : voltage, source = voltageVaries ? mainCurrent : mainVoltage;
-    const delta = Math.abs(source) * (tolerance / 100);
-    const sourceEndpoints = [nominal - delta, nominal + delta];
-    const endpoints = range?.flatMap(resistance => sourceEndpoints.map(value => voltageVaries ? value * resistance : value / resistance));
-    const basis = tolerance ? "with tolerances" : `at fixed ${primarySourceKind()}`;
-    return { field, basis, text: rangeText(endpoints, units[field]) };
-  }
-
   function renderCharacteristics() {
-    const { voltage, current, resistance, power } = displayValues(), { range, readings } = result;
+    const { voltage, current, resistance, power } = displayValues(), { ranges, readings } = result;
     const extras = sources(), hasSeries = extras.some(source => source.kind === "voltage"), hasParallel = extras.some(source => source.kind === "current");
     const currentDriven = primarySourceKind() === "current";
     const rows = [
       [hasSeries || currentDriven ? "Voltage across load" : "Supply voltage", format(voltage, "V"), "voltage"],
       [hasParallel ? "Load current" : "Circuit current", format(current, "A"), "current"],
       ["Equivalent resistance", format(resistance, "Ω"), "resistance"], ["Total power", format(power, "W"), "power"],
-      ["Equivalent resistance range", rangeText(range, "Ω"), "resistanceRange"]
+      ["Voltage range", rangeText(ranges?.voltage, "V"), "voltageRange"],
+      ["Current range", rangeText(ranges?.current, "A"), "currentRange"],
+      ["Equivalent resistance range", rangeText(ranges?.resistance, "Ω"), "resistanceRange"],
+      ["Total power range", rangeText(ranges?.power, "W"), "powerRange"]
     ];
     if (hasSeries) {
       const mainVoltage = currentDriven ? result.mainVoltage : state.voltage;
@@ -1020,9 +1013,7 @@
       rows.push([currentDriven ? "Main source current" : "Voltage-source branch current", format(mainCurrent, "A"), currentDriven ? "mainCurrent" : "voltageBranchCurrent"]);
     }
     for (const source of extras) rows.push([`${sourceKey(source)} · ${sourceKind(source).toLowerCase()}`, format(source.value, units[source.kind]), sourceKey(source)]);
-    const interval = loadRange();
-    rows.push([`${modes[primarySourceKind()]} source tolerance`, `±${sourceTolerance()}%`, "sourceTolerance"],
-      [`${modes[interval.field]} range ${interval.basis}`, interval.text, `${interval.field}Range`]);
+    rows.push([`${modes[primarySourceKind()]} source tolerance`, `±${sourceTolerance()}%`, "sourceTolerance"]);
     addRows(byId("characteristicsTable"), rows);
     copyRows = [["Characteristic", "Value"], ...rows.map(([label, value]) => [label, value])];
 
