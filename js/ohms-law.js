@@ -948,11 +948,11 @@
       const rowY = tileY + 25;
       const heading = text(tile, labelX, rowY, label, 18, accent, { "dominant-baseline": "central" });
       const role = field === "power" && Number.isFinite(values.power) ? "derived" : valueRole(values[field], field === state.mode);
-      const value = text(tile, valueX, rowY, format(values[field], unit), 36, "#fff", {
+      const value = text(tile, valueX, rowY, format(values[field], unit), 36, accent, {
         "data-operating-value": field, "data-value-role": role, "text-anchor": "end", "dominant-baseline": "central", "font-weight": 700
       });
       const interval = rangeText(result.ranges?.[field], unit);
-      const range = text(tile, valueX, tileY + 62, interval, 24, "#fff", {
+      const range = text(tile, valueX, tileY + 62, interval, 24, accent, {
         "data-operating-range": field, "aria-label": `Tolerance range ${interval === "—" ? "unavailable" : interval}`,
         "text-anchor": "end", "dominant-baseline": "central", "font-weight": 600
       });
