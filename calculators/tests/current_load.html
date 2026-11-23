@@ -6,9 +6,19 @@ document.getElementById('calculator').addEventListener('load',async event=>{try{
  const set=(id,value)=>{get(id).value=value;get(id).dispatchEvent(new w.Event('input',{bubbles:true}));},node=(key,focus='value')=>svg().querySelector(`[data-schematic-edit="${key}"][data-edit-focus="${focus}"]`),open=(key,focus='value')=>node(key,focus).dispatchEvent(new w.MouseEvent('click',{bubbles:true})),enter=()=>input().dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})),type=value=>{input().value=value;input().dispatchEvent(new w.Event('input',{bubbles:true}));},pick=value=>{const select=inline().querySelector('select');select.value=value;select.dispatchEvent(new w.Event('change',{bubbles:true}));};
  const reset=async()=>{w.closeSchematicEditor(false);get('dividerForm').reset();get('pairForm').reset();await pause();w.eval('environmentSettings=ResistorEnvironment.initialOnly();update()');};
  const exact=()=>{set('tolR1','0');set('tolR2','0');set('tolVin','0');},oracle=(v,a,b,l,i)=>(v/a-i)/(1/a+1/b+(l===null?0:1/l));
- await reset();exact();set('rl','100');const parked=get('rl').value;get('schematicLoad').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(inline()?.querySelector('select')&&!get('calculatorDetails').open&&!get('schematicEditor').open,'Clicking the load symbol opens an inline model selector');pick('current');
+ const loadRowsSpaced=()=>{
+  const card=svg().querySelector('[data-schematic-info="load"]');
+  const controls=[card.querySelector('.schematic-pill rect'),get('schematicLoadValue').previousElementSibling,card.querySelector('[data-edit-focus="tolerance"]')?.previousElementSibling].filter(Boolean);
+  const rows=controls.map(control=>control.getBBox()), panel=card.firstElementChild.getBBox();
+  return rows.every((row,index)=>row.y-(index?rows[index-1].y+rows[index-1].height:panel.y)>=4
+    && row.y+row.height<=panel.y+panel.height-6);
+ };
+ await reset();exact();assert(loadRowsSpaced(),'The open load reference and value have a gap between their controls');
+ set('rl','100');assert(loadRowsSpaced(),'The resistive load separates the reference, value and tolerance');
+ const parked=get('rl').value;get('schematicLoad').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(inline()?.querySelector('select')&&!get('calculatorDetails').open&&!get('schematicEditor').open,'Clicking the load symbol opens an inline model selector');pick('current');
  assert(state().circuit.loadType==='current'&&state().circuit.iload===0&&close(state().circuit.iloadTolerance,1e-7)&&get('rl').value===parked,'Current mode defaults to 0 ±0.1 µA and retains the parked resistance');
  assert(svg().querySelector('[data-schematic-load-symbol="current"] circle')&&get('schematicLoadValue').textContent==='0 µA'&&svg().querySelector('[data-schematic-info="load"]').textContent.includes('±0.1 µA'),'The SVG shows the current-source symbol and absolute µA tolerance');
+ assert(loadRowsSpaced(),'The current load keeps its three controls spaced within the panel');
  assert(close(state().result.vout,6)&&close(state().bounds.min,5.9995)&&close(state().bounds.max,6.0005),'0 ±0.1 µA gives the independent 6 V ±0.5 mV result with exact 10 kΩ resistors');
  assert(svg().querySelector('[data-field="vmidMin"]').textContent==='5.9995 V'&&svg().querySelector('[data-field="vmidMax"]').textContent==='6.0005 V','Adaptive voltage precision keeps the small leakage interval visible');
  open('load');type('1');enter();assert(close(state().result.vout,5.995)&&close(state().result.i1,state().result.i2+state().result.il),'Positive 1 µA sinks current and satisfies KCL');open('load');type('-1');enter();assert(close(state().result.vout,6.005),'Negative current injects into VMID');
