@@ -26,6 +26,7 @@
   // Match the voltage divider's full and compact schematic dimensions.
   const leadLength = 20;
   const resistorBlockInset = 24;
+  const schematicFieldHeight = 34, schematicReadoutSize = 25;
   const addedSourceCardHeight = 82;
   const fullSymbols = { width: 20, height: 52, radius: 2, stroke: 3, junction: 5, source: 30, ground: [20, 12, 4], groundPitch: 10 };
   const compactSymbols = { width: 14, height: 38, radius: 1, stroke: 2.5, junction: 4, source: 19, ground: [14, 9, 4], groundPitch: 7 };
@@ -632,9 +633,9 @@
   }
 
   function drawInfoField(host, x, y, width, content, fill, attributes) {
-    const box = { x, y, width, height: 34, class: "component-field" };
+    const box = { x, y, width, height: schematicFieldHeight, class: "component-field" };
     svg(host, "rect", { x, y, width, height: box.height, rx: 6, fill: "#172c3d", stroke: "#39586f", "stroke-width": 1 });
-    const readout = text(host, x + 9, y + box.height / 2, content, 25, fill, { ...attributes, "dominant-baseline": "central" });
+    const readout = text(host, x + 9, y + box.height / 2, content, schematicReadoutSize, fill, { ...attributes, "dominant-baseline": "central" });
     fitReadoutText(readout, width - 18, box.height - 6);
     return { readout, box };
   }
@@ -745,11 +746,12 @@
     } else {
       svg(meter, "circle", { cx: x, cy: y, r: radius, fill: "none", stroke: "#39586f", "stroke-width": 2.5 });
     }
-    const value = text(meter, x, y, reading, 24, color[role], { "data-circuit-quantity": "current",
+    const fieldWidth = 2 * radius - 8, height = schematicFieldHeight;
+    const value = text(meter, x, y, reading, schematicReadoutSize, color[role], { "data-circuit-quantity": "current",
       "data-value-role": role, "data-current-value": "", "text-anchor": "middle",
       "dominant-baseline": "central", "font-weight": 700 });
-    fitReadoutText(value, 2 * radius - 16, 26);
-    drawQuantityField(value, "current", { x: x - radius + 8, y: y - 13, width: 2 * radius - 16, height: 26 }, true);
+    fitReadoutText(value, fieldWidth, height - 6);
+    drawQuantityField(value, "current", { x: x - fieldWidth / 2, y: y - height / 2, width: fieldWidth, height }, true);
   }
 
   function drawVoltmeter(host, x, top, bottom, radius, symbols, topColor, voltage) {
